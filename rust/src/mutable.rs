@@ -1,4 +1,4 @@
-use crate::bits::{bits_from_any, Bits};
+use crate::bits::{bits_from_any, Tibs};
 use crate::core::str_to_bits;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
@@ -17,7 +17,7 @@ use std::ops::Not;
 pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits> {
     let any_bound = any.bind(py);
 
-    if let Ok(any_bits) = any_bound.extract::<PyRef<Bits>>() {
+    if let Ok(any_bits) = any_bound.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.to_mutable_bits());
     }
 
@@ -30,7 +30,7 @@ pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits
         return Ok(bits.to_mutable_bits());
     }
     if let Ok(any_bytes) = any_bound.extract::<Vec<u8>>() {
-        let bits = <Bits as BitCollection>::from_bytes(any_bytes);
+        let bits = <Tibs as BitCollection>::from_bytes(any_bytes);
         return Ok(bits.to_mutable_bits());
     }
     let type_name = match any_bound.get_type().name() {
@@ -58,9 +58,9 @@ pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits
 ///
 ///     Using the constructor ``MutableBits(s)`` is an alias for ``MutableBits.from_string(s)``.
 ///
-#[pyclass(freelist = 8, module = "bitformat")]
+#[pyclass(freelist = 8, module = "tibs")]
 pub struct MutableBits {
-    pub(crate) inner: Bits,
+    pub(crate) inner: Tibs,
 }
 
 impl MutableBits {
@@ -90,7 +90,7 @@ impl MutableBits {
             type_name
         );
 
-        if s.is_instance_of::<Bits>() {
+        if s.is_instance_of::<Tibs>() {
             err.push_str(
                 "You can use the 'to_mutable_bits()' method on the `Bits` instance instead.",
             );
@@ -125,7 +125,7 @@ impl MutableBits {
     ///
     pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
         let obj = other.bind(py);
-        if let Ok(b) = obj.extract::<PyRef<Bits>>() {
+        if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
             return self.inner.data == b.data;
         }
         if let Ok(b) = obj.extract::<PyRef<MutableBits>>() {
@@ -154,11 +154,11 @@ impl MutableBits {
 
 
 
-    pub fn _overwrite(&mut self, start: usize, value: &Bits) {
+    pub fn _overwrite(&mut self, start: usize, value: &Tibs) {
         self.inner.data[start..start + value.len()].copy_from_bitslice(&value.data);
     }
 
-    pub fn _set_slice(&mut self, start: usize, end: usize, value: &Bits) {
+    pub fn _set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
             self._overwrite(start, value);
@@ -195,17 +195,17 @@ impl MutableBits {
         Ok(())
     }
 
-    pub fn _or(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(MutableBits::logical_or(self, other))
     }
 
-    pub fn _and(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(MutableBits::logical_and(self, other))
     }
 
-    pub fn _xor(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(MutableBits::logical_xor(self, other))
     }
@@ -297,7 +297,7 @@ impl MutableBits {
         values: Vec<Py<PyAny>>,
         py: Python,
     ) -> PyResult<Self> {
-        Ok(Bits::from_bools(_cls, values, py)?.to_mutable_bits())
+        Ok(Tibs::from_bools(_cls, values, py)?.to_mutable_bits())
     }
 
     /// Create a new instance with all bits pseudo-randomly set.
@@ -317,7 +317,7 @@ impl MutableBits {
     #[classmethod]
     #[pyo3(signature = (length, seed=None))]
     pub fn from_random(_cls: &Bound<'_, PyType>, length: i64, seed: Option<Vec<u8>>) -> PyResult<Self> {
-        Ok(Bits::from_random(_cls, length, seed)?.to_mutable_bits())
+        Ok(Tibs::from_random(_cls, length, seed)?.to_mutable_bits())
     }
 
 
@@ -337,7 +337,7 @@ impl MutableBits {
     #[staticmethod]
     pub fn _from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
         Self {
-            inner: Bits::_from_bytes_with_offset(data, offset),
+            inner: Tibs::_from_bytes_with_offset(data, offset),
         }
     }
 
@@ -358,7 +358,7 @@ impl MutableBits {
         sequence: &Bound<'_, PyAny>,
         py: Python,
     ) -> PyResult<Self> {
-        Ok(Bits::from_joined(_cls, sequence, py)?.to_mutable_bits())
+        Ok(Tibs::from_joined(_cls, sequence, py)?.to_mutable_bits())
     }
 
     pub fn _to_u64(&self, start: usize, length: usize) -> u64 {
@@ -454,7 +454,7 @@ impl MutableBits {
         if let Ok(slice) = key.downcast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                Bits::new(slf.inner.data.clone())
+                Tibs::new(slf.inner.data.clone())
             } else {
                 bits_from_any(value, py)?
             };
@@ -843,11 +843,11 @@ impl MutableBits {
         self.inner.any()
     }
 
-    pub fn _find(&self, b: &Bits, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
         self.inner._find(b, start, end, bytealigned)
     }
 
-    pub fn _rfind(&self, b: &Bits, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
         self.inner._rfind(b, start, end, bytealigned)
     }
 
@@ -1074,8 +1074,8 @@ impl MutableBits {
     ///     >>> b
     ///     Bits('0b1101')
     ///
-    pub fn to_bits(&self) -> Bits {
-        Bits::new(self.inner.data.clone())
+    pub fn to_bits(&self) -> Tibs {
+        Tibs::new(self.inner.data.clone())
     }
 
     /// Create and return a Bits instance by moving the MutableBits data.
@@ -1096,10 +1096,10 @@ impl MutableBits {
     ///     >>> b
     ///     Bits('0b1101')
     ///
-    pub fn as_bits(&mut self) -> Bits {
+    pub fn as_bits(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut self.inner.data);
         data.shrink_to_fit();
-        Bits::new(data)
+        Tibs::new(data)
     }
 
     /// Clear all bits, making the MutableBits empty.

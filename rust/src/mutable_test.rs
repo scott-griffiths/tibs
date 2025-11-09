@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::core::BitCollection;
-    use crate::bits::Bits;
+    use crate::bits::Tibs;
     use crate::mutable::MutableBits;
 
     #[test]
@@ -16,7 +16,7 @@ mod tests {
     #[test]
     fn test_set_slice() {
         let mut mb = <MutableBits as BitCollection>::from_zeros(6);
-        let br = <Bits as BitCollection>::from_ones(2);
+        let br = <Tibs as BitCollection>::from_ones(2);
         mb._set_slice(2, 4, &br);
         assert_eq!(mb.to_bin(), "001100");
     }
@@ -24,7 +24,7 @@ mod tests {
     #[test]
     fn test_overwrite_slice() {
         let mut mb = <MutableBits as BitCollection>::from_zeros(6);
-        let br = <Bits as BitCollection>::from_ones(2);
+        let br = <Tibs as BitCollection>::from_ones(2);
         mb._set_slice(2, 4, &br);
         assert_eq!(mb.to_bin(), "001100");
     }
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn test_unusual_slice_setting() {
     let mut mb = MutableBits::from_hex("0x12345678").unwrap();
-    let zeros = <Bits as BitCollection>::from_zeros(8);
+    let zeros = <Tibs as BitCollection>::from_zeros(8);
     mb._set_slice(0 , 8, &zeros);
     assert_eq!(mb.to_hex().unwrap(), "00345678");
     }

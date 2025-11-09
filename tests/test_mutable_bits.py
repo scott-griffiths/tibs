@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Dtype, Bits, MutableBits, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind
+from tibs import Dtype, Tibs, MutableBits, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind
 
 
 def test_creation():
@@ -34,14 +34,14 @@ def test_append():
 
     # Different input types
     a = MutableBits('0b1010')
-    a.append(Bits('0b1111'))  # Bits object
+    a.append(Tibs('0b1111'))  # Tibs object
     assert a == '0b10101111'
-    a.append(Bits.from_bools([True, False, True]))
+    a.append(Tibs.from_bools([True, False, True]))
     assert a == '0b10101111101'
 
     # Empty append
     a = MutableBits('0x42')
-    a.append(Bits())
+    a.append(Tibs())
     assert a == '0x42'
 
 
@@ -59,14 +59,14 @@ def test_prepend():
 
     # Different input types
     a = MutableBits('0b1010')
-    a.prepend(Bits('0b1111'))  # Bits object
+    a.prepend(Tibs('0b1111'))  # Tibs object
     assert a == '0b11111010'
-    a.prepend(Bits.from_bools([True, False, True]))  # Boolean list
+    a.prepend(Tibs.from_bools([True, False, True]))  # Boolean list
     assert a == '0b10111111010'
 
     # Empty prepend
     a = MutableBits('0x42')
-    a.prepend(Bits())
+    a.prepend(Tibs())
     assert a == '0x42'
 
 
@@ -97,7 +97,7 @@ def test_setitem_slice():
     a = MutableBits('0b101010')
     a[1:4] = '0b111'
     assert a == '0b111110'
-    a[0:2] = Bits('0b00')
+    a[0:2] = Tibs('0b00')
     assert a == '0b001110'
     a[2:5] = MutableBits('0b101')
     assert a == '0b001010'
@@ -241,8 +241,8 @@ def test_iand():
     b = MutableBits('0b1111')
     a &= b
     assert a == '0b1000'
-    from tibs._bits import Bits
-    c = Bits('0b0100')
+    from tibs._bits import Tibs
+    c = Tibs('0b0100')
     a &= c
     assert a == '0b0000'
 
@@ -251,7 +251,7 @@ def test_and():
     b = MutableBits('0b1010')
     c = a & b
     assert c == '0b1000'
-    d = Bits('0b0110')
+    d = Tibs('0b0110')
     e = a & d
     assert e == '0b0100'
 
@@ -262,7 +262,7 @@ def test_ixor():
     b = MutableBits('0b0011')
     a ^= b
     assert a == '0b0101'
-    c = Bits('0b1100')
+    c = Tibs('0b1100')
     a ^= c
     assert a == '0b1001'
 
@@ -271,7 +271,7 @@ def test_xor():
     b = MutableBits('0b1010')
     c = a ^ b
     assert c == '0b0110'
-    d = Bits('0b0110')
+    d = Tibs('0b0110')
     e = a ^ d
     assert e == '0b1010'
 
@@ -329,9 +329,9 @@ def test_insert_empty():
     assert a == '0b1010'
 
 def test_insert_from_bits():
-    # Insert with Bits object
+    # Insert with Tibs object
     a = MutableBits('0b1010')
-    a.insert(2, Bits('0b11'))
+    a.insert(2, Tibs('0b11'))
     assert a == '0b101110'
 
 def test_insert_from_mutable_bits():
@@ -549,7 +549,7 @@ def test_replace_method_chaining():
 def test_replace_different_types():
     # Replace with different types
     a = MutableBits('0b10101010')
-    a.replace(Bits('0b10'), MutableBits('0b11'))
+    a.replace(Tibs('0b10'), MutableBits('0b11'))
     assert a == '0b11111111'
 
 def test_replace_empty_pattern():
@@ -795,7 +795,7 @@ def test_to_bits_basic():
     # Basic conversion
     a = MutableBits('0b1010')
     b = a.to_bits()
-    assert isinstance(b, Bits)
+    assert isinstance(b, Tibs)
     assert b == '0b1010'
 
 def test_to_bits_immutable_copy_operations():
@@ -819,13 +819,13 @@ def test_to_bits_empty():
     # Empty MutableBits conversion
     a = MutableBits()
     b = a.to_bits()
-    assert isinstance(b, Bits)
+    assert isinstance(b, Tibs)
     assert b == ''
     assert len(b) == 0
 
 def test_mutable_bits_from_bits():
-    # Test creating MutableBits from Bits object
-    b = Bits('0b1010')
+    # Test creating MutableBits from Tibs object
+    b = Tibs('0b1010')
     a = b.to_mutable_bits()
     assert a == '0b1010'
     assert isinstance(a, MutableBits)
@@ -836,16 +836,16 @@ def test_mutable_bits_from_bits():
     assert b == '0b1010'
 
 def test_setitem_with_bits_object():
-    # Test setting slices using Bits objects
+    # Test setting slices using Tibs objects
     a = MutableBits('0b1010')
-    b = Bits('0b11')
+    b = Tibs('0b11')
     a[1:3] = b
     assert a == '0b1110'
 
 def test_iadd_with_bits():
-    # Test in-place add with Bits objects
+    # Test in-place add with Tibs objects
     a = MutableBits('0x12')
-    b = Bits('0x34')
+    b = Tibs('0x34')
     a += b
     assert a == '0x1234'
 
@@ -853,7 +853,7 @@ def test_iadd_multiple_types():
     # Test in-place add with various types
     a = MutableBits('0b1010')
     a += '0b11'  # String
-    a += Bits('0b00')  # Bits object
+    a += Tibs('0b00')  # Tibs object
     a += MutableBits('0b111')  # Another MutableBits
     assert a == '0b10101100111'
 
@@ -893,28 +893,28 @@ def test_setitem_complex_cases():
     assert a == '0b1'
 
 def test_bit_operations_with_bits():
-    # Testing bitwise AND with Bits
+    # Testing bitwise AND with Tibs
     a = MutableBits('0b1100')
-    b = Bits('0b1010')
+    b = Tibs('0b1010')
     a &= b
     assert a == '0b1000'
 
-    # Testing bitwise OR with Bits
+    # Testing bitwise OR with Tibs
     a = MutableBits('0b1100')
-    b = Bits('0b0011')
+    b = Tibs('0b0011')
     a |= b
     assert a == '0b1111'
 
-    # Testing bitwise XOR with Bits
+    # Testing bitwise XOR with Tibs
     a = MutableBits('0b1100')
-    b = Bits('0b1010')
+    b = Tibs('0b1010')
     a ^= b
     assert a == '0b0110'
 
 def test_equality_with_bits():
-    # Test equality comparison with Bits
+    # Test equality comparison with Tibs
     a = MutableBits('0b1010')
-    b = Bits('0b1010')
+    b = Tibs('0b1010')
     assert a == b
 
     # Test after modification
@@ -938,25 +938,25 @@ def test_interleaved_operations():
     assert a == '0b101010'  # 101 + 010 -> 101010 -> 010101 (invert) -> 010010 (reverse)
 
 def test_mutable_bits_conversion_roundtrip():
-    # Test round-trip conversion between Bits and MutableBits
-    orig = Bits('0b10101100')
+    # Test round-trip conversion between Tibs and MutableBits
+    orig = Tibs('0b10101100')
     mutable = orig.to_mutable_bits()
     mutable.invert(range(4))  # Modify some bits
     back_to_bits = mutable.to_bits()
 
-    assert isinstance(back_to_bits, Bits)
+    assert isinstance(back_to_bits, Tibs)
     assert back_to_bits == '0b01011100'
     assert orig == '0b10101100'  # Original should be unchanged
 
 def test_inserting_bits_objects():
-    # Test inserting Bits objects at specific positions
+    # Test inserting Tibs objects at specific positions
     a = MutableBits('0b1010')
-    b = Bits('0b11')
+    b = Tibs('0b11')
     a.insert(2, b)
     assert a == '0b101110'
 
     # Insert at beginning
-    c = Bits('0b00')
+    c = Tibs('0b00')
     a.insert(0, c)
     assert a == '0b00101110'
 

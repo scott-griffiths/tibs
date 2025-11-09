@@ -3,7 +3,7 @@
 import pytest
 import sys
 import tibs
-from tibs import Bits, Dtype, DtypeTuple, MutableBits
+from tibs import Tibs, Dtype, DtypeTuple, MutableBits
 import math
 import copy
 
@@ -12,23 +12,23 @@ sys.path.insert(0, "..")
 
 class TestAll:
     def test_creation_from_uint(self):
-        s = Bits.from_dtype("u6", 15)
+        s = Tibs.from_dtype("u6", 15)
         assert s.bin == "001111"
-        s = Bits.from_dtype("u1", 0)
+        s = Tibs.from_dtype("u1", 0)
         assert s.bin == "0"
-        s = Bits.from_zeros(8)
+        s = Tibs.from_zeros(8)
         assert s.u == 0
 
     def test_creation_from_oct(self):
-        s = Bits.from_dtype(Dtype("oct"), "7")
+        s = Tibs.from_dtype(Dtype("oct"), "7")
         assert s.oct == "7"
         assert s.bin == "111"
         s += "0o1"
         assert s.bin == "111001"
-        s = Bits() + "0o12345670"
+        s = Tibs() + "0o12345670"
         assert len(s) == 24
         assert s.bin == "001010011100101110111000"
-        s = Bits.from_string("0o123")
+        s = Tibs.from_string("0o123")
         assert s.oct == "123"
 
 
@@ -65,8 +65,8 @@ class TestNoPosAttribute:
         assert s == "0b00000"
 
     def test_prepend(self):
-        s = Bits.from_zeros(1)
-        t = Bits.from_bools([1]) + s
+        s = Tibs.from_zeros(1)
+        t = Tibs.from_bools([1]) + s
         assert s == "0b0"
         assert t == "0b10"
 
@@ -76,7 +76,7 @@ class TestNoPosAttribute:
         assert t == "0b0010"
 
     def test_ror(self):
-        s = Bits.from_string("0b1000")
+        s = Tibs.from_string("0b1000")
         t = s.to_mutable_bits().ror(1)
         assert s == "0b1000"
         assert t == "0b0100"
@@ -101,7 +101,7 @@ class TestNoPosAttribute:
 
 class Testbyte_aligned:
     def test_not_byte_aligned(self):
-        a = Bits.from_string("0x00 ff 0f f")
+        a = Tibs.from_string("0x00 ff 0f f")
         li = list(a.find_all("0xff"))
         assert li == [8, 20]
         p = a.find("0x0f")
@@ -113,7 +113,7 @@ class Testbyte_aligned:
 
     def test_byte_aligned(self):
         tibs.Options().byte_aligned = True
-        a = Bits.from_string("0x00 ff 0f f")
+        a = Tibs.from_string("0x00 ff 0f f")
         li = list(a.find_all("0xff"))
         assert li == [8]
         p = a.find("0x0f")
@@ -205,9 +205,9 @@ class TestSliceAssignment:
     def test_del_slice_errors(self):
         a = MutableBits.from_zeros(10)
         del a[5:3]
-        assert a == Bits.from_zeros(10)
+        assert a == Tibs.from_zeros(10)
         del a[3:5:-1]
-        assert a == Bits.from_zeros(10)
+        assert a == Tibs.from_zeros(10)
 
     def test_del_single_element(self):
         a = MutableBits('0b0010011')
@@ -268,8 +268,8 @@ class TestSliceAssignment:
 #         assert SubBits().__class__ == SubBits
 
 def test_adding():
-    a = Bits.from_string("0b0")
-    b = Bits.from_string("0b11")
+    a = Tibs.from_string("0b0")
+    b = Tibs.from_string("0b11")
     c = a + b
     assert c == "0b011"
     assert a == "0b0"
@@ -277,7 +277,7 @@ def test_adding():
 
 
 def test_copy_method():
-    s = Bits.from_zeros(9000)
+    s = Tibs.from_zeros(9000)
     t = copy.copy(s)
     assert s == t
     assert s is t
@@ -289,28 +289,28 @@ def test_copy_method():
 
 class TestRepr:
     def test_standard_repr(self):
-        a = Bits.from_string("0o12345")
-        assert repr(a).splitlines()[0] == "Bits('0b001010011100101')"
+        a = Tibs.from_string("0o12345")
+        assert repr(a).splitlines()[0] == "Tibs('0b001010011100101')"
 
 
 class TestNewProperties:
     def test_getter_length_errors(self):
-        a = Bits.from_string("0x123")
+        a = Tibs.from_string("0x123")
         with pytest.raises(ValueError):
             _ = a.f
-        b = Bits()
+        b = Tibs()
         with pytest.raises(ValueError):
             _ = b.u
 
     def test_bytes_properties(self):
-        a = Bits.from_bytes(b"hello")
+        a = Tibs.from_bytes(b"hello")
         assert a.bytes == b"hello"
 
 def test_bits_conversion_to_bytes():
-    a = Bits.from_string("0x41424344, 0b1")
+    a = Tibs.from_string("0x41424344, 0b1")
     b = bytes(a)
     assert b == b"ABCD\x80"
-    a = Bits()
+    a = Tibs()
     assert bytes(a) == b""
 
 def test_mutable_bits_conversion_to_bytes():
@@ -380,29 +380,29 @@ class TestBFloats:
         assert (x, y, z) == (1.0, 2.0, 3.0)
 
     def test_interpret_bug(self):
-        a = Bits.from_ones(100)
+        a = Tibs.from_ones(100)
         with pytest.raises(ValueError):
             _ = a.f
 
     def test_overflows(self):
-        inf16 = Bits.from_dtype("f16", math.inf)
-        inf32 = Bits.from_string("f32 = inf")
+        inf16 = Tibs.from_dtype("f16", math.inf)
+        inf32 = Tibs.from_string("f32 = inf")
         inf64 = Dtype.from_string("f64").pack(float("inf"))
 
-        s = Bits.from_string("f64 = 1e400")
+        s = Tibs.from_string("f64 = 1e400")
         assert s == inf64
-        s = Bits.from_string("f32 = 1e60")
+        s = Tibs.from_string("f32 = 1e60")
         assert s == inf32
-        s = Bits.from_string("f16 = 100000")
+        s = Tibs.from_string("f16 = 100000")
         assert s == inf16
 
         ninf16 = Dtype.from_string("f16").pack(float("-inf"))
         ninf32 = Dtype.from_string("f32").pack(float("-inf"))
         ninf64 = Dtype.from_string("f64").pack(float("-inf"))
 
-        assert ninf64 == Bits.from_string("f64 = -1e400")
-        assert ninf32 == Bits.from_string("f32 = -1e60")
-        assert ninf16 == Bits.from_string("f16 = -100000")
+        assert ninf64 == Tibs.from_string("f64 = -1e400")
+        assert ninf32 == Tibs.from_string("f32 = -1e60")
+        assert ninf16 == Tibs.from_string("f16 = -100000")
 
 
 try:
@@ -416,7 +416,7 @@ except ImportError:
 class TestNumpy:
     @pytest.mark.skipif(not numpy_installed, reason="numpy not installed.")
     def test_getting(self):
-        a = Bits("0b110")
+        a = Tibs("0b110")
         p = np.int_(1)
         assert a[p] is True
         p = np.short(0)
@@ -424,18 +424,18 @@ class TestNumpy:
 
     @pytest.mark.skipif(not numpy_installed, reason="numpy not installed.")
     def test_creation(self):
-        a = Bits.from_zeros(np.longlong(12))
+        a = Tibs.from_zeros(np.longlong(12))
         assert a.hex == "000"
 
 
 def test_bytes_from_list():
-    s = Bits.from_dtype("bytes", [1, 2])
+    s = Tibs.from_dtype("bytes", [1, 2])
     assert s == "0x0102"
-    s = Bits.from_bytes(bytearray([1, 2]))
+    s = Tibs.from_bytes(bytearray([1, 2]))
     assert s == "0x0102"
 
 def test_from_dtype_tuple():
-    a = Bits.from_dtype(DtypeTuple('(u8, bool)'), [50, True])
-    b = Bits.from_dtype(' ( u8, bool )', [50, True])
+    a = Tibs.from_dtype(DtypeTuple('(u8, bool)'), [50, True])
+    b = Tibs.from_dtype(' ( u8, bool )', [50, True])
     assert a.unpack("(u8, bool)") == (50, True)
     assert a == b

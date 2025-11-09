@@ -7,10 +7,10 @@ import tibs
 from ._common import Expression, Endianness, byteorder, DtypeKind, override, final, parser_str, ExpressionError
 from lark import Transformer, UnexpectedInput
 import lark
-from tibs.rust import Bits, bits_from_any
+from tibs.rust import Tibs, bits_from_any
 
-# Things that can be converted to Bits when a Bits type is needed
-BitsType = Union["Bits", str, Iterable[Any], bytearray, bytes, memoryview]
+# Things that can be converted to Tibs when a Tibs type is needed
+BitsType = Union["Tibs", str, Iterable[Any], bytearray, bytes, memoryview]
 
 __all__ = ["Dtype", "DtypeSingle", "DtypeArray", "DtypeTuple", "DtypeDefinition", "Register", "DtypeTransformer"]
 
@@ -142,8 +142,8 @@ class Dtype(abc.ABC):
             raise ValueError(f"Error parsing dtype '{s}': {e}")
 
     @abc.abstractmethod
-    def pack(self, value: Any, /) -> tibs.Bits:
-        """Create and return a new Bits from a value.
+    def pack(self, value: Any, /) -> tibs.Tibs:
+        """Create and return a new Tibs from a value.
 
         The value parameter should be of a type appropriate to the data type.
 
@@ -152,18 +152,18 @@ class Dtype(abc.ABC):
 
     @abc.abstractmethod
     def _unpack(self, b: BitsType, /) -> tuple[int, Any]:
-        """Unpacks a Bits, returning number of bits unpacked as first element of tuple"""
+        """Unpacks a Tibs, returning number of bits unpacked as first element of tuple"""
         ...
 
     @abc.abstractmethod
-    def _unpack_no_checks(self, b: Bits | MutableBits) -> Any | tuple[Any]:
-        """Unpacks the whole of a Bits, without checks on length or type."""
+    def _unpack_no_checks(self, b: Tibs | MutableBits) -> Any | tuple[Any]:
+        """Unpacks the whole of a Tibs, without checks on length or type."""
         ...
 
     def unpack(self, b: BitsType, /):
-        """Unpack a Bits to find its value.
+        """Unpack a Tibs to find its value.
 
-        The b parameter should be a Bits of the appropriate length, or an object that can be converted to a Bits.
+        The b parameter should be a Tibs of the appropriate length, or an object that can be converted to a Tibs.
 
         """
         return self._unpack(b)[1]  # We only return the values, not the number of bits unpacked.
@@ -294,8 +294,8 @@ class DtypeSingle(Dtype):
     _bit_length: int | None
     _definition: DtypeDefinition
     _endianness: Endianness
-    _create_fn: Callable[[Any], Bits]
-    _get_fn: Callable[[tibs.Bits], Any]
+    _create_fn: Callable[[Any], Tibs]
+    _get_fn: Callable[[tibs.Tibs], Any]
 
     @override
     def _is_padding(self) -> bool:
@@ -386,8 +386,8 @@ class DtypeSingle(Dtype):
 
     @override
     @final
-    def pack(self, value: Any, /) -> tibs.Bits:
-        """Create and return a new Bits from a value.
+    def pack(self, value: Any, /) -> tibs.Tibs:
+        """Create and return a new Tibs from a value.
 
         The value parameter should be of a type appropriate to the data type.
 
@@ -414,7 +414,7 @@ class DtypeSingle(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Bits | MutableBits) -> Any | tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | MutableBits) -> Any | tuple[Any]:
         return self._get_fn(b, 0, len(b))
 
     @override
@@ -522,19 +522,19 @@ class DtypeArray(Dtype):
 
     @override
     @final
-    def pack(self, value: Any, /) -> tibs.Bits:
-        """Create and return a new Bits from a value.
+    def pack(self, value: Any, /) -> tibs.Tibs:
+        """Create and return a new Tibs from a value.
 
         The value parameter should be of a type appropriate to the data type.
 
         """
-        if isinstance(value, tibs.Bits):
+        if isinstance(value, tibs.Tibs):
             if len(value) != self.bit_length:
                 raise ValueError(f"Expected {self.bit_length} bits, but got {len(value)} bits.")
             return value
         if not self._items.is_none() and len(value) != self._items:
             raise ValueError(f"Expected {self._items} items, but got {len(value)}.")
-        return Bits.from_joined(self._dtype_single._create_fn(v) for v in value)
+        return Tibs.from_joined(self._dtype_single._create_fn(v) for v in value)
 
     @override
     @final
@@ -557,7 +557,7 @@ class DtypeArray(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Bits | MutableBits) -> tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | MutableBits) -> tuple[Any]:
         if isinstance(b, tibs.MutableBits):
             b = b.to_bits()
         return tuple(self._dtype_single._unpack_no_checks(c) for c in b.chunks(self._dtype_single.bit_length, count=self.items))
@@ -682,22 +682,22 @@ class DtypeTuple(Dtype):
 
     @override
     @final
-    def pack(self, values: Sequence[Any]) -> tibs.Bits:
-        """Create and return a new Bits from a value.
+    def pack(self, values: Sequence[Any]) -> tibs.Tibs:
+        """Create and return a new Tibs from a value.
 
         The value parameter should be of a type appropriate to the data type.
 
         """
         if len(values) != self.items:
             raise ValueError(f"Expected {self.items} values, but got {len(values)}.")
-        return tibs.Bits.from_joined([dtype.pack(value) for dtype, value in zip(self._dtypes, values)])
+        return tibs.Tibs.from_joined([dtype.pack(value) for dtype, value in zip(self._dtypes, values)])
 
     @override
     @final
-    def _unpack(self, b: tibs.Bits | str | Iterable[Any] | bytearray | bytes | memoryview, /) -> tuple[int, tuple[tuple[Any] | Any]]:
-        """Unpack a Bits to find its value.
+    def _unpack(self, b: tibs.Tibs | str | Iterable[Any] | bytearray | bytes | memoryview, /) -> tuple[int, tuple[tuple[Any] | Any]]:
+        """Unpack a Tibs to find its value.
 
-        The b parameter should be a Bits of the appropriate length, or an object that can be converted to a Bits.
+        The b parameter should be a Tibs of the appropriate length, or an object that can be converted to a Tibs.
 
         """
         if self._bit_length is None:
@@ -725,7 +725,7 @@ class DtypeTuple(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Bits | MutableBits) -> tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | MutableBits) -> tuple[Any]:
         pos = 0
         vals = []
         for i, dtype in enumerate(self._dtypes):
@@ -954,8 +954,8 @@ class Register:
         def fget_bitwise(b):
             return definition.get_fn(b, 0, len(b))
 
-        setattr(tibs.Bits, kind.value, property(fget=fget_bitwise,
-                                                     doc=f"The Bits as {definition.description}. Read only."))
+        setattr(tibs.Tibs, kind.value, property(fget=fget_bitwise,
+                                                     doc=f"The Tibs as {definition.description}. Read only."))
 
         def fset_bitwise(b, val):
             b[:] = definition.set_fn(val, length=len(b))
@@ -982,8 +982,8 @@ class Register:
             for modifier, fget, desc in [("_le", fget_le, "little-endian"),
                                          ("_be", fget_be, "big-endian"),
                                          ("_ne", fget_ne, f"native-endian (i.e. {byteorder}-endian)")]:
-                doc = f"The Bits as {definition.description} in {desc} byte order. Read only."
-                setattr(tibs.Bits, kind.value + modifier, property(fget=fget, doc=doc))
+                doc = f"The Tibs as {definition.description} in {desc} byte order. Read only."
+                setattr(tibs.Tibs, kind.value + modifier, property(fget=fget, doc=doc))
 
             def fget_le_mut(b):
                 if len(b) % 8 != 0:

@@ -27,11 +27,11 @@ pub fn set_dtype_parser(dtype_parser: Py<PyAny>) -> PyResult<()> {
 }
 
 #[pyfunction]
-pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Bits> {
+pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
     let any_bound = any.bind(py);
 
     // Is it of type Bits?
-    if let Ok(any_bits) = any_bound.extract::<PyRef<Bits>>() {
+    if let Ok(any_bits) = any_bound.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.clone());
     }
 
@@ -51,7 +51,7 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Bits> {
         || any_bound.is_instance_of::<PyMemoryView>()
     {
         if let Ok(any_bytes) = any_bound.extract::<Vec<u8>>() {
-            return Ok(<Bits as BitCollection>::from_bytes(any_bytes));
+            return Ok(<Tibs as BitCollection>::from_bytes(any_bytes));
         }
     }
 
@@ -61,7 +61,7 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Bits> {
         for item in iter {
             bv.push(item?.is_truthy()?);
         }
-        return Ok(Bits::new(bv));
+        return Ok(Tibs::new(bv));
     }
 
     let type_name = match any_bound.get_type().name() {
@@ -89,15 +89,15 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Bits> {
 ///     Using the constructor ``Bits(s)`` is an alias for ``Bits.from_string(s)``.
 ///
 #[derive(Clone)]
-#[pyclass(module = "bitformat")]
-pub struct Bits {
+#[pyclass(module = "tibs")]
+pub struct Tibs {
     pub(crate) data: BV,
     pub(crate) bin_cache: OnceCell<String>,
     pub(crate) oct_cache: OnceCell<String>,
     pub(crate) hex_cache: OnceCell<String>,
 }
 
-impl Bits {
+impl Tibs {
     pub(crate) fn _getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         if step == 0 {
             return Err(PyValueError::new_err("Slice step cannot be zero."));
@@ -121,7 +121,7 @@ impl Bits {
                     "Slice end goes past the end of the Bits.",
                 ));
             }
-            Ok(Bits::new(
+            Ok(Tibs::new(
                 self.data[start_bit as usize..end_bit as usize]
                     .iter()
                     .step_by(step as usize)
@@ -139,7 +139,7 @@ impl Bits {
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
             let adjusted_end_bit = (end_bit + 1) as usize;
-            Ok(Bits::new(
+            Ok(Tibs::new(
                 self.data[adjusted_end_bit..=start_bit as usize]
                     .iter()
                     .rev()
@@ -153,7 +153,7 @@ impl Bits {
 
 /// Public Python-facing methods.
 #[pymethods]
-impl Bits {
+impl Tibs {
     #[new]
     #[pyo3(signature = (s = None))]
     pub fn py_new(s: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
@@ -285,7 +285,7 @@ impl Bits {
         chunk_size: i64,
         count: Option<i64>,
     ) -> PyResult<Py<ChunksIterator>> {
-        Bits::chunks(slf, chunk_size, count)
+        Tibs::chunks(slf, chunk_size, count)
     }
 
     /// Return True if two Bits have the same binary representation.
@@ -297,7 +297,7 @@ impl Bits {
     ///
     pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
         let obj = other.bind(py);
-        if let Ok(b) = obj.extract::<PyRef<Bits>>() {
+        if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
             return self.data == b.data;
         }
         if let Ok(b) = obj.extract::<PyRef<MutableBits>>() {
@@ -330,13 +330,13 @@ impl Bits {
     #[pyo3(signature = (needle_obj, start=None, end=None, byte_aligned=false))]
     pub fn _findall(
         slf: PyRef<'_, Self>,
-        needle_obj: Py<Bits>,
+        needle_obj: Py<Tibs>,
         start: Option<usize>,
         end: Option<usize>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         let py = slf.py();
-        let haystack_obj: Py<Bits> = slf.into(); // Get a Py<Bits> for the haystack (self)
+        let haystack_obj: Py<Tibs> = slf.into(); // Get a Py<Bits> for the haystack (self)
 
         let step = if byte_aligned { 8 } else { 1 };
         let start = start.unwrap_or(0);
@@ -438,9 +438,9 @@ impl Bits {
     #[staticmethod]
     pub fn _from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
         debug_assert!(offset < 8);
-        let mut bv: BV = <Bits as BitCollection>::from_bytes(data).data;
+        let mut bv: BV = <Tibs as BitCollection>::from_bytes(data).data;
         bv.drain(..offset);
-        Bits::new(bv)
+        Tibs::new(bv)
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -463,7 +463,7 @@ impl Bits {
             let b = value.is_truthy(py)?;
             bv.push(b);
         }
-        Ok(Bits::new(bv))
+        Ok(Tibs::new(bv))
     }
 
     /// Create a new instance with all bits pseudo-randomly set.
@@ -501,7 +501,7 @@ impl Bits {
         rng.fill_bytes(&mut data);
         let mut bv = BV::from_vec(data);
         bv.truncate(length);
-        Ok(Bits::new(bv))
+        Ok(Tibs::new(bv))
     }
 
     #[staticmethod]
@@ -538,7 +538,7 @@ impl Bits {
     ) -> PyResult<Self> {
         // Convert each item to Bits, store, and sum total length for a single allocation.
         let iter = sequence.try_iter()?;
-        let mut parts: Vec<Bits> = Vec::new();
+        let mut parts: Vec<Tibs> = Vec::new();
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
@@ -552,7 +552,7 @@ impl Bits {
         for bits in &parts {
             bv.extend_from_bitslice(&bits.data);
         }
-        Ok(Bits::new(bv))
+        Ok(Tibs::new(bv))
     }
 
     /// Return bytes that can easily be converted to an int in Python
@@ -644,31 +644,31 @@ impl Bits {
             .map_err(PyValueError::new_err)
     }
 
-    pub fn _and(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         let result = self.data.clone() & &other.data;
-        Ok(Bits::new(result))
+        Ok(Tibs::new(result))
     }
 
-    pub fn _or(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         let result = self.data.clone() | &other.data;
-        Ok(Bits::new(result))
+        Ok(Tibs::new(result))
     }
 
-    pub fn _xor(&self, other: &Bits) -> PyResult<Self> {
+    pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         let result = self.data.clone() ^ &other.data;
-        Ok(Bits::new(result))
+        Ok(Tibs::new(result))
     }
 
-    pub fn _find(&self, b: &Bits, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
         debug_assert!(end >= start);
         debug_assert!(end <= self.len());
         find_bitvec(self, b, start, end, bytealigned)
     }
 
-    pub fn _rfind(&self, b: &Bits, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
         debug_assert!(end >= start);
         debug_assert!(end <= self.len());
         if b.len() + start > end {
@@ -806,7 +806,7 @@ impl Bits {
     /// Create and return a mutable copy of the Bits as a MutableBits instance.
     pub fn to_mutable_bits(&self) -> MutableBits {
         MutableBits {
-            inner: Bits::new(self.data.clone()),
+            inner: Tibs::new(self.data.clone()),
         }
     }
 
@@ -817,7 +817,7 @@ impl Bits {
     pub fn _as_mutable_bits(mut slf: PyRefMut<Self>) -> MutableBits {
         let data = std::mem::take(&mut slf.data);
         MutableBits {
-            inner: Bits::new(data),
+            inner: Tibs::new(data),
         }
     }
 
@@ -911,14 +911,14 @@ impl Bits {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.data);
         data.extend_from_bitslice(&bs.data);
-        Ok(Bits::new(data))
+        Ok(Tibs::new(data))
     }
 
     /// Concatenates two Bits and return a newly constructed Bits.
     pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let mut bs = mutable_bits_from_any(bs, py)?;
         bs.inner.data.extend_from_bitslice(&self.data);
-        Ok(Bits::new(bs.inner.data))
+        Ok(Tibs::new(bs.inner.data))
     }
 
     /// Bit-wise 'and' between two Bits. Returns new Bits.
@@ -992,7 +992,7 @@ impl Bits {
         if self.data.is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Bits."));
         }
-        Ok(Bits::new(self.data.clone().not()))
+        Ok(Tibs::new(self.data.clone().not()))
     }
 
     pub fn __bytes__(&self) -> Vec<u8> {
@@ -1020,7 +1020,7 @@ impl Bits {
         for _ in 1..n {
             bv.extend_from_bitslice(&self.data);
         }
-        Ok(Bits::new(bv))
+        Ok(Tibs::new(bv))
     }
 
     /// Return Bits consisting of n concatenations of self.
