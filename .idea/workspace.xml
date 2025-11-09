@@ -12,14 +12,27 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Renaming a lot of it from bitformat -&gt; tibs.">
-      <change afterPath="$PROJECT_DIR$/.github/actions/setup/action.yaml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.github/workflows/build.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.github/workflows/publish.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.github/workflows/setup.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.github/workflows/test.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_coverage.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_coverage.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_general.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_general.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_array.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_fuzzing.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_general.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_if.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_pass.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_reader.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_repeat.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_array.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_field.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_fieldtype.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_format.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_if.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_let.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_pass.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_reader.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_repeat.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_while.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,12 +49,12 @@
     &quot;assignee&quot;: &quot;scott-griffiths&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/scott-griffiths/tibs.git",
-    "accountId": "a7c89bb6-a5de-4a8e-b267-2249abde250c"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/scott-griffiths/tibs.git&quot;,
+    &quot;accountId&quot;: &quot;59011adc-39e8-472b-aabb-1f0b1fc70d3b&quot;
   }
-}]]></component>
+}</component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="LtemUqSh" />
   </component>
@@ -58,6 +71,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.pytest in /.executor": "Run",
     "Python tests.pytest in scottg.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
@@ -74,34 +88,15 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="RunManager" selected="Python tests.pytest in scottg">
-    <configuration name="Test tibs" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-      <option name="buildProfileId" value="test" />
-      <option name="command" value="test --workspace" />
-      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-      <envs />
-      <option name="emulateTerminal" value="true" />
-      <option name="channel" value="DEFAULT" />
-      <option name="requiredFeatures" value="true" />
-      <option name="allFeatures" value="false" />
-      <option name="withSudo" value="false" />
-      <option name="buildTarget" value="REMOTE" />
-      <option name="backtrace" value="SHORT" />
-      <option name="isRedirectInput" value="false" />
-      <option name="redirectInputPath" value="" />
-      <method v="2">
-        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="pytest in scottg" type="tests" factoryName="py.test" nameIsGenerated="true">
+  <component name="RunManager">
+    <configuration name="pytest in /" type="tests" factoryName="py.test" nameIsGenerated="true">
       <module name="tibs" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="Python 3.13 (tibs)" />
       <option name="WORKING_DIRECTORY" value="" />
-      <option name="IS_MODULE_SDK" value="false" />
+      <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
@@ -112,9 +107,6 @@
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
-    <list>
-      <item itemvalue="Python tests.pytest in scottg" />
-    </list>
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
@@ -136,6 +128,8 @@
       <updated>1762679936942</updated>
       <workItem from="1762679938545" duration="1739000" />
       <workItem from="1762683838824" duration="2367000" />
+      <workItem from="1762701415857" duration="131000" />
+      <workItem from="1762701564677" duration="457000" />
     </task>
     <task id="LOCAL-00001" summary="Adding in the whole of bitformat, as deleting is easier than adding!">
       <option name="closed" value="true" />
@@ -165,6 +159,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="Renaming a lot of it from bitformat -&gt; tibs." />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762701999367" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>
