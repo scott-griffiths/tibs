@@ -1,0 +1,50 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bitformat"
+version = "0.9.0"
+description = "A Python library for creating and parsing binary formats."
+readme = "README.md"
+authors = [
+    { name = "Scott Griffiths", email = "dr.scottgriffiths@gmail.com" }
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: File Formats",
+    "Typing :: Typed"
+]
+dependencies = [
+    "lark >= 1.2.2, < 1.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.2",
+    "hypothesis>=6.98.13",
+    "pytest-benchmark>=4.0.0",
+    "pyright>=1.1.389",
+    "pytest-cov>=6.0.0",
+    "build",
+]
+
+[tool.maturin]
+python-source = "."
+module-name = "bitformat.rust"
+features = ["pyo3/extension-module", "pyo3/abi3-py311"]
+
+[project.urls]
+homepage = "https://github.com/scott-griffiths/bitformat"
+documentation = "https://bitformat.readthedocs.io/"

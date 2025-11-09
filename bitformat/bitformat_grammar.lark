@@ -1,0 +1,70 @@
+start: field_type
+
+// This should reflect the DtypeKind enum.
+dtype_kind: /u|i|f|bool|bytes|hex|bin|oct|bits|pad/
+
+// Endian modifiers for dtypes
+dtype_modifier: /le|be|ne/
+
+// Expression strings start with a { and end with a }
+expression: "{" /[^\}]+/ "}"
+
+// Data type sizes and items can be either integers or expressions.
+dtype_size: INT | expression
+dtype_items: INT | expression
+
+// dtype is the abstract base class for the dtypes below.
+?dtype: dtype_tuple | dtype_single | dtype_array
+
+// When in a Field, the tuple dtype needs start with 'tuple('.
+// This is so that it isn't confused with a Format.
+?field_dtype: field_dtype_tuple | dtype_single | dtype_array
+
+// A dtype with a single type and optional size, for example "u8".
+dtype_single: dtype_kind [dtype_size] ["_" dtype_modifier]
+// An array with items of a single dtype, for example "[u8; 4]".
+dtype_array: "[" dtype_single ";" [dtype_items] "]"
+// A tuple of dtypes, for example "(u8, u16, [u32; 10])".
+dtype_tuple: "(" dtype ("," dtype)* [","] ")"
+// When a tuple dtype is part of a Field, it needs the tuple keyword.
+field_dtype_tuple: "tuple(" dtype ("," dtype)* [","] ")"
+
+?field_name: NAME -> field_name
+
+// A single value is a an item that could be used to initialise a field.
+?inline_string: /[a-zA-Z0-9\.\+\-]+/
+single_value: python_string | inline_string -> single_value
+// A list could be in the form of a list or tuple of single_values.
+list_of_values: ("[" single_value ("," single_value)* [","] "]") | ("(" single_value ("," single_value)* [","] ")")
+?value: single_value | list_of_values
+
+// Match const_field with higher priority than mutable_field
+// const fields have the 'const' keyword and always have a value
+const_field.1: [field_name ":"] "const " field_dtype "=" value -> const_field
+// non-const fields don't always have a value
+mutable_field.0: [field_name ":"] field_dtype ["=" value] -> mutable_field
+?field: const_field | mutable_field
+
+if_: "if" expression ":" field_type ["else" ":" field_type]
+
+repeat: "repeat" expression ":" field_type ["=" value]
+
+while_: "while" expression ":" field_type
+
+let: "let" field_name "=" expression
+
+// The Pass field is literally just "pass".
+// Making it optional means that empty fieldtypes are interpreted as pass fields.
+pass_: ["pass"]
+
+format: [field_name ":"] "(" [field_type]  (("," | _NEWLINE) field_type)* ")"
+
+?field_type: [_WS] (field | format | if_ | repeat | while_ | pass_ | let) [_WS]
+
+%import common.INT -> INT
+%import python.NAME -> NAME
+%import python.string -> python_string  // Parses Python strings, including things like b'abc' and f"abc'd'"
+%import common.WS_INLINE
+_NEWLINE: "\n"
+%import common.WS -> _WS
+%ignore WS_INLINE

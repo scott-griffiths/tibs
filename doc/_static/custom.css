@@ -1,0 +1,100 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300&display=swap');
+
+:root {
+  --mainNavColor: rgba(128, 128, 128, 20%);
+  --sidebarColor: #f8f8ff;
+  --inlineCodeBackgroundColor: rgb(0 0 0 / 0%);
+}
+
+:root[data-mode="light"] {
+    --mainNavColor: rgb(220, 220, 220);
+}
+
+:root[data-mode="dark"] {
+    --mainNavColor: rgb(50, 50, 50);
+}
+
+:root[data-mode="darkest"] {
+    --mainNavColor: rgb(20, 20, 20);
+}
+
+div#top_nav nav {
+    /*background-image: linear-gradient(rgb(128, 128, 128), rgb(80, 80, 80));*/
+    padding: 0.2rem 1rem;
+}
+
+div#top_nav nav h1 img{
+    height: 2rem;
+}
+
+.highlight {
+    background: #f8f8f8;
+}
+
+div.document {
+    margin-bottom: 1rem;
+    padding-top: 1rem;
+}
+
+div.document div.documentwrapper {
+    max-width: 55rem;
+}
+
+div.document div.highlight {
+    border-radius: 0.0rem;
+    border-left: 3px dotted rgba(128, 128, 128, 40%);
+    background-color: var(--mainBackgroundColor);
+}
+
+h1, h2, h3 {
+    font-family: 'Lato', sans-serif;
+}
+
+h1, h2 {
+    color: #f47228;
+}
+
+/*div.document div.admonition.attention, div.document div.admonition.caution, div.document div.admonition.warning {*/
+/*    border: 2px solid #d77732;*/
+/*    border-radius: 0.5rem;*/
+/*    width: 90%;*/
+/*    margin: auto;*/
+/*}*/
+
+/*div.document div.admonition.attention p.admonition-title, div.document div.admonition.caution p.admonition-title, div.document div.admonition.warning p.admonition-title {*/
+/*    color: #ffffff;*/
+/*    background-color: #d77732;*/
+/*}*/
+
+/*div.document div.admonition.attention, div.document div.admonition.caution, div.document div.admonition.note {*/
+/*    border: 2px solid #587f9f;*/
+/*}*/
+
+/*div.document div.admonition.attention p.admonition-title, div.document div.admonition.caution p.admonition-title, div.document div.admonition.note p.admonition-title {*/
+/*    color: #ffffff;*/
+/*    background-color: #587f9f;*/
+/*}*/
+
+div.document li p {
+    margin: 0 0 0.3rem 0;
+}
+
+div.document table.docutils td {
+    border: none;
+    padding: 0.1rem 1rem;
+}
+
+div.document table.docutils th {
+    border: none;
+    padding: 0.1rem 1rem;
+}
+
+div.document hr {
+    height: 0.20rem;
+    background-color: #1787df;
+}
+
+div.document dl.py dt.sig {
+    border: 1px solid rgb(128, 128, 128);
+    border-radius: 0.5rem;
+}
