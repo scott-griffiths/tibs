@@ -1,0 +1,10 @@
+
+name: "install uv"
+description: "Installs uv package manager"
+runs:
+  using: composite
+  steps:
+    - name: install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.8.4"

@@ -1,0 +1,67 @@
+name: Test
+
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Test ${{ matrix.os.name }} ${{ matrix.python.name }}
+    runs-on: ${{ matrix.os.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - name: 🐧
+            runs-on: ubuntu-latest
+          - name: 🍎
+            runs-on: macos-14
+          - name: 🪟
+            runs-on: windows-latest
+        python:
+          - name: CPython 3.11
+            action: '3.11'
+          - name: CPython 3.12
+            action: '3.12'
+          - name: CPython 3.13
+            action: '3.13'
+          - name: CPython 3.14
+            action: '3.14'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: repo
+
+      - name: Download artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          name: packages-${{ matrix.os.runs-on }}
+          path: dist
+
+      # Setup steps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python.action }}
+          architecture: x64
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.8.4"
+
+      - name: Test
+        run: |
+          cd repo
+          uv venv
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            source .venv\\Scripts\\activate
+          else
+            source .venv/bin/activate
+          fi
+          ./build.sh

@@ -1,0 +1,80 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+
+jobs:
+  check-tag:
+    name: Check for release tag
+    runs-on: ubuntu-latest
+    outputs:
+      is_tag: ${{ steps.tag.outputs.is_tag }}
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+    steps:
+      - name: Download source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags
+
+      - name: Get tag information
+        id: tag
+        run: |
+          TAG=$(git tag --points-at ${{ github.event.workflow_run.head_sha }})
+          echo "Found tag: $TAG"
+
+          if [[ $TAG == v* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+
+            if [[ $TAG == *-alpha* || $TAG == *-beta* ]]; then
+              echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          fi
+
+  publish:
+    name: Publish to PyPI
+    needs: check-tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' && needs.check-tag.outputs.is_tag == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download source code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          workflow_conclusion: success
+          path: artifacts
+
+      - name: Prepare distribution files
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name "*.whl" -o -name "*.tar.gz" \) -exec mv {} dist/ \;
+          ls -l dist/
+
+      - name: Publish to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+      - name: Publish to PyPI
+        if: needs.check-tag.outputs.is_prerelease == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

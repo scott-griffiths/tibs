@@ -23,11 +23,11 @@ from hypothesis import Verbosity
 # NOTE: The following imports will fail until the bitformat package is properly built
 # with its Rust dependencies. In a proper CI environment, these should work.
 try:
-    from bitformat import (
+    from tibs import (
         Bits, MutableBits, Array, Format, Field, Dtype, DtypeSingle, DtypeArray, 
         DtypeTuple, Endianness, DtypeKind
     )
-    from bitformat._common import Expression, ExpressionError
+    from tibs._common import Expression, ExpressionError
     BITFORMAT_AVAILABLE = True
 except ImportError as e:
     BITFORMAT_AVAILABLE = False

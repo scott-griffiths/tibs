@@ -1,0 +1,27 @@
+name: Setup
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+
+jobs:
+  setup:
+    runs-on: ${{ inputs.os }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          architecture: x64
+
+      - uses: ./.github/actions/setup
+
+      - name: Set up virtual environment
+        run: |
+          uv venv
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            source .venv\\Scripts\\activate
+          else
+            source .venv/bin/activate
+          fi

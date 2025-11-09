@@ -3,14 +3,6 @@ from tibs import Format, If, Repeat, FieldType, Field, DtypeSingle, Dtype, Dtype
 
 from tibs._bits import bits_from_any
 
-# import tomllib
-#
-#
-# def test_version_number():
-#     with open("../pyproject.toml") as f:
-#         pyproject_data = tomllib.loads(f.read())
-#         toml_version = pyproject_data["project"]["version"]
-#         assert bitformat.__version__ == toml_version
 
 def test_info_strings():
     # This just exercises the info methods. We don't check the values as they are not part of the interface.
