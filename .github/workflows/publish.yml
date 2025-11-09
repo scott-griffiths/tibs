@@ -48,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      contents: read
+    environment: pypi
     steps:
       - name: Download source code
         uses: actions/checkout@v3
