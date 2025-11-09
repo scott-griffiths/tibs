@@ -1,4 +1,4 @@
-use crate::bits::Bits;
+use crate::bits::Tibs;
 use crate::core::BitCollection;
 use crate::helpers;
 use pyo3::prelude::*;
@@ -6,7 +6,7 @@ use pyo3::PyResult;
 
 #[pyclass]
 pub struct BoolIterator {
-    pub(crate) bits: Py<Bits>,
+    pub(crate) bits: Py<Tibs>,
     pub(crate) index: usize,
     pub(crate) length: usize,
 }
@@ -31,8 +31,8 @@ impl BoolIterator {
 
 #[pyclass]
 pub struct FindAllIterator {
-    pub haystack: Py<Bits>, // Py<T> keeps the Python object alive
-    pub needle: Py<Bits>,
+    pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
+    pub needle: Py<Tibs>,
     pub start: usize,
     pub end: Option<usize>,
     pub byte_aligned: bool,
@@ -90,7 +90,7 @@ impl FindAllIterator {
 
 #[pyclass]
 pub struct ChunksIterator {
-    pub(crate) bits_object: Py<Bits>,
+    pub(crate) bits_object: Py<Tibs>,
     pub(crate) chunk_size: usize,
     pub(crate) max_chunks: usize,
     pub(crate) current_pos: usize,
@@ -104,7 +104,7 @@ impl ChunksIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Bits>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Tibs>> {
         if slf.chunks_generated >= slf.max_chunks || slf.current_pos >= slf.bits_len {
             return Ok(None);
         }
@@ -123,7 +123,7 @@ impl ChunksIterator {
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
             let slice = &bits.data[start..end];
-            Bits::new(slice.to_bitvec())
+            Tibs::new(slice.to_bitvec())
         };
 
         slf.current_pos = end;

@@ -2,7 +2,7 @@ import pytest
 import sys
 
 import tibs
-from tibs import Dtype, Bits, Endianness, DtypeTuple, DtypeSingle, DtypeArray
+from tibs import Dtype, Tibs, Endianness, DtypeTuple, DtypeSingle, DtypeArray
 from tibs._dtypes import DtypeDefinition, Register
 from tibs._common import DtypeKind, Expression, ExpressionError
 
@@ -93,21 +93,21 @@ class TestBasicFunctionality:
     def test_dtype_single_pack_unpack(self):
         d = Dtype('u8')
         packed = d.pack(255)
-        assert packed == Bits('0xff')
+        assert packed == Tibs('0xff')
         unpacked = d.unpack(packed)
         assert unpacked == 255
 
     def test_dtype_array_pack_unpack(self):
         d = Dtype('[u8; 4]')
         packed = d.pack([1, 2, 3, 4])
-        assert packed == Bits('0x01020304')
+        assert packed == Tibs('0x01020304')
         unpacked = d.unpack(packed)
         assert unpacked == (1, 2, 3, 4)
 
     def test_dtype_tuple_pack_unpack(self):
         d = Dtype('(u8, u16)')
         packed = d.pack([1, 258])
-        assert packed == Bits('0x010102')
+        assert packed == Tibs('0x010102')
         unpacked = d.unpack(packed)
         assert unpacked == (1, 258)
 
@@ -116,11 +116,11 @@ class TestBasicFunctionality:
 # class TestCreatingNewDtypes:
 #     def test_new_type(self):
 #
-#         md = DtypeDefinition("uintr", "A new type", Bits._set_u, Bits._get_u)
+#         md = DtypeDefinition("uintr", "A new type", Tibs._set_u, Tibs._get_u)
 #         Register().add_dtype(md)
-#         a = Bits("0xf")
+#         a = Tibs("0xf")
 #         assert a.uintr == 15
-#         a = Bits.from_dtype("uintr4", 1)
+#         a = Tibs.from_dtype("uintr4", 1)
 #         assert a == "0x1"
 #         a += "uintr100=0"
 #         assert a == "0x1, 0b" + "0" * 100
@@ -131,7 +131,7 @@ class TestBasicFunctionality:
 #
 #         md = DtypeDefinition("counter", "Some sort of counter", None, get_fn)
 #         Register().add_dtype(md)
-#         a = Bits.from_string("0x010f")
+#         a = Tibs.from_string("0x010f")
 #         assert a.counter == 5
 #         with pytest.raises(AttributeError):
 #             a.counter = 4
@@ -256,7 +256,7 @@ def test_dtype_tuple_unpacking():
 
 
 def test_dtype_tuple_unpacking_with_pad():
-    s = Bits.from_string("0b111000111")
+    s = Tibs.from_string("0b111000111")
     d = Dtype(" ( bits3 , pad3 , bits3 , ) ")
     x, y = d.unpack(s)
     assert (x, y.unpack("u")) == ("0b111", 7)
@@ -298,7 +298,7 @@ def test_str():
     assert str(b) == '(bool, [i5; 1])'
     assert repr(a) == "DtypeSingle('u8_le')"
     assert repr(b) == "DtypeTuple('(bool, [i5; 1])')"
-    # nt = DtypeDefinition(DtypeKind("u"), "A new type", "new", Bits._set_u, Bits._get_u)
+    # nt = DtypeDefinition(DtypeKind("u"), "A new type", "new", Tibs._set_u, Tibs._get_u)
     # s = "DtypeDefinition(kind='u', description='A new type', short_description='new', return_type=Any, is_signed=False, allowed_lengths=(), bits_per_character=None)"
     # assert str(nt) == s
     # assert repr(nt) == s
@@ -320,7 +320,7 @@ def test_creating_dtype_with_no_size():
     d = Dtype('f')
     with pytest.raises(ValueError):
         _ = d.pack(5.0)
-    b = Bits.from_dtype('f32', 12.5)
+    b = Tibs.from_dtype('f32', 12.5)
     assert b.unpack(d) == 12.5
     with pytest.raises(ValueError):
         _ = Dtype('[u;4]')
@@ -383,7 +383,7 @@ def test_evaluate():
     assert e2.evaluate(my_items=10).bit_length == 80
 
 def test_unpack_dtype_tuple():
-    s = Bits('0x100')
+    s = Tibs('0x100')
     with pytest.raises(ExpressionError):
         _ = s.unpack('u{x}')
     x = s.unpack('u')
@@ -392,7 +392,7 @@ def test_unpack_dtype_tuple():
 
 def test_unpack_dtype_tuple_with_single_dynamic_type():
     d = Dtype('(u8, [u8;], u8)')
-    s = Bits.from_string('0x010203040506')
+    s = Tibs.from_string('0x010203040506')
     x = d.unpack(s)
     assert x == (1, (2, 3, 4, 5), 6)
     x = s.unpack(d)
@@ -402,7 +402,7 @@ def test_unpack_dtype_tuple_with_single_dynamic_type():
 
 def test_unpack_dtype_array_with_no_length():
     d = Dtype('[u{x};]')
-    b = Bits('0x1234')
+    b = Tibs('0x1234')
     with pytest.raises(ValueError):
         _ = d.unpack(b)
 
@@ -412,8 +412,8 @@ def test_dtype_single_endianness():
     val = 0x1234
     packed_le = d_le.pack(val)
     packed_be = d_be.pack(val)
-    assert packed_le == Bits("0x3412")
-    assert packed_be == Bits("0x1234")
+    assert packed_le == Tibs("0x3412")
+    assert packed_be == Tibs("0x1234")
     assert d_le.unpack(packed_le) == val
     assert d_be.unpack(packed_be) == val
 
@@ -436,14 +436,14 @@ def test_dtype_single_pack_invalid_value():
 def test_dtype_single_unpack_invalid_length():
     d = Dtype("u16")
     with pytest.raises(ValueError):
-        d.unpack(Bits("0x12")) # Too short
+        d.unpack(Tibs("0x12")) # Too short
 
 def test_dtype_single_dynamic_size_unpack():
     d = Dtype("u") # Unsigned int, dynamic size
-    assert d.unpack(Bits("0b1")) == 1
-    assert d.unpack(Bits("0xffff")) == 0xffff
+    assert d.unpack(Tibs("0b1")) == 1
+    assert d.unpack(Tibs("0xffff")) == 0xffff
     d_bytes = Dtype("bytes")
-    assert d_bytes.unpack(Bits("0x010203")) == b"\x01\x02\x03"
+    assert d_bytes.unpack(Tibs("0x010203")) == b"\x01\x02\x03"
 
 def test_dtype_single_evaluate_with_expression():
     d_expr = Dtype("u{size_val}")
@@ -452,7 +452,7 @@ def test_dtype_single_evaluate_with_expression():
     assert d_concrete.bit_length == 16
     assert d_concrete.kind == DtypeKind.UINT
     packed = d_concrete.pack(100)
-    assert packed == Bits.from_dtype('u16', 100)
+    assert packed == Tibs.from_dtype('u16', 100)
     assert d_concrete.unpack(packed) == 100
 
 def test_dtype_single_info():
@@ -472,8 +472,8 @@ def test_dtype_array_endianness():
     val = [0x1234, 0x5678]
     packed_le = d_le.pack(val)
     packed_be = d_be.pack(val)
-    assert packed_le == Bits("0x34127856")
-    assert packed_be == Bits("0x12345678")
+    assert packed_le == Tibs("0x34127856")
+    assert packed_be == Tibs("0x12345678")
     assert d_le.unpack(packed_le) == tuple(val)
     assert d_be.unpack(packed_be) == tuple(val)
 
@@ -489,20 +489,20 @@ def test_dtype_array_pack_invalid_value():
 def test_dtype_array_unpack_invalid_length():
     d = Dtype("[u8; 4]")
     with pytest.raises(ValueError):
-        d.unpack(Bits("0x010203")) # Too short, needs 32 bits, got 24
+        d.unpack(Tibs("0x010203")) # Too short, needs 32 bits, got 24
 
 def test_dtype_array_dynamic_items():
     d = Dtype("[u8;]") # Dynamic number of items
     assert isinstance(d, DtypeArray) # Added for clarity, though .items access is next
     assert d.items is None
     val = [1, 2, 3, 4]
-    # Packing dynamic items array is tricky as pack expects a fixed number of items if not Bits
+    # Packing dynamic items array is tricky as pack expects a fixed number of items if not Tibs
     # Let's pack manually then unpack
-    packed = Bits.from_joined(Dtype("u8").pack(v) for v in val)
-    assert packed == Bits("0x01020304")
+    packed = Tibs.from_joined(Dtype("u8").pack(v) for v in val)
+    assert packed == Tibs("0x01020304")
     unpacked = d.unpack(packed)
     assert unpacked == tuple(val)
-    assert d.unpack(Bits("0xfffe")) == (0xff, 0xfe)
+    assert d.unpack(Tibs("0xfffe")) == (0xff, 0xfe)
 
 def test_dtype_array_evaluate_with_expression():
     d_expr = Dtype("[u{size_val}; {num_items}]")
@@ -514,7 +514,7 @@ def test_dtype_array_evaluate_with_expression():
     assert d_concrete.kind == DtypeKind.UINT
     val = [10, 20, 30]
     packed = d_concrete.pack(val)
-    assert packed == Bits("0x0a141e")
+    assert packed == Tibs("0x0a141e")
     assert d_concrete.unpack(packed) == tuple(val)
 
 def test_dtype_array_info():
@@ -571,7 +571,7 @@ def test_dtype_tuple_pack_invalid_value():
 def test_dtype_tuple_unpack_invalid_length():
     d = Dtype("(u8, u8)")
     with pytest.raises(ValueError):
-        d.unpack(Bits("0x01")) # Too short, needs 16 bits, got 8
+        d.unpack(Tibs("0x01")) # Too short, needs 16 bits, got 8
 
 def test_dtype_tuple_with_dynamic_element():
     # One dynamic element (array with no fixed items)
@@ -581,7 +581,7 @@ def test_dtype_tuple_with_dynamic_element():
     p1 = Dtype("u8").pack(val1[0])
     p2 = Dtype("[bool;]").pack(val1[1]) # This pack works for array
     p3 = Dtype("u8").pack(val1[2])
-    packed1 = Bits.from_joined([p1, p2, p3])
+    packed1 = Tibs.from_joined([p1, p2, p3])
     unpacked1 = d1.unpack(packed1)
     assert unpacked1[0] == val1[0]
     assert unpacked1[1] == tuple(val1[1])
@@ -593,7 +593,7 @@ def test_dtype_tuple_with_dynamic_element():
     p1_2 = Dtype("u8").pack(val2[0])
     p2_2 = Dtype("bytes").pack(val2[1])
     p3_2 = Dtype("u8").pack(val2[2])
-    packed2 = Bits.from_joined([p1_2, p2_2, p3_2])
+    packed2 = Tibs.from_joined([p1_2, p2_2, p3_2])
     unpacked2 = d2.unpack(packed2)
     assert unpacked2[0] == val2[0]
     assert unpacked2[1] == val2[1]

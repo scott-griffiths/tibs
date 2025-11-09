@@ -1,5 +1,5 @@
 /// Helper functions.
-use crate::bits::Bits;
+use crate::bits::Tibs;
 use crate::core::BitCollection;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
@@ -36,8 +36,8 @@ fn compute_lps(pattern: &BS) -> Vec<usize> {
 }
 
 pub(crate) fn find_bitvec(
-    haystack: &Bits,
-    needle: &Bits,
+    haystack: &Tibs,
+    needle: &Tibs,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -53,8 +53,8 @@ pub(crate) fn find_bitvec(
 
 #[inline]
 fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
-    haystack: &Bits,
-    needle: &Bits,
+    haystack: &Tibs,
+    needle: &Tibs,
     start: usize,
     end: usize,
 ) -> Option<usize> {

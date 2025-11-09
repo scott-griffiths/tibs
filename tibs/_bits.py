@@ -7,17 +7,17 @@ from typing import Union, Iterable, Any, TextIO
 from tibs._dtypes import Dtype, DtypeSingle, Register, DtypeTuple, DtypeArray
 from tibs._common import Colour, DtypeKind
 from tibs._options import Options
-from tibs.rust import Bits, MutableBits, bits_from_any
+from tibs.rust import Tibs, MutableBits, bits_from_any
 from collections.abc import Sequence
 
-__all__ = ["Bits", "MutableBits", "BitsType"]
+__all__ = ["Tibs", "MutableBits", "BitsType"]
 
 _unprintable = list(range(0x00, 0x20))  # ASCII control characters
 _unprintable.extend(range(0x7F, 0xFF))  # DEL char + non-ASCII
 
 
-# Things that can be converted to Bits or MutableBits.
-BitsType = Union["Bits", "MutableBits", str, bytearray, bytes, memoryview]
+# Things that can be converted to Tibs or MutableBits.
+BitsType = Union["Tibs", "MutableBits", str, bytearray, bytes, memoryview]
 
 
 def _validate_slice(length: int, start: int | None, end: int | None) -> tuple[int, int]:
@@ -25,7 +25,7 @@ def _validate_slice(length: int, start: int | None, end: int | None) -> tuple[in
     start = 0 if start is None else (start + length if start < 0 else start)
     end = length if end is None else (end + length if end < 0 else end)
     if not 0 <= start <= end <= length:
-        raise ValueError(f"Invalid slice positions for Bits length {length}: start={start}, end={end}.")
+        raise ValueError(f"Invalid slice positions for Tibs length {length}: start={start}, end={end}.")
     return start, end
 
 def convert_bytes_to_printable(b: bytes) -> str:
@@ -34,7 +34,7 @@ def convert_bytes_to_printable(b: bytes) -> str:
     return string
 
 
-def format_bits(bits: Bits, bits_per_group: int, sep: str, dtype: Dtype, colour_start: str,
+def format_bits(bits: Tibs, bits_per_group: int, sep: str, dtype: Dtype, colour_start: str,
                 colour_end: str, width: int | None = None) -> tuple[str, int]:
     get_fn = dtype.unpack
     chars_per_group = chars_per_dtype(dtype, bits_per_group)
@@ -114,7 +114,7 @@ def process_pp_tokens(dtype1: Dtype, dtype2: Dtype | None) -> tuple[int, bool]:
     return bits_per_group, has_length_in_fmt
 
 
-def dtype_token_to_bits(token: str) -> Bits:
+def dtype_token_to_bits(token: str) -> Tibs:
     try:
         dtype_str, value_str = token.split("=", 1)
         dtype = Dtype.from_string(dtype_str)
@@ -131,7 +131,7 @@ def dtype_token_to_bits(token: str) -> Bits:
 
 
 class BaseBitsMethods:
-    """Not a real class! This contains the common methods for Bits and MutableBits, and they
+    """Not a real class! This contains the common methods for Tibs and MutableBits, and they
 are monkey-patched into those classes later. Yes, it would be more normal to use inheritance, but
 this is a step to using the Rust classes as the base classes."""
     # ----- Instance Methods -----
@@ -143,35 +143,35 @@ this is a step to using the Rust classes as the base classes."""
 
         Returns the bit position if found, or None if not found.
 
-        :param bs: The Bits to find.
+        :param bs: The Tibs to find.
         :param start: The starting bit position. Defaults to 0.
         :param end: The end position. Defaults to len(self).
-        :param byte_aligned: If ``True``, the Bits will only be found on byte boundaries.
+        :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
         :return: The bit position if found, or None if not found.
 
         .. code-block:: pycon
 
-            >>> Bits.from_string('0xc3e').find('0b1111')
+            >>> Tibs.from_string('0xc3e').find('0b1111')
             6
 
         """
         bs = bits_from_any(bs)
         start, end = _validate_slice(len(self), start, end)
         if len(bs) == 0:
-            raise ValueError("Cannot find an empty Bits.")
+            raise ValueError("Cannot find an empty Tibs.")
         ba = Options().byte_aligned if byte_aligned is None else byte_aligned
         p = self._find(bs, start, end, bytealigned=ba)
         return p
 
     def info(self) -> str:
-        """Return a descriptive string with information about the Bits.
+        """Return a descriptive string with information about the Tibs.
 
         Note that the output is designed to be helpful to users and is not considered part of the API.
         You should not use the output programmatically as it may change even between point versions.
 
         .. code-block:: pycon
 
-            >>> Bits('0b1101').info()
+            >>> Tibs('0b1101').info()
             '4 bits: binary = 1101, hex = d, unsigned int = 13, signed int = -3'
 
         """
@@ -208,7 +208,7 @@ this is a step to using the Rust classes as the base classes."""
 
     def pp(self, dtype1: str | Dtype | None = None, dtype2: str | Dtype | None = None,
            groups: int | None = None, width: int = 80, show_offset: bool = True, stream: TextIO = sys.stdout) -> None:
-        """Pretty print the Bits's value.
+        """Pretty print the Tibs's value.
 
         :param dtype1: First data type to display.
         :param dtype2: Optional second data type.
@@ -264,19 +264,19 @@ this is a step to using the Rust classes as the base classes."""
         occurrence of `bs` closest to the `end` posistion will be found.
 
 
-        :param bs: The Bits to find.
+        :param bs: The Tibs to find.
         :param start: The starting bit position of the slice to search. Defaults to 0.
         :param end: The end bit position of the slice to search. Defaults to len(self).
-        :param byte_aligned: If True, the Bits will only be found on byte boundaries.
+        :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
         :return: The bit position if found, or None if not found.
 
         Raises ValueError if bs is empty.
 
         .. code-block:: pycon
 
-            >>> Bits('0b110110').rfind('0b1')
+            >>> Tibs('0b110110').rfind('0b1')
             4
-            >>> Bits('0b110110').rfind('0b0')
+            >>> Tibs('0b110110').rfind('0b0')
             5
 
         """
@@ -284,26 +284,26 @@ this is a step to using the Rust classes as the base classes."""
         start, end = _validate_slice(len(self), start, end)
         ba = Options().byte_aligned if byte_aligned is None else byte_aligned
         if len(bs) == 0:
-            raise ValueError("Cannot find an empty Bits.")
+            raise ValueError("Cannot find an empty Tibs.")
         p = self._rfind(bs, start, end, ba)
         return p
 
     def unpack(self, dtype: Dtype | str | Sequence[Dtype | str], /, start: int | None = None, end: int | None = None) -> Any | list[Any]:
         """
-        Interpret the Bits as a given data type or list of data types.
+        Interpret the Tibs as a given data type or list of data types.
 
         If a single Dtype is given then a single value will be returned, otherwise a list of values will be returned.
-        A single Dtype with no length can be used to interpret the whole Bits - in this common case properties
+        A single Dtype with no length can be used to interpret the whole Tibs - in this common case properties
         are provided as a shortcut. For example instead of ``b.unpack('bin')`` you can use ``b.bin``.
 
-        :param dtype: The data type used to interpret the Bits.
+        :param dtype: The data type used to interpret the Tibs.
         :param start: The starting bit position. Defaults to 0.
         :param end: The end position. Defaults to len(self).
         :return: The interpreted value(s).
 
         .. code-block:: pycon
 
-            >>> s = Bits('0xdeadbeef')
+            >>> s = Tibs('0xdeadbeef')
             >>> s.unpack(['bin4', 'u28'])
             ['1101', 246267631]
             >>> s.unpack(['f16', '[u4; 4]'])
@@ -350,12 +350,12 @@ this is a step to using the Rust classes as the base classes."""
         if dtype2 is not None:
             if dtype1.bit_length is not None:
                 try:
-                    _ = dtype2.unpack(Bits.from_zeros(dtype1.bit_length))
+                    _ = dtype2.unpack(Tibs.from_zeros(dtype1.bit_length))
                 except ValueError:
                     raise ValueError(f"The Dtype '{dtype2}' can't be used alongside '{dtype1}' as it's not compatible with it's length.")
             if dtype2.bit_length is not None:
                 try:
-                    _ = dtype1.unpack(Bits.from_zeros(dtype2.bit_length))
+                    _ = dtype1.unpack(Tibs.from_zeros(dtype2.bit_length))
                 except ValueError:
                     raise ValueError(f"The Dtype '{dtype1}' can't be used alongside '{dtype2}' as it's not compatible with it's length.")
         colour = Colour(not Options().no_color)
@@ -402,9 +402,9 @@ this is a step to using the Rust classes as the base classes."""
     # ----- Other
 
     def __contains__(self, bs: BitsType, /) -> bool:
-        """Return whether bs is contained in the current Bits.
+        """Return whether bs is contained in the current Tibs.
 
-        bs -- The Bits to search for.
+        bs -- The Tibs to search for.
 
         """
         found = BaseBitsMethods.find(self, bs, byte_aligned=False)
@@ -417,18 +417,18 @@ class BitsMethods:
     # ----- Class Methods -----
 
     @classmethod
-    def from_dtype(cls, dtype: Dtype | str, value: Any, /) -> Bits :
+    def from_dtype(cls, dtype: Dtype | str, value: Any, /) -> Tibs :
         """
         Pack a value according to a data type or data type tuple.
 
         :param dtype: The data type to pack.
         :param value: A value appropriate for the data type.
-        :returns: A newly constructed ``Bits``.
+        :returns: A newly constructed ``Tibs``.
 
         .. code-block:: python
 
-            a = Bits.from_dtype("u8", 17)
-            b = Bits.from_dtype("f16, i4, bool", [2.25, -3, False])
+            a = Tibs.from_dtype("u8", 17)
+            b = Tibs.from_dtype("f16, i4, bool", [2.25, -3, False])
 
         """
         if isinstance(dtype, str):
@@ -443,11 +443,11 @@ class BitsMethods:
                   count: int | None = None, byte_aligned: bool | None = None) -> Iterable[int]:
         """Find all occurrences of bs starting at the end. Return generator of bit positions.
 
-        :param bs: The Bits to find.
+        :param bs: The Tibs to find.
         :param start: The starting bit position of the slice to search. Defaults to 0.
         :param end: The end bit position of the slice to search. Defaults to len(self).
         :param count: The maximum number of occurrences to find.
-        :param byte_aligned: If True, the Bits will only be found on byte boundaries.
+        :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
         :return: A generator yielding bit positions.
 
         Raises ValueError if bs is empty, if start < 0, if end > len(self) or
@@ -456,11 +456,11 @@ class BitsMethods:
         All occurrences of bs are found, even if they overlap.
 
         Note that this method is not available for :class:`MutableBits` as its value could change while the
-        generator is still active. For that case you should convert to a :class:`Bits` first with :meth:`MutableBits.to_bits`.
+        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`MutableBits.to_bits`.
 
         .. code-block:: pycon
 
-            >>> list(Bits('0b10111011').rfind_all('0b11'))
+            >>> list(Tibs('0b10111011').rfind_all('0b11'))
             [6, 3, 2]
 
         """
@@ -471,11 +471,11 @@ class BitsMethods:
                  count: int | None = None, byte_aligned: bool | None = None) -> Iterable[int]:
         """Find all occurrences of bs. Return generator of bit positions.
 
-        :param bs: The Bits to find.
+        :param bs: The Tibs to find.
         :param start: The starting bit position of the slice to search. Defaults to 0.
         :param end: The end bit position of the slice to search. Defaults to len(self).
         :param count: The maximum number of occurrences to find.
-        :param byte_aligned: If True, the Bits will only be found on byte boundaries.
+        :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
         :return: A generator yielding bit positions.
 
         Raises ValueError if bs is empty, if start < 0, if end > len(self) or
@@ -484,11 +484,11 @@ class BitsMethods:
         All occurrences of bs are found, even if they overlap.
 
         Note that this method is not available for :class:`MutableBits` as its value could change while the
-        generator is still active. For that case you should convert to a :class:`Bits` first with :meth:`MutableBits.to_bits`.
+        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`MutableBits.to_bits`.
 
         .. code-block:: pycon
 
-            >>> list(Bits('0b10111011').find_all('0b11'))
+            >>> list(Tibs('0b10111011').find_all('0b11'))
             [2, 3, 6]
 
         """
@@ -507,15 +507,15 @@ class BitsMethods:
 
     def __hash__(self) -> int:
         """Return an integer hash of the object."""
-        # Only requirement is that equal Bits should return the same hash.
-        # For equal Bits the bytes at the start/end will be the same and they will have the same length
+        # Only requirement is that equal Tibs should return the same hash.
+        # For equal Tibs the bytes at the start/end will be the same and they will have the same length
         # (need to check the length as there could be zero padding when getting the bytes).
         length = len(self)
         if length <= 2000:
-            # Use the whole Bits.
+            # Use the whole Tibs.
             return hash((self.to_bytes(), length))
         else:
-            # We can't in general hash the whole Bits (it could take hours!)
+            # We can't in general hash the whole Tibs (it could take hours!)
             # So instead take some bits from the start and end.
             start = self._getslice(0, 800)
             end = self._getslice(length - 800, 800)
@@ -534,8 +534,8 @@ class BitsMethods:
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
 
-    def __copy__(self: Bits) -> Bits:
-        """Return a new copy of the Bits for the copy module.
+    def __copy__(self: Tibs) -> Tibs:
+        """Return a new copy of the Tibs for the copy module.
 
         This can just return self as it's immutable.
 
@@ -571,12 +571,12 @@ class MutableBitsMethods:
         return xt._as_mutable_bits()
 
     def __getattr__(self, name):
-        """Catch attribute errors and provide helpful messages for methods that exist in Bits."""
-        # Check if the method exists in Bits
-        if hasattr(Bits, name) and callable(getattr(Bits, name)) and not name.startswith("_"):
+        """Catch attribute errors and provide helpful messages for methods that exist in Tibs."""
+        # Check if the method exists in Tibs
+        if hasattr(Tibs, name) and callable(getattr(Tibs, name)) and not name.startswith("_"):
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{name}'. "
-                f"Did you mean to use the Bits class? Or you could replace '.{name}(...)' with '.to_bits().{name}(...)'."
+                f"Did you mean to use the Tibs class? Or you could replace '.{name}(...)' with '.to_bits().{name}(...)'."
             )
 
         # Default behaviour
@@ -587,8 +587,8 @@ class MutableBitsMethods:
                 count: int | None = None, byte_aligned: bool | None = None) -> MutableBits:
         """Replaces all occurrences of old with new. Returns self.
 
-        :param old: The Bits or to replace.
-        :param new: The replacement Bits.
+        :param old: The Tibs or to replace.
+        :param new: The replacement Tibs.
         :param start: Any occurrences that start before this bit position will not be replaced.
         :param end: Any occurrences that finish after this bit position will not be replaced.
         :param count: The maximum number of replacements to make. Defaults to all.
@@ -609,7 +609,7 @@ class MutableBitsMethods:
         old_bits = bits_from_any(old)
         new_bits = bits_from_any(new)
         if len(old_bits) == 0:
-            raise ValueError("Empty Bits cannot be replaced.")
+            raise ValueError("Empty Tibs cannot be replaced.")
         start, end = _validate_slice(len(self), start, end)
         if byte_aligned is None:
             byte_aligned = Options().byte_aligned
@@ -640,21 +640,21 @@ class MutableBitsMethods:
         return self
 
 
-# Patching on the methods to Bits and MutableBits to avoid inheritance.
+# Patching on the methods to Tibs and MutableBits to avoid inheritance.
 def _patch_classes():
     for name, method in BaseBitsMethods.__dict__.items():
         if isinstance(method, classmethod):
-            setattr(Bits, name, classmethod(method.__func__))
+            setattr(Tibs, name, classmethod(method.__func__))
             setattr(MutableBits, name, classmethod(method.__func__))
         elif callable(method):
-            setattr(Bits, name, method)
+            setattr(Tibs, name, method)
             setattr(MutableBits, name, method)
 
     for name, method in BitsMethods.__dict__.items():
         if isinstance(method, classmethod):
-            setattr(Bits, name, classmethod(method.__func__))
+            setattr(Tibs, name, classmethod(method.__func__))
         elif callable(method):
-            setattr(Bits, name, method)
+            setattr(Tibs, name, method)
 
     for name, method in MutableBitsMethods.__dict__.items():
         if isinstance(method, classmethod):
@@ -669,5 +669,5 @@ MutableBits.__hash__ = None
 
 _patch_classes()
 
-Sequence.register(Bits)
+Sequence.register(Tibs)
 Sequence.register(MutableBits)

@@ -1,4 +1,4 @@
-use crate::bits::Bits;
+use crate::bits::Tibs;
 use crate::helpers::{validate_index, BV};
 use crate::mutable::MutableBits;
 use bitvec::bits;
@@ -27,9 +27,9 @@ pub(crate) trait BitCollection: Sized {
     fn from_hex(hex_string: &str) -> Result<Self, String>;
     fn from_u64(value: u64, length: usize) -> Self;
     fn from_i64(value: i64, length: usize) -> Self;
-    fn logical_or(&self, other: &Bits) -> Self;
-    fn logical_and(&self, other: &Bits) -> Self;
-    fn logical_xor(&self, other: &Bits) -> Self;
+    fn logical_or(&self, other: &Tibs) -> Self;
+    fn logical_and(&self, other: &Tibs) -> Self;
+    fn logical_xor(&self, other: &Tibs) -> Self;
 
     fn get_bit(&self, i: usize) -> bool;
     fn to_bin(&self) -> String;
@@ -69,27 +69,27 @@ fn split_tokens(s: &String) -> Vec<String> {
     tokens
 }
 
-fn string_literal_to_bits(s: &str) -> PyResult<Bits> {
+fn string_literal_to_bits(s: &str) -> PyResult<Tibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => Ok(Bits::_from_bin(s)?),
-        Some("0x") => Ok(Bits::_from_hex(s)?),
-        Some("0o") => Ok(Bits::_from_oct(s)?),
+        Some("0b") => Ok(Tibs::_from_bin(s)?),
+        Some("0x") => Ok(Tibs::_from_hex(s)?),
+        Some("0o") => Ok(Tibs::_from_oct(s)?),
         _ => Err(PyValueError::new_err(format!(
             "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
         )))
     }
 }
 
-pub(crate) fn str_to_bits(s: String) -> PyResult<Bits> {
+pub(crate) fn str_to_bits(s: String) -> PyResult<Tibs> {
     // Check cache first
     {
         let mut cache = BITS_CACHE.lock().unwrap();
         if let Some(cached_data) = cache.get(&s) {
-            return Ok(Bits::new(cached_data.clone()));
+            return Ok(Tibs::new(cached_data.clone()));
         }
     }
     let tokens = split_tokens(&s);
-    let mut bits_array = Vec::<Bits>::new();
+    let mut bits_array = Vec::<Tibs>::new();
     let mut total_bit_length = 0;
 
     for token in tokens {
@@ -114,8 +114,8 @@ pub(crate) fn str_to_bits(s: String) -> PyResult<Bits> {
                     let dtype_parser = parser.bind(py);
                     let result = dtype_parser.call1((token.clone(),))?;
                     // Convert result
-                    let bits_ref = result.extract::<PyRef<Bits>>()?;
-                    let new_bits = Bits::new(bits_ref.data.clone());
+                    let bits_ref = result.extract::<PyRef<Tibs>>()?;
+                    let new_bits = Tibs::new(bits_ref.data.clone());
                     total_bit_length += new_bits.len();
                     bits_array.push(new_bits);
                     Ok(())
@@ -134,7 +134,7 @@ pub(crate) fn str_to_bits(s: String) -> PyResult<Bits> {
         for bits in bits_array {
             result.extend_from_bitslice(&bits.data);
         }
-        Bits::new(result)
+        Tibs::new(result)
     };
     // Update cache with new result
     {
@@ -144,7 +144,7 @@ pub(crate) fn str_to_bits(s: String) -> PyResult<Bits> {
     Ok(result)
 }
 
-impl BitCollection for Bits {
+impl BitCollection for Tibs {
     #[inline]
     fn len(&self) -> usize {
         self.data.len()
@@ -157,24 +157,24 @@ impl BitCollection for Bits {
 
     #[inline]
     fn empty() -> Self {
-        Bits::new(BV::new())
+        Tibs::new(BV::new())
     }
 
     #[inline]
     fn from_zeros(length: usize) -> Self {
-        Bits::new(BV::repeat(false, length))
+        Tibs::new(BV::repeat(false, length))
     }
 
     #[inline]
     fn from_ones(length: usize) -> Self {
-        Bits::new(BV::repeat(true, length))
+        Tibs::new(BV::repeat(true, length))
     }
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
         let bits = data.view_bits::<Msb0>();
         let bv = BV::from_bitslice(bits);
-        Bits::new(bv)
+        Tibs::new(bv)
     }
 
     #[inline]
@@ -196,7 +196,7 @@ impl BitCollection for Bits {
             }
         }
         b.set_uninitialized(false);
-        Ok(Bits::new(b))
+        Ok(Tibs::new(b))
     }
 
     #[inline]
@@ -223,7 +223,7 @@ impl BitCollection for Bits {
                 }
             }
         }
-        Ok(Bits::new(b))
+        Ok(Tibs::new(b))
     }
 
     #[inline]
@@ -240,46 +240,46 @@ impl BitCollection for Bits {
             Ok(d) => d,
             Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
         };
-        let mut bv = <Bits as BitCollection>::from_bytes(data).data;
+        let mut bv = <Tibs as BitCollection>::from_bytes(data).data;
         if is_odd_length {
             bv.drain(bv.len() - 4..bv.len());
         }
-        Ok(Bits::new(bv))
+        Ok(Tibs::new(bv))
     }
 
     #[inline]
     fn from_u64(value: u64, length: usize) -> Self {
         let mut bv = BV::repeat(false, length);
         bv.store_be(value);
-        Bits::new(bv)
+        Tibs::new(bv)
     }
 
     #[inline]
     fn from_i64(value: i64, length: usize) -> Self {
         let mut bv = BV::repeat(false, length);
         bv.store_be(value);
-        Bits::new(bv)
+        Tibs::new(bv)
     }
 
     #[inline]
-    fn logical_or(&self, other: &Bits) -> Self {
+    fn logical_or(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
         let result = self.data.clone() | &other.data;
-        Bits::new(result)
+        Tibs::new(result)
     }
 
     #[inline]
-    fn logical_and(&self, other: &Bits) -> Self {
+    fn logical_and(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
         let result = self.data.clone() & &other.data;
-        Bits::new(result)
+        Tibs::new(result)
     }
 
     #[inline]
-    fn logical_xor(&self, other: &Bits) -> Self {
+    fn logical_xor(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
         let result = self.data.clone() ^ &other.data;
-        Bits::new(result)
+        Tibs::new(result)
     }
 
     #[inline]
@@ -349,82 +349,82 @@ impl BitCollection for MutableBits {
     #[inline]
     fn empty() -> Self {
         Self {
-            inner: <Bits as BitCollection>::empty(),
+            inner: <Tibs as BitCollection>::empty(),
         }
     }
 
     #[inline]
     fn from_zeros(length: usize) -> Self {
         Self {
-            inner: <Bits as BitCollection>::from_zeros(length),
+            inner: <Tibs as BitCollection>::from_zeros(length),
         }
     }
 
     #[inline]
     fn from_ones(length: usize) -> Self {
         Self {
-            inner: <Bits as BitCollection>::from_ones(length),
+            inner: <Tibs as BitCollection>::from_ones(length),
         }
     }
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
         Self {
-            inner: <Bits as BitCollection>::from_bytes(data),
+            inner: <Tibs as BitCollection>::from_bytes(data),
         }
     }
 
     #[inline]
     fn from_bin(binary_string: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Bits as BitCollection>::from_bin(binary_string)?,
+            inner: <Tibs as BitCollection>::from_bin(binary_string)?,
         })
     }
 
     #[inline]
     fn from_oct(oct: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Bits as BitCollection>::from_oct(oct)?,
+            inner: <Tibs as BitCollection>::from_oct(oct)?,
         })
     }
 
     #[inline]
     fn from_hex(hex: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Bits as BitCollection>::from_hex(hex)?,
+            inner: <Tibs as BitCollection>::from_hex(hex)?,
         })
     }
 
     #[inline]
     fn from_u64(value: u64, length: usize) -> Self {
         Self {
-            inner: <Bits as BitCollection>::from_u64(value, length),
+            inner: <Tibs as BitCollection>::from_u64(value, length),
         }
     }
 
     #[inline]
     fn from_i64(value: i64, length: usize) -> Self {
         Self {
-            inner: <Bits as BitCollection>::from_i64(value, length),
+            inner: <Tibs as BitCollection>::from_i64(value, length),
         }
     }
 
     #[inline]
-    fn logical_or(&self, other: &Bits) -> Self {
+    fn logical_or(&self, other: &Tibs) -> Self {
         Self {
             inner: self.inner.logical_or(other),
         }
     }
 
     #[inline]
-    fn logical_and(&self, other: &Bits) -> Self {
+    fn logical_and(&self, other: &Tibs) -> Self {
         Self {
             inner: self.inner.logical_and(other),
         }
     }
 
     #[inline]
-    fn logical_xor(&self, other: &Bits) -> Self {
+    fn logical_xor(&self, other: &Tibs) -> Self {
         Self {
             inner: self.inner.logical_xor(other),
         }
@@ -451,7 +451,7 @@ impl BitCollection for MutableBits {
     }
 }
 
-impl fmt::Debug for Bits {
+impl fmt::Debug for Tibs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.len() > 100 {
             return f
@@ -477,14 +477,14 @@ impl fmt::Debug for Bits {
     }
 }
 
-impl PartialEq for Bits {
+impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
     }
 }
 
-impl PartialEq<MutableBits> for Bits {
+impl PartialEq<MutableBits> for Tibs {
     #[inline]
     fn eq(&self, other: &MutableBits) -> bool {
         self.data == other.inner.data
@@ -498,18 +498,18 @@ impl PartialEq for MutableBits {
     }
 }
 
-impl PartialEq<Bits> for MutableBits {
+impl PartialEq<Tibs> for MutableBits {
     #[inline]
-    fn eq(&self, other: &Bits) -> bool {
+    fn eq(&self, other: &Tibs) -> bool {
         self.inner.data == other.data
     }
 }
 
 // ---- Bits private helper methods. Not part of the Python interface. ----
 
-impl Bits {
+impl Tibs {
     pub(crate) fn new(bv: BV) -> Self {
-        Bits {
+        Tibs {
             data: bv,
             bin_cache: OnceCell::new(),
             oct_cache: OnceCell::new(),
@@ -519,7 +519,7 @@ impl Bits {
 
     /// Slice used internally without bounds checking.
     pub(crate) fn slice(&self, start_bit: usize, length: usize) -> Self {
-        Bits::new(self.data[start_bit..start_bit + length].to_bitvec())
+        Tibs::new(self.data[start_bit..start_bit + length].to_bitvec())
     }
 
     #[inline]
@@ -567,7 +567,7 @@ pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
 impl MutableBits {
     pub fn new(bv: BV) -> Self {
         Self {
-            inner: Bits::new(bv),
+            inner: Tibs::new(bv),
         }
     }
 

@@ -5,34 +5,32 @@
   </component>
   <component name="CargoProjects">
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml">
-      <package file="$PROJECT_DIR$">
-        <feature name="default" enabled="true" />
-      </package>
+      <package file="$PROJECT_DIR$" />
     </cargoProject>
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Renaming a lot of it from bitformat -&gt; tibs.">
       <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_array.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/bits.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/bits_tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/bits_tests.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/core.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/core.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/helpers.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/iterator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/iterator.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/mutable.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/src/mutable_test.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/mutable_test.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_benchmarks.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_benchmarks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_fuzzing.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_general.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_if.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_pass.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_reader.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_repeat.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitstream.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitstream.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_dtypes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_array.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_field.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_fieldtype.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_format.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_if.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_let.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_pass.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_reader.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_repeat.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_while.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_dtype_definitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtype_definitions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtypes.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,27 +66,47 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python tests.pytest in /.executor": "Run",
-    "Python tests.pytest in scottg.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "/Users/scottg/dev/tibs",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
-    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
-    "org.rust.first.attach.projects": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python tests.pytest in /.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.pytest in scottg.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/scottg/dev/tibs&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
+    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
-  <component name="RunManager">
+}</component>
+  <component name="RunManager" selected="Python tests.pytest in /">
+    <configuration name="Build" type="CargoCommandRunConfiguration" factoryName="Cargo Command" nameIsGenerated="true">
+      <option name="buildProfileId" value="dev" />
+      <option name="command" value="build" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="pytest in /" type="tests" factoryName="py.test" nameIsGenerated="true">
       <module name="tibs" />
       <option name="ENV_FILES" value="" />
@@ -107,6 +125,9 @@
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
+    <list>
+      <item itemvalue="Python tests.pytest in /" />
+    </list>
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
@@ -130,6 +151,7 @@
       <workItem from="1762683838824" duration="2367000" />
       <workItem from="1762701415857" duration="131000" />
       <workItem from="1762701564677" duration="457000" />
+      <workItem from="1762702241018" duration="266000" />
     </task>
     <task id="LOCAL-00001" summary="Adding in the whole of bitformat, as deleting is easier than adding!">
       <option name="closed" value="true" />
@@ -156,10 +178,22 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Adding in the whole of bitformat, as deleting is easier than adding!" />
     <MESSAGE value="Renaming a lot of it from bitformat -&gt; tibs." />
-    <option name="LAST_COMMIT_MESSAGE" value="Renaming a lot of it from bitformat -&gt; tibs." />
+    <MESSAGE value="Removing a lot of Python stuff that won't be in tibs." />
+    <option name="LAST_COMMIT_MESSAGE" value="Removing a lot of Python stuff that won't be in tibs." />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/tests/test_mutable_bits.py</url>
+          <line>1</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762701999367" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762702957976" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>
