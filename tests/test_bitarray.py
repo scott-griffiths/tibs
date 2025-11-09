@@ -3,7 +3,7 @@
 import pytest
 import sys
 import tibs
-from tibs import Tibs, Dtype, DtypeTuple, MutableBits
+from tibs import Tibs, Dtype, DtypeTuple, Mutibs
 import math
 import copy
 
@@ -34,33 +34,33 @@ class TestAll:
 
 class TestNoPosAttribute:
     def test_replace(self):
-        s = MutableBits.from_string("0b01")
+        s = Mutibs.from_string("0b01")
         s = s.replace("0b1", "0b11")
         assert s == "0b011"
 
     def test_delete(self):
-        s = MutableBits('0b000000001')
+        s = Mutibs('0b000000001')
         del s[-1:]
         assert s == '0b00000000'
 
     def test_insert(self):
-        s = MutableBits.from_string("0b00")
+        s = Mutibs.from_string("0b00")
         s = s.insert(1, "0xf")
         assert s == "0b011110"
 
     def test_insert_self(self):
-        b = MutableBits.from_string("0b10")
+        b = Mutibs.from_string("0b10")
         b = b.insert(0, b)
         assert b == "0b1010"
-        c = MutableBits.from_string("0x00ff")
+        c = Mutibs.from_string("0x00ff")
         c = c.insert(8, c)
         assert c == "0x0000ffff"
-        a = MutableBits.from_string("0b11100")
+        a = Mutibs.from_string("0b11100")
         a = a.insert(3, a)
         assert a == "0b1111110000"
 
     def test_overwrite(self):
-        s = MutableBits.from_string("0b01110")
+        s = Mutibs.from_string("0b01110")
         s[1:4] = "0b000"
         assert s == "0b00000"
 
@@ -71,7 +71,7 @@ class TestNoPosAttribute:
         assert t == "0b10"
 
     def test_rol(self):
-        s = MutableBits("0b0001")
+        s = Mutibs("0b0001")
         t = s.rol(1)
         assert t == "0b0010"
 
@@ -82,16 +82,16 @@ class TestNoPosAttribute:
         assert t == "0b0100"
 
     def test_set_item(self):
-        s = MutableBits('0b000100')
+        s = Mutibs('0b000100')
         s[4:5] = '0xf'
         assert s == '0b000111110'
         s[0:1] = [1]
         assert s == '0b100111110'
-        s[5:5] = MutableBits()
+        s[5:5] = Mutibs()
         assert s == '0b100111110'
 
     def test_adding_nonsense(self):
-        a = MutableBits.from_bools([0])
+        a = Mutibs.from_bools([0])
         with pytest.raises(ValueError):
             a += '3'
         with pytest.raises(ValueError):
@@ -128,10 +128,10 @@ class Testbyte_aligned:
 class TestSliceAssignment:
 
     def test_slice_assignment_single_bit(self):
-        a = MutableBits('0b000')
+        a = Mutibs('0b000')
         a[2] = '0b1'
         assert a.bin == '001'
-        a[0] = MutableBits('0b1')
+        a[0] = Mutibs('0b1')
         assert a.bin == '101'
         a[-1] = 0
         assert a.bin == '100'
@@ -139,14 +139,14 @@ class TestSliceAssignment:
         assert a.bin == '000'
 
     def test_slice_assignment_single_bit_errors(self):
-        a = MutableBits('0b000')
+        a = Mutibs('0b000')
         with pytest.raises(IndexError):
             a[-4] = 1
         with pytest.raises(IndexError):
             a[3] = 1
 
     def test_slice_assignment_muliple_bits(self):
-        a = MutableBits('0b0')
+        a = Mutibs('0b0')
         a[0:1] = '0b110'
         assert a.bin == '110'
         a[0:1] = '0b000'
@@ -161,7 +161,7 @@ class TestSliceAssignment:
         assert not a
 
     def test_slice_assignment_multiple_bits_errors(self):
-        a = MutableBits()
+        a = Mutibs()
         with pytest.raises(IndexError):
             a[0] = '0b00'
         a += '0b1'
@@ -169,7 +169,7 @@ class TestSliceAssignment:
         assert a == '0b11'
 
     def test_del_slice_step(self):
-        a = MutableBits.from_dtype('bin', '100111101001001110110100101')
+        a = Mutibs.from_dtype('bin', '100111101001001110110100101')
         del a[::2]
         assert a.bin == '0110010101100'
         del a[3:9:3]
@@ -182,7 +182,7 @@ class TestSliceAssignment:
         assert a.bin == ''
 
     def test_del_slice_negative_step(self):
-        a = MutableBits('0b0001011101101100100110000001')
+        a = Mutibs('0b0001011101101100100110000001')
         del a[5:23:-3]
         assert a.bin == '0001011101101100100110000001'
         del a[25:3:-3]
@@ -195,22 +195,22 @@ class TestSliceAssignment:
         assert a.bin == ''
 
     def test_del_slice_negative_end(self):
-        a = MutableBits('0b01001000100001')
+        a = Mutibs('0b01001000100001')
         del a[:-5]
         assert a == '0b00001'
-        a = MutableBits('0b01001000100001')
+        a = Mutibs('0b01001000100001')
         del a[-11:-5]
         assert a == '0b01000001'
 
     def test_del_slice_errors(self):
-        a = MutableBits.from_zeros(10)
+        a = Mutibs.from_zeros(10)
         del a[5:3]
         assert a == Tibs.from_zeros(10)
         del a[3:5:-1]
         assert a == Tibs.from_zeros(10)
 
     def test_del_single_element(self):
-        a = MutableBits('0b0010011')
+        a = Mutibs('0b0010011')
         del a[-1]
         assert a.bin == '001001'
         del a[2]
@@ -219,7 +219,7 @@ class TestSliceAssignment:
             del a[5]
 
     def test_set_slice_step(self):
-        a = MutableBits.from_dtype('bin', '0000000000')
+        a = Mutibs.from_dtype('bin', '0000000000')
         a[::2] = '0b11111'
         assert a.bin == '1010101010'
         a[4:9:3] = [0, 0]
@@ -234,12 +234,12 @@ class TestSliceAssignment:
         assert a.bin == '1000000000'
 
     def test_set_slice_step_with_int(self):
-        a = MutableBits.from_zeros(9)
+        a = Mutibs.from_zeros(9)
         with pytest.raises(TypeError):
             a[5:8] = -1
 
     def test_set_slice_errors(self):
-        a = MutableBits.from_zeros(8)
+        a = Mutibs.from_zeros(8)
         with pytest.raises(ValueError):
             a[::3] = [1]
 
@@ -255,14 +255,14 @@ class TestSliceAssignment:
 # class TestSubclassing:
 #
 #     def test_is_instance(self):
-#         class SubBits(MutableBits):
+#         class SubBits(Mutibs):
 #             pass
 #
 #         a = SubBits()
 #         assert isinstance(a, SubBits)
 #
 #     def test_class_type(self):
-#         class SubBits(MutableBits):
+#         class SubBits(Mutibs):
 #             pass
 #
 #         assert SubBits().__class__ == SubBits
@@ -314,10 +314,10 @@ def test_bits_conversion_to_bytes():
     assert bytes(a) == b""
 
 def test_mutable_bits_conversion_to_bytes():
-    a = MutableBits('0x0001')
+    a = Mutibs('0x0001')
     b = bytes(a)
     assert b == b'\x00\x01'
-    b = bytes(MutableBits())
+    b = bytes(Mutibs())
     assert b == b''
 
 class TestBFloats:

@@ -14,14 +14,14 @@ use pyo3::{Bound, IntoPyObject, Py, PyAny};
 use std::ops::Not;
 
 #[pyfunction]
-pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits> {
+pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Mutibs> {
     let any_bound = any.bind(py);
 
     if let Ok(any_bits) = any_bound.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.to_mutable_bits());
     }
 
-    if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<MutableBits>>() {
+    if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.__copy__());
     }
 
@@ -38,7 +38,7 @@ pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits
         Err(_) => "<unknown>".to_string(),
     };
     Err(PyTypeError::new_err(format!(
-        "Cannot convert object of type {} to a MutableBits object.",
+        "Cannot convert object of type {} to a Mutibs object.",
         type_name
     )))
 }
@@ -47,32 +47,32 @@ pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<MutableBits
 ///
 ///     To construct, use a builder 'from' method:
 ///
-///     * ``MutableBits.from_bytes(b)`` - Create directly from a ``bytes`` object.
-///     * ``MutableBits.from_string(s)`` - Use a formatted string.
-///     * ``MutableBits.from_bools(i)`` - Convert each element in ``i`` to a bool.
-///     * ``MutableBits.from_zeros(length)`` - Initialise with ``length`` '0' bits.
-///     * ``MutableBits.from_ones(length)`` - Initialise with ``length`` '1' bits.
-///     * ``MutableBits.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
-///     * ``MutableBits.from_dtype(dtype, value)`` - Combine a data type with a value.
-///     * ``MutableBits.from_joined(iterable)`` - Concatenate an iterable of objects.
+///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` object.
+///     * ``Mutibs.from_string(s)`` - Use a formatted string.
+///     * ``Mutibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
+///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
+///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
+///     * ``Mutibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
+///     * ``Mutibs.from_dtype(dtype, value)`` - Combine a data type with a value.
+///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
-///     Using the constructor ``MutableBits(s)`` is an alias for ``MutableBits.from_string(s)``.
+///     Using the constructor ``Mutibs(s)`` is an alias for ``Mutibs.from_string(s)``.
 ///
 #[pyclass(freelist = 8, module = "tibs")]
-pub struct MutableBits {
+pub struct Mutibs {
     pub(crate) inner: Tibs,
 }
 
-impl MutableBits {
+impl Mutibs {
     fn _getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         self.inner
             ._getslice_with_step(start_bit, end_bit, step)
-            .map(|bits| MutableBits { inner: bits })
+            .map(|bits| Mutibs { inner: bits })
     }
 }
 
 #[pymethods]
-impl MutableBits {
+impl Mutibs {
     #[new]
     #[pyo3(signature = (s = None))]
     pub fn py_new(s: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
@@ -86,7 +86,7 @@ impl MutableBits {
         // If it's not a string, build a more helpful error message.
         let type_name = s.get_type().name()?;
         let mut err = format!(
-            "Expected a str for MutableBits constructor, but received a {}. ",
+            "Expected a str for Mutibs constructor, but received a {}. ",
             type_name
         );
 
@@ -98,14 +98,14 @@ impl MutableBits {
             || s.is_instance_of::<pyo3::types::PyByteArray>()
             || s.is_instance_of::<pyo3::types::PyMemoryView>()
         {
-            err.push_str("You can use 'MutableBits.from_bytes()' instead.");
+            err.push_str("You can use 'Mutibs.from_bytes()' instead.");
         } else if s.is_instance_of::<pyo3::types::PyInt>() {
-            err.push_str("Perhaps you want to use 'MutableBits.from_zeros()', 'MutableBits.from_ones()' or 'MutableBits.from_random()'?");
+            err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
         } else if s.is_instance_of::<pyo3::types::PyTuple>()
             || s.is_instance_of::<pyo3::types::PyList>()
         {
             err.push_str(
-                "Perhaps you want to use 'MutableBits.from_joined()' or 'MutableBits.from_bools()' instead?",
+                "Perhaps you want to use 'Mutibs.from_joined()' or 'Mutibs.from_bools()' instead?",
             );
         } else {
             err.push_str(
@@ -116,11 +116,11 @@ impl MutableBits {
         Err(PyTypeError::new_err(err))
     }
 
-    /// Return True if two MutableBits have the same binary representation.
+    /// Return True if two Mutibs have the same binary representation.
     ///
-    /// The right hand side will be promoted to a MutableBits if needed and possible.
+    /// The right hand side will be promoted to a Mutibs if needed and possible.
     ///
-    /// >>> MutableBits('0xf2') == '0b11110010'
+    /// >>> Mutibs('0xf2') == '0b11110010'
     /// True
     ///
     pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
@@ -128,7 +128,7 @@ impl MutableBits {
         if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
             return self.inner.data == b.data;
         }
-        if let Ok(b) = obj.extract::<PyRef<MutableBits>>() {
+        if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
             return self.inner.data == b.inner.data;
         }
         match bits_from_any(other, py) {
@@ -177,19 +177,19 @@ impl MutableBits {
         }
     }
 
-    pub fn _ixor(&mut self, other: &MutableBits) -> PyResult<()> {
+    pub fn _ixor(&mut self, other: &Mutibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
         self.inner.data ^= &other.inner.data;
         Ok(())
     }
 
-    pub fn _ior(&mut self, other: &MutableBits) -> PyResult<()> {
+    pub fn _ior(&mut self, other: &Mutibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
         self.inner.data |= &other.inner.data;
         Ok(())
     }
 
-    pub fn _iand(&mut self, other: &MutableBits) -> PyResult<()> {
+    pub fn _iand(&mut self, other: &Mutibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
         self.inner.data &= &other.inner.data;
         Ok(())
@@ -197,17 +197,17 @@ impl MutableBits {
 
     pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(MutableBits::logical_or(self, other))
+        Ok(Mutibs::logical_or(self, other))
     }
 
     pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(MutableBits::logical_and(self, other))
+        Ok(Mutibs::logical_and(self, other))
     }
 
     pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(MutableBits::logical_xor(self, other))
+        Ok(Mutibs::logical_xor(self, other))
     }
 
     #[staticmethod]
@@ -222,22 +222,22 @@ impl MutableBits {
 
     /// Create a new instance from a formatted string.
     ///
-    /// This method initializes a new instance of :class:`MutableBits` using a formatted string.
+    /// This method initializes a new instance of :class:`Mutibs` using a formatted string.
     ///
     /// :param s: The formatted string to convert.
-    /// :return: A newly constructed ``MutableBits``.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_string("0xff01")
-    ///     b = MutableBits.from_string("0b1")
-    ///     c = MutableBits.from_string("u12 = 31, f16=-0.25")
+    ///     a = Mutibs.from_string("0xff01")
+    ///     b = Mutibs.from_string("0b1")
+    ///     c = Mutibs.from_string("u12 = 31, f16=-0.25")
     ///
-    /// The `__init__` method for `MutableBits` redirects to the `from_string` method and is sometimes more convenient:
+    /// The `__init__` method for `Mutibs` redirects to the `from_string` method and is sometimes more convenient:
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits("0xff01")  # MutableBits(s) is equivalent to MutableBits.from_string(s)
+    ///     a = Mutibs("0xff01")  # Mutibs(s) is equivalent to Mutibs.from_string(s)
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         str_to_bits(s).map(|bits| bits.to_mutable_bits())
@@ -246,11 +246,11 @@ impl MutableBits {
     /// Create a new instance with all bits set to zero.
     ///
     /// :param length: The number of bits to set.
-    /// :return: A MutableBits object with all bits set to zero.
+    /// :return: A Mutibs object with all bits set to zero.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_zeros(500)  # 500 zero bits
+    ///     a = Mutibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
@@ -269,8 +269,8 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits.from_ones(5)
-    ///     MutableBits('0b11111')
+    ///     >>> Mutibs.from_ones(5)
+    ///     Mutibs('0b11111')
     ///
     #[classmethod]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
@@ -285,11 +285,11 @@ impl MutableBits {
 
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
-    /// :param i: The iterable to convert to a :class:`MutableBits`.
+    /// :param i: The iterable to convert to a :class:`Mutibs`.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_bools([False, 0, 1, "Steven"])  # binary 0011
+    ///     a = Mutibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
     pub fn from_bools(
@@ -304,15 +304,15 @@ impl MutableBits {
     ///
     /// :param length: The number of bits to set. Must be positive.
     /// :param seed: An optional seed as a bytes or bytearray.
-    /// :return: A newly constructed ``MutableBits`` with random data.
+    /// :return: A newly constructed ``Mutibs`` with random data.
     ///
     /// Note that this uses a pseudo-random number generator and so
     /// might not suitable for cryptographic or other more serious purposes.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_random(1000000)  # A million random bits
-    ///     b = MutableBits.from_random(100, b'a_seed')
+    ///     a = Mutibs.from_random(1000000)  # A million random bits
+    ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
     #[pyo3(signature = (length, seed=None))]
@@ -323,11 +323,11 @@ impl MutableBits {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes object to convert to a :class:`MutableBits`.
+    /// :param b: The bytes object to convert to a :class:`Mutibs`.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_bytes(b"some_bytes_maybe_from_a_file")
+    ///     a = Mutibs.from_bytes(b"some_bytes_maybe_from_a_file")
     ///
     #[classmethod]
     pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>) -> Self {
@@ -343,14 +343,14 @@ impl MutableBits {
 
     /// Create a new instance by concatenating a sequence of Bits objects.
     ///
-    /// This method concatenates a sequence of Bits objects into a single MutableBits object.
+    /// This method concatenates a sequence of Bits objects into a single Mutibs object.
     ///
     /// :param sequence: A sequence to concatenate. Items can either be a Bits object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
     ///
     /// .. code-block:: python
     ///
-    ///     a = MutableBits.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = MutableBits.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
+    ///     a = Mutibs.from_joined([f'u6={x}' for x in range(64)])
+    ///     b = Mutibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
     ///
     #[classmethod]
     pub fn from_joined(
@@ -380,7 +380,7 @@ impl MutableBits {
     pub fn _getslice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         self.inner
             ._getslice(start_bit, length)
-            .map(|bits| MutableBits { inner: bits })
+            .map(|bits| Mutibs { inner: bits })
     }
 
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -403,7 +403,7 @@ impl MutableBits {
                 if start < stop {
                     self._getslice(start as usize, (stop - start) as usize)?
                 } else {
-                    MutableBits::empty()
+                    Mutibs::empty()
                 }
 
             } else {
@@ -424,7 +424,7 @@ impl MutableBits {
     /// :raises IndexError: If the index is out of range.
     ///
     /// Examples:
-    ///     >>> b = MutableBits('0b0000')
+    ///     >>> b = Mutibs('0b0000')
     ///     >>> b[1] = True
     ///     >>> b.bin
     ///     '0100'
@@ -565,11 +565,11 @@ impl MutableBits {
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
-    /// Return the MutableBits as bytes, padding with zero bits if needed.
+    /// Return the Mutibs as bytes, padding with zero bits if needed.
     ///
     /// Up to seven zero bits will be added at the end to byte align.
     ///
-    /// :return: The MutableBits as bytes.
+    /// :return: The Mutibs as bytes.
     ///
     pub fn to_bytes(&self) -> Vec<u8> {
         self.inner.to_bytes()
@@ -595,92 +595,92 @@ impl MutableBits {
         self.inner._to_int_byte_data(signed)
     }
 
-    /// Return whether the current MutableBits starts with prefix.
+    /// Return whether the current Mutibs starts with prefix.
     ///
     /// :param prefix: The Bits to search for.
     /// :return: True if the Bits starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits('0b101100').starts_with('0b101')
+    ///     >>> Mutibs('0b101100').starts_with('0b101')
     ///     True
-    ///     >>> MutableBits('0b101100').starts_with('0b100')
+    ///     >>> Mutibs('0b101100').starts_with('0b100')
     ///     False
     ///
     pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
         self.inner.starts_with(prefix, py)
     }
 
-    /// Return whether the current MutableBits ends with suffix.
+    /// Return whether the current Mutibs ends with suffix.
     ///
     /// :param suffix: The Bits to search for.
     /// :return: True if the Bits ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits('0b101100').ends_with('0b10-')
+    ///     >>> Mutibs('0b101100').ends_with('0b10-')
     ///     True
-    ///     >>> MutableBits('0b101100').ends_with('0b101')
+    ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
     ///
     pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
         self.inner.ends_with(suffix, py)
     }
 
-    /// Bit-wise 'and' between two MutableBits. Returns new MutableBits.
+    /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         self._and(&other)
     }
 
-    /// Bit-wise 'or' between two MutableBits. Returns new MutableBits.
+    /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         self._or(&other)
     }
 
-    /// Bit-wise 'xor' between two MutableBits. Returns new MutableBits.
+    /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         self._xor(&other)
     }
 
-    /// Reverse bit-wise 'and' between two MutableBits. Returns new MutableBits.
+    /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
-    /// This method is used when the RHS is a MutableBits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = mutable_bits_from_any(bs, py)?;
         other._and(&self.inner)
     }
 
-    /// Reverse bit-wise 'or' between two MutableBits. Returns new MutableBits.
+    /// Reverse bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
-    /// This method is used when the RHS is a MutableBits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = mutable_bits_from_any(bs, py)?;
         other._or(&self.inner)
     }
 
-    /// Reverse bit-wise 'xor' between two MutableBits. Returns new MutableBits.
+    /// Reverse bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
-    /// This method is used when the RHS is a MutableBits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two MutableBits have differing lengths.
+    /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = mutable_bits_from_any(bs, py)?;
@@ -698,9 +698,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> a.rol(2)
-    ///     MutableBits('0b1110')
+    ///     Mutibs('0b1110')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
     pub fn rol<'a>(
@@ -710,7 +710,7 @@ impl MutableBits {
         end: Option<i64>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         if slf.is_empty() {
-            return Err(PyValueError::new_err("Cannot rotate an empty MutableBits."));
+            return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
         if n < 0 {
             return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
@@ -733,9 +733,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> a.ror(1)
-    ///     MutableBits('0b1101')
+    ///     Mutibs('0b1101')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
     pub fn ror<'a>(
@@ -745,7 +745,7 @@ impl MutableBits {
         end: Option<i64>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         if slf.is_empty() {
-            return Err(PyValueError::new_err("Cannot rotate an empty MutableBits."));
+            return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
         if n < 0 {
             return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
@@ -766,13 +766,13 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits.from_zeros(10)
+    ///     >>> a = Mutibs.from_zeros(10)
     ///     >>> a.set(1, 5)
-    ///     MutableBits('0b0000010000')
+    ///     Mutibs('0b0000010000')
     ///     >>> a.set(1, [-1, -2])
-    ///     MutableBits('0b0000010011')
+    ///     Mutibs('0b0000010011')
     ///     >>> a.set(0, range(8, 10))
-    ///     MutableBits('0b0000010000')
+    ///     Mutibs('0b0000010000')
     ///
     pub fn set<'a>(
         mut slf: PyRefMut<'a, Self>,
@@ -806,7 +806,7 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits('0xef').count(1)
+    ///     >>> Mutibs('0xef').count(1)
     ///     7
     ///
     pub fn count(&self, value: Py<PyAny>, py: Python) -> PyResult<usize> {
@@ -819,9 +819,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits('0b1111').all()
+    ///     >>> Mutibs('0b1111').all()
     ///     True
-    ///     >>> MutableBits('0b1011').all()
+    ///     >>> Mutibs('0b1011').all()
     ///     False
     ///
     pub fn all(&self) -> bool {
@@ -834,9 +834,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> MutableBits('0b0000').any()
+    ///     >>> Mutibs('0b0000').any()
     ///     False
-    ///     >>> MutableBits('0b1000').any()
+    ///     >>> Mutibs('0b1000').any()
     ///     True
     ///
     pub fn any(&self) -> bool {
@@ -851,7 +851,7 @@ impl MutableBits {
         self.inner._rfind(b, start, end, bytealigned)
     }
 
-    /// Return the MutableBits with one or many bits inverted between 0 and 1.
+    /// Return the Mutibs with one or many bits inverted between 0 and 1.
     ///
     /// :param pos: Either a single bit position or an iterable of bit positions.
     /// :return: self
@@ -860,13 +860,13 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b10111')
+    ///     >>> a = Mutibs('0b10111')
     ///     >>> a.invert(1)
-    ///     MutableBits('0b11111')
+    ///     Mutibs('0b11111')
     ///     >>> a.invert([0, 2])
-    ///     MutableBits('0b01011')
+    ///     Mutibs('0b01011')
     ///     >>> a.invert()
-    ///     MutableBits('0b10100')
+    ///     Mutibs('0b10100')
     ///
     #[pyo3(signature = (pos = None))]
     pub fn invert<'a>(
@@ -904,9 +904,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> a.reverse()
-    ///     MutableBits('0b1101')
+    ///     Mutibs('0b1101')
     ///
     pub fn reverse(mut slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
         slf.inner.data.reverse();
@@ -915,7 +915,7 @@ impl MutableBits {
 
     /// Change the byte endianness in-place. Returns self.
     ///
-    /// The whole of the MutableBits will be byte-swapped. It must be a multiple
+    /// The whole of the Mutibs will be byte-swapped. It must be a multiple
     /// of byte_length long.
     ///
     /// :param byte_length: An int giving the number of bytes in each swap.
@@ -923,9 +923,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0x12345678')
+    ///     >>> a = Mutibs('0x12345678')
     ///     >>> a.byte_swap(2)
-    ///     MutableBits('0x34127856')
+    ///     Mutibs('0x34127856')
     ///
     #[pyo3(signature = (byte_length = None))]
     pub fn byte_swap(mut slf: PyRefMut<'_, Self>, byte_length: Option<i64>) -> PyResult<PyRefMut<'_, Self>> {
@@ -948,7 +948,7 @@ impl MutableBits {
         let self_byte_length = len / 8;
         if self_byte_length % byte_length != 0 {
             return Err(PyValueError::new_err(format!(
-                "The MutableBits to byte_swap is {self_byte_length} bytes long, but it needs to be a multiple of {byte_length} bytes."
+                "The Mutibs to byte_swap is {self_byte_length} bytes long, but it needs to be a multiple of {byte_length} bytes."
             )));
         }
 
@@ -962,29 +962,29 @@ impl MutableBits {
 
     /// Return the instance with every bit inverted.
     ///
-    /// Raises ValueError if the MutableBits is empty.
+    /// Raises ValueError if the Mutibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
         if self.inner.data.is_empty() {
-            return Err(PyValueError::new_err("Cannot invert empty MutableBits."));
+            return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(MutableBits::new(self.inner.data.clone().not()))
+        Ok(Mutibs::new(self.inner.data.clone().not()))
     }
 
-    /// Return new MutableBits shifted by n to the left.
+    /// Return new Mutibs shifted by n to the left.
     ///
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        Ok(MutableBits::new(self.inner.__lshift__(n)?.data))
+        Ok(Mutibs::new(self.inner.__lshift__(n)?.data))
     }
 
-    /// Return new MutableBits shifted by n to the right.
+    /// Return new Mutibs shifted by n to the right.
     ///
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        Ok(MutableBits::new(self.inner.__rshift__(n)?.data))
+        Ok(Mutibs::new(self.inner.__rshift__(n)?.data))
     }
 
     pub fn _set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
@@ -1053,24 +1053,24 @@ impl MutableBits {
         Ok(())
     }
 
-    /// Return a new copy of the MutableBits for the copy module.
+    /// Return a new copy of the Mutibs for the copy module.
     pub fn __copy__(&self) -> Self {
-        MutableBits::new(self.inner.data.clone())
+        Mutibs::new(self.inner.data.clone())
     }
 
-    /// Create and return a Bits instance from a copy of the MutableBits data.
+    /// Create and return a Bits instance from a copy of the Mutibs data.
     ///
     /// This copies the underlying binary data, giving a new independent Bits object.
-    /// If you no longer need the MutableBits, consider using :meth:`as_bits` instead to avoid the copy.
+    /// If you no longer need the Mutibs, consider using :meth:`as_bits` instead to avoid the copy.
     ///
     /// :return: A new Bits instance with the same bit data.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> b = a.to_bits()
     ///     >>> a
-    ///     MutableBits('0b1011')
+    ///     Mutibs('0b1011')
     ///     >>> b
     ///     Bits('0b1101')
     ///
@@ -1078,21 +1078,21 @@ impl MutableBits {
         Tibs::new(self.inner.data.clone())
     }
 
-    /// Create and return a Bits instance by moving the MutableBits data.
+    /// Create and return a Bits instance by moving the Mutibs data.
     ///
-    /// The data is moved to the new Bits, so this MutableBits will be empty after the operation.
-    /// This is more efficient than :meth:`to_bits` if you no longer need the MutableBits.
+    /// The data is moved to the new Bits, so this Mutibs will be empty after the operation.
+    /// This is more efficient than :meth:`to_bits` if you no longer need the Mutibs.
     ///
-    /// It will try to reclaim any excess memory capacity that the MutableBits may have had.
+    /// It will try to reclaim any excess memory capacity that the Mutibs may have had.
     ///
     /// :return: A Bits instance with the same bit data.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> b = a.as_bits()
     ///     >>> a
-    ///     MutableBits()
+    ///     Mutibs()
     ///     >>> b
     ///     Bits('0b1101')
     ///
@@ -1102,7 +1102,7 @@ impl MutableBits {
         Tibs::new(data)
     }
 
-    /// Clear all bits, making the MutableBits empty.
+    /// Clear all bits, making the Mutibs empty.
     ///
     /// This doesn't change the allocated capacity, so won't free up any memory.
     ///
@@ -1110,23 +1110,23 @@ impl MutableBits {
         self.inner.data.clear();
     }
 
-    /// Return the number of bits the MutableBits can hold without reallocating memory.
+    /// Return the number of bits the Mutibs can hold without reallocating memory.
     ///
-    /// The capacity is always equal to or greater than the current length of the MutableBits.
+    /// The capacity is always equal to or greater than the current length of the Mutibs.
     /// If the length ever exceeds the capacity then memory will have to be reallocated, and the
     /// capacity will increase.
     ///
     /// It can be helpful as a performance optimization to reserve enough capacity before
-    /// constructing a large MutableBits incrementally. See also :meth:`reserve`.
+    /// constructing a large Mutibs incrementally. See also :meth:`reserve`.
     ///
     pub fn capacity(&self) -> usize {
         self.inner.data.capacity()
     }
 
-    /// Reserve memory for at least `additional` more bits to be appended to the MutableBits.
+    /// Reserve memory for at least `additional` more bits to be appended to the Mutibs.
     ///
     /// This can be helpful as a performance optimization to avoid multiple memory reallocations when
-    /// constructing a large MutableBits incrementally. If enough memory is already reserved then
+    /// constructing a large Mutibs incrementally. If enough memory is already reserved then
     /// this method will have no effect. See also :meth:`capacity`.
     ///
     /// :param additional: The number of bits that can be appended without any further memory reallocations.
@@ -1135,16 +1135,16 @@ impl MutableBits {
         self.inner.data.reserve(additional);
     }
 
-    /// Concatenate MutableBits and return a new MutableBits.
+    /// Concatenate Mutibs and return a new Mutibs.
     pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let bs = bits_from_any(bs, py)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.inner.data);
         data.extend_from_bitslice(&bs.data);
-        Ok(MutableBits::new(data))
+        Ok(Mutibs::new(data))
     }
 
-    /// Concatenate MutableBits and return a new MutableBits.
+    /// Concatenate Mutibs and return a new Mutibs.
     pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let mut bs = mutable_bits_from_any(bs, py)?;
         bs.inner.data.extend_from_bitslice(&self.inner.data);
@@ -1170,16 +1170,16 @@ impl MutableBits {
         Ok(())
     }
 
-    /// Append bits to the end of the current MutableBits in-place.
+    /// Append bits to the end of the current Mutibs in-place.
     ///
     /// :param bs: The bits to append.
     /// :return: self
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0x0f')
+    ///     >>> a = Mutibs('0x0f')
     ///     >>> a.append('0x0a')
-    ///     MutableBits('0x0f0a')
+    ///     Mutibs('0x0f0a')
     ///
     pub fn append<'a>(
         mut slf: PyRefMut<'a, Self>,
@@ -1199,16 +1199,16 @@ impl MutableBits {
         Ok(slf)
     }
 
-    ///Prepend bits to the beginning of the current MutableBits in-place.
+    ///Prepend bits to the beginning of the current Mutibs in-place.
     ///
     /// :param bs: The bits to prepend.
     /// :return: self
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0x0f')
+    ///     >>> a = Mutibs('0x0f')
     ///     >>> a.prepend('0x0a')
-    ///     MutableBits('0x0a0f')
+    ///     Mutibs('0x0a0f')
     ///
     pub fn prepend<'a>(
         mut slf: PyRefMut<'a, Self>,
@@ -1232,7 +1232,7 @@ impl MutableBits {
         Ok(slf)
     }
 
-    /// Inserts another Bits or MutableBits at bit position pos. Returns self.
+    /// Inserts another Bits or Mutibs at bit position pos. Returns self.
     ///
     /// :param pos: The bit position to insert at.
     /// :param bs: The Bits to insert.
@@ -1242,9 +1242,9 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = MutableBits('0b1011')
+    ///     >>> a = Mutibs('0b1011')
     ///     >>> a.insert(2, '0b00')
-    ///     MutableBits('0b100011')
+    ///     Mutibs('0b100011')
     ///
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
@@ -1254,7 +1254,7 @@ impl MutableBits {
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
-            MutableBits::new(slf.inner.data.clone())
+            Mutibs::new(slf.inner.data.clone())
         } else {
             mutable_bits_from_any(bs, py)?
         };
@@ -1289,7 +1289,7 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> b = MutableBits('0b001100')
+    ///     >>> b = Mutibs('0b001100')
     ///     >>> b <<= 2
     ///     >>> b.bin
     ///     '110000'
@@ -1309,7 +1309,7 @@ impl MutableBits {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> b = MutableBits('0b001100')
+    ///     >>> b = Mutibs('0b001100')
     ///     >>> b >>= 2
     ///     >>> b.bin
     ///     '000011'
@@ -1324,7 +1324,7 @@ impl MutableBits {
         self.inner.to_bytes()
     }
 
-    /// Return new MutableBits consisting of n concatenations of self.
+    /// Return new Mutibs consisting of n concatenations of self.
     ///
     /// Called for expression of the form 'a = b*3'.
     ///
@@ -1332,10 +1332,10 @@ impl MutableBits {
     ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
         let x = self.inner.__mul__(n)?;
-        Ok(MutableBits::new(x.data))
+        Ok(Mutibs::new(x.data))
     }
 
-    /// Return MutableBits consisting of n concatenations of self.
+    /// Return Mutibs consisting of n concatenations of self.
     ///
     /// Called for expressions of the form 'a = 3*b'.
     ///
@@ -1347,7 +1347,7 @@ impl MutableBits {
 
     pub fn __iter__(&self) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "MutableBits objects are not iterable. You can use .to_bits() or .as_bits() to convert to a Bits object that does support iteration."
+            "Mutibs objects are not iterable. You can use .to_bits() or .as_bits() to convert to a Bits object that does support iteration."
         ))
     }
 

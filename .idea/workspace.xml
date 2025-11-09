@@ -9,15 +9,12 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Renaming a lot of it from bitformat -&gt; tibs.">
-      <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
+    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Renaming the Bits class -&gt; Tibs. Well, it might be a good idea?">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/bits.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/bits_tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/bits_tests.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/core.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/core.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/helpers.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/iterator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/iterator.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/lib.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/mutable.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rust/src/mutable_test.rs" beforeDir="false" afterPath="$PROJECT_DIR$/rust/src/mutable_test.rs" afterDir="false" />
@@ -25,11 +22,9 @@
       <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_bitstream.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitstream.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_dtypes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_bits.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_dtype_definitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtype_definitions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtypes.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -169,7 +164,15 @@
       <option name="project" value="LOCAL" />
       <updated>1762685639607</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Renaming the Bits class -&gt; Tibs. Well, it might be a good idea?">
+      <option name="closed" value="true" />
+      <created>1762703013033</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1762703013033</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -179,7 +182,8 @@
     <MESSAGE value="Adding in the whole of bitformat, as deleting is easier than adding!" />
     <MESSAGE value="Renaming a lot of it from bitformat -&gt; tibs." />
     <MESSAGE value="Removing a lot of Python stuff that won't be in tibs." />
-    <option name="LAST_COMMIT_MESSAGE" value="Removing a lot of Python stuff that won't be in tibs." />
+    <MESSAGE value="Renaming the Bits class -&gt; Tibs. Well, it might be a good idea?" />
+    <option name="LAST_COMMIT_MESSAGE" value="Renaming the Bits class -&gt; Tibs. Well, it might be a good idea?" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -193,7 +197,7 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762702957976" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762705694609" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>

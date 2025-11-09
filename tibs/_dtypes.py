@@ -156,7 +156,7 @@ class Dtype(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def _unpack_no_checks(self, b: Tibs | MutableBits) -> Any | tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | Mutibs) -> Any | tuple[Any]:
         """Unpacks the whole of a Tibs, without checks on length or type."""
         ...
 
@@ -414,7 +414,7 @@ class DtypeSingle(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Tibs | MutableBits) -> Any | tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | Mutibs) -> Any | tuple[Any]:
         return self._get_fn(b, 0, len(b))
 
     @override
@@ -557,8 +557,8 @@ class DtypeArray(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Tibs | MutableBits) -> tuple[Any]:
-        if isinstance(b, tibs.MutableBits):
+    def _unpack_no_checks(self, b: Tibs | Mutibs) -> tuple[Any]:
+        if isinstance(b, tibs.Mutibs):
             b = b.to_bits()
         return tuple(self._dtype_single._unpack_no_checks(c) for c in b.chunks(self._dtype_single.bit_length, count=self.items))
 
@@ -725,7 +725,7 @@ class DtypeTuple(Dtype):
 
     @override
     @final
-    def _unpack_no_checks(self, b: Tibs | MutableBits) -> tuple[Any]:
+    def _unpack_no_checks(self, b: Tibs | Mutibs) -> tuple[Any]:
         pos = 0
         vals = []
         for i, dtype in enumerate(self._dtypes):
@@ -960,8 +960,8 @@ class Register:
         def fset_bitwise(b, val):
             b[:] = definition.set_fn(val, length=len(b))
 
-        setattr(tibs.MutableBits, kind.value, property(fget=fget_bitwise, fset=fset_bitwise,
-                                                            doc=f"The MutableBits as {definition.description}. Read and write."))
+        setattr(tibs.Mutibs, kind.value, property(fget=fget_bitwise, fset=fset_bitwise,
+                                                            doc=f"The Mutibs as {definition.description}. Read and write."))
 
         if definition.endianness_variants:
 
@@ -1008,8 +1008,8 @@ class Register:
             for modifier, fget, fset, desc in [("_le", fget_le_mut, fset_le, "little-endian"),
                                                ("_be", fget_be, fset_be, "big-endian"),
                                                ("_ne", fget_ne_mut, fset_ne, f"native-endian (i.e. {byteorder}-endian)")]:
-                doc = f"The MutableBits as {definition.description} in {desc} byte order. Read and write."
-                setattr(tibs.MutableBits, kind.value + modifier, property(fget=fget, fset=fset, doc=doc))
+                doc = f"The Mutibs as {definition.description} in {desc} byte order. Read and write."
+                setattr(tibs.Mutibs, kind.value + modifier, property(fget=fget, fset=fset, doc=doc))
 
     @classmethod
     @functools.lru_cache(CACHE_SIZE)

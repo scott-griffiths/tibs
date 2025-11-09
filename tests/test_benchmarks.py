@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, "..")
-from tibs import Tibs, MutableBits
+from tibs import Tibs, Mutibs
 import random
 import math
 import itertools
@@ -23,7 +23,7 @@ def test_chunking(benchmark):
 
 def test_count(benchmark):
     def count():
-        s = MutableBits.from_zeros(100000000)
+        s = Mutibs.from_zeros(100000000)
         s = s.set(1, [10, 100, 1000, 10000000])
         return s.count(1)
 
@@ -33,7 +33,7 @@ def test_count(benchmark):
 
 def test_token_parsing(benchmark):
     def token_parsing():
-        s = MutableBits()
+        s = Mutibs()
         for i in range(10000):
             s += "u12=244, f32=0.4"
             s += "0x3e44f, 0b11011, 0o75523"
@@ -74,7 +74,7 @@ def test_repeated_reading(benchmark):
 def test_primes(benchmark):
     def primes():
         limit = 1000000
-        is_prime = MutableBits.from_ones(limit)
+        is_prime = Mutibs.from_ones(limit)
         # Manually set 0 and 1 to be not prime.
         is_prime.set(False, [0, 1])
         # For every other integer, if it's set as prime then unset all of its multiples

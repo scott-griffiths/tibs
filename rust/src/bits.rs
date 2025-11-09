@@ -3,7 +3,7 @@ use crate::core::validate_logical_op_lengths;
 use crate::core::{str_to_bits, BitCollection, DTYPE_PARSER};
 use crate::helpers::{find_bitvec, validate_index, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutable::MutableBits;
+use crate::mutable::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
 use pyo3::conversion::IntoPyObject;
@@ -30,13 +30,13 @@ pub fn set_dtype_parser(dtype_parser: Py<PyAny>) -> PyResult<()> {
 pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
     let any_bound = any.bind(py);
 
-    // Is it of type Bits?
+    // Is it of type Tibs?
     if let Ok(any_bits) = any_bound.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.clone());
     }
 
     // Is it of type MutableBits?
-    if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<MutableBits>>() {
+    if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.to_bits());
     }
 
@@ -69,7 +69,7 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
         Err(_) => "<unknown>".to_string(),
     };
     Err(PyTypeError::new_err(format!(
-        "Cannot convert object of type {type_name} to a Bits object."
+        "Cannot convert object of type {type_name} to a Tibs object."
     )))
 }
 
@@ -77,16 +77,16 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 ///
 ///     To construct, use a builder 'from' method:
 ///
-///     * ``Bits.from_bytes(b)`` - Create directly from a ``bytes`` object.
-///     * ``Bits.from_string(s)`` - Use a formatted string.
-///     * ``Bits.from_bools(i)`` - Convert each element in ``i`` to a bool.
-///     * ``Bits.from_zeros(length)`` - Initialise with ``length`` '0' bits.
-///     * ``Bits.from_ones(length)`` - Initialise with ``length`` '1' bits.
-///     * ``Bits.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
-///     * ``Bits.from_dtype(dtype, value)`` - Combine a data type with a value.
-///     * ``Bits.from_joined(iterable)`` - Concatenate an iterable of objects.
+///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` object.
+///     * ``Tibs.from_string(s)`` - Use a formatted string.
+///     * ``Tibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
+///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
+///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
+///     * ``Tibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
+///     * ``Tibs.from_dtype(dtype, value)`` - Combine a data type with a value.
+///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
-///     Using the constructor ``Bits(s)`` is an alias for ``Bits.from_string(s)``.
+///     Using the constructor ``Tibs(s)`` is an alias for ``Tibs.from_string(s)``.
 ///
 #[derive(Clone)]
 #[pyclass(module = "tibs")]
@@ -118,7 +118,7 @@ impl Tibs {
             }
             if end_bit as usize > self.len() {
                 return Err(PyValueError::new_err(
-                    "Slice end goes past the end of the Bits.",
+                    "Slice end goes past the end of the Tibs.",
                 ));
             }
             Ok(Tibs::new(
@@ -133,7 +133,7 @@ impl Tibs {
             }
             if start_bit as usize > self.len() {
                 return Err(PyValueError::new_err(
-                    "Slice start bit is past the end of the Bits.",
+                    "Slice start bit is past the end of the Tibs.",
                 ));
             }
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
@@ -167,11 +167,11 @@ impl Tibs {
         // If it's not a string, build a more helpful error message.
         let type_name = s.get_type().name()?;
         let mut err = format!(
-            "Expected a str for Bits constructor, but received a {}. ",
+            "Expected a str for Tibs constructor, but received a {}. ",
             type_name
         );
 
-        if s.is_instance_of::<MutableBits>() {
+        if s.is_instance_of::<Mutibs>() {
             err.push_str(
                 "You can use the 'to_bits()' method on the `MutableBits` instance instead.",
             );
@@ -179,14 +179,14 @@ impl Tibs {
             || s.is_instance_of::<PyByteArray>()
             || s.is_instance_of::<PyMemoryView>()
         {
-            err.push_str("You can use 'Bits.from_bytes()' instead.");
+            err.push_str("You can use 'Tibs.from_bytes()' instead.");
         } else if s.is_instance_of::<PyInt>() {
-            err.push_str("Perhaps you want to use 'Bits.from_zeros()', 'Bits.from_ones()' or 'Bits.from_random()'?");
+            err.push_str("Perhaps you want to use 'Tibs.from_zeros()', 'Tibs.from_ones()' or 'Tibs.from_random()'?");
         } else if s.is_instance_of::<PyTuple>()
             || s.is_instance_of::<PyList>()
         {
             err.push_str(
-                "Perhaps you want to use 'Bits.from_joined()' or 'Bits.from_bools()' instead?",
+                "Perhaps you want to use 'Tibs.from_joined()' or 'Tibs.from_bools()' instead?",
             );
         } else {
             err.push_str(
@@ -231,16 +231,16 @@ impl Tibs {
         )
     }
 
-    /// Return Bits generator by cutting into chunks.
+    /// Return Tibs generator by cutting into chunks.
     ///
     /// :param chunk_size: The size in bits of the chunks to generate.
     /// :param count: If specified, at most count items are generated. Default is to cut as many times as possible.
-    /// :return: A generator yielding Bits chunks.
+    /// :return: A generator yielding Tibs chunks.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Bits('0b110011').chunks(2))
-    ///     [Bits('0b11'), Bits('0b00'), Bits('0b11')]
+    ///     >>> list(Tibs('0b110011').chunks(2))
+    ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
     ///
     #[pyo3(signature = (chunk_size, count = None))]
     pub fn chunks(
@@ -278,7 +278,7 @@ impl Tibs {
         Py::new(py, iter)
     }
 
-    // A bit of a hack so that the Python can use _chunks on Bits and MutableBits. Can remove later.
+    // A bit of a hack so that the Python can use _chunks on Tibs and MutableBits. Can remove later.
     #[pyo3(signature = (chunk_size, count = None))]
     pub fn _chunks(
         slf: PyRef<'_, Self>,
@@ -288,11 +288,11 @@ impl Tibs {
         Tibs::chunks(slf, chunk_size, count)
     }
 
-    /// Return True if two Bits have the same binary representation.
+    /// Return True if two Tibs have the same binary representation.
     ///
-    /// The right hand side will be promoted to a Bits if needed and possible.
+    /// The right hand side will be promoted to a Tibs if needed and possible.
     ///
-    /// >>> Bits('0b1110') == '0xe'
+    /// >>> Tibs('0b1110') == '0xe'
     /// True
     ///
     pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
@@ -300,7 +300,7 @@ impl Tibs {
         if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
             return self.data == b.data;
         }
-        if let Ok(b) = obj.extract::<PyRef<MutableBits>>() {
+        if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
             return self.data == b.inner.data;
         }
         match bits_from_any(other, py) {
@@ -336,7 +336,7 @@ impl Tibs {
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         let py = slf.py();
-        let haystack_obj: Py<Tibs> = slf.into(); // Get a Py<Bits> for the haystack (self)
+        let haystack_obj: Py<Tibs> = slf.into(); // Get a Py<Tibs> for the haystack (self)
 
         let step = if byte_aligned { 8 } else { 1 };
         let start = start.unwrap_or(0);
@@ -360,11 +360,11 @@ impl Tibs {
     /// Create a new instance with all bits set to '0'.
     ///
     /// :param length: The number of bits to set.
-    /// :return: A Bits object with all bits set to zero.
+    /// :return: A Tibs object with all bits set to zero.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits.from_zeros(500)  # 500 zero bits
+    ///     a = Tibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
@@ -383,8 +383,8 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Bits.from_ones(5)
-    ///     Bits('0b11111')
+    ///     >>> Tibs.from_ones(5)
+    ///     Tibs('0b11111')
     ///
     #[classmethod]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
@@ -399,22 +399,22 @@ impl Tibs {
 
     /// Create a new instance from a formatted string.
     ///
-    /// This method initializes a new instance of :class:`Bits` using a formatted string.
+    /// This method initializes a new instance of :class:`Tibs` using a formatted string.
     ///
     /// :param s: The formatted string to convert.
-    /// :return: A newly constructed ``Bits``.
+    /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits.from_string("0xff01")
-    ///     b = Bits.from_string("0b1")
-    ///     c = Bits.from_string("u12 = 31, f16=-0.25")
+    ///     a = Tibs.from_string("0xff01")
+    ///     b = Tibs.from_string("0b1")
+    ///     c = Tibs.from_string("u12 = 31, f16=-0.25")
     ///
-    /// The `__init__` method for `Bits` redirects to the `from_string` method and is sometimes more convenient:
+    /// The `__init__` method for `Tibs` redirects to the `from_string` method and is sometimes more convenient:
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits("0xff01")  # Bits(s) is equivalent to Bits.from_string(s)
+    ///     a = Tibs("0xff01")  # Tibs(s) is equivalent to Tibs.from_string(s)
     ///
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
@@ -423,11 +423,11 @@ impl Tibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes object to convert to a :class:`Bits`.
+    /// :param b: The bytes object to convert to a :class:`Tibs`.
     ///
     /// .. code-block:: python
     ///
-    /// a = Bits.from_bytes(b"some_bytes_maybe_from_a_file")
+    /// a = Tibs.from_bytes(b"some_bytes_maybe_from_a_file")
     ///
     #[classmethod]
     #[inline]
@@ -445,11 +445,11 @@ impl Tibs {
 
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
-    /// :param i: The iterable to convert to a :class:`Bits`.
+    /// :param i: The iterable to convert to a :class:`Tibs`.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits.from_bools([False, 0, 1, "Steven"])  # binary 0011
+    ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
     pub fn from_bools(
@@ -470,15 +470,15 @@ impl Tibs {
     ///
     /// :param length: The number of bits to set. Must be positive.
     /// :param seed: An optional seed as a bytes or bytearray.
-    /// :return: A newly constructed ``Bits`` with random data.
+    /// :return: A newly constructed ``Tibs`` with random data.
     ///
     /// Note that this uses a pseudo-random number generator and so
     /// might not suitable for cryptographic or other more serious purposes.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits.from_random(1000000)  # A million random bits
-    ///     b = Bits.from_random(100, b'a_seed')
+    ///     a = Tibs.from_random(1000000)  # A million random bits
+    ///     b = Tibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
     #[pyo3(signature = (length, seed=None))]
@@ -519,16 +519,16 @@ impl Tibs {
         BitCollection::from_oct(oct).map_err(PyValueError::new_err)
     }
 
-    /// Create a new instance by concatenating a sequence of Bits objects.
+    /// Create a new instance by concatenating a sequence of Tibs objects.
     ///
-    /// This method concatenates a sequence of Bits objects into a single Bits object.
+    /// This method concatenates a sequence of Tibs objects into a single Tibs object.
     ///
-    /// :param sequence: A sequence to concatenate. Items can either be a Bits object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
+    /// :param sequence: A sequence to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Bits.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = Bits.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
+    ///     a = Tibs.from_joined([f'u6={x}' for x in range(64)])
+    ///     b = Tibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
     ///
     #[classmethod]
     pub fn from_joined(
@@ -536,7 +536,7 @@ impl Tibs {
         sequence: &Bound<'_, PyAny>,
         py: Python,
     ) -> PyResult<Self> {
-        // Convert each item to Bits, store, and sum total length for a single allocation.
+        // Convert each item to Tibs, store, and sum total length for a single allocation.
         let iter = sequence.try_iter()?;
         let mut parts: Vec<Tibs> = Vec::new();
         let mut total_len: usize = 0;
@@ -576,11 +576,11 @@ impl Tibs {
         bv.into_vec()
     }
 
-    /// Return the Bits as bytes, padding with zero bits if needed.
+    /// Return the Tibs as bytes, padding with zero bits if needed.
     ///
     /// Up to seven zero bits will be added at the end to byte align.
     ///
-    /// :return: The Bits as bytes.
+    /// :return: The Tibs as bytes.
     ///
     pub fn to_bytes(&self) -> Vec<u8> {
         if self.data.is_empty() {
@@ -691,16 +691,16 @@ impl Tibs {
         None
     }
 
-    /// Return whether the current Bits starts with prefix.
+    /// Return whether the current Tibs starts with prefix.
     ///
-    /// :param prefix: The Bits to search for.
-    /// :return: True if the Bits starts with the prefix, otherwise False.
+    /// :param prefix: The Tibs to search for.
+    /// :return: True if the Tibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Bits('0b101100').starts_with('0b101')
+    ///     >>> Tibs('0b101100').starts_with('0b101')
     ///     True
-    ///     >>> Bits('0b101100').starts_with('0b100')
+    ///     >>> Tibs('0b101100').starts_with('0b100')
     ///     False
     ///
     pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
@@ -713,16 +713,16 @@ impl Tibs {
         }
     }
 
-    /// Return whether the current Bits ends with suffix.
+    /// Return whether the current Tibs ends with suffix.
     ///
-    /// :param suffix: The Bits to search for.
-    /// :return: True if the Bits ends with the suffix, otherwise False.
+    /// :param suffix: The Tibs to search for.
+    /// :return: True if the Tibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Bits('0b101100').ends_with('0b10-')
+    ///     >>> Tibs('0b101100').ends_with('0b10-')
     ///     True
-    ///     >>> Bits('0b101100').ends_with('0b101')
+    ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False
     ///
     pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
@@ -742,7 +742,7 @@ impl Tibs {
     ///
     ///     .. code-block:: pycon
     ///
-    ///         >>> Bits('0xef').count(1)
+    ///         >>> Tibs('0xef').count(1)
     ///         7
     ///
     pub fn count(&self, value: Py<PyAny>, py: Python) -> PyResult<usize> {
@@ -758,14 +758,14 @@ impl Tibs {
         Ok(if count_ones { ones } else { len - ones })
     }
 
-    /// Return a slice of the current Bits.
+    /// Return a slice of the current Tibs.
     pub fn _getslice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         if length == 0 {
             return Ok(BitCollection::empty());
         }
         if start_bit + length > self.len() {
             return Err(PyValueError::new_err(
-                "End bit of the slice goes past the end of the Bits.",
+                "End bit of the slice goes past the end of the Tibs.",
             ));
         }
         Ok(self.slice(start_bit, length))
@@ -777,9 +777,9 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Bits('0b1111').all()
+    ///     >>> Tibs('0b1111').all()
     ///     True
-    ///     >>> Bits('0b1011').all()
+    ///     >>> Tibs('0b1011').all()
     ///     False
     ///
     #[inline]
@@ -793,9 +793,9 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Bits('0b0000').any()
+    ///     >>> Tibs('0b0000').any()
     ///     False
-    ///     >>> Bits('0b1000').any()
+    ///     >>> Tibs('0b1000').any()
     ///     True
     ///
     #[inline]
@@ -803,20 +803,20 @@ impl Tibs {
         self.data.any()
     }
 
-    /// Create and return a mutable copy of the Bits as a MutableBits instance.
-    pub fn to_mutable_bits(&self) -> MutableBits {
-        MutableBits {
+    /// Create and return a mutable copy of the Tibs as a MutableBits instance.
+    pub fn to_mutable_bits(&self) -> Mutibs {
+        Mutibs {
             inner: Tibs::new(self.data.clone()),
         }
     }
 
-    /// Move the bitvec out, leaving this Bits empty.
+    /// Move the bitvec out, leaving this Tibs empty.
     /// Only to be done as part of MutableBits construction
-    /// when the transient Bits isn't visible externally.
+    /// when the transient Tibs isn't visible externally.
     /// Definitely not part of public interface!
-    pub fn _as_mutable_bits(mut slf: PyRefMut<Self>) -> MutableBits {
+    pub fn _as_mutable_bits(mut slf: PyRefMut<Self>) -> Mutibs {
         let data = std::mem::take(&mut slf.data);
-        MutableBits {
+        Mutibs {
             inner: Tibs::new(data),
         }
     }
@@ -860,7 +860,7 @@ impl Tibs {
     #[inline]
     pub(crate) fn _validate_shift(&self, n: i64) -> PyResult<usize> {
         if self.is_empty() {
-            return Err(PyValueError::new_err("Cannot shift an empty Bits."));
+            return Err(PyValueError::new_err("Cannot shift an empty Tibs."));
         }
         if n < 0 {
             return Err(PyValueError::new_err("Cannot shift by a negative amount."));
@@ -868,7 +868,7 @@ impl Tibs {
         Ok(n as usize)
     }
 
-    /// Return new Bits shifted by n to the left.
+    /// Return new Tibs shifted by n to the left.
     ///
     /// n -- the number of bits to shift. Must be >= 0.
     ///
@@ -887,7 +887,7 @@ impl Tibs {
         Ok(Self::new(result_data))
     }
 
-    /// Return new Bits shifted by n to the right.
+    /// Return new Tibs shifted by n to the right.
     ///
     /// n -- the number of bits to shift. Must be >= 0.
     ///
@@ -905,7 +905,7 @@ impl Tibs {
         Ok(Self::new(result_data))
     }
 
-    /// Concatenates two Bits and return a newly constructed Bits.
+    /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let bs = bits_from_any(bs, py)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
@@ -914,16 +914,16 @@ impl Tibs {
         Ok(Tibs::new(data))
     }
 
-    /// Concatenates two Bits and return a newly constructed Bits.
+    /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let mut bs = mutable_bits_from_any(bs, py)?;
         bs.inner.data.extend_from_bitslice(&self.data);
         Ok(Tibs::new(bs.inner.data))
     }
 
-    /// Bit-wise 'and' between two Bits. Returns new Bits.
+    /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
@@ -931,9 +931,9 @@ impl Tibs {
         self._and(&other)
     }
 
-    /// Bit-wise 'or' between two Bits. Returns new Bits.
+    /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
@@ -941,42 +941,42 @@ impl Tibs {
         self._or(&other)
     }
 
-    /// Bit-wise 'xor' between two Bits. Returns new Bits.
+    /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         self._xor(&other)
     }
 
-    /// Reverse bit-wise 'and' between two Bits. Returns new Bits.
+    /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
-    /// This method is used when the RHS is a Bits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         other._and(&self)
     }
 
-    /// Reverse bit-wise 'or' between two Bits. Returns new Bits.
+    /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
-    /// This method is used when the RHS is a Bits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
         other._or(&self)
     }
 
-    /// Reverse bit-wise 'xor' between two Bits. Returns new Bits.
+    /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
-    /// This method is used when the RHS is a Bits and the LHS is not, but can be converted to one.
+    /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Bits have differing lengths.
+    /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         let other = bits_from_any(bs, py)?;
@@ -986,11 +986,11 @@ impl Tibs {
 
     /// Return the instance with every bit inverted.
     ///
-    /// Raises ValueError if the Bits is empty.
+    /// Raises ValueError if the Tibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
         if self.data.is_empty() {
-            return Err(PyValueError::new_err("Cannot invert empty Bits."));
+            return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
         Ok(Tibs::new(self.data.clone().not()))
     }
@@ -999,7 +999,7 @@ impl Tibs {
         self.to_bytes()
     }
 
-    /// Return new Bits consisting of n concatenations of self.
+    /// Return new Tibs consisting of n concatenations of self.
     ///
     /// Called for expression of the form 'a = b*3'.
     ///
@@ -1023,7 +1023,7 @@ impl Tibs {
         Ok(Tibs::new(bv))
     }
 
-    /// Return Bits consisting of n concatenations of self.
+    /// Return Tibs consisting of n concatenations of self.
     ///
     /// Called for expressions of the form 'a = 3*b'.
     ///
@@ -1035,13 +1035,13 @@ impl Tibs {
 
     pub fn __setitem__(&self, _key: Py<PyAny>, _value: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Bits objects do not support item assignment. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
+            "Tibs objects do not support item assignment. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
         ))
     }
 
     pub fn __delitem__(&self, _key: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Bits objects do not support item deletion. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
+            "Tibs objects do not support item deletion. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
         ))
     }
 }
