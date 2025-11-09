@@ -35,6 +35,7 @@ dev = [
     "pyright>=1.1.389",
     "pytest-cov>=6.0.0",
     "build",
+    "lark",
 ]
 
 [tool.maturin]
