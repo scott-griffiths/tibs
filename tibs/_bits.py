@@ -7,17 +7,17 @@ from typing import Union, Iterable, Any, TextIO
 from tibs._dtypes import Dtype, DtypeSingle, Register, DtypeTuple, DtypeArray
 from tibs._common import Colour, DtypeKind
 from tibs._options import Options
-from tibs.rust import Tibs, MutableBits, bits_from_any
+from tibs.rust import Tibs, Mutibs, bits_from_any
 from collections.abc import Sequence
 
-__all__ = ["Tibs", "MutableBits", "BitsType"]
+__all__ = ["Tibs", "Mutibs", "BitsType"]
 
 _unprintable = list(range(0x00, 0x20))  # ASCII control characters
 _unprintable.extend(range(0x7F, 0xFF))  # DEL char + non-ASCII
 
 
-# Things that can be converted to Tibs or MutableBits.
-BitsType = Union["Tibs", "MutableBits", str, bytearray, bytes, memoryview]
+# Things that can be converted to Tibs or Mutibs.
+BitsType = Union["Tibs", "Mutibs", str, bytearray, bytes, memoryview]
 
 
 def _validate_slice(length: int, start: int | None, end: int | None) -> tuple[int, int]:
@@ -131,7 +131,7 @@ def dtype_token_to_bits(token: str) -> Tibs:
 
 
 class BaseBitsMethods:
-    """Not a real class! This contains the common methods for Tibs and MutableBits, and they
+    """Not a real class! This contains the common methods for Tibs and Mutibs, and they
 are monkey-patched into those classes later. Yes, it would be more normal to use inheritance, but
 this is a step to using the Rust classes as the base classes."""
     # ----- Instance Methods -----
@@ -455,8 +455,8 @@ class BitsMethods:
 
         All occurrences of bs are found, even if they overlap.
 
-        Note that this method is not available for :class:`MutableBits` as its value could change while the
-        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`MutableBits.to_bits`.
+        Note that this method is not available for :class:`Mutibs` as its value could change while the
+        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_bits`.
 
         .. code-block:: pycon
 
@@ -483,8 +483,8 @@ class BitsMethods:
 
         All occurrences of bs are found, even if they overlap.
 
-        Note that this method is not available for :class:`MutableBits` as its value could change while the
-        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`MutableBits.to_bits`.
+        Note that this method is not available for :class:`Mutibs` as its value could change while the
+        generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_bits`.
 
         .. code-block:: pycon
 
@@ -522,12 +522,12 @@ class BitsMethods:
             return hash(((start + end).to_bytes(), length))
 
     def __getattr__(self, name):
-        """Catch attribute errors and provide helpful messages for methods that exist in MutableBits."""
-        # Check if the method exists in MutableBits
-        if hasattr(MutableBits, name) and callable(getattr(MutableBits, name)) and not name.startswith("_"):
+        """Catch attribute errors and provide helpful messages for methods that exist in Mutibs."""
+        # Check if the method exists in Mutibs
+        if hasattr(Mutibs, name) and callable(getattr(Mutibs, name)) and not name.startswith("_"):
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{name}'. "
-                f"Did you mean to use the MutableBits class? Or you could replace '.{name}(...)' with '.to_mutable_bits().{name}(...)'."
+                f"Did you mean to use the Mutibs class? Or you could replace '.{name}(...)' with '.to_mutable_bits().{name}(...)'."
             )
         # Default behavior
         raise AttributeError(
@@ -548,18 +548,18 @@ class MutableBitsMethods:
     # ----- Class Methods -----
 
     @classmethod
-    def from_dtype(cls, dtype: Dtype | str, value: Any, /) -> MutableBits:
+    def from_dtype(cls, dtype: Dtype | str, value: Any, /) -> Mutibs:
         """
         Pack a value according to a data type or data type tuple.
 
         :param dtype: The data type to pack.
         :param value: A value appropriate for the data type.
-        :returns: A newly constructed ``MutableBits``.
+        :returns: A newly constructed ``Mutibs``.
 
         .. code-block:: python
 
-            a = MutableBits.from_dtype("u8", 17)
-            b = MutableBits.from_dtype("f16, i4, bool", [2.25, -3, False])
+            a = Mutibs.from_dtype("u8", 17)
+            b = Mutibs.from_dtype("f16, i4, bool", [2.25, -3, False])
 
         """
         if isinstance(dtype, str):
@@ -584,7 +584,7 @@ class MutableBitsMethods:
 
 
     def replace(self, old: BitsType, new: BitsType, /, start: int | None = None, end: int | None = None,
-                count: int | None = None, byte_aligned: bool | None = None) -> MutableBits:
+                count: int | None = None, byte_aligned: bool | None = None) -> Mutibs:
         """Replaces all occurrences of old with new. Returns self.
 
         :param old: The Tibs or to replace.
@@ -599,9 +599,9 @@ class MutableBitsMethods:
 
         .. code-block:: pycon
 
-            >>> s = MutableBits('0b10011')
+            >>> s = Mutibs('0b10011')
             >>> s.replace('0b1', '0xf')
-            MutableBits('0b11110011111111')
+            Mutibs('0b11110011111111')
 
         """
         if count == 0:
@@ -636,19 +636,19 @@ class MutableBitsMethods:
         # Final replacement
         replacement_list.append(new_bits)
         replacement_list.append(original._getslice(starting_points[-1] + len(old_bits), len(original) - starting_points[-1] - len(old_bits)))
-        self[:] = MutableBits.from_joined(replacement_list)
+        self[:] = Mutibs.from_joined(replacement_list)
         return self
 
 
-# Patching on the methods to Tibs and MutableBits to avoid inheritance.
+# Patching on the methods to Tibs and Mutibs to avoid inheritance.
 def _patch_classes():
     for name, method in BaseBitsMethods.__dict__.items():
         if isinstance(method, classmethod):
             setattr(Tibs, name, classmethod(method.__func__))
-            setattr(MutableBits, name, classmethod(method.__func__))
+            setattr(Mutibs, name, classmethod(method.__func__))
         elif callable(method):
             setattr(Tibs, name, method)
-            setattr(MutableBits, name, method)
+            setattr(Mutibs, name, method)
 
     for name, method in BitsMethods.__dict__.items():
         if isinstance(method, classmethod):
@@ -658,16 +658,16 @@ def _patch_classes():
 
     for name, method in MutableBitsMethods.__dict__.items():
         if isinstance(method, classmethod):
-            setattr(MutableBits, name, classmethod(method.__func__))
+            setattr(Mutibs, name, classmethod(method.__func__))
         elif callable(method):
-            setattr(MutableBits, name, method)
+            setattr(Mutibs, name, method)
 
 
-# The hash method is not available for a ``MutableBits`` object as it is mutable.
-MutableBits.__hash__ = None
+# The hash method is not available for a ``Mutibs`` object as it is mutable.
+Mutibs.__hash__ = None
 
 
 _patch_classes()
 
 Sequence.register(Tibs)
-Sequence.register(MutableBits)
+Sequence.register(Mutibs)

@@ -119,7 +119,7 @@ pub(crate) fn validate_slice(
 
     if !(0 <= start && start <= end && end <= length as i64) {
         return Err(PyValueError::new_err(format!(
-            "Invalid slice positions for MutableBits of length {length}: start={start}, end={end}."
+            "Invalid slice positions for Mutibs of length {length}: start={start}, end={end}."
         )));
     }
     Ok((start as usize, end as usize))

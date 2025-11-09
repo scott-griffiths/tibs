@@ -5,7 +5,7 @@ import re
 from hypothesis import given
 import hypothesis.strategies as st
 import tibs
-from tibs import Dtype, Tibs, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, MutableBits
+from tibs import Dtype, Tibs, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, Mutibs
 from typing import Iterable, Sequence
 
 def test_build():
@@ -712,7 +712,7 @@ def test_from_random():
     assert a == b
     b = Tibs.from_random(10000, b'a different seed this time - quite long to test if this makes a difference or not. It shouldnt really, but who knows?')
     assert a != b
-    c = MutableBits.from_random(10000, b'a_seed')
+    c = Mutibs.from_random(10000, b'a_seed')
     assert a == c
 
 def test_unpacking_array_dtype_with_no_length():

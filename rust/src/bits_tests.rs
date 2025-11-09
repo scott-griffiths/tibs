@@ -2,7 +2,7 @@
 mod tests {
     use crate::core::BitCollection;
     use crate::bits::Tibs;
-    use crate::mutable::MutableBits;
+    use crate::mutable::Mutibs;
 
     #[test]
     fn from_bytes() {
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_set_mutable_slice() {
-        let mut a = MutableBits::from_hex("0011223344").unwrap();
+        let mut a = Mutibs::from_hex("0011223344").unwrap();
         let b = Tibs::from_hex("ff").unwrap();
         a._set_slice(8, 16, &b);
         assert_eq!(a.to_hex().unwrap(), "00ff223344");
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_set_index() {
-        let mut b = <MutableBits as BitCollection>::from_zeros(10);
+        let mut b = <Mutibs as BitCollection>::from_zeros(10);
         b._set_index(true, 0).unwrap();
         assert_eq!(b.to_bin(), "1000000000");
         b._set_index(true, -1).unwrap();
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_set_from_slice() {
-        let mut bits = MutableBits::from_bin("00000000").unwrap();
+        let mut bits = Mutibs::from_bin("00000000").unwrap();
         bits._set_from_slice(true, 1, 7, 2).unwrap();
         assert_eq!(bits.to_bin(), "01010100");
         bits._set_from_slice(true, -7, -1, 2).unwrap();
@@ -317,20 +317,20 @@ mod tests {
     #[test]
     fn mutable_from_immutable() {
         let immutable = Tibs::from_bin("1010").unwrap();
-        let mutable = MutableBits::new(immutable.data);
+        let mutable = Mutibs::new(immutable.data);
         assert_eq!(mutable.to_bin(), "1010");
     }
 
     #[test]
     fn freeze_preserves_data() {
-        let mutable = MutableBits::from_bin("1100").unwrap();
+        let mutable = Mutibs::from_bin("1100").unwrap();
         let immutable = mutable.to_bits();
         assert_eq!(immutable.to_bin(), "1100");
     }
 
     #[test]
     fn modify_then_freeze() {
-        let mut mutable = MutableBits::from_bin("0000").unwrap();
+        let mut mutable = Mutibs::from_bin("0000").unwrap();
         mutable._set_index(true, 1).unwrap();
         mutable._set_index(true, 2).unwrap();
         let immutable = mutable.to_bits();
@@ -339,27 +339,27 @@ mod tests {
 
     #[test]
     fn mutable_constructors() {
-        let m1 = <MutableBits as BitCollection>::from_zeros(4);
+        let m1 = <Mutibs as BitCollection>::from_zeros(4);
         assert_eq!(m1.to_bin(), "0000");
 
-        let m2 = <MutableBits as BitCollection>::from_ones(4);
+        let m2 = <Mutibs as BitCollection>::from_ones(4);
         assert_eq!(m2.to_bin(), "1111");
 
-        let m3 = MutableBits::from_bin("1010").unwrap();
+        let m3 = Mutibs::from_bin("1010").unwrap();
         assert_eq!(m3.to_bin(), "1010");
 
-        let m4 = MutableBits::from_hex("a").unwrap();
+        let m4 = Mutibs::from_hex("a").unwrap();
         assert_eq!(m4.to_bin(), "1010");
 
-        let m5 = MutableBits::from_oct("12").unwrap();
+        let m5 = Mutibs::from_oct("12").unwrap();
         assert_eq!(m5.to_bin(), "001010");
     }
 
     #[test]
     fn mutable_equality() {
-        let m1 = MutableBits::from_bin("1100").unwrap();
-        let m2 = MutableBits::from_bin("1100").unwrap();
-        let m3 = MutableBits::from_bin("0011").unwrap();
+        let m1 = Mutibs::from_bin("1100").unwrap();
+        let m2 = Mutibs::from_bin("1100").unwrap();
+        let m3 = Mutibs::from_bin("0011").unwrap();
 
         assert!(m1 == m2);
         assert!(m1 != m3);
@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn mutable_getslice() {
-        let m = MutableBits::from_bin("11001010").unwrap();
+        let m = Mutibs::from_bin("11001010").unwrap();
 
         let slice1 = m._getslice(2, 6).unwrap();
         assert_eq!(slice1.to_bin(), "0010");
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn mutable_find_operations() {
-        let haystack = MutableBits::from_bin("00110011").unwrap();
+        let haystack = Mutibs::from_bin("00110011").unwrap();
         let needle = Tibs::from_bin("11").unwrap();
 
         assert_eq!(haystack._find(&needle, 0, haystack.len(), false), Some(2));
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn mutable_set_operations() {
-        let mut m = <MutableBits as BitCollection>::from_zeros(8);
+        let mut m = <Mutibs as BitCollection>::from_zeros(8);
 
         m._set_index(true, 0).unwrap();
         m._set_index(true, 7).unwrap();
@@ -400,10 +400,10 @@ mod tests {
 
     #[test]
     fn mutable_immutable_interaction() {
-        let pattern1 = MutableBits::from_bin("1100").unwrap();
+        let pattern1 = Mutibs::from_bin("1100").unwrap();
         let pattern2 = Tibs::from_bin("0011").unwrap();
 
-        let mut m = MutableBits::new(pattern1.inner.data);
+        let mut m = Mutibs::new(pattern1.inner.data);
 
         m._set_slice(0, 2, &pattern2);
         assert_eq!(m.to_bin(), "001100");
@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn empty_data_operations() {
-        let empty_mutable = <MutableBits as BitCollection>::empty();
+        let empty_mutable = <Mutibs as BitCollection>::empty();
 
         assert_eq!(empty_mutable.len(), 0);
         assert!(!empty_mutable.any());
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn mutable_edge_index_operations() {
-        let mut m = MutableBits::from_bin("1010").unwrap();
+        let mut m = Mutibs::from_bin("1010").unwrap();
 
         m._set_index(false, 0).unwrap();
         m._set_index(false, 3).unwrap();
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn set_mutable_slice_with_bits() {
-        let mut m = MutableBits::from_bin("00000000").unwrap();
+        let mut m = Mutibs::from_bin("00000000").unwrap();
         let pattern = Tibs::from_bin("1111").unwrap();
 
         m._set_slice(2, 6, &pattern);
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn conversion_round_trip() {
         let original = Tibs::from_bin("101010").unwrap();
-        let mut mutable = MutableBits::new(original.data);
+        let mut mutable = Mutibs::new(original.data);
         mutable._set_index(false, 0).unwrap();
         mutable._set_index(true, 1).unwrap();
         let result = mutable.as_bits();
@@ -474,23 +474,23 @@ mod tests {
 
     #[test]
     fn mutable_from_checked_constructors() {
-        let bin = MutableBits::from_bin("1010").unwrap();
+        let bin = Mutibs::from_bin("1010").unwrap();
         assert_eq!(bin.to_bin(), "1010");
 
-        let hex = MutableBits::from_hex("a").unwrap();
+        let hex = Mutibs::from_hex("a").unwrap();
         assert_eq!(hex.to_bin(), "1010");
 
-        let oct = MutableBits::from_oct("12").unwrap();
+        let oct = Mutibs::from_oct("12").unwrap();
         assert_eq!(oct.to_bin(), "001010");
 
-        assert!(MutableBits::from_bin("123").is_err());
-        assert!(MutableBits::from_hex("xy").is_err());
-        assert!(MutableBits::from_oct("89").is_err());
+        assert!(Mutibs::from_bin("123").is_err());
+        assert!(Mutibs::from_hex("xy").is_err());
+        assert!(Mutibs::from_oct("89").is_err());
     }
 
     #[test]
     fn negative_indexing_in_mutable() {
-        let m = MutableBits::from_bin("10101010").unwrap();
+        let m = Mutibs::from_bin("10101010").unwrap();
 
         assert_eq!(m._getindex(-3).unwrap(), false);
         assert_eq!(m._getindex(-8).unwrap(), true);
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn mutable_getslice_edge_cases() {
-        let m = MutableBits::from_bin("11001010").unwrap();
+        let m = Mutibs::from_bin("11001010").unwrap();
 
         let empty = m._getslice(4, 4).unwrap();
         assert_eq!(empty.to_bin(), "");

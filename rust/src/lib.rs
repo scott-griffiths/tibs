@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 #[pymodule]
 fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<bits::Tibs>()?;
-    m.add_class::<mutable::MutableBits>()?;
+    m.add_class::<mutable::Mutibs>()?;
 
     m.add_function(wrap_pyfunction!(bits::set_dtype_parser, m)?)?;
     m.add_function(wrap_pyfunction!(bits::bits_from_any, m)?)?;

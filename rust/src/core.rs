@@ -1,6 +1,6 @@
 use crate::bits::Tibs;
 use crate::helpers::{validate_index, BV};
-use crate::mutable::MutableBits;
+use crate::mutable::Mutibs;
 use bitvec::bits;
 use bitvec::field::BitField;
 use bitvec::order::Msb0;
@@ -14,7 +14,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
 
-// Trait used for commonality between the Bits and MutableBits structs.
+// Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
@@ -334,7 +334,7 @@ impl BitCollection for Tibs {
     }
 }
 
-impl BitCollection for MutableBits {
+impl BitCollection for Mutibs {
 
     #[inline]
     fn len(&self) -> usize {
@@ -455,7 +455,7 @@ impl fmt::Debug for Tibs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.len() > 100 {
             return f
-                .debug_struct("Bits")
+                .debug_struct("Tibs")
                 .field(
                     "hex",
                     &self.slice(0, 100)._slice_to_hex(0, self.len()).unwrap(),
@@ -465,12 +465,12 @@ impl fmt::Debug for Tibs {
         }
         if self.len() % 4 == 0 {
             return f
-                .debug_struct("Bits")
+                .debug_struct("Tibs")
                 .field("hex", &self._slice_to_hex(0, self.len()).unwrap())
                 .field("length", &self.len())
                 .finish();
         }
-        f.debug_struct("Bits")
+        f.debug_struct("Tibs")
             .field("bin", &self.to_bin())
             .field("length", &self.len())
             .finish()
@@ -484,28 +484,28 @@ impl PartialEq for Tibs {
     }
 }
 
-impl PartialEq<MutableBits> for Tibs {
+impl PartialEq<Mutibs> for Tibs {
     #[inline]
-    fn eq(&self, other: &MutableBits) -> bool {
+    fn eq(&self, other: &Mutibs) -> bool {
         self.data == other.inner.data
     }
 }
 
-impl PartialEq for MutableBits {
+impl PartialEq for Mutibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.inner.data == other.inner.data
     }
 }
 
-impl PartialEq<Tibs> for MutableBits {
+impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
         self.inner.data == other.data
     }
 }
 
-// ---- Bits private helper methods. Not part of the Python interface. ----
+// ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
     pub(crate) fn new(bv: BV) -> Self {
@@ -564,7 +564,7 @@ pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     }
 }
 
-impl MutableBits {
+impl Mutibs {
     pub fn new(bv: BV) -> Self {
         Self {
             inner: Tibs::new(bv),

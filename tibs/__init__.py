@@ -31,7 +31,7 @@ __author__ = "Scott Griffiths"
 
 
 from ._version import VERSION as __version__
-from ._bits import Tibs, MutableBits
+from ._bits import Tibs, Mutibs
 from ._bits import dtype_token_to_bits as _dtype_token_to_bits
 from ._dtypes import Register, Dtype, DtypeSingle, DtypeArray, DtypeTuple
 from ._options import Options
@@ -41,7 +41,7 @@ from .rust import set_dtype_parser as _set_dtype_parser
 
 
 __all__ = ["Tibs", "Dtype", "DtypeSingle", "DtypeArray", "DtypeTuple", "Expression",
-           "Options", "Register", "Endianness", "DtypeKind", "MutableBits"]
+           "Options", "Register", "Endianness", "DtypeKind", "Mutibs"]
 
 
 def _init():
