@@ -4,14 +4,14 @@ import os
 import time
 import datetime
 
-from bitformat._version import VERSION
+from tibs._version import VERSION
 
 year = datetime.datetime.utcfromtimestamp(
     int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
 ).year
 
-project = "bitformat"
-copyright = f"2024 - {year}, Scott Griffiths"
+project = "tibs"
+copyright = f"2025 - {year}, Scott Griffiths"
 author = "Scott Griffiths"
 release = VERSION
 
@@ -21,7 +21,7 @@ extensions = [
     'enum_tools.autoenum',
     'sphinx_autodoc_typehints',
 ]
-autoapi_dirs = ["../bitformat/"]
+autoapi_dirs = ["../tibs/"]
 autoapi_add_toctree_entry = False
 autodoc_mock_imports = ["lark"]
 

@@ -1,11 +1,11 @@
 r"""
-A library for creating and interpreting binary formats.
+A Python bit manipulation library written in Rust
 """
 
 __licence__ = """
 The MIT License
 
-Copyright (c) 2024 Scott Griffiths (dr.scottgriffiths@gmail.com)
+Copyright (c) 2025 Scott Griffiths (dr.scottgriffiths@gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -64,6 +64,6 @@ _init()
 
 del rust
 
-# Set the __module__ of each of the types in __all__ to 'bitformat' so that they appear as bitformat.Bits instead of bitformat._bits.Bits etc.
+# Set the __module__ of each of the types in __all__ to 'tibs' so that they appear as tibs.Bits instead of tibs._bits.Bits etc.
 for _name in __all__:
-    locals()[_name].__module__ = "bitformat"
+    locals()[_name].__module__ = "tibs"
