@@ -46,6 +46,8 @@ jobs:
     needs: check-tag
     if: ${{ github.event.workflow_run.conclusion == 'success' && needs.check-tag.outputs.is_tag == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - name: Download source code
         uses: actions/checkout@v3
@@ -69,12 +71,9 @@ jobs:
       - name: Publish to Test PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
 
       - name: Publish to PyPI
         if: needs.check-tag.outputs.is_prerelease == 'false'
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
