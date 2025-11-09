@@ -2,7 +2,7 @@
 
 import pytest
 import copy
-from bitformat import Bits, MutableBits
+from tibs import Bits, MutableBits
 
 
 class TestFlexibleInitialisation:

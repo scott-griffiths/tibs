@@ -2,7 +2,7 @@ from __future__ import annotations
 import abc
 import sys
 
-from bitformat import Bits
+from tibs import Bits
 from ._dtypes import DtypeTransformer
 from ._bits import BitsType
 from ._common import final, Indenter, field_parser

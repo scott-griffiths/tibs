@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bitformat import Bits
+from tibs import Bits
 from ._dtypes import Dtype, DtypeSingle, DtypeTuple
 from ast import literal_eval
 from ._common import override, Indenter, Colour, DtypeKind, validate_name, ExpressionError

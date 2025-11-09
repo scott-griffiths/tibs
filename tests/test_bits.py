@@ -4,8 +4,8 @@ import io
 import re
 from hypothesis import given
 import hypothesis.strategies as st
-import bitformat
-from bitformat import Dtype, Bits, Field, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, MutableBits
+import tibs
+from tibs import Dtype, Bits, Field, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, MutableBits
 from typing import Iterable, Sequence
 
 def test_build():
@@ -658,7 +658,7 @@ def test_big_endian_errors():
 
 
 def test_native_endian_floats():
-    if bitformat.byteorder == "little":
+    if tibs.byteorder == "little":
         a = Bits.from_dtype("f64_ne", 0.55)
         assert a.unpack("f64_ne") == 0.55
         assert a.f_le == 0.55

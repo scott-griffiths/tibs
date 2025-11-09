@@ -1,7 +1,7 @@
 
-from bitformat import Format, If, Repeat, FieldType, Field, DtypeSingle, Dtype, DtypeTuple, DtypeArray, Bits, MutableBits
+from tibs import Format, If, Repeat, FieldType, Field, DtypeSingle, Dtype, DtypeTuple, DtypeArray, Bits, MutableBits
 
-from bitformat._bits import bits_from_any
+from tibs._bits import bits_from_any
 
 # import tomllib
 #

@@ -4,10 +4,10 @@ import sys
 import io
 from ast import literal_eval
 from typing import Union, Iterable, Any, TextIO
-from bitformat._dtypes import Dtype, DtypeSingle, Register, DtypeTuple, DtypeArray
-from bitformat._common import Colour, DtypeKind
-from bitformat._options import Options
-from bitformat.rust import Bits, MutableBits, bits_from_any
+from tibs._dtypes import Dtype, DtypeSingle, Register, DtypeTuple, DtypeArray
+from tibs._common import Colour, DtypeKind
+from tibs._options import Options
+from tibs.rust import Bits, MutableBits, bits_from_any
 from collections.abc import Sequence
 
 __all__ = ["Bits", "MutableBits", "BitsType"]

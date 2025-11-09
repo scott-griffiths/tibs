@@ -1,5 +1,5 @@
 import pytest
-from bitformat import Expression
+from tibs import Expression
 
 
 def test_expression_creation():

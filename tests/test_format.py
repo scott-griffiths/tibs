@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from bitformat import Format, Dtype, DtypeSingle, Bits, Field, Array, FieldType, Repeat, DtypeKind, Expression, While, \
+from tibs import Format, Dtype, DtypeSingle, Bits, Field, Array, FieldType, Repeat, DtypeKind, Expression, While, \
     MutableBits
 from hypothesis import given
 import pytest

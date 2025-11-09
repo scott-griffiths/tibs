@@ -1,5 +1,5 @@
 import pytest
-from bitformat import Reader, Field, Bits, Dtype, DtypeTuple, MutableBits
+from tibs import Reader, Field, Bits, Dtype, DtypeTuple, MutableBits
 
 
 def test_creation():

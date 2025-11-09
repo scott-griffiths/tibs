@@ -15,21 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
-name = "bitformat_rust"
-version = "0.1.0"
-dependencies = [
- "bitvec",
- "bytemuck",
- "hamming",
- "hex",
- "lru",
- "once_cell",
- "pyo3",
- "rand",
- "sha2",
-]
-
-[[package]]
 name = "bitvec"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -364,6 +349,21 @@ name = "target-lexicon"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
+
+[[package]]
+name = "tibs_rust"
+version = "0.1.0"
+dependencies = [
+ "bitvec",
+ "bytemuck",
+ "hamming",
+ "hex",
+ "lru",
+ "once_cell",
+ "pyo3",
+ "rand",
+ "sha2",
+]
 
 [[package]]
 name = "typenum"

@@ -11,92 +11,51 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/CONTRIBUTING.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_array.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_bits.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_common.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_dtype_definitions.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_dtypes.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_field.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_fieldtype.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_format.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_if.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_let.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_options.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_pass.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_reader.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_repeat.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_version.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/_while.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/bitformat_grammar.lark" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bitformat/py.typed" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/_static/custom.css" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/api.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/array.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/bitformat_logo.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/bitformat_logo_small.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/bitformat_tour.ipynb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/bits.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/bitstring_comparison.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/dtypes.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/fieldtypes.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/index.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/introduction.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/logo.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/misc.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/mutable_bits.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/parser_ref.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/quick_reference.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/reader.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/requirements.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/tldr.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/use_case_construction.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/use_case_formats.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/use_case_manipulation.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/use_cases.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/release_notes.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/runtime.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/bits.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/bits_tests.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/core.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/helpers.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/iterator.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/lib.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/mutable.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/src/mutable_test.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rust/tests/test_python_interface.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/performance/blob" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/performance_comparison.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_array.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_benchmarks.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_bitstream.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_common.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_coverage.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_coverage_README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_dtypes.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_field.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_format.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_fuzzing.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_general.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_if.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_pass.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_reader.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_repeat.py" afterDir="false" />
+    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Adding in the whole of bitformat, as deleting is easier than adding!">
+      <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CONTRIBUTING.md" beforeDir="false" afterPath="$PROJECT_DIR$/CONTRIBUTING.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LICENSE" beforeDir="false" afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_array.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_array.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_common.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_dtype_definitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtype_definitions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtypes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_field.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_field.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_fieldtype.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_fieldtype.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_format.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_if.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_if.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_let.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_let.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_options.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_options.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_pass.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_pass.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_reader.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_reader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_repeat.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_repeat.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_version.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_version.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/_while.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_while.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/bitformat_grammar.lark" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/bitformat_grammar.lark" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitformat/py.typed" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/py.typed" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/release_notes.md" beforeDir="false" afterPath="$PROJECT_DIR$/release_notes.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_array.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_array.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_benchmarks.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_benchmarks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitstream.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitstream.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_common.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_dtypes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_field.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_field.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_format.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_fuzzing.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_fuzzing.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_general.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_general.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_if.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_if.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_pass.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_pass.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_reader.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_reader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_repeat.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_repeat.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -113,12 +72,12 @@
     &quot;assignee&quot;: &quot;scott-griffiths&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/scott-griffiths/tibs.git&quot;,
-    &quot;accountId&quot;: &quot;f53dcd32-f003-418b-b2be-1419c262c9b7&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/scott-griffiths/tibs.git",
+    "accountId": "a7c89bb6-a5de-4a8e-b267-2249abde250c"
   }
-}</component>
+}]]></component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="LtemUqSh" />
   </component>
@@ -132,19 +91,26 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/scottg/dev/tibs&quot;,
-    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
-    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
-    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.pytest in scottg.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/Users/scottg/dev/tibs",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "org.rust.first.attach.projects": "true",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
-  <component name="RunManager">
+}]]></component>
+  <component name="RunManager" selected="Python tests.pytest in scottg">
     <configuration name="Test tibs" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
       <option name="buildProfileId" value="test" />
       <option name="command" value="test --workspace" />
@@ -163,9 +129,39 @@
         <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
       </method>
     </configuration>
+    <configuration name="pytest in scottg" type="tests" factoryName="py.test" nameIsGenerated="true">
+      <module name="tibs" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="Python 3.13 (tibs)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;--benchmark-skip&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python tests.pytest in scottg" />
+    </list>
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-PY-252.27397.106" />
+        <option value="bundled-python-sdk-4e2b1448bda8-9a97661f3031-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.27397.106" />
+      </set>
+    </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -174,8 +170,28 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1762679936942</updated>
-      <workItem from="1762679938545" duration="816000" />
+      <workItem from="1762679938545" duration="1739000" />
+      <workItem from="1762683838824" duration="1226000" />
     </task>
+    <task id="LOCAL-00001" summary="Adding in the whole of bitformat, as deleting is easier than adding!">
+      <option name="closed" value="true" />
+      <created>1762682156310</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1762682156310</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Adding in the whole of bitformat, as deleting is easier than adding!" />
+    <option name="LAST_COMMIT_MESSAGE" value="Adding in the whole of bitformat, as deleting is easier than adding!" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>

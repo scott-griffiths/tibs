@@ -3,11 +3,11 @@ from __future__ import annotations
 import abc
 import functools
 from typing import Any, Callable, Iterable, Sequence, overload, Union, Self
-import bitformat
+import tibs
 from ._common import Expression, Endianness, byteorder, DtypeKind, override, final, parser_str, ExpressionError
 from lark import Transformer, UnexpectedInput
 import lark
-from bitformat.rust import Bits, bits_from_any
+from tibs.rust import Bits, bits_from_any
 
 # Things that can be converted to Bits when a Bits type is needed
 BitsType = Union["Bits", str, Iterable[Any], bytearray, bytes, memoryview]
@@ -142,7 +142,7 @@ class Dtype(abc.ABC):
             raise ValueError(f"Error parsing dtype '{s}': {e}")
 
     @abc.abstractmethod
-    def pack(self, value: Any, /) -> bitformat.Bits:
+    def pack(self, value: Any, /) -> tibs.Bits:
         """Create and return a new Bits from a value.
 
         The value parameter should be of a type appropriate to the data type.
@@ -295,7 +295,7 @@ class DtypeSingle(Dtype):
     _definition: DtypeDefinition
     _endianness: Endianness
     _create_fn: Callable[[Any], Bits]
-    _get_fn: Callable[[bitformat.Bits], Any]
+    _get_fn: Callable[[tibs.Bits], Any]
 
     @override
     def _is_padding(self) -> bool:
@@ -344,7 +344,7 @@ class DtypeSingle(Dtype):
             else:
                 x._bit_length = x._size.const_value * definition.bits_per_character
         little_endian = (endianness is Endianness.LITTLE or
-                     (endianness is Endianness.NATIVE and bitformat.byteorder is Endianness.LITTLE))
+                     (endianness is Endianness.NATIVE and tibs.byteorder is Endianness.LITTLE))
         x._endianness = endianness
 
         if little_endian:
@@ -386,7 +386,7 @@ class DtypeSingle(Dtype):
 
     @override
     @final
-    def pack(self, value: Any, /) -> bitformat.Bits:
+    def pack(self, value: Any, /) -> tibs.Bits:
         """Create and return a new Bits from a value.
 
         The value parameter should be of a type appropriate to the data type.
@@ -522,13 +522,13 @@ class DtypeArray(Dtype):
 
     @override
     @final
-    def pack(self, value: Any, /) -> bitformat.Bits:
+    def pack(self, value: Any, /) -> tibs.Bits:
         """Create and return a new Bits from a value.
 
         The value parameter should be of a type appropriate to the data type.
 
         """
-        if isinstance(value, bitformat.Bits):
+        if isinstance(value, tibs.Bits):
             if len(value) != self.bit_length:
                 raise ValueError(f"Expected {self.bit_length} bits, but got {len(value)} bits.")
             return value
@@ -558,7 +558,7 @@ class DtypeArray(Dtype):
     @override
     @final
     def _unpack_no_checks(self, b: Bits | MutableBits) -> tuple[Any]:
-        if isinstance(b, bitformat.MutableBits):
+        if isinstance(b, tibs.MutableBits):
             b = b.to_bits()
         return tuple(self._dtype_single._unpack_no_checks(c) for c in b.chunks(self._dtype_single.bit_length, count=self.items))
 
@@ -682,7 +682,7 @@ class DtypeTuple(Dtype):
 
     @override
     @final
-    def pack(self, values: Sequence[Any]) -> bitformat.Bits:
+    def pack(self, values: Sequence[Any]) -> tibs.Bits:
         """Create and return a new Bits from a value.
 
         The value parameter should be of a type appropriate to the data type.
@@ -690,11 +690,11 @@ class DtypeTuple(Dtype):
         """
         if len(values) != self.items:
             raise ValueError(f"Expected {self.items} values, but got {len(values)}.")
-        return bitformat.Bits.from_joined([dtype.pack(value) for dtype, value in zip(self._dtypes, values)])
+        return tibs.Bits.from_joined([dtype.pack(value) for dtype, value in zip(self._dtypes, values)])
 
     @override
     @final
-    def _unpack(self, b: bitformat.Bits | str | Iterable[Any] | bytearray | bytes | memoryview, /) -> tuple[int, tuple[tuple[Any] | Any]]:
+    def _unpack(self, b: tibs.Bits | str | Iterable[Any] | bytearray | bytes | memoryview, /) -> tuple[int, tuple[tuple[Any] | Any]]:
         """Unpack a Bits to find its value.
 
         The b parameter should be a Bits of the appropriate length, or an object that can be converted to a Bits.
@@ -954,13 +954,13 @@ class Register:
         def fget_bitwise(b):
             return definition.get_fn(b, 0, len(b))
 
-        setattr(bitformat.Bits, kind.value, property(fget=fget_bitwise,
+        setattr(tibs.Bits, kind.value, property(fget=fget_bitwise,
                                                      doc=f"The Bits as {definition.description}. Read only."))
 
         def fset_bitwise(b, val):
             b[:] = definition.set_fn(val, length=len(b))
 
-        setattr(bitformat.MutableBits, kind.value, property(fget=fget_bitwise, fset=fset_bitwise,
+        setattr(tibs.MutableBits, kind.value, property(fget=fget_bitwise, fset=fset_bitwise,
                                                             doc=f"The MutableBits as {definition.description}. Read and write."))
 
         if definition.endianness_variants:
@@ -983,7 +983,7 @@ class Register:
                                          ("_be", fget_be, "big-endian"),
                                          ("_ne", fget_ne, f"native-endian (i.e. {byteorder}-endian)")]:
                 doc = f"The Bits as {definition.description} in {desc} byte order. Read only."
-                setattr(bitformat.Bits, kind.value + modifier, property(fget=fget, doc=doc))
+                setattr(tibs.Bits, kind.value + modifier, property(fget=fget, doc=doc))
 
             def fget_le_mut(b):
                 if len(b) % 8 != 0:
@@ -1009,7 +1009,7 @@ class Register:
                                                ("_be", fget_be, fset_be, "big-endian"),
                                                ("_ne", fget_ne_mut, fset_ne, f"native-endian (i.e. {byteorder}-endian)")]:
                 doc = f"The MutableBits as {definition.description} in {desc} byte order. Read and write."
-                setattr(bitformat.MutableBits, kind.value + modifier, property(fget=fget, fset=fset, doc=doc))
+                setattr(tibs.MutableBits, kind.value + modifier, property(fget=fget, fset=fset, doc=doc))
 
     @classmethod
     @functools.lru_cache(CACHE_SIZE)

@@ -2,8 +2,8 @@
 
 import pytest
 import sys
-import bitformat
-from bitformat import Bits, Dtype, DtypeTuple, MutableBits
+import tibs
+from tibs import Bits, Dtype, DtypeTuple, MutableBits
 import math
 import copy
 
@@ -112,7 +112,7 @@ class Testbyte_aligned:
         assert a == "0x000"
 
     def test_byte_aligned(self):
-        bitformat.Options().byte_aligned = True
+        tibs.Options().byte_aligned = True
         a = Bits.from_string("0x00 ff 0f f")
         li = list(a.find_all("0xff"))
         assert li == [8]
@@ -122,7 +122,7 @@ class Testbyte_aligned:
         assert p == 8
         a = a.to_mutable_bits().replace("0xff", "")
         assert a == "0x000ff"
-        bitformat.Options().byte_aligned = False
+        tibs.Options().byte_aligned = False
 
 
 class TestSliceAssignment:

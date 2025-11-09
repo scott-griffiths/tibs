@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, "..")
-from bitformat import Bits, MutableBits
+from tibs import Bits, MutableBits
 import random
 import math
 import itertools

@@ -4,11 +4,11 @@ import math
 from collections.abc import Sized, Sequence
 from typing import Union, Iterable, Any, overload, TextIO
 
-from bitformat._bits import Bits, BitsType, MutableBits
-from bitformat._dtypes import Dtype, Register, DtypeTuple, DtypeSingle
-from bitformat._options import Options
-from bitformat._common import Colour, DtypeKind
-from bitformat.rust import bits_from_any, mutable_bits_from_any
+from tibs._bits import Bits, BitsType, MutableBits
+from tibs._dtypes import Dtype, Register, DtypeTuple, DtypeSingle
+from tibs._options import Options
+from tibs._common import Colour, DtypeKind
+from tibs.rust import bits_from_any, mutable_bits_from_any
 import operator
 import sys
 

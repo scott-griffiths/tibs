@@ -3,12 +3,12 @@ import pytest
 import sys
 import array
 import os
-from bitformat import Array, Bits
+from tibs import Array, Bits
 import copy
 import itertools
 import io
-from bitformat._dtypes import Dtype, DtypeTuple, DtypeSingle
-from bitformat._common import DtypeKind
+from tibs._dtypes import Dtype, DtypeTuple, DtypeSingle
+from tibs._common import DtypeKind
 import re
 import collections
 from typing import Iterable, Sequence

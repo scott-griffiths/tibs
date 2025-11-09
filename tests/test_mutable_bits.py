@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from bitformat import Dtype, Bits, MutableBits, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind
+from tibs import Dtype, Bits, MutableBits, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind
 
 
 def test_creation():
@@ -241,7 +241,7 @@ def test_iand():
     b = MutableBits('0b1111')
     a &= b
     assert a == '0b1000'
-    from bitformat._bits import Bits
+    from tibs._bits import Bits
     c = Bits('0b0100')
     a &= c
     assert a == '0b0000'

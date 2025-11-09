@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import struct
 from typing import Literal
-from bitformat._common import DtypeKind
+from tibs._common import DtypeKind
 from ._dtypes import DtypeDefinition, AllowedSizes
 from ._bits import Bits
 from .rust import bits_from_any

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from bitformat import Format, DtypeSingle, DtypeArray, Bits, Field, Register
-from bitformat._common import DtypeKind
+from tibs import Format, DtypeSingle, DtypeArray, Bits, Field, Register
+from tibs._common import DtypeKind
 from hypothesis import given
 import hypothesis.strategies as st
 import math

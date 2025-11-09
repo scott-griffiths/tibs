@@ -1,5 +1,5 @@
 import pytest
-from bitformat import Pass, Format, Bits
+from tibs import Pass, Format, Bits
 
 
 def test_pass_creation():

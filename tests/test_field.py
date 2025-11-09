@@ -1,8 +1,8 @@
 import keyword
 
 import pytest
-from bitformat import Dtype, Bits, Field, DtypeSingle, Expression, DtypeArray, DtypeTuple
-from bitformat._common import DtypeKind
+from tibs import Dtype, Bits, Field, DtypeSingle, Expression, DtypeArray, DtypeTuple
+from tibs._common import DtypeKind
 from hypothesis import given
 import hypothesis.strategies as st
 import string

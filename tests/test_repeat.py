@@ -1,4 +1,4 @@
-from bitformat import Repeat, Bits, Field, Format, Expression
+from tibs import Repeat, Bits, Field, Format, Expression
 import pytest
 
 def test_creation():
