@@ -64,7 +64,7 @@ class ExpressionError(ValueError):
 
 
 
-class Expression:
+class Expressdion:
     """
     A compiled expression that can be evaluated with a dictionary of variables.
 
@@ -190,8 +190,6 @@ class Expression:
     def __hash__(self) -> int:
         return hash(self.code_str)
 
-
-NONE = Expression('{None}')
 
 
 @enum_tools.documentation.document_enum

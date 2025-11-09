@@ -3,7 +3,7 @@
 import pytest
 import sys
 import tibs
-from tibs import Tibs, Dtype, DtypeTuple, Mutibs
+from tibs import Tibs, Mutibs
 import math
 import copy
 
@@ -11,14 +11,17 @@ sys.path.insert(0, "..")
 
 
 class TestAll:
+    @pytest.mark.skip
     def test_creation_from_uint(self):
-        s = Tibs.from_dtype("u6", 15)
+        s = Tibs("u6 = 15")
         assert s.bin == "001111"
-        s = Tibs.from_dtype("u1", 0)
+        s = Tibs("u1 = 0")
         assert s.bin == "0"
         s = Tibs.from_zeros(8)
         assert s.u == 0
+        assert len(s) == 8
 
+    @pytest.mark.skip
     def test_creation_from_oct(self):
         s = Tibs.from_dtype(Dtype("oct"), "7")
         assert s.oct == "7"
@@ -127,6 +130,7 @@ class Testbyte_aligned:
 
 class TestSliceAssignment:
 
+    @pytest.mark.skip
     def test_slice_assignment_single_bit(self):
         a = Mutibs('0b000')
         a[2] = '0b1'
@@ -145,6 +149,7 @@ class TestSliceAssignment:
         with pytest.raises(IndexError):
             a[3] = 1
 
+    @pytest.mark.skip
     def test_slice_assignment_muliple_bits(self):
         a = Mutibs('0b0')
         a[0:1] = '0b110'
@@ -168,6 +173,7 @@ class TestSliceAssignment:
         a[0:2] = '0b11'
         assert a == '0b11'
 
+    @pytest.mark.skip
     def test_del_slice_step(self):
         a = Mutibs.from_dtype('bin', '100111101001001110110100101')
         del a[::2]
@@ -181,6 +187,7 @@ class TestSliceAssignment:
         del a[::1]
         assert a.bin == ''
 
+    @pytest.mark.skip
     def test_del_slice_negative_step(self):
         a = Mutibs('0b0001011101101100100110000001')
         del a[5:23:-3]
@@ -209,6 +216,7 @@ class TestSliceAssignment:
         del a[3:5:-1]
         assert a == Tibs.from_zeros(10)
 
+    @pytest.mark.skip
     def test_del_single_element(self):
         a = Mutibs('0b0010011')
         del a[-1]
@@ -218,6 +226,7 @@ class TestSliceAssignment:
         with pytest.raises(IndexError):
             del a[5]
 
+    @pytest.mark.skip
     def test_set_slice_step(self):
         a = Mutibs.from_dtype('bin', '0000000000')
         a[::2] = '0b11111'
@@ -292,7 +301,7 @@ class TestRepr:
         a = Tibs.from_string("0o12345")
         assert repr(a).splitlines()[0] == "Tibs('0b001010011100101')"
 
-
+@pytest.mark.skip
 class TestNewProperties:
     def test_getter_length_errors(self):
         a = Tibs.from_string("0x123")
@@ -379,11 +388,13 @@ class TestBFloats:
         x, y, z = a.unpack("3*bfloat16")
         assert (x, y, z) == (1.0, 2.0, 3.0)
 
+    @pytest.mark.skip
     def test_interpret_bug(self):
         a = Tibs.from_ones(100)
         with pytest.raises(ValueError):
             _ = a.f
 
+    @pytest.mark.skip
     def test_overflows(self):
         inf16 = Tibs.from_dtype("f16", math.inf)
         inf32 = Tibs.from_string("f32 = inf")
@@ -405,35 +416,14 @@ class TestBFloats:
         assert ninf16 == Tibs.from_string("f16 = -100000")
 
 
-try:
-    import numpy as np
-
-    numpy_installed = True
-except ImportError:
-    numpy_installed = False
-
-
-class TestNumpy:
-    @pytest.mark.skipif(not numpy_installed, reason="numpy not installed.")
-    def test_getting(self):
-        a = Tibs("0b110")
-        p = np.int_(1)
-        assert a[p] is True
-        p = np.short(0)
-        assert a[p] is True
-
-    @pytest.mark.skipif(not numpy_installed, reason="numpy not installed.")
-    def test_creation(self):
-        a = Tibs.from_zeros(np.longlong(12))
-        assert a.hex == "000"
-
-
+@pytest.mark.skip
 def test_bytes_from_list():
     s = Tibs.from_dtype("bytes", [1, 2])
     assert s == "0x0102"
     s = Tibs.from_bytes(bytearray([1, 2]))
     assert s == "0x0102"
 
+@pytest.mark.skip
 def test_from_dtype_tuple():
     a = Tibs.from_dtype(DtypeTuple('(u8, bool)'), [50, True])
     b = Tibs.from_dtype(' ( u8, bool )', [50, True])

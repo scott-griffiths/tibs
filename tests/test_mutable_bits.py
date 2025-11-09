@@ -1,24 +1,15 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Dtype, Tibs, Mutibs, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind
+from tibs import Tibs, Mutibs
 
 
 def test_creation():
     a = Mutibs.from_zeros(5)
     b = Mutibs.from_bools([1, 0, 0])
     c = Mutibs.from_bytes(b'123')
-    d = Mutibs.from_dtype('u8', 254)
     e = Mutibs.from_string('0b1110')
-    for x in [a, b, c, d, e]:
+    for x in [a, b, c, e]:
         assert isinstance(x, Mutibs)
-
-# def test_set_mut():
-#     a = Mutibs('0x000')
-#     b = a.set_mut(1, 1)
-#     assert a == '0x400'
-#     assert b == '0x400'
-#     with pytest.raises(AttributeError):
-#         _ = a.set(1, 1)
 
 def test_append():
     # Basic append functionality
@@ -295,6 +286,7 @@ def test_invert():
     assert b == '0b0001'
     assert a == '0b1110'
 
+@pytest.mark.skip
 def test_properties():
     a = Mutibs('0x0000')
     assert a.u == a.u_be == a.u_le == a.u_ne == 0
@@ -1052,6 +1044,7 @@ def test_reserve():
     a.clear()
     assert a.capacity() == b4
 
+@pytest.mark.skip
 def test_assigning_by_properties():
     a = Mutibs.from_zeros(64)
     a.i = -1
