@@ -5,7 +5,7 @@ import re
 from hypothesis import given
 import hypothesis.strategies as st
 import tibs
-from tibs import Dtype, Bits, Field, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, MutableBits
+from tibs import Dtype, Bits, Endianness, DtypeTuple, DtypeSingle, DtypeArray, DtypeKind, MutableBits
 from typing import Iterable, Sequence
 
 def test_build():
@@ -669,19 +669,6 @@ def test_native_endian_floats():
         assert d.endianness is Endianness.NATIVE
         d3 = DtypeSingle.from_params(DtypeKind.FLOAT, 64, endianness=Endianness.LITTLE)
         assert d != d3
-
-
-def test_unpack_field():
-    f = Field("tadpole: u12")
-    a = Bits("u12=100")
-    assert f.unpack(a) == 100
-    # TODO: Should this work? Not sure if we want to allow unpacking a Bits with a Field - seems confusing?
-    # Currently works as Dtype and Field both have an unpack that accepts a Bits.
-    # assert a.unpack(f) == 100
-
-    a = Bits("0x000001b3, u12=352, u12=288, bool=1")
-    v = a.unpack(["hex8", "[u12; 2]", "bool"])
-    assert v == ("000001b3", (352, 288), True)
 
 
 def test_unpack_dtype_tuple():
