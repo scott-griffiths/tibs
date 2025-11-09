@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import sys
-import io
 from ast import literal_eval
-from typing import Union, Iterable, Any, TextIO
-from tibs._dtypes import Dtype, DtypeSingle, Register, DtypeTuple, DtypeArray
-from tibs._common import Colour, DtypeKind
+from typing import Union, Iterable, Any
+from tibs._dtypes import Dtype, DtypeSingle, DtypeTuple, DtypeArray
 from tibs._options import Options
 from tibs.rust import Tibs, Mutibs, bits_from_any
 from collections.abc import Sequence

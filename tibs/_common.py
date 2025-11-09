@@ -58,148 +58,10 @@ class DtypeKind(Enum):
         return self.value
 
 
-class Indenter:
-    def __init__(self, indent_size: int | None = None, max_depth: int | None = None):
-        """
-        Create an Indenter object. The indent level is increased by using the object
-        as a context manager.
-
-        :param indent_size: The number of spaces to indent. If None, use the value of Options().indent_size.
-        """
-        if indent_size is None:
-            indent_size = Options().indent_size
-        self.indent_size = indent_size
-        self.indent_level = 0
-        self.max_depth = max_depth
-        self.at_max_depth = False
-        self.skipped_field_count = 0
-
-    def __call__(self, s: str) -> str:
-        """Indent the string and return it.
-        Takes max_depth into account."""
-        if self.max_depth is None or self.indent_level <= self.max_depth:
-            self.at_max_depth = False
-            skipped_str = ""
-            if self.skipped_field_count > 0:
-                skipped_str = (
-                    " " * ((self.indent_level + 1) * self.indent_size)
-                    + f"... ({self.skipped_field_count} fields)\n"
-                )
-                self.skipped_field_count = 0
-            return skipped_str + " " * (self.indent_level * self.indent_size) + s
-        if not self.at_max_depth and self.indent_level == self.max_depth + 1:
-            self.at_max_depth = True
-            self.skipped_field_count += 1
-            return ""
-        if self.indent_level == self.max_depth + 1:
-            self.skipped_field_count += 1
-        return ""
-
-    def __enter__(self):
-        self.indent_level += 1
-        return self
-
-    def __exit__(self, type_, value, traceback):
-        self.indent_level -= 1
-
-
 class ExpressionError(ValueError):
     """Exception raised when failing to create or parse an Expression."""
     pass
 
-
-class ANSIColours:
-    """
-    ANSI colour and style codes
-    """
-    # Reset all
-    RESET = '\033[0m'
-
-    # Regular Colours
-    BLACK = '\033[30m'
-    RED = '\033[31m'
-    GREEN = '\033[32m'
-    YELLOW = '\033[33m'
-    BLUE = '\033[34m'
-    MAGENTA = '\033[35m'
-    CYAN = '\033[36m'
-    WHITE = '\033[37m'
-
-    # Bright/Light Colours
-    BRIGHT_BLACK = '\033[90m'  # Gray
-    BRIGHT_RED = '\033[91m'
-    BRIGHT_GREEN = '\033[92m'
-    BRIGHT_YELLOW = '\033[93m'
-    BRIGHT_BLUE = '\033[94m'
-    BRIGHT_MAGENTA = '\033[95m'
-    BRIGHT_CYAN = '\033[96m'
-    BRIGHT_WHITE = '\033[97m'
-
-    # Background Colours
-    BG_BLACK = '\033[40m'
-    BG_RED = '\033[41m'
-    BG_GREEN = '\033[42m'
-    BG_YELLOW = '\033[43m'
-    BG_BLUE = '\033[44m'
-    BG_MAGENTA = '\033[45m'
-    BG_CYAN = '\033[46m'
-    BG_WHITE = '\033[47m'
-
-    # Bright Background Colours
-    BG_BRIGHT_BLACK = '\033[100m'
-    BG_BRIGHT_RED = '\033[101m'
-    BG_BRIGHT_GREEN = '\033[102m'
-    BG_BRIGHT_YELLOW = '\033[103m'
-    BG_BRIGHT_BLUE = '\033[104m'
-    BG_BRIGHT_MAGENTA = '\033[105m'
-    BG_BRIGHT_CYAN = '\033[106m'
-    BG_BRIGHT_WHITE = '\033[107m'
-
-    # Styles
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-    ITALIC = '\033[3m'
-    UNDERLINE = '\033[4m'
-    BLINK = '\033[5m'
-    REVERSE = '\033[7m'  # Swap foreground/background colours
-    HIDDEN = '\033[8m'
-    STRIKE = '\033[9m'
-
-    # Reset specific attributes
-    RESET_BOLD = '\033[22m'
-    RESET_DIM = '\033[22m'
-    RESET_ITALIC = '\033[23m'
-    RESET_UNDERLINE = '\033[24m'
-    RESET_BLINK = '\033[25m'
-    RESET_REVERSE = '\033[27m'
-    RESET_HIDDEN = '\033[28m'
-    RESET_STRIKE = '\033[29m'
-
-
-class Colour:
-    """A class to hold colour codes for terminal output. If use_colour is False, all codes are empty strings."""
-
-    def __new__(cls, use_colour: bool) -> Colour:
-        x = super().__new__(cls)
-        cls.blue = ANSIColours.BLUE
-        cls.green = ANSIColours.GREEN
-        cls.red = ANSIColours.RED
-        cls.magenta = ANSIColours.MAGENTA
-        cls.orange = ANSIColours.BRIGHT_RED
-
-        cls.off = ANSIColours.RESET
-        cls.code = ANSIColours.YELLOW + ANSIColours.ITALIC
-        cls.name = ANSIColours.GREEN + ANSIColours.ITALIC
-        cls.dtype = ANSIColours.MAGENTA
-        cls.value = ANSIColours.CYAN
-        cls.const_value = ANSIColours.CYAN + ANSIColours.UNDERLINE
-
-        if not use_colour:
-            # Set all the above to ""
-            for attr in dir(cls):
-                if not attr.startswith("__") and isinstance(getattr(cls, attr), str):
-                    setattr(cls, attr, "")
-        return x
 
 
 class Expression:
@@ -311,10 +173,9 @@ class Expression:
         return self == NONE
 
     def __str__(self) -> str:
-        colour = Colour(not Options().no_color)
         if self.has_const_value:
             return str(self.const_value)
-        return colour.code + "{" + self.code_str + "}" + colour.off
+        return "{" + self.code_str + "}"
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}('{self}')"
