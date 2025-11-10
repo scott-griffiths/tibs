@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 
 import pytest
-import sys
-import tibs
 from tibs import Tibs, Mutibs
 import math
 import copy
-
-sys.path.insert(0, "..")
 
 
 class TestAll:
