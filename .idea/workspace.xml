@@ -10,22 +10,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Mostly removing things.">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/publish.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/publish.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/bits_tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits_tests.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/core.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/helpers.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/iterator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/iterator.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutable.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/src/mutable_test.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutable_test.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rust/tests/test_python_interface.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_common.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/py.typed" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -61,28 +53,29 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python tests.pytest in /.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest in scottg.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/scottg/dev/tibs&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
-    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
-    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.pytest for test_mutable_bits.test_creation.executor": "Run",
+    "Python tests.pytest in /.executor": "Run",
+    "Python tests.pytest in scottg.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/Users/scottg/dev/tibs",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "org.rust.first.attach.projects": "true",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$" />
@@ -107,13 +100,31 @@
         <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
       </method>
     </configuration>
+    <configuration name="pytest for test_mutable_bits.test_creation" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="tibs" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_mutable_bits.test_creation&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
     <configuration name="pytest in /" type="tests" factoryName="py.test" nameIsGenerated="true">
       <module name="tibs" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
@@ -126,9 +137,14 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Cargo.Build" />
       <item itemvalue="Python tests.pytest in /" />
+      <item itemvalue="Python tests.pytest for test_mutable_bits.test_creation" />
     </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python tests.pytest for test_mutable_bits.test_creation" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
@@ -153,7 +169,7 @@
       <workItem from="1762701415857" duration="131000" />
       <workItem from="1762701564677" duration="457000" />
       <workItem from="1762702241018" duration="266000" />
-      <workItem from="1762793751414" duration="188000" />
+      <workItem from="1762793751414" duration="3227000" />
     </task>
     <task id="LOCAL-00001" summary="Adding in the whole of bitformat, as deleting is easier than adding!">
       <option name="closed" value="true" />
@@ -267,7 +283,8 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762769201342" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/tibs$pytest_for_test_mutable_bits_test_creation.coverage" NAME="pytest for test_mutable_bits.test_creation Coverage Results" MODIFIED="1762796520189" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762796632112" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_for_test_bitarray_TestAll_test_creation_from_uint.coverage" NAME="pytest for test_bitarray.TestAll.test_creation_from_uint Coverage Results" MODIFIED="1762706759427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
   </component>
