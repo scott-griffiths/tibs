@@ -23,7 +23,6 @@ extensions = [
 ]
 autoapi_dirs = ["../tibs/"]
 autoapi_add_toctree_entry = False
-autodoc_mock_imports = ["lark"]
 
 add_module_names = False
 
@@ -41,12 +40,8 @@ html_css_files = ["custom.css"]
 html_theme = "piccolo_theme"
 
 html_theme_options = {
-    # "banner_text": "bitformat is currently in beta. This documentation may be inaccurate.",
     "banner_hiding": "permanent",
     "show_theme_credit": False,
     "globaltoc_collapse": False,
-    "source_url": "https://github.com/scott-griffiths/bitformat/",
+    "source_url": "https://github.com/scott-griffiths/tibs/",
 }
-
-html_logo = "./bitformat_logo_small.png"
-html_favicon = "./logo.png"

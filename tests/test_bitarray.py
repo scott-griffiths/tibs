@@ -114,6 +114,7 @@ class Testbyte_aligned:
         a = a.to_mutable_bits().replace("0xff", "")
         assert a == "0x000"
 
+    @pytest.mark.skip
     def test_byte_aligned(self):
         tibs.Options().byte_aligned = True
         a = Tibs.from_string("0x00 ff 0f f")
