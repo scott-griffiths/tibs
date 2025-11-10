@@ -20,21 +20,6 @@ def _validate_slice(length: int, start: int | None, end: int | None) -> tuple[in
         raise ValueError(f"Invalid slice positions for Tibs length {length}: start={start}, end={end}.")
     return start, end
 
-def dtype_token_to_bits(token: str) -> Tibs:
-    try:
-        dtype_str, value_str = token.split("=", 1)
-        dtype = Dtype.from_string(dtype_str)
-    except ValueError:
-        raise ValueError(f"Can't parse token '{token}'. It should be in the form 'kind[length][_endianness]=value' (e.g. "
-                         "'u16_le = 44') or a literal starting with '0b', '0o' or '0x'.")
-    if isinstance(dtype, DtypeSingle) and dtype._definition.return_type not in (bool, bytes):
-        return dtype.pack(value_str)
-    try:
-        value = literal_eval(value_str)
-    except ValueError:
-        raise ValueError(f"Can't parse token '{token}'. The value '{value_str}' can't be converted to the appropriate type.")
-    return dtype.pack(value)
-
 
 class BaseBitsMethods:
     """Not a real class! This contains the common methods for Tibs and Mutibs, and they

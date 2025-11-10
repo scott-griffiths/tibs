@@ -1,12 +1,11 @@
 [package]
-name = "tibs_rust"
-version = "0.1.0"  # This version is not updated. The user will see the Python version.
+name = "tibs"
+version = "0.0.5"
 edition = "2021"
 
 [lib]
-name = "rust"
+name = "tibs"
 crate-type = ["cdylib"]
-path = "rust/src/lib.rs"
 
 [dependencies]
 hex = "~0.4"

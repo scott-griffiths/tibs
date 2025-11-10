@@ -7,7 +7,7 @@ pub mod mutable;
 use pyo3::prelude::*;
 
 #[pymodule]
-fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<bits::Tibs>()?;
     m.add_class::<mutable::Mutibs>()?;
 
