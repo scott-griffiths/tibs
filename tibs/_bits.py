@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ast import literal_eval
 from typing import Union, Iterable, Any
-from tibs._options import Options
 from tibs.rust import Tibs, Mutibs, bits_from_any
 from collections.abc import Sequence
 
@@ -66,7 +65,7 @@ this is a step to using the Rust classes as the base classes."""
         start, end = _validate_slice(len(self), start, end)
         if len(bs) == 0:
             raise ValueError("Cannot find an empty Tibs.")
-        ba = Options().byte_aligned if byte_aligned is None else byte_aligned
+        ba = False if byte_aligned is None else byte_aligned
         p = self._find(bs, start, end, bytealigned=ba)
         return p
 
@@ -97,7 +96,7 @@ this is a step to using the Rust classes as the base classes."""
         """
         bs = bits_from_any(bs)
         start, end = _validate_slice(len(self), start, end)
-        ba = Options().byte_aligned if byte_aligned is None else byte_aligned
+        ba = False if byte_aligned is None else byte_aligned
         if len(bs) == 0:
             raise ValueError("Cannot find an empty Tibs.")
         p = self._rfind(bs, start, end, ba)
@@ -174,29 +173,6 @@ class BitsMethods:
 
     # ----- Class Methods -----
 
-    @classmethod
-    def from_dtype(cls, dtype: Dtype | str, value: Any, /) -> Tibs :
-        """
-        Pack a value according to a data type or data type tuple.
-
-        :param dtype: The data type to pack.
-        :param value: A value appropriate for the data type.
-        :returns: A newly constructed ``Tibs``.
-
-        .. code-block:: python
-
-            a = Tibs.from_dtype("u8", 17)
-            b = Tibs.from_dtype("f16, i4, bool", [2.25, -3, False])
-
-        """
-        if isinstance(dtype, str):
-            dtype = Dtype.from_string(dtype)
-        try:
-            xt = dtype.pack(value)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Can't pack a value of {value} with a Dtype '{dtype}': {str(e)}")
-        return xt
-
     def rfind_all(self, bs: BitsType, start: int | None = None, end: int | None = None,
                   count: int | None = None, byte_aligned: bool | None = None) -> Iterable[int]:
         """Find all occurrences of bs starting at the end. Return generator of bit positions.
@@ -254,7 +230,7 @@ class BitsMethods:
             raise ValueError("In find_all, count must be >= 0.")
         bs = bits_from_any(bs)
         start, end = _validate_slice(len(self), start, end)
-        ba = Options().byte_aligned if byte_aligned is None else byte_aligned
+        ba = False if byte_aligned is None else byte_aligned
         c = 0
         for i in self._findall(bs, start, end, ba):
             if count is not None and c >= count:
@@ -370,7 +346,7 @@ class MutableBitsMethods:
             raise ValueError("Empty Tibs cannot be replaced.")
         start, end = _validate_slice(len(self), start, end)
         if byte_aligned is None:
-            byte_aligned = Options().byte_aligned
+            byte_aligned = False
         # First find all the places where we want to do the replacements
         starting_points: list[int] = []
         if byte_aligned:

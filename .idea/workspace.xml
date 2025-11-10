@@ -9,18 +9,43 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Removing info() and pp()">
+    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Trying another publish strategy.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/api.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/array.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/bitformat_logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/bitformat_logo_small.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/bitformat_tour.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/bits.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/bitstring_comparison.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/doc/conf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/dtypes.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/fieldtypes.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/index.rst" beforeDir="false" afterPath="$PROJECT_DIR$/doc/index.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/introduction.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/misc.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/mutable_bits.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/parser_ref.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/quick_reference.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/reader.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/tldr.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/use_case_construction.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/use_case_formats.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/use_case_manipulation.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/use_cases.rst" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_benchmarks.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_benchmarks.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_common.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_dtypes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_bits.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_common.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_dtype_definitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtype_definitions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_dtypes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tibs/_dtypes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_common.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_dtype_definitions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_dtypes.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_options.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/_version.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tibs/bitformat_grammar.lark" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -183,7 +208,39 @@
       <option name="project" value="LOCAL" />
       <updated>1762705973305</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Removing most of the Dtype stuff. Skipping or commenting out tests as eventually I'll want to reintroduce many of them.">
+      <option name="closed" value="true" />
+      <created>1762709393407</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1762709393407</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Upping the version number to try PyPI upload again.">
+      <option name="closed" value="true" />
+      <created>1762709489609</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1762709489609</updated>
+    </task>
+    <task id="LOCAL-00008" summary="Trying alternate publish strategy.">
+      <option name="closed" value="true" />
+      <created>1762716024482</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1762716024482</updated>
+    </task>
+    <task id="LOCAL-00009" summary="Trying another publish strategy.">
+      <option name="closed" value="true" />
+      <created>1762722513483</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1762722513483</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -196,7 +253,11 @@
     <MESSAGE value="Renaming the Bits class -&gt; Tibs. Well, it might be a good idea?" />
     <MESSAGE value="Renaming the MuableBits class -&gt; Mutibs. Also a good idea?" />
     <MESSAGE value="Removing info() and pp()" />
-    <option name="LAST_COMMIT_MESSAGE" value="Removing info() and pp()" />
+    <MESSAGE value="Removing most of the Dtype stuff. Skipping or commenting out tests as eventually I'll want to reintroduce many of them." />
+    <MESSAGE value="Upping the version number to try PyPI upload again." />
+    <MESSAGE value="Trying alternate publish strategy." />
+    <MESSAGE value="Trying another publish strategy." />
+    <option name="LAST_COMMIT_MESSAGE" value="Trying another publish strategy." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -210,7 +271,7 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762708500813" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/tibs$pytest_in__.coverage" NAME="pytest in / Coverage Results" MODIFIED="1762764870665" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_in_scottg.coverage" NAME="pytest in scottg Coverage Results" MODIFIED="1762684351391" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/tibs$pytest_for_test_bitarray_TestAll_test_creation_from_uint.coverage" NAME="pytest for test_bitarray.TestAll.test_creation_from_uint Coverage Results" MODIFIED="1762706759427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
   </component>

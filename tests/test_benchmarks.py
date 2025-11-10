@@ -1,4 +1,5 @@
 import sys
+import pytest
 
 sys.path.insert(0, "..")
 from tibs import Tibs, Mutibs
@@ -30,7 +31,7 @@ def test_count(benchmark):
     c = benchmark(count)
     assert c == 4
 
-
+@pytest.mark.skip
 def test_token_parsing(benchmark):
     def token_parsing():
         s = Mutibs()
@@ -42,7 +43,7 @@ def test_token_parsing(benchmark):
 
     benchmark(token_parsing)
 
-
+@pytest.mark.skip
 def test_find_all(benchmark):
     def finding():
         random.seed(999)
@@ -59,7 +60,7 @@ def test_find_all(benchmark):
     c = benchmark(finding)
     assert c == 37
 
-
+@pytest.mark.skip
 def test_repeated_reading(benchmark):
     def repeating_reading():
         random.seed(1414)

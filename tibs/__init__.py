@@ -30,19 +30,6 @@ THE SOFTWARE.
 __author__ = "Scott Griffiths"
 
 
-from ._version import VERSION as __version__
 from ._bits import Tibs, Mutibs
-from ._bits import dtype_token_to_bits as _dtype_token_to_bits
-from ._options import Options
-from ._common import Endianness, DtypeKind, byteorder
-from .rust import set_dtype_parser as _set_dtype_parser
 
-
-__all__ = ["Tibs", "Options", "Endianness", "Mutibs"]
-
-
-del rust
-
-# Set the __module__ of each of the types in __all__ to 'tibs' so that they appear as tibs.Bits instead of tibs._bits.Bits etc.
-for _name in __all__:
-    locals()[_name].__module__ = "tibs"
+__all__ = ["Tibs", "Mutibs"]

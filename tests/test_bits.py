@@ -5,7 +5,7 @@ import re
 from hypothesis import given
 import hypothesis.strategies as st
 import tibs
-from tibs import Tibs, Endianness, Mutibs
+from tibs import Tibs, Mutibs
 from typing import Iterable, Sequence
 
 @pytest.mark.skip
@@ -368,6 +368,7 @@ def test_big_endian_errors():
         _ = b.f_be
 
 
+@pytest.mark.skip
 def test_native_endian_floats():
     if tibs.byteorder == "little":
         a = Tibs.from_dtype("f64_ne", 0.55)

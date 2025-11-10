@@ -12,7 +12,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
@@ -35,7 +35,6 @@ dev = [
     "pyright>=1.1.389",
     "pytest-cov>=6.0.0",
     "build",
-    "lark",
 ]
 
 [tool.maturin]
@@ -44,5 +43,5 @@ module-name = "tibs.rust"
 features = ["pyo3/extension-module", "pyo3/abi3-py311"]
 
 [project.urls]
-homepage = "https://github.com/scott-griffiths/bitformat"
-documentation = "https://bitformat.readthedocs.io/"
+homepage = "https://github.com/scott-griffiths/tibs"
+documentation = "https://tibs.readthedocs.io/"
