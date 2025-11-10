@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.8,<2.0"]
+requires = ["maturin>=1.10,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -39,7 +39,7 @@ dev = [
 
 [tool.maturin]
 python-source = "."
-module-name = "tibs.rust"
+module-name = "tibs"
 features = ["pyo3/extension-module", "pyo3/abi3-py311"]
 
 [project.urls]
