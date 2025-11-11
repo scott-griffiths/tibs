@@ -1,3 +1,5 @@
+[![tibs](https://raw.githubusercontent.com/scott-griffiths/tibs/main/tibs.png)](https://github.com/scott-griffiths/bitformat)
+
 # Tibs
 
 A Python bit manipulation library written entirely in Rust.
