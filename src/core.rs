@@ -1,6 +1,6 @@
-use crate::bits::Tibs;
+use crate::tibs_::Tibs;
 use crate::helpers::{validate_index, BV};
-use crate::mutable::Mutibs;
+use crate::mutibs::Mutibs;
 use bitvec::bits;
 use bitvec::field::BitField;
 use bitvec::order::Msb0;
@@ -69,7 +69,7 @@ fn split_tokens(s: &String) -> Vec<String> {
     tokens
 }
 
-fn string_literal_to_bits(s: &str) -> PyResult<Tibs> {
+fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
         Some("0b") => Ok(Tibs::_from_bin(s)?),
         Some("0x") => Ok(Tibs::_from_hex(s)?),
@@ -80,7 +80,7 @@ fn string_literal_to_bits(s: &str) -> PyResult<Tibs> {
     }
 }
 
-pub(crate) fn str_to_bits(s: String) -> PyResult<Tibs> {
+pub(crate) fn str_to_tibs(s: String) -> PyResult<Tibs> {
     // Check cache first
     {
         let mut cache = BITS_CACHE.lock().unwrap();
@@ -96,7 +96,7 @@ pub(crate) fn str_to_bits(s: String) -> PyResult<Tibs> {
         if token.is_empty() {
             continue;
         }
-        match string_literal_to_bits(&token) {
+        match string_literal_to_tibs(&token) {
             Ok(bits) => bits_array.push(bits),
             Err(_) => {
                 // Call out to the Python dtype parser - see if it can handle it.

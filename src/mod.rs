@@ -1,8 +1,8 @@
-mod bits;
+mod tibs_;
 mod core;
 mod helpers;
 mod iterator;
-mod mutable;
+mod mutibs;
 
 pub use crate::{bits_from_any, set_dtype_parser};
 pub use bits::Bits;

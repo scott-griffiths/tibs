@@ -9,13 +9,20 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Adding logo. Of course.">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits.rs" afterDir="false" />
+    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Fixing some tests, removing others.">
+      <change beforePath="$PROJECT_DIR$/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/tibs.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/bits_tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits_tests.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutable.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/helpers.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/iterator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/iterator.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutibs.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mutable_test.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutable_test.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_benchmarks.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_benchmarks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_bitstream.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitstream.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -237,7 +244,15 @@
       <option name="project" value="LOCAL" />
       <updated>1762896013489</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Fixing some tests, removing others.">
+      <option name="closed" value="true" />
+      <created>1762972977102</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1762972977102</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -256,7 +271,8 @@
     <MESSAGE value="Trying another publish strategy." />
     <MESSAGE value="Mostly removing things." />
     <MESSAGE value="Adding logo. Of course." />
-    <option name="LAST_COMMIT_MESSAGE" value="Adding logo. Of course." />
+    <MESSAGE value="Fixing some tests, removing others." />
+    <option name="LAST_COMMIT_MESSAGE" value="Fixing some tests, removing others." />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/tibs$pytest_for_test_mutable_bits_test_creation.coverage" NAME="pytest for test_mutable_bits.test_creation Coverage Results" MODIFIED="1762796520189" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

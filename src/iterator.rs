@@ -1,4 +1,4 @@
-use crate::bits::Tibs;
+use crate::tibs_::Tibs;
 use crate::core::BitCollection;
 use crate::helpers;
 use pyo3::prelude::*;

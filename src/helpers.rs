@@ -1,5 +1,5 @@
 /// Helper functions.
-use crate::bits::Tibs;
+use crate::tibs_::Tibs;
 use crate::core::BitCollection;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
