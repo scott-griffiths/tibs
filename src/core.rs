@@ -44,8 +44,6 @@ const BITS_CACHE_SIZE: usize = 1024;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
-pub(crate) static DTYPE_PARSER: Lazy<Mutex<Option<Py<PyAny>>>> = Lazy::new(|| Mutex::new(None));
-
 fn split_tokens(s: &String) -> Vec<String> {
     // Remove whitespace
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
@@ -91,37 +89,13 @@ pub(crate) fn str_to_tibs(s: String) -> PyResult<Tibs> {
     let tokens = split_tokens(&s);
     let mut bits_array = Vec::<Tibs>::new();
     let mut total_bit_length = 0;
-
     for token in tokens {
         if token.is_empty() {
             continue;
         }
-        match string_literal_to_tibs(&token) {
-            Ok(bits) => bits_array.push(bits),
-            Err(_) => {
-                // Call out to the Python dtype parser - see if it can handle it.
-                Python::attach(|py| -> PyResult<()> {
-                    // Only access the parser inside this scope
-                    let parser_guard = DTYPE_PARSER.lock().unwrap();
-                    let parser = match &*parser_guard {
-                        Some(p) => p,
-                        None => {
-                            return Err(PyValueError::new_err(
-                                "dtype_parser has not been set. Call set_dtype_parser first",
-                            ));
-                        }
-                    };
-                    let dtype_parser = parser.bind(py);
-                    let result = dtype_parser.call1((token.clone(),))?;
-                    // Convert result
-                    let bits_ref = result.extract::<PyRef<Tibs>>()?;
-                    let new_bits = Tibs::new(bits_ref.data.clone());
-                    total_bit_length += new_bits.len();
-                    bits_array.push(new_bits);
-                    Ok(())
-                })?; // Propagate any Python errors
-            }
-        }
+        let x= string_literal_to_tibs(&token)?;
+        total_bit_length += x.len();
+        bits_array.push(x);
     }
     if bits_array.is_empty() {
         return Ok(BitCollection::empty());
