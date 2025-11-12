@@ -843,13 +843,13 @@ impl Mutibs {
         self.inner.any()
     }
 
-    pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-        self.inner._find(b, start, end, bytealigned)
-    }
+    // pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    //     self.inner.find(b, Some(start), Some(end), bytealigned)
+    // }
 
-    pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-        self.inner._rfind(b, start, end, bytealigned)
-    }
+    // pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
+    //     self.inner.rfind(b, start, end, bytealigned)
+    // }
 
     /// Return the Mutibs with one or many bits inverted between 0 and 1.
     ///

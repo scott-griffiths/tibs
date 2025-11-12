@@ -662,33 +662,37 @@ impl Tibs {
         Ok(Tibs::new(result))
     }
 
-    pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-        debug_assert!(end >= start);
-        debug_assert!(end <= self.len());
-        find_bitvec(self, b, start, end, bytealigned)
+    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    pub fn find(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
+        let b = bits_from_any(b, py)?;
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.len());
+        Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 
-    pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-        debug_assert!(end >= start);
-        debug_assert!(end <= self.len());
+    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    pub fn rfind(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
+        let b = bits_from_any(b, py)?;
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.len());
         if b.len() + start > end {
-            return None;
+            return Ok(None);
         }
-        let step = if bytealigned { 8 } else { 1 };
+        let step = if byte_aligned { 8 } else { 1 };
         let mut pos = end - b.len();
-        if bytealigned {
+        if byte_aligned {
             pos = pos / 8 * 8;
         }
         while pos >= start {
             if &self.data[pos..pos + b.len()] == &b.data {
-                return Some(pos);
+                return Ok(Some(pos));
             }
             if pos < step {
                 break;
             }
             pos -= step;
         }
-        None
+        Ok(None)
     }
 
     /// Return whether the current Tibs starts with prefix.
