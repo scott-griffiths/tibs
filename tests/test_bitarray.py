@@ -76,7 +76,7 @@ class TestNoPosAttribute:
 
     def test_ror(self):
         s = Tibs.from_string("0b1000")
-        t = s.to_mutable_bits().ror(1)
+        t = s.to_mutibs().ror(1)
         assert s == "0b1000"
         assert t == "0b0100"
 
@@ -107,7 +107,7 @@ class Testbyte_aligned:
         assert p == 4
         p = a.rfind("0xff")
         assert p == 20
-        a = a.to_mutable_bits().replace("0xff", "")
+        a = a.to_mutibs().replace("0xff", "")
         assert a == "0x000"
 
     @pytest.mark.skip
@@ -120,7 +120,7 @@ class Testbyte_aligned:
         assert p == 16
         p = a.rfind("0xff")
         assert p == 8
-        a = a.to_mutable_bits().replace("0xff", "")
+        a = a.to_mutibs().replace("0xff", "")
         assert a == "0x000ff"
         tibs.Options().byte_aligned = False
 
@@ -287,7 +287,7 @@ def test_copy_method():
     t = copy.copy(s)
     assert s == t
     assert s is t
-    s = s.to_mutable_bits()
+    s = s.to_mutibs()
     t = copy.copy(s)
     assert s == t
     assert s is not t

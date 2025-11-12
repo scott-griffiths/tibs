@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::core::BitCollection;
-    use crate::bits::Tibs;
-    use crate::mutable::Mutibs;
+    use crate::tibs_::Tibs;
+    use crate::mutibs::Mutibs;
 
     #[test]
     fn test_set_and_get_index() {

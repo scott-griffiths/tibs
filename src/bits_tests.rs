@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::core::BitCollection;
-    use crate::bits::Tibs;
-    use crate::mutable::Mutibs;
+    use crate::tibs_::Tibs;
+    use crate::mutibs::Mutibs;
 
     #[test]
     fn from_bytes() {
@@ -146,7 +146,7 @@ mod tests {
         assert_eq!(a.len(), 24);
         let b = a._getslice(1, a.len()).unwrap();
         assert_eq!(b.len(), 23);
-        let c = b.to_mutable_bits();
+        let c = b.to_mutibs();
         assert_eq!(c.len(), 23);
     }
 
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn freeze_preserves_data() {
         let mutable = Mutibs::from_bin("1100").unwrap();
-        let immutable = mutable.to_bits();
+        let immutable = mutable.to_tibs();
         assert_eq!(immutable.to_bin(), "1100");
     }
 
@@ -333,7 +333,7 @@ mod tests {
         let mut mutable = Mutibs::from_bin("0000").unwrap();
         mutable._set_index(true, 1).unwrap();
         mutable._set_index(true, 2).unwrap();
-        let immutable = mutable.to_bits();
+        let immutable = mutable.to_tibs();
         assert_eq!(immutable.to_bin(), "0110");
     }
 
@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(empty_mutable.len(), 0);
         assert!(!empty_mutable.any());
 
-        assert_eq!(empty_mutable.to_bits().len(), 0);
+        assert_eq!(empty_mutable.to_tibs().len(), 0);
     }
 
     #[test]

@@ -331,7 +331,7 @@ def test_little_endian_uint():
     assert s.u_le == 100
     s = Tibs("u32_le=999")
     assert s.u_le == 999
-    s = s.to_mutable_bits()
+    s = s.to_mutibs()
     s = s.byte_swap()
     assert s.u == 999
     s = Tibs.from_dtype("u24_le", 1001)

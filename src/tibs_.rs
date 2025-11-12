@@ -1,9 +1,9 @@
-use crate::mutable::mutable_bits_from_any;
+use crate::mutibs::mutable_bits_from_any;
 use crate::core::validate_logical_op_lengths;
-use crate::core::{str_to_bits, BitCollection, DTYPE_PARSER};
+use crate::core::{str_to_tibs, BitCollection, DTYPE_PARSER};
 use crate::helpers::{find_bitvec, validate_index, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutable::Mutibs;
+use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
 use pyo3::conversion::IntoPyObject;
@@ -37,12 +37,12 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 
     // Is it of type MutableBits?
     if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
-        return Ok(any_mutable_bits.to_bits());
+        return Ok(any_mutable_bits.to_tibs());
     }
 
     // Is it a string?
     if let Ok(any_string) = any_bound.extract::<String>() {
-        return str_to_bits(any_string);
+        return str_to_tibs(any_string);
     }
 
     // Is it a bytes, bytearray or memoryview?
@@ -161,7 +161,7 @@ impl Tibs {
             return Ok(BitCollection::empty());
         };
         if let Ok(string_s) = s.extract::<String>() {
-            return str_to_bits(string_s);
+            return str_to_tibs(string_s);
         }
 
         // If it's not a string, build a more helpful error message.
@@ -173,7 +173,7 @@ impl Tibs {
 
         if s.is_instance_of::<Mutibs>() {
             err.push_str(
-                "You can use the 'to_bits()' method on the `MutableBits` instance instead.",
+                "You can use the 'to_tibs()' method on the `MutableBits` instance instead.",
             );
         } else if s.is_instance_of::<PyBytes>()
             || s.is_instance_of::<PyByteArray>()
@@ -418,7 +418,7 @@ impl Tibs {
     ///
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        str_to_bits(s)
+        str_to_tibs(s)
     }
 
     /// Create a new instance from a bytes object.
@@ -808,7 +808,7 @@ impl Tibs {
     }
 
     /// Create and return a mutable copy of the Tibs as a MutableBits instance.
-    pub fn to_mutable_bits(&self) -> Mutibs {
+    pub fn to_mutibs(&self) -> Mutibs {
         Mutibs {
             inner: Tibs::new(self.data.clone()),
         }
@@ -1039,13 +1039,13 @@ impl Tibs {
 
     pub fn __setitem__(&self, _key: Py<PyAny>, _value: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item assignment. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
+            "Tibs objects do not support item assignment. Did you mean to use the MutableBits class? Call to_mutibs() to convert to a MutableBits."
         ))
     }
 
     pub fn __delitem__(&self, _key: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item deletion. Did you mean to use the MutableBits class? Call to_mutable_bits() to convert to a MutableBits."
+            "Tibs objects do not support item deletion. Did you mean to use the MutableBits class? Call to_mutibs() to convert to a MutableBits."
         ))
     }
 }

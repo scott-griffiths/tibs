@@ -783,34 +783,34 @@ def test_byte_swap_not_multiple_of_byte_length():
         a = Mutibs('0x123456')  # 3 bytes
         a.byte_swap(2)  # Not a multiple of 2 bytes
 
-def test_to_bits_basic():
+def test_to_tibs_basic():
     # Basic conversion
     a = Mutibs('0b1010')
-    b = a.to_bits()
+    b = a.to_tibs()
     assert isinstance(b, Tibs)
     assert b == '0b1010'
 
-def test_to_bits_immutable_copy_operations():
+def test_to_tibs_immutable_copy_operations():
     # Original shouldn't change when immutable copy is modified
     a = Mutibs('0b1010')
-    b = a.to_bits()
+    b = a.to_tibs()
     c = ~b
     assert a == '0b1010'  # Original remains unchanged
     assert b == '0b1010'  # Original immutable copy unchanged
     assert c == '0b0101'  # New inverted copy
 
-def test_to_bits_original_modifications():
+def test_to_tibs_original_modifications():
     # Changes to original shouldn't affect the immutable copy
     a = Mutibs('0b1010')
-    b = a.to_bits()
+    b = a.to_tibs()
     a.invert()
     assert a == '0b0101'  # Original changed
     assert b == '0b1010'  # Immutable copy remains unchanged
 
-def test_to_bits_empty():
+def test_to_tibs_empty():
     # Empty Mutibs conversion
     a = Mutibs()
-    b = a.to_bits()
+    b = a.to_tibs()
     assert isinstance(b, Tibs)
     assert b == ''
     assert len(b) == 0
@@ -818,7 +818,7 @@ def test_to_bits_empty():
 def test_mutable_bits_from_bits():
     # Test creating Mutibs from Tibs object
     b = Tibs('0b1010')
-    a = b.to_mutable_bits()
+    a = b.to_mutibs()
     assert a == '0b1010'
     assert isinstance(a, Mutibs)
 
@@ -932,12 +932,12 @@ def test_interleaved_operations():
 def test_mutable_bits_conversion_roundtrip():
     # Test round-trip conversion between Tibs and Mutibs
     orig = Tibs('0b10101100')
-    mutable = orig.to_mutable_bits()
+    mutable = orig.to_mutibs()
     mutable.invert(range(4))  # Modify some bits
-    back_to_bits = mutable.to_bits()
+    back_to_tibs = mutable.to_tibs()
 
-    assert isinstance(back_to_bits, Tibs)
-    assert back_to_bits == '0b01011100'
+    assert isinstance(back_to_tibs, Tibs)
+    assert back_to_tibs == '0b01011100'
     assert orig == '0b10101100'  # Original should be unchanged
 
 def test_inserting_bits_objects():
