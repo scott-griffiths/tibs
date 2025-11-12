@@ -9,22 +9,21 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Mostly removing things.">
-      <change beforePath="$PROJECT_DIR$/.idea/tibs.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tibs.iml" afterDir="false" />
+    <list default="true" id="2d70f313-d1ea-44bf-9ee9-b552b918f906" name="Changes" comment="Adding logo. Of course.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_bitarray.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_bitarray.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_common.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/_bits.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tibs/py.typed" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/bits.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/bits_tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/bits_tests.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mutable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/mutable.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_mutable_bits.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_mutable_bits.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:test" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -34,12 +33,12 @@
     &quot;assignee&quot;: &quot;scott-griffiths&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/scott-griffiths/tibs.git&quot;,
-    &quot;accountId&quot;: &quot;59011adc-39e8-472b-aabb-1f0b1fc70d3b&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/scott-griffiths/tibs.git",
+    "accountId": "f53dcd32-f003-418b-b2be-1419c262c9b7"
   }
-}</component>
+}]]></component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="LtemUqSh" />
   </component>
@@ -55,6 +54,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Cargo.Build.executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python tests.pytest for test_mutable_bits.test_creation.executor": "Run",
     "Python tests.pytest in /.executor": "Run",
@@ -63,6 +63,8 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "SHELLCHECK.PATH": "I do mind",
+    "Shell Script.build.sh.executor": "Run",
     "git-widget-placeholder": "main",
     "last_opened_file_path": "/Users/scottg/dev/tibs",
     "node.js.detected.package.eslint": "true",
@@ -81,7 +83,7 @@
       <recent name="$PROJECT_DIR$" />
     </key>
   </component>
-  <component name="RunManager" selected="Python tests.pytest in /">
+  <component name="RunManager" selected="Shell Script.build.sh">
     <configuration name="Build" type="CargoCommandRunConfiguration" factoryName="Cargo Command" nameIsGenerated="true">
       <option name="buildProfileId" value="dev" />
       <option name="command" value="build" />
@@ -100,51 +102,25 @@
         <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
       </method>
     </configuration>
-    <configuration name="pytest for test_mutable_bits.test_creation" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="tibs" />
-      <option name="ENV_FILES" value="" />
+    <configuration name="build.sh" type="ShConfigurationType">
+      <option name="SCRIPT_TEXT" value="" />
+      <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+      <option name="SCRIPT_PATH" value="$PROJECT_DIR$/build.sh" />
+      <option name="SCRIPT_OPTIONS" value="" />
+      <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+      <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
+      <option name="INTERPRETER_PATH" value="/bin/zsh" />
       <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_mutable_bits.test_creation&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="pytest in /" type="tests" factoryName="py.test" nameIsGenerated="true">
-      <module name="tibs" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;--benchmark-skip&quot;" />
-      <option name="_new_target" value="&quot;&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <option name="EXECUTE_IN_TERMINAL" value="true" />
+      <option name="EXECUTE_SCRIPT_FILE" value="true" />
+      <envs />
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python tests.pytest in /" />
-      <item itemvalue="Python tests.pytest for test_mutable_bits.test_creation" />
+      <item itemvalue="Cargo.Build" />
+      <item itemvalue="Shell Script.build.sh" />
     </list>
-    <recent_temporary>
-      <list>
-        <item itemvalue="Python tests.pytest for test_mutable_bits.test_creation" />
-      </list>
-    </recent_temporary>
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
@@ -170,6 +146,8 @@
       <workItem from="1762701564677" duration="457000" />
       <workItem from="1762702241018" duration="266000" />
       <workItem from="1762793751414" duration="3227000" />
+      <workItem from="1762895460409" duration="989000" />
+      <workItem from="1762896720134" duration="8000" />
     </task>
     <task id="LOCAL-00001" summary="Adding in the whole of bitformat, as deleting is easier than adding!">
       <option name="closed" value="true" />
@@ -251,7 +229,15 @@
       <option name="project" value="LOCAL" />
       <updated>1762765477257</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Adding logo. Of course.">
+      <option name="closed" value="true" />
+      <created>1762896013489</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1762896013489</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -269,18 +255,8 @@
     <MESSAGE value="Trying alternate publish strategy." />
     <MESSAGE value="Trying another publish strategy." />
     <MESSAGE value="Mostly removing things." />
-    <option name="LAST_COMMIT_MESSAGE" value="Mostly removing things." />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/tests/test_mutable_bits.py</url>
-          <line>1</line>
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
+    <MESSAGE value="Adding logo. Of course." />
+    <option name="LAST_COMMIT_MESSAGE" value="Adding logo. Of course." />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/tibs$pytest_for_test_mutable_bits_test_creation.coverage" NAME="pytest for test_mutable_bits.test_creation Coverage Results" MODIFIED="1762796520189" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

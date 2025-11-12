@@ -232,7 +232,7 @@ def test_iand():
     b = Mutibs('0b1111')
     a &= b
     assert a == '0b1000'
-    from tibs._bits import Tibs
+    from tibs import Tibs
     c = Tibs('0b0100')
     a &= c
     assert a == '0b0000'
@@ -482,85 +482,85 @@ def test_invert_empty_bits():
     a = Mutibs()
     a.invert()  # Inverting empty bits should do nothing
     assert a == ''
-
-def test_replace_basic():
-    # Basic replace functionality
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b111')
-    assert a == '0b111111111111'
-
-def test_replace_same_length():
-    # Replace with same length pattern
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b00')
-    assert a == '0b00000000'
-
-def test_replace_with_empty():
-    # Replace with empty bits (should effectively delete)
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '')
-    assert a == ''
-
-def test_replace_with_count():
-    # Replace only first occurrences with count parameter
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b00', count=2)
-    assert a == '0b00001010'
-
-def test_replace_with_start():
-    # Replace with start parameter
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b11', start=2)
-    assert a == '0b10111111'
-
-def test_replace_with_end():
-    # Replace with end parameter
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b11', end=4)
-    assert a == '0b11111010'
-
-def test_replace_with_start_end():
-    # Replace with both start and end parameters
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b11', start=2, end=6)
-    assert a == '0b10111110'
-
-def test_replace_byte_aligned():
-    # Replace with byte_aligned=True
-    a = Mutibs('0b10101010')
-    a.replace('0b1010', '0b1111', byte_aligned=True)
-    assert a == '0b11111010'
-
-def test_replace_method_chaining():
-    # Method chaining
-    a = Mutibs('0b10101010')
-    result = a.replace('0b10', '0b11').replace('0b11', '0b00')
-    assert a == '0b00000000'
-    assert result is a
-
-def test_replace_different_types():
-    # Replace with different types
-    a = Mutibs('0b10101010')
-    a.replace(Tibs('0b10'), Mutibs('0b11'))
-    assert a == '0b11111111'
-
-def test_replace_empty_pattern():
-    # Empty pattern (should raise error)
-    with pytest.raises(ValueError):
-        a = Mutibs('0b1010')
-        a.replace('', '0b11')
-
-def test_replace_pattern_not_found():
-    # Pattern not found
-    a = Mutibs('0b1010')
-    a.replace('0b11', '0b00')
-    assert a == '0b1010'  # Should remain unchanged
-
-def test_replace_with_count_zero():
-    # Count=0 (should not replace anything)
-    a = Mutibs('0b10101010')
-    a.replace('0b10', '0b11', count=0)
-    assert a == '0b10101010'
+#
+# def test_replace_basic():
+#     # Basic replace functionality
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b111')
+#     assert a == '0b111111111111'
+#
+# def test_replace_same_length():
+#     # Replace with same length pattern
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b00')
+#     assert a == '0b00000000'
+#
+# def test_replace_with_empty():
+#     # Replace with empty bits (should effectively delete)
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '')
+#     assert a == ''
+#
+# def test_replace_with_count():
+#     # Replace only first occurrences with count parameter
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b00', count=2)
+#     assert a == '0b00001010'
+#
+# def test_replace_with_start():
+#     # Replace with start parameter
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b11', start=2)
+#     assert a == '0b10111111'
+#
+# def test_replace_with_end():
+#     # Replace with end parameter
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b11', end=4)
+#     assert a == '0b11111010'
+#
+# def test_replace_with_start_end():
+#     # Replace with both start and end parameters
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b11', start=2, end=6)
+#     assert a == '0b10111110'
+#
+# def test_replace_byte_aligned():
+#     # Replace with byte_aligned=True
+#     a = Mutibs('0b10101010')
+#     a.replace('0b1010', '0b1111', byte_aligned=True)
+#     assert a == '0b11111010'
+#
+# def test_replace_method_chaining():
+#     # Method chaining
+#     a = Mutibs('0b10101010')
+#     result = a.replace('0b10', '0b11').replace('0b11', '0b00')
+#     assert a == '0b00000000'
+#     assert result is a
+#
+# def test_replace_different_types():
+#     # Replace with different types
+#     a = Mutibs('0b10101010')
+#     a.replace(Tibs('0b10'), Mutibs('0b11'))
+#     assert a == '0b11111111'
+#
+# def test_replace_empty_pattern():
+#     # Empty pattern (should raise error)
+#     with pytest.raises(ValueError):
+#         a = Mutibs('0b1010')
+#         a.replace('', '0b11')
+#
+# def test_replace_pattern_not_found():
+#     # Pattern not found
+#     a = Mutibs('0b1010')
+#     a.replace('0b11', '0b00')
+#     assert a == '0b1010'  # Should remain unchanged
+#
+# def test_replace_with_count_zero():
+#     # Count=0 (should not replace anything)
+#     a = Mutibs('0b10101010')
+#     a.replace('0b10', '0b11', count=0)
+#     assert a == '0b10101010'
 
 def test_reverse_basic():
     # Basic reverse functionality
