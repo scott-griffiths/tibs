@@ -1,6 +1,6 @@
 use crate::mutibs::mutable_bits_from_any;
 use crate::core::validate_logical_op_lengths;
-use crate::core::{str_to_tibs, BitCollection, DTYPE_PARSER};
+use crate::core::{str_to_tibs, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -18,13 +18,6 @@ use once_cell::sync::OnceCell;
 
 // ---- Exported Python helper methods ----
 
-#[pyfunction]
-pub fn set_dtype_parser(dtype_parser: Py<PyAny>) -> PyResult<()> {
-    // Store the Python object directly - no conversion needed
-    let mut parser_guard = DTYPE_PARSER.lock().unwrap();
-    *parser_guard = Some(dtype_parser);
-    Ok(())
-}
 
 #[pyfunction]
 pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
