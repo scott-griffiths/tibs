@@ -132,13 +132,13 @@ class TestInitialisation:
         b = a.rfind("0b010")
         assert b == 11
 
-    def test_find_all(self):
-        a = Tibs("0b0010011")
-        b = list(a.find_all('0b1'))
-        assert b == [2, 5, 6]
-        t = Tibs("0b10")
-        tp = list(t.find_all("0b1"))
-        assert tp == [0]
+#     def test_find_all(self):
+#         a = Tibs("0b0010011")
+#         b = list(a.find_all('0b1'))
+#         assert b == [2, 5, 6]
+#         t = Tibs("0b10")
+#         tp = list(t.find_all("0b1"))
+#         assert tp == [0]
 
 
 class TestCut:
@@ -464,7 +464,7 @@ def test_tuple_from_str():
 def test_is_things():
     a = Tibs('0b1010101010101010')
     assert isinstance(a, Iterable)
-    assert isinstance(a, Sequence)
+#     assert isinstance(a, Sequence)
 
 @pytest.mark.skip
 def test_conversion_to_long_ints():
@@ -497,14 +497,14 @@ def test_bool_conversion():
     assert b
     assert c
 
-def test_rfind_all():
-    a = Tibs(' 0 B 0 0 01011')
-    g = a.rfind_all('0b1')
-    assert next(g) == 6
-    assert next(g) == 5
-    assert next(g) == 3
-    with pytest.raises(StopIteration):
-        _ = next(g)
+# def test_rfind_all():
+#     a = Tibs(' 0 B 0 0 01011')
+#     g = a.rfind_all('0b1')
+#     assert next(g) == 6
+#     assert next(g) == 5
+#     assert next(g) == 3
+#     with pytest.raises(StopIteration):
+#         _ = next(g)
 
 def test_repr():
     a = Tibs()

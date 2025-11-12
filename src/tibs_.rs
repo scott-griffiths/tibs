@@ -670,6 +670,13 @@ impl Tibs {
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 
+    pub fn __contains__(&self, b: Py<PyAny>, py: Python) -> bool {
+        match self.find(b, None, None, false, py) {
+            Ok(Some(_)) => true,
+            _ => false,
+        }
+    }
+
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
         let b = bits_from_any(b, py)?;

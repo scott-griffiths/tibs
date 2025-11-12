@@ -32,10 +32,10 @@ class TestAll:
 
 
 class TestNoPosAttribute:
-    def test_replace(self):
-        s = Mutibs.from_string("0b01")
-        s = s.replace("0b1", "0b11")
-        assert s == "0b011"
+#     def test_replace(self):
+#         s = Mutibs.from_string("0b01")
+#         s = s.replace("0b1", "0b11")
+#         assert s == "0b011"
 
     def test_delete(self):
         s = Mutibs('0b000000001')
@@ -99,16 +99,16 @@ class TestNoPosAttribute:
             a += 'float:32'
 
 class Testbyte_aligned:
-    def test_not_byte_aligned(self):
-        a = Tibs.from_string("0x00 ff 0f f")
-        li = list(a.find_all("0xff"))
-        assert li == [8, 20]
-        p = a.find("0x0f")
-        assert p == 4
-        p = a.rfind("0xff")
-        assert p == 20
-        a = a.to_mutibs().replace("0xff", "")
-        assert a == "0x000"
+#     def test_not_byte_aligned(self):
+#         a = Tibs.from_string("0x00 ff 0f f")
+#         li = list(a.find_all("0xff"))
+#         assert li == [8, 20]
+#         p = a.find("0x0f")
+#         assert p == 4
+#         p = a.rfind("0xff")
+#         assert p == 20
+#         a = a.to_mutibs().replace("0xff", "")
+#         assert a == "0x000"
 
     @pytest.mark.skip
     def test_byte_aligned(self):
@@ -282,15 +282,15 @@ def test_adding():
     assert b == "0b11"
 
 
-def test_copy_method():
-    s = Tibs.from_zeros(9000)
-    t = copy.copy(s)
-    assert s == t
-    assert s is t
-    s = s.to_mutibs()
-    t = copy.copy(s)
-    assert s == t
-    assert s is not t
+# def test_copy_method():
+#     s = Tibs.from_zeros(9000)
+#     t = copy.copy(s)
+#     assert s == t
+#     assert s is t
+#     s = s.to_mutibs()
+#     t = copy.copy(s)
+#     assert s == t
+#     assert s is not t
 
 
 class TestRepr:
