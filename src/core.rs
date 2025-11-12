@@ -22,9 +22,9 @@ pub(crate) trait BitCollection: Sized {
     fn from_zeros(length: usize) -> Self;
     fn from_ones(length: usize) -> Self;
     fn from_bytes(data: Vec<u8>) -> Self;
-    fn from_bin(binary_string: &str) -> Result<Self, String>;
-    fn from_oct(octal_string: &str) -> Result<Self, String>;
-    fn from_hex(hex_string: &str) -> Result<Self, String>;
+    fn from_binary(binary_string: &str) -> Result<Self, String>;
+    fn from_octal(octal_string: &str) -> Result<Self, String>;
+    fn from_hexadecimal(hex_string: &str) -> Result<Self, String>;
     fn from_u64(value: u64, length: usize) -> Self;
     fn from_i64(value: i64, length: usize) -> Self;
     fn logical_or(&self, other: &Tibs) -> Self;
@@ -32,9 +32,9 @@ pub(crate) trait BitCollection: Sized {
     fn logical_xor(&self, other: &Tibs) -> Self;
 
     fn get_bit(&self, i: usize) -> bool;
-    fn to_bin(&self) -> String;
-    fn to_oct(&self) -> Result<String, String>;
-    fn to_hex(&self) -> Result<String, String>;
+    fn to_binary(&self) -> String;
+    fn to_octal(&self) -> Result<String, String>;
+    fn to_hexadecimal(&self) -> Result<String, String>;
 }
 
 // ---- Rust-only helper methods ----
@@ -152,7 +152,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_bin(binary_string: &str) -> Result<Self, String> {
+    fn from_binary(binary_string: &str) -> Result<Self, String> {
         // Ignore any leading '0b' or '0B'
         let s = binary_string.strip_prefix("0b").or_else(|| binary_string.strip_prefix("0B")).unwrap_or(binary_string);
         let mut b: BV = BV::with_capacity(s.len());
@@ -174,7 +174,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_oct(octal_string: &str) -> Result<Self, String> {
+    fn from_octal(octal_string: &str) -> Result<Self, String> {
         // Ignore any leading '0o'
         let s = octal_string.strip_prefix("0o").or_else(|| octal_string.strip_prefix("0O")).unwrap_or(octal_string);
         let mut b: BV = BV::with_capacity(s.len() * 3);
@@ -201,7 +201,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_hex(hex: &str) -> Result<Self, String> {
+    fn from_hexadecimal(hex: &str) -> Result<Self, String> {
         // Ignore any leading '0x'
         let mut new_hex = hex.strip_prefix("0x").or_else(|| hex.strip_prefix("0X")).unwrap_or(hex).to_string();
         // Remove any underscores or whitespace characters
@@ -262,7 +262,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn to_bin(&self) -> String {
+    fn to_binary(&self) -> String {
         if self.len() > 64 {
             return self.build_bin_string();
         }
@@ -273,7 +273,7 @@ impl BitCollection for Tibs {
 
 
     #[inline]
-    fn to_oct(&self) -> Result<String, String> {
+    fn to_octal(&self) -> Result<String, String> {
         let len = self.len();
         if len % 3 != 0 {
             return Err(format!(
@@ -290,7 +290,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn to_hex(&self) -> Result<String, String> {
+    fn to_hexadecimal(&self) -> Result<String, String> {
         let len = self.len();
         if len % 4 != 0 {
             return Err(format!(
@@ -349,23 +349,23 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn from_bin(binary_string: &str) -> Result<Self, String> {
+    fn from_binary(binary_string: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_bin(binary_string)?,
+            inner: <Tibs as BitCollection>::from_binary(binary_string)?,
         })
     }
 
     #[inline]
-    fn from_oct(oct: &str) -> Result<Self, String> {
+    fn from_octal(oct: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_oct(oct)?,
+            inner: <Tibs as BitCollection>::from_octal(oct)?,
         })
     }
 
     #[inline]
-    fn from_hex(hex: &str) -> Result<Self, String> {
+    fn from_hexadecimal(hex: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_hex(hex)?,
+            inner: <Tibs as BitCollection>::from_hexadecimal(hex)?,
         })
     }
 
@@ -410,18 +410,18 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn to_bin(&self) -> String {
-        self.inner.to_bin()
+    fn to_binary(&self) -> String {
+        self.inner.to_binary()
     }
 
     #[inline]
-    fn to_oct(&self) -> Result<String, String> {
-        self.inner.to_oct()
+    fn to_octal(&self) -> Result<String, String> {
+        self.inner.to_octal()
     }
 
     #[inline]
-    fn to_hex(&self) -> Result<String, String> {
-        self.inner.to_hex()
+    fn to_hexadecimal(&self) -> Result<String, String> {
+        self.inner.to_hexadecimal()
     }
 }
 

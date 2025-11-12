@@ -195,7 +195,7 @@ impl Tibs {
         if self.is_empty() {
             return "".to_string();
         }
-        match self.to_hex() {
+        match self.to_hexadecimal() {
             Ok(hex) => format!("0x{}", hex),
             Err(_) => format!("0b{}", self.to_bin()),
         }
@@ -414,6 +414,33 @@ impl Tibs {
         str_to_tibs(s)
     }
 
+    #[classmethod]
+    pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_binary(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_bin(&self) -> String {
+        BitCollection::to_binary(self)
+    }
+
+    #[classmethod]
+    pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_octal(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_oct(&self) -> PyResult<String> {
+        BitCollection::to_octal(self).map_err(|e| PyValueError::new_err(e))
+    }
+
+    #[classmethod]
+    pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_hex(&self) -> PyResult<String> {
+        BitCollection::to_hexadecimal(self).map_err(|e| PyValueError::new_err(e))
+    }
+
     /// Create a new instance from a bytes object.
     ///
     /// :param b: The bytes object to convert to a :class:`Tibs`.
@@ -499,17 +526,17 @@ impl Tibs {
 
     #[staticmethod]
     pub fn _from_bin(binary_string: &str) -> PyResult<Self> {
-        BitCollection::from_bin(binary_string).map_err(PyValueError::new_err)
+        BitCollection::from_binary(binary_string).map_err(PyValueError::new_err)
     }
 
     #[staticmethod]
     pub fn _from_hex(hex: &str) -> PyResult<Self> {
-        BitCollection::from_hex(hex).map_err(PyValueError::new_err)
+        BitCollection::from_hexadecimal(hex).map_err(PyValueError::new_err)
     }
 
     #[staticmethod]
     pub fn _from_oct(oct: &str) -> PyResult<Self> {
-        BitCollection::from_oct(oct).map_err(PyValueError::new_err)
+        BitCollection::from_octal(oct).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance by concatenating a sequence of Tibs objects.
@@ -633,7 +660,7 @@ impl Tibs {
 
     pub fn _slice_to_hex(&self, start: usize, length: usize) -> PyResult<String> {
         self.slice(start, length)
-            .to_hex()
+            .to_hexadecimal()
             .map_err(PyValueError::new_err)
     }
 

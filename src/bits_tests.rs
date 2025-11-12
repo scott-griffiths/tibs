@@ -14,28 +14,28 @@ mod tests {
 
     #[test]
     fn from_hex() {
-        let bits = Tibs::from_hex("0x0a_14  _1e").unwrap();
+        let bits = Tibs::from_hexadecimal("0x0a_14  _1e").unwrap();
         assert_eq!(*bits.to_bytes(), vec![10, 20, 30]);
         assert_eq!(bits.len(), 24);
-        let bits = Tibs::from_hex("").unwrap();
+        let bits = Tibs::from_hexadecimal("").unwrap();
         assert_eq!(bits.len(), 0);
-        let bits = Tibs::from_hex("hello");
+        let bits = Tibs::from_hexadecimal("hello");
         assert!(bits.is_err());
-        let bits = Tibs::from_hex("1").unwrap();
+        let bits = Tibs::from_hexadecimal("1").unwrap();
         assert_eq!(*bits.to_bytes(), vec![16]);
         assert_eq!(bits.len(), 4);
     }
 
     #[test]
     fn from_bin() {
-        let bits = Tibs::from_bin("00001010").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("00001010").unwrap();
         assert_eq!(*bits.to_bytes(), vec![10]);
         assert_eq!(bits.len(), 8);
-        let bits = Tibs::from_bin("").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("").unwrap();
         assert_eq!(bits.len(), 0);
-        let bits = Tibs::from_bin("hello");
+        let bits = <Tibs as BitCollection>::from_binary("hello");
         assert!(bits.is_err());
-        let bits = Tibs::from_bin("1").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("1").unwrap();
         assert_eq!(*bits.to_bytes(), vec![128]);
         assert_eq!(bits.len(), 1);
     }
@@ -45,7 +45,7 @@ mod tests {
         let bits = <Tibs as BitCollection>::from_zeros(8);
         assert_eq!(*bits.to_bytes(), vec![0]);
         assert_eq!(bits.len(), 8);
-        assert_eq!(bits.to_hex().unwrap(), "00");
+        assert_eq!(bits.to_hexadecimal().unwrap(), "00");
         let bits = <Tibs as BitCollection>::from_zeros(9);
         assert_eq!(*bits.to_bytes(), vec![0, 0]);
         assert_eq!(bits.len(), 9);
@@ -58,7 +58,7 @@ mod tests {
         let bits = <Tibs as BitCollection>::from_ones(8);
         assert_eq!(*bits.to_bytes(), vec![255]);
         assert_eq!(bits.len(), 8);
-        assert_eq!(bits.to_hex().unwrap(), "ff");
+        assert_eq!(bits.to_hexadecimal().unwrap(), "ff");
         let bits = <Tibs as BitCollection>::from_ones(9);
         assert_eq!(bits.to_bin(), "111111111");
         assert_eq!((*bits.to_bytes())[0], 0xff);
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn get_index() {
-        let bits = Tibs::from_bin("001100").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("001100").unwrap();
         assert_eq!(bits._getindex(0).unwrap(), false);
         assert_eq!(bits._getindex(1).unwrap(), false);
         assert_eq!(bits._getindex(2).unwrap(), true);
@@ -83,12 +83,12 @@ mod tests {
 
     #[test]
     fn hex_edge_cases() {
-        let b1 = Tibs::from_hex("0123456789abcdef").unwrap();
+        let b1 = Tibs::from_hexadecimal("0123456789abcdef").unwrap();
         let b2 = b1._getslice(12, b1.len()).unwrap();
-        assert_eq!(b2.to_hex().unwrap(), "3456789abcdef");
+        assert_eq!(b2.to_hexadecimal().unwrap(), "3456789abcdef");
         assert_eq!(b2.len(), 52);
-        let t = Tibs::from_hex("123").unwrap();
-        assert_eq!(t.to_hex().unwrap(), "123");
+        let t = Tibs::from_hexadecimal("123").unwrap();
+        assert_eq!(t.to_hexadecimal().unwrap(), "123");
     }
 
     // #[test]
@@ -123,26 +123,26 @@ mod tests {
 
     #[test]
     fn test_and() {
-        let a1 = Tibs::from_hex("f0f").unwrap();
-        let a2 = Tibs::from_hex("123").unwrap();
+        let a1 = Tibs::from_hexadecimal("f0f").unwrap();
+        let a2 = Tibs::from_hexadecimal("123").unwrap();
         let a3 = a1._and(&a2).unwrap();
-        let b = Tibs::from_hex("103").unwrap();
+        let b = Tibs::from_hexadecimal("103").unwrap();
         assert_eq!(a3, b);
         let a4 = a1.slice(4, 8)._and(&a2.slice(4, 8)).unwrap();
-        assert_eq!(a4, Tibs::from_hex("03").unwrap());
+        assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
     }
 
     #[test]
     fn test_set_mutable_slice() {
-        let mut a = Mutibs::from_hex("0011223344").unwrap();
-        let b = Tibs::from_hex("ff").unwrap();
+        let mut a = Mutibs::from_hexadecimal("0011223344").unwrap();
+        let b = Tibs::from_hexadecimal("ff").unwrap();
         a._set_slice(8, 16, &b);
-        assert_eq!(a.to_hex().unwrap(), "00ff223344");
+        assert_eq!(a.to_hexadecimal().unwrap(), "00ff223344");
     }
 
     #[test]
     fn test_get_mutable_slice() {
-        let a = Tibs::from_hex("01ffff").unwrap();
+        let a = Tibs::from_hexadecimal("01ffff").unwrap();
         assert_eq!(a.len(), 24);
         let b = a._getslice(1, a.len()).unwrap();
         assert_eq!(b.len(), 23);
@@ -152,16 +152,16 @@ mod tests {
 
     #[test]
     fn test_getslice() {
-        let a = Tibs::from_bin("00010001").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("00010001").unwrap();
         assert_eq!(a._getslice(0, 4).unwrap().to_bin(), "0001");
         assert_eq!(a._getslice(4, 8).unwrap().to_bin(), "0001");
     }
 
     #[test]
     fn test_all_set() {
-        let b = Tibs::from_bin("111").unwrap();
+        let b = <Tibs as BitCollection>::from_binary("111").unwrap();
         assert!(b.all());
-        let c = Tibs::from_oct("7777777777").unwrap();
+        let c = <Tibs as BitCollection>::from_octal("7777777777").unwrap();
         assert!(c.all());
     }
 
@@ -169,11 +169,11 @@ mod tests {
     fn test_set_index() {
         let mut b = <Mutibs as BitCollection>::from_zeros(10);
         b._set_index(true, 0).unwrap();
-        assert_eq!(b.to_bin(), "1000000000");
+        assert_eq!(b.to_binary(), "1000000000");
         b._set_index(true, -1).unwrap();
-        assert_eq!(b.to_bin(), "1000000001");
+        assert_eq!(b.to_binary(), "1000000001");
         b._set_index(false, 0).unwrap();
-        assert_eq!(b.to_bin(), "0000000001");
+        assert_eq!(b.to_binary(), "0000000001");
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_to_int_byte_data() {
-        let a = Tibs::from_bin("111111111").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("111111111").unwrap();
         let b = a._to_int_byte_data(false);
         assert_eq!(b, vec![1, 255]);
         let c = a._to_int_byte_data(true);
@@ -199,73 +199,73 @@ mod tests {
 
     #[test]
     fn test_from_oct() {
-        let bits = Tibs::from_oct("123").unwrap();
+        let bits = <Tibs as BitCollection>::from_octal("123").unwrap();
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_oct("7").unwrap();
+        let bits = Tibs::from_octal("7").unwrap();
         assert_eq!(bits.to_bin(), "111");
     }
 
     #[test]
     fn test_from_oct_checked() {
-        let bits = Tibs::from_oct("123").unwrap();
+        let bits = Tibs::from_octal("123").unwrap();
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_oct("0o123").unwrap();
+        let bits = Tibs::from_octal("0o123").unwrap();
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_oct("7").unwrap();
+        let bits = Tibs::from_octal("7").unwrap();
         assert_eq!(bits.to_bin(), "111");
-        let bits = Tibs::from_oct("8");
+        let bits = Tibs::from_octal("8");
         assert!(bits.is_err());
     }
 
     #[test]
     fn test_to_oct() {
-        let bits = Tibs::from_bin("001010011").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("001010011").unwrap();
         assert_eq!(bits._slice_to_oct(0, bits.len()).unwrap(), "123");
-        let bits = Tibs::from_bin("111").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("111").unwrap();
         assert_eq!(bits._slice_to_oct(0, 3).unwrap(), "7");
-        let bits = Tibs::from_bin("000").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("000").unwrap();
         assert_eq!(bits._slice_to_oct(0, 3).unwrap(), "0");
     }
 
     #[test]
     fn test_set_from_slice() {
-        let mut bits = Mutibs::from_bin("00000000").unwrap();
+        let mut bits = Mutibs::from_binary("00000000").unwrap();
         bits._set_from_slice(true, 1, 7, 2).unwrap();
-        assert_eq!(bits.to_bin(), "01010100");
+        assert_eq!(bits.to_binary(), "01010100");
         bits._set_from_slice(true, -7, -1, 2).unwrap();
-        assert_eq!(bits.to_bin(), "01010100");
+        assert_eq!(bits.to_binary(), "01010100");
         bits._set_from_slice(false, 1, 7, 2).unwrap();
-        assert_eq!(bits.to_bin(), "00000000");
+        assert_eq!(bits.to_binary(), "00000000");
     }
 
     #[test]
     fn test_any_set() {
-        let bits = Tibs::from_bin("0000").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("0000").unwrap();
         assert!(!bits.any());
-        let bits = Tibs::from_bin("1000").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("1000").unwrap();
         assert!(bits.any());
     }
 
     #[test]
     fn test_xor() {
-        let a = Tibs::from_bin("1100").unwrap();
-        let b = Tibs::from_bin("1010").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
         let result = a._xor(&b).unwrap();
         assert_eq!(result.to_bin(), "0110");
     }
 
     #[test]
     fn test_or() {
-        let a = Tibs::from_bin("1100").unwrap();
-        let b = Tibs::from_bin("1010").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
         let result = a._or(&b).unwrap();
         assert_eq!(result.to_bin(), "1110");
     }
 
     #[test]
     fn test_and2() {
-        let a = Tibs::from_bin("1100").unwrap();
-        let b = Tibs::from_bin("1010").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
         let result = a._and(&b).unwrap();
         assert_eq!(result.to_bin(), "1000");
     }
@@ -280,24 +280,24 @@ mod tests {
 
     #[test]
     fn test_len() {
-        let bits = Tibs::from_bin("1100").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("1100").unwrap();
         assert_eq!(bits.__len__(), 4);
-        let bits = Tibs::from_bin("101010").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("101010").unwrap();
         assert_eq!(bits.__len__(), 6);
     }
 
     #[test]
     fn test_eq() {
-        let a = Tibs::from_bin("1100").unwrap();
-        let b = Tibs::from_bin("1100").unwrap();
+        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+        let b = <Tibs as BitCollection>::from_binary("1100").unwrap();
         assert_eq!(a, b);
-        let c = Tibs::from_bin("1010").unwrap();
+        let c = <Tibs as BitCollection>::from_binary("1010").unwrap();
         assert_ne!(a, c);
     }
 
     #[test]
     fn test_getslice_withstep() {
-        let bits = Tibs::from_bin("11001100").unwrap();
+        let bits = <Tibs as BitCollection>::from_binary("11001100").unwrap();
         let slice = bits._getslice_with_step(0, 8, 2).unwrap();
         assert_eq!(slice.to_bin(), "1010");
         let slice = bits._getslice_with_step(7, -1, -2).unwrap();
@@ -316,21 +316,21 @@ mod tests {
 
     #[test]
     fn mutable_from_immutable() {
-        let immutable = Tibs::from_bin("1010").unwrap();
+        let immutable = <Tibs as BitCollection>::from_binary("1010").unwrap();
         let mutable = Mutibs::new(immutable.data);
-        assert_eq!(mutable.to_bin(), "1010");
+        assert_eq!(mutable.to_binary(), "1010");
     }
 
     #[test]
     fn freeze_preserves_data() {
-        let mutable = Mutibs::from_bin("1100").unwrap();
+        let mutable = Mutibs::from_binary("1100").unwrap();
         let immutable = mutable.to_tibs();
         assert_eq!(immutable.to_bin(), "1100");
     }
 
     #[test]
     fn modify_then_freeze() {
-        let mut mutable = Mutibs::from_bin("0000").unwrap();
+        let mut mutable = Mutibs::from_binary("0000").unwrap();
         mutable._set_index(true, 1).unwrap();
         mutable._set_index(true, 2).unwrap();
         let immutable = mutable.to_tibs();
@@ -340,26 +340,26 @@ mod tests {
     #[test]
     fn mutable_constructors() {
         let m1 = <Mutibs as BitCollection>::from_zeros(4);
-        assert_eq!(m1.to_bin(), "0000");
+        assert_eq!(m1.to_binary(), "0000");
 
         let m2 = <Mutibs as BitCollection>::from_ones(4);
-        assert_eq!(m2.to_bin(), "1111");
+        assert_eq!(m2.to_binary(), "1111");
 
-        let m3 = Mutibs::from_bin("1010").unwrap();
-        assert_eq!(m3.to_bin(), "1010");
+        let m3 = Mutibs::from_binary("1010").unwrap();
+        assert_eq!(m3.to_binary(), "1010");
 
-        let m4 = Mutibs::from_hex("a").unwrap();
-        assert_eq!(m4.to_bin(), "1010");
+        let m4 = Mutibs::from_hexadecimal("a").unwrap();
+        assert_eq!(m4.to_binary(), "1010");
 
-        let m5 = Mutibs::from_oct("12").unwrap();
-        assert_eq!(m5.to_bin(), "001010");
+        let m5 = Mutibs::from_octal("12").unwrap();
+        assert_eq!(m5.to_binary(), "001010");
     }
 
     #[test]
     fn mutable_equality() {
-        let m1 = Mutibs::from_bin("1100").unwrap();
-        let m2 = Mutibs::from_bin("1100").unwrap();
-        let m3 = Mutibs::from_bin("0011").unwrap();
+        let m1 = Mutibs::from_binary("1100").unwrap();
+        let m2 = Mutibs::from_binary("1100").unwrap();
+        let m3 = Mutibs::from_binary("0011").unwrap();
 
         assert!(m1 == m2);
         assert!(m1 != m3);
@@ -367,10 +367,10 @@ mod tests {
 
     #[test]
     fn mutable_getslice() {
-        let m = Mutibs::from_bin("11001010").unwrap();
+        let m = Mutibs::from_binary("11001010").unwrap();
 
         let slice1 = m._getslice(2, 6).unwrap();
-        assert_eq!(slice1.to_bin(), "0010");
+        assert_eq!(slice1.to_binary(), "0010");
     }
 
     // #[test]
@@ -389,24 +389,24 @@ mod tests {
 
         m._set_index(true, 0).unwrap();
         m._set_index(true, 7).unwrap();
-        assert_eq!(m.to_bin(), "10000001");
+        assert_eq!(m.to_binary(), "10000001");
 
         m._set_from_slice(true, 2, 6, 1).unwrap();
-        assert_eq!(m.to_bin(), "10111101");
+        assert_eq!(m.to_binary(), "10111101");
 
         m._set_from_sequence(false, vec![0, 3, 7]).unwrap();
-        assert_eq!(m.to_bin(), "00101100");
+        assert_eq!(m.to_binary(), "00101100");
     }
 
     #[test]
     fn mutable_immutable_interaction() {
-        let pattern1 = Mutibs::from_bin("1100").unwrap();
-        let pattern2 = Tibs::from_bin("0011").unwrap();
+        let pattern1 = Mutibs::from_binary("1100").unwrap();
+        let pattern2 = <Tibs as BitCollection>::from_binary("0011").unwrap();
 
         let mut m = Mutibs::new(pattern1.inner.data);
 
         m._set_slice(0, 2, &pattern2);
-        assert_eq!(m.to_bin(), "001100");
+        assert_eq!(m.to_binary(), "001100");
     }
 
     #[test]
@@ -421,15 +421,15 @@ mod tests {
 
     #[test]
     fn mutable_edge_index_operations() {
-        let mut m = Mutibs::from_bin("1010").unwrap();
+        let mut m = Mutibs::from_binary("1010").unwrap();
 
         m._set_index(false, 0).unwrap();
         m._set_index(false, 3).unwrap();
-        assert_eq!(m.to_bin(), "0010");
+        assert_eq!(m.to_binary(), "0010");
 
         m._set_index(true, -1).unwrap();
         m._set_index(true, -4).unwrap();
-        assert_eq!(m.to_bin(), "1011");
+        assert_eq!(m.to_binary(), "1011");
 
         assert!(m._set_index(true, 4).is_err());
         assert!(m._set_index(true, -5).is_err());
@@ -437,22 +437,22 @@ mod tests {
 
     #[test]
     fn set_mutable_slice_with_bits() {
-        let mut m = Mutibs::from_bin("00000000").unwrap();
-        let pattern = Tibs::from_bin("1111").unwrap();
+        let mut m = Mutibs::from_binary("00000000").unwrap();
+        let pattern = <Tibs as BitCollection>::from_binary("1111").unwrap();
 
         m._set_slice(2, 6, &pattern);
-        assert_eq!(m.to_bin(), "00111100");
+        assert_eq!(m.to_binary(), "00111100");
 
         m._set_slice(0, 2, &pattern);
-        assert_eq!(m.to_bin(), "1111111100");
+        assert_eq!(m.to_binary(), "1111111100");
 
         m._set_slice(6, 8, &pattern);
-        assert_eq!(m.to_bin(), "111111111100");
+        assert_eq!(m.to_binary(), "111111111100");
     }
 
     #[test]
     fn conversion_round_trip() {
-        let original = Tibs::from_bin("101010").unwrap();
+        let original = <Tibs as BitCollection>::from_binary("101010").unwrap();
         let mut mutable = Mutibs::new(original.data);
         mutable._set_index(false, 0).unwrap();
         mutable._set_index(true, 1).unwrap();
@@ -474,23 +474,23 @@ mod tests {
 
     #[test]
     fn mutable_from_checked_constructors() {
-        let bin = Mutibs::from_bin("1010").unwrap();
-        assert_eq!(bin.to_bin(), "1010");
+        let bin = Mutibs::from_binary("1010").unwrap();
+        assert_eq!(bin.to_binary(), "1010");
 
-        let hex = Mutibs::from_hex("a").unwrap();
-        assert_eq!(hex.to_bin(), "1010");
+        let hex = Mutibs::from_hexadecimal("a").unwrap();
+        assert_eq!(hex.to_binary(), "1010");
 
-        let oct = Mutibs::from_oct("12").unwrap();
-        assert_eq!(oct.to_bin(), "001010");
+        let oct = Mutibs::from_octal("12").unwrap();
+        assert_eq!(oct.to_binary(), "001010");
 
-        assert!(Mutibs::from_bin("123").is_err());
-        assert!(Mutibs::from_hex("xy").is_err());
-        assert!(Mutibs::from_oct("89").is_err());
+        assert!(Mutibs::from_binary("123").is_err());
+        assert!(Mutibs::from_hexadecimal("xy").is_err());
+        assert!(Mutibs::from_octal("89").is_err());
     }
 
     #[test]
     fn negative_indexing_in_mutable() {
-        let m = Mutibs::from_bin("10101010").unwrap();
+        let m = Mutibs::from_binary("10101010").unwrap();
 
         assert_eq!(m._getindex(-3).unwrap(), false);
         assert_eq!(m._getindex(-8).unwrap(), true);
@@ -499,13 +499,13 @@ mod tests {
 
     #[test]
     fn mutable_getslice_edge_cases() {
-        let m = Mutibs::from_bin("11001010").unwrap();
+        let m = Mutibs::from_binary("11001010").unwrap();
 
         let empty = m._getslice(4, 4).unwrap();
-        assert_eq!(empty.to_bin(), "");
+        assert_eq!(empty.to_binary(), "");
 
         let full = m._getslice(0, m.len()).unwrap();
-        assert_eq!(full.to_bin(), "11001010");
+        assert_eq!(full.to_binary(), "11001010");
 
         assert!(m._getslice(9, 10).is_err());
     }
