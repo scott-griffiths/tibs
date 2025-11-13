@@ -320,22 +320,20 @@ impl Tibs {
         self.data[start..start + length].load_be::<i64>()
     }
 
-    #[pyo3(signature = (needle_obj, start=None, end=None, byte_aligned=false))]
+    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
-        needle_obj: Py<Tibs>,
+        b: Py<PyAny>,
         start: Option<usize>,
         end: Option<usize>,
-        byte_aligned: bool,
+        byte_aligned: bool, py: Python
     ) -> PyResult<Py<FindAllIterator>> {
-        let py = slf.py();
-        let haystack_obj: Py<Tibs> = slf.into(); // Get a Py<Tibs> for the haystack (self)
-
+        let b = bits_from_any(b, py)?;
         let step = if byte_aligned { 8 } else { 1 };
         let start = start.unwrap_or(0);
         let iter_obj = FindAllIterator {
-            haystack: haystack_obj,
-            needle: needle_obj,
+            haystack: slf.into(),
+            needle: Py::new(py, b)?,
             start,
             end,
             byte_aligned,

@@ -1259,6 +1259,25 @@ impl Mutibs {
         Ok(slf)
     }
 
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false))]
+    pub fn replace<'a>(mut slf: PyRefMut<'a, Self>,
+                       old: Py<PyAny>,
+                       new: Py<PyAny>,
+                       start: Option<i64>,
+                       end: Option<i64>,
+                       count: Option<i64>,
+                       byte_aligned: bool, py: Python) -> PyResult<PyRefMut<'a, Self>> {
+        let old = bits_from_any(old, py)?;
+        let new = bits_from_any(new, py)?;
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(slf.len() as i64);
+
+        // Find everywhere we want to do the replacements
+        let mut starting_points = Vec::<i64>::new();
+        let start = if byte_aligned {start + (8 - start % 8) % 8} else {start};
+        for val in slf.to_tibs().find_all(old) {}
+    }
+
     /// Inserts another Tibs or Mutibs at bit position pos. Returns self.
     ///
     /// :param pos: The bit position to insert at.
