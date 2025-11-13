@@ -243,6 +243,33 @@ impl Mutibs {
         str_to_tibs(s).map(|bits| bits.to_mutibs())
     }
 
+    #[classmethod]
+    pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_binary(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_bin(&self) -> String {
+        BitCollection::to_binary(self)
+    }
+
+    #[classmethod]
+    pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_octal(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_oct(&self) -> PyResult<String> {
+        BitCollection::to_octal(self).map_err(|e| PyValueError::new_err(e))
+    }
+
+    #[classmethod]
+    pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+        BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
+    }
+
+    pub fn to_hex(&self) -> PyResult<String> {
+        BitCollection::to_hexadecimal(self).map_err(|e| PyValueError::new_err(e))
+    }
+
     /// Create a new instance with all bits set to zero.
     ///
     /// :param length: The number of bits to set.

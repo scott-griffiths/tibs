@@ -321,7 +321,7 @@ impl Tibs {
     }
 
     #[pyo3(signature = (needle_obj, start=None, end=None, byte_aligned=false))]
-    pub fn _findall(
+    pub fn find_all(
         slf: PyRef<'_, Self>,
         needle_obj: Py<Tibs>,
         start: Option<usize>,
