@@ -199,68 +199,26 @@ class TestContainsBug:
         assert "0b0" not in Tibs.from_string("0xf")
 
 
-@pytest.mark.skip
 class TestUnderscoresInLiterals:
     def test_hex_creation(self):
-        a = Tibs.from_dtype("hex", "ab_cd__ef")
-        assert a.hex == "abcdef"
+        a = Tibs.from_hex("ab_cd__ef")
+        assert a.to_hex() == "abcdef"
         b = Tibs.from_string("0x0102_0304")
-        assert b.u == 0x0102_0304
+        assert b.to_hex() == "01020304"
 
     def test_binary_creation(self):
-        a = Tibs.from_dtype("bin", "0000_0001_0010")
-        assert a.bin == "000000010010"
+        a = Tibs.from_bin("0000_0001_0010")
+        assert a.to_bin() == "000000010010"
         b = Tibs.from_string("0b0011_1100_1111_0000")
-        assert b.bin == "0011110011110000"
-        v = 0b1010_0000
-        c = Tibs.from_dtype("u8", 0b1010_0000)
-        assert c.u == v
+        assert b.to_bin() == "0011110011110000"
 
     def test_octal_creation(self):
-        a = Tibs.from_dtype("oct", "0011_2233_4455_6677")
-        assert a.u == 0o001122334455_6677
+        a = Tibs.from_oct("0011_2233_4455_6677")
+        assert a.to_oct() == "0011223344556677"
         b = Tibs.from_string("0o123_321_123_321")
-        assert b.u == 0o123_321_123321
-
-@pytest.mark.skip
-def test_unpack_array():
-    a = Tibs.from_string("0b1010101010101010")
-    assert a.unpack(("u8", "u4", "u4")) == (170, 10, 10)
-    assert a.unpack(["u4", "u4", "u8"]) == (10, 10, 170)
-    assert a.unpack(["u4", "u4", "u4", "u4"]) == (10, 10, 10, 10)
-
-    assert a.unpack(["[u4; 4]"]) == ((10, 10, 10, 10),)
-    assert a.unpack("[u4; 3]") == (10, 10, 10)
+        assert b.to_oct() == "123321123321"
 
 
-@pytest.mark.skip
-def test_unpack_errors():
-    with pytest.raises(ValueError):
-        _ = Tibs().unpack("bool")
-    with pytest.raises(ValueError):
-        _ = Tibs("0b1").unpack("u2")
-    a = Tibs.from_string("0b101010101")
-    with pytest.raises(ValueError):
-        _ = a.unpack(["u4", "u4", "u4"])
-    with pytest.raises(ValueError):
-        _ = a.unpack("i10")
-
-
-@pytest.mark.skip
-def test_unpack_single():
-    a = Tibs("0x12345")
-    assert a.unpack("[u4; 5]") == (1, 2, 3, 4, 5)
-    assert a.unpack("u8") == 0x12
-
-
-@pytest.mark.skip
-def test_pack_array():
-    d = DtypeArray.from_params(DtypeKind.UINT, 33, 5)
-    a = Tibs.from_dtype(d, [10, 100, 1000, 32, 1])
-    assert a.unpack(d) == (10, 100, 1000, 32, 1)
-
-
-@pytest.mark.skip
 def test_from_iterable():
     with pytest.raises(TypeError):
         _ = Tibs.from_bools()
@@ -269,7 +227,7 @@ def test_from_iterable():
     a = Tibs.from_bools([1, 0, 1, 1])
     assert a == "0b1011"
     a = Tibs.from_bools((True,))
-    assert a == "bool=1"
+    assert a.to_bin() == "1"
 
 
 def test_mul_by_zero():
@@ -281,45 +239,6 @@ def test_mul_by_zero():
     b = a * 2
     assert b == a + a
 
-
-@pytest.mark.skip
-def test_uintne():
-    s = Tibs.from_dtype("u160_ne", 454)
-    t = Tibs("u160_ne=454")
-    assert s == t
-
-
-@pytest.mark.skip
-def test_float_endianness():
-    a = Tibs("f64_le=12, f64_be=-0.01, f64_ne=3e33")
-    x, y, z = a.unpack(["f64_le", "f64_be", "f64_ne"])
-    assert x == 12.0
-    assert y == -0.01
-    assert z == 3e33
-    a = Tibs("f16_le=12, f32_be=-0.01, f32_ne=3e33")
-    x, y, z = a.unpack(["f16_le", "f32_be", "f32_ne"])
-    assert x / 12.0 == pytest.approx(1.0)
-    assert y / -0.01 == pytest.approx(1.0)
-    assert z / 3e33 == pytest.approx(1.0)
-
-
-@pytest.mark.skip
-def test_non_aligned_float_reading():
-    s = Tibs("0b1, f32 = 10.0")
-    (y,) = s.unpack(["pad1", "f32"])
-    assert y == 10.0
-    s = Tibs("0b1, f32_le = 20.0")
-    x, y = s.unpack(["bits1", "f32_le"])
-    assert y == 20.0
-
-@pytest.mark.skip
-def test_float_errors():
-    a = Tibs("0x3")
-    with pytest.raises(ValueError):
-        _ = a.f
-    for le in (8, 10, 12, 18, 30, 128, 200):
-        with pytest.raises(ValueError):
-            _ = Tibs.from_dtype(DtypeSingle.from_params(DtypeKind.FLOAT, le), 1.0)
 
 @pytest.mark.skip
 def test_little_endian_uint():
@@ -341,55 +260,6 @@ def test_little_endian_uint():
     with pytest.raises(ValueError):
         s.unpack('i_le_be')
 
-
-@pytest.mark.skip
-def test_little_endian_errors():
-    with pytest.raises(ValueError):
-        _ = Tibs("uint15_le=10")
-    with pytest.raises(ValueError):
-        _ = Tibs("i31_le=-999")
-    s = Tibs("0xfff")
-    with pytest.raises(ValueError):
-        _ = s.i_le
-    with pytest.raises(ValueError):
-        _ = s.u_be
-    with pytest.raises(ValueError):
-        _ = s.unpack("uint_le")
-    with pytest.raises(ValueError):
-        _ = s.unpack("i_ne")
-
-
-@pytest.mark.skip
-def test_big_endian_errors():
-    with pytest.raises(ValueError):
-        _ = Tibs("u15_be = 10")
-    b = Tibs("0xabc")
-    with pytest.raises(ValueError):
-        _ = b.f_be
-
-
-@pytest.mark.skip
-def test_native_endian_floats():
-    if tibs.byteorder == "little":
-        a = Tibs.from_dtype("f64_ne", 0.55)
-        assert a.unpack("f64_ne") == 0.55
-        assert a.f_le == 0.55
-        assert a.f_ne == 0.55
-        d =Dtype("f64_ne")
-        d2 = DtypeSingle.from_params(DtypeKind.FLOAT, 64, endianness=Endianness.NATIVE)
-        assert d == d2
-        assert d.endianness is Endianness.NATIVE
-        d3 = DtypeSingle.from_params(DtypeKind.FLOAT, 64, endianness=Endianness.LITTLE)
-        assert d != d3
-
-
-@pytest.mark.skip
-def test_unpack_dtype_tuple():
-    f = "(u8, u8, u8, bool)"
-    d = DtypeTuple(f)
-    b = d.pack([55, 33, 11, 0])
-    assert b.unpack(d) == (55, 33, 11, False)
-    assert b.unpack(f) == (55, 33, 11, False)
 
 def test_from_ones():
     a = Tibs.from_ones(0)
@@ -428,43 +298,11 @@ def test_from_random():
     c = Mutibs.from_random(10000, b'a_seed')
     assert a == c
 
-@pytest.mark.skip
-def test_unpacking_array_dtype_with_no_length():
-    a = Tibs.from_dtype('[u8; 10]', range(10))
-    assert a.unpack('[u8; 10]') == tuple(range(10))
-    assert a.unpack('[u8;]') == tuple(range(10))
-    b = a + '0b1'
-    assert b.unpack('[u8;]') == tuple(range(10))
-    assert len(b.unpack('[bool;]')) == 81
-
-@pytest.mark.skip
-def test_creating_from_array_dtype_with_no_length():
-    a = Tibs.from_dtype('[u8;]', [1, 2, 3, 4])
-    assert a.unpack('[u8;]') == (1, 2, 3, 4)
-    a += '0b1111111'
-    assert a.unpack('[u8;]') == (1, 2, 3, 4)
-    a += '0b1'
-    assert a.unpack('[u8;]') == (1, 2, 3, 4, 255)
-
-
-@pytest.mark.skip
-def test_array_from_str():
-    x = Tibs('[u8; 1]= [1]')
-    assert x.unpack('u8') == 1
-    y = Tibs('[bool; 4] = [True, False, True, False]')
-    assert y.bin == '1010'
-
-@pytest.mark.skip
-def test_tuple_from_str():
-    x = Tibs('(u8, u6) = (1, 2)')
-    assert x == 'u8 = 1, u6 = 2'
-    y = Tibs('(bool, bool) = [0, 0]')
-    assert y == 'bool = 0, bool = 0'
 
 def test_is_things():
     a = Tibs('0b1010101010101010')
     assert isinstance(a, Iterable)
-#     assert isinstance(a, Sequence)
+    assert isinstance(a, Sequence)
 
 @pytest.mark.skip
 def test_conversion_to_long_ints():
@@ -476,18 +314,10 @@ def test_conversion_to_long_ints():
         assert ones.u == (1 << l) - 1
         assert ones.i == -1
 
-# TODO: Nice to reinstate this method of creating Tibs.
-# def test_bits_from_bytes_string():
-#     a = Tibs("b'ABC'")
-#     assert a.to_bytes() == b'ABC'
+def test_bits_from_bytes_string():
+    a = Tibs.from_bytes(b'ABC')
+    assert a.to_bytes() == b'ABC'
 
-@pytest.mark.skip
-def test_unpack_tuple():
-    a = Tibs('0X 123 00ff')
-    x, y, z = a.unpack(('hex3', 'u8', 'i'))
-    assert x == '123'
-    assert y == 0
-    assert z == -1
 
 def test_bool_conversion():
     a = Tibs()
@@ -497,14 +327,14 @@ def test_bool_conversion():
     assert b
     assert c
 
-# def test_rfind_all():
-#     a = Tibs(' 0 B 0 0 01011')
-#     g = a.rfind_all('0b1')
-#     assert next(g) == 6
-#     assert next(g) == 5
-#     assert next(g) == 3
-#     with pytest.raises(StopIteration):
-#         _ = next(g)
+def test_find_all():
+    a = Tibs(' 0 B 0 0 01011')
+    g = a.find_all('0b1')
+    assert next(g) == 3
+    assert next(g) == 5
+    assert next(g) == 6
+    with pytest.raises(StopIteration):
+        _ = next(g)
 
 def test_repr():
     a = Tibs()
