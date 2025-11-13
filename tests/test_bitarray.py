@@ -75,31 +75,19 @@ class TestNoPosAttribute:
         with pytest.raises(ValueError):
             a += 'float:32'
 
-class Testbyte_aligned:
-#     def test_not_byte_aligned(self):
-#         a = Tibs.from_string("0x00 ff 0f f")
-#         li = list(a.find_all("0xff"))
-#         assert li == [8, 20]
-#         p = a.find("0x0f")
-#         assert p == 4
-#         p = a.rfind("0xff")
-#         assert p == 20
-#         a = a.to_mutibs().replace("0xff", "")
-#         assert a == "0x000"
 
-    @pytest.mark.skip
-    def test_byte_aligned(self):
-        tibs.Options().byte_aligned = True
-        a = Tibs.from_string("0x00 ff 0f f")
-        li = list(a.find_all("0xff"))
-        assert li == [8]
-        p = a.find("0x0f")
-        assert p == 16
-        p = a.rfind("0xff")
-        assert p == 8
-        a = a.to_mutibs().replace("0xff", "")
-        assert a == "0x000ff"
-        tibs.Options().byte_aligned = False
+def test_not_byte_aligned():
+    a = Tibs.from_string("0x00 ff 0f f")
+    li = list(a.find_all("0xff"))
+    assert li == [8, 20]
+    p = a.find("0x0f")
+    assert p == 4
+    p = a.rfind("0xff")
+    assert p == 20
+    a = a.to_mutibs().replace("0xff", "")
+    assert a == "0x000"
+
+
 
 
 class TestSliceAssignment:
@@ -111,7 +99,7 @@ class TestSliceAssignment:
         with pytest.raises(IndexError):
             a[3] = 1
 
-    def test_slice_assignment_muliple_bits(self):
+    def test_slice_assignment_multiple_bits(self):
         a = Mutibs('0b0')
         a[0:1] = '0b110'
         assert a.to_bin() == '110'

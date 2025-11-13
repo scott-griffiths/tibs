@@ -2,7 +2,7 @@ use crate::tibs_::{bits_from_any, Tibs};
 use crate::core::str_to_tibs;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
-use crate::helpers::{validate_index, validate_slice, BV};
+use crate::helpers::{validate_index, validate_slice, BV, find_bitvec};
 use crate::iterator::ChunksIterator;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
@@ -1269,13 +1269,42 @@ impl Mutibs {
                        byte_aligned: bool, py: Python) -> PyResult<PyRefMut<'a, Self>> {
         let old = bits_from_any(old, py)?;
         let new = bits_from_any(new, py)?;
-        let start = start.unwrap_or(0);
-        let end = end.unwrap_or(slf.len() as i64);
 
-        // Find everywhere we want to do the replacements
-        let mut starting_points = Vec::<i64>::new();
-        let start = if byte_aligned {start + (8 - start % 8) % 8} else {start};
-        for val in slf.to_tibs().find_all(old) {}
+        let (start, end) = validate_slice(slf.len(), start, end)?;
+
+        // Find all non-overlapping occurrences
+        let mut starting_points: Vec<usize> = Vec::new();
+        let mut current_pos = start;
+        while current_pos < end {
+            if let Some(count) = count {
+                if starting_points.len() >= count as usize {
+                    break;
+                }
+            }
+            if let Some(found_pos) = find_bitvec(&slf.inner, &old, current_pos, end, byte_aligned) {
+                starting_points.push(found_pos);
+                current_pos = found_pos + old.len();
+            } else {
+                break;
+            }
+        }
+
+        if starting_points.is_empty() {
+            return Ok(slf);
+        }
+
+        // Rebuild the bitstring with replacements
+        let mut result = BV::new();
+        let mut last_pos = 0;
+        for &pos in &starting_points {
+            result.extend_from_bitslice(&slf.inner.data[last_pos..pos]);
+            result.extend_from_bitslice(&new.data);
+            last_pos = pos + old.len();
+        }
+        result.extend_from_bitslice(&slf.inner.data[last_pos..]);
+
+        slf.inner.data = result;
+        Ok(slf)
     }
 
     /// Inserts another Tibs or Mutibs at bit position pos. Returns self.
