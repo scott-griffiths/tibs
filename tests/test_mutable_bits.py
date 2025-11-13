@@ -1044,19 +1044,6 @@ def test_reserve():
     a.clear()
     assert a.capacity() == b4
 
-@pytest.mark.skip
-def test_assigning_by_properties():
-    a = Mutibs.from_zeros(64)
-    a.i = -1
-    assert a == Mutibs.from_ones(64)
-    a.f_le = -0.25
-    assert a.f_le == -0.25
-    assert len(a) == 64
-    a.u_be = 123
-    assert a.u_be == 123
-    a.i_ne = 55
-    assert a.i_ne == 55
-
 def test_insert_slice():
     a = Mutibs('0xff')
     a[0:0] = '0xab'
