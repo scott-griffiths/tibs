@@ -1,7 +1,7 @@
 use crate::mutibs::mutable_bits_from_any;
 use crate::core::validate_logical_op_lengths;
 use crate::core::{str_to_tibs, BitCollection};
-use crate::helpers::{find_bitvec, validate_index, BV};
+use crate::helpers::{find_bitvec, validate_index, BV, validate_slice};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
@@ -681,10 +681,9 @@ impl Tibs {
     }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
-    pub fn find(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
+    pub fn find(&self, b: Py<PyAny>, start: Option<i64>, end: Option<i64>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
         let b = bits_from_any(b, py)?;
-        let start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.len());
+        let (start, end) = validate_slice(self.len(), start, end)?;
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 

@@ -124,78 +124,78 @@ class TestShift:
         with pytest.raises(ValueError):
             _ = s >> -1
 
-#
-# class TestReplace:
-#     def test_replace1(self):
-#         a = Mutibs("0b1")
-#         a = a.replace("0b1", "0b0", byte_aligned=True)
-#         assert a.to_bin() == "0"
-#         a = a.replace("0b1", "0b0", byte_aligned=True)
-#         assert a.to_bin() == "0"
-#
-#     def test_replace2(self):
-#         a = Mutibs("0b00001111111")
-#         a = a.replace("0b1", "0b0", byte_aligned=True)
-#         assert a.to_bin() == "00001111011"
-#         a = a.replace("0b1", "0b0", byte_aligned=False)
-#         assert a.to_bin() == "00000000000"
-#
-#     def test_replace3(self):
-#         a = Mutibs("0b0")
-#         a = a.replace("0b0", "0b110011111", byte_aligned=True)
-#         assert a.to_bin() == "110011111"
-#         a = a.replace("0b11", "", byte_aligned=False)
-#         assert a.to_bin() == "001"
-#
-#     def test_replace4(self):
-#         a = Mutibs("0x00114723ef4732344700")
-#         a = a.replace("0x47", "0x00", byte_aligned=True)
-#         assert a.to_hex() == "00110023ef0032340000"
-#         a = a.replace("0x00", "", byte_aligned=True)
-#         assert a.to_hex() == "1123ef3234"
-#         a = a.replace("0x11", "", start=1, byte_aligned=True)
-#         assert a.to_hex() == "1123ef3234"
-#         a = a.replace("0x11", "0xfff", start=7, byte_aligned=True)
-#         assert a.to_hex() == "1123ef3234"
-#         a = a.replace("0x11", "0xfff", start=0, byte_aligned=True)
-#         assert a.to_hex() == "fff23ef3234"
-#
-#     def test_replace5(self):
-#         a = Tibs.from_string("0xab")
-#         b = Tibs.from_string("0xcd")
-#         c = Tibs.from_string("0xabef")
-#         c = c.to_mutibs().replace(a, b)
-#         assert c == "0xcdef"
-#         assert a == "0xab"
-#         assert b == "0xcd"
-#         a = Mutibs("0x0011223344").replace("0x11", "0xfff", byte_aligned=True)
-#         assert a == "0x00fff223344"
-#
-#     def test_replace_with_self(self):
-#         a = Mutibs("0b11")
-#         a = a.replace("0b1", a)
-#         assert a == "0xf"
-#         a = a.replace(a, a)
-#         assert a == "0xf"
-#
-#     def test_replace_count(self):
-#         a = Mutibs("0x223344223344223344")
-#         a = a.replace("0x2", "0x0", count=0, byte_aligned=True)
-#         assert a.to_hex() == "223344223344223344"
-#         a = a.replace("0x2", "0x0", count=1, byte_aligned=True)
-#         assert a.to_hex() == "023344223344223344"
-#         a = a.replace("0x33", "", count=2, byte_aligned=True)
-#         assert a.to_hex() == "02442244223344"
-#         a = a.replace("0x44", "0x4444", count=1435, byte_aligned=True)
-#         assert a.to_hex() == "02444422444422334444"
-#
-#     def test_replace_errors(self):
-#         a = Mutibs("0o123415")
-#         with pytest.raises(ValueError):
-#             a.replace("", Tibs("0o7"), byte_aligned=True)
-#
 
-#
+class TestReplace:
+    def test_replace1(self):
+        a = Mutibs("0b1")
+        a.replace("0b1", "0b0", byte_aligned=True)
+        assert a.to_bin() == "0"
+        a.replace("0b1", "0b0", byte_aligned=True)
+        assert a.to_bin() == "0"
+
+    def test_replace2(self):
+        a = Mutibs("0b00001111111")
+        a.replace("0b1", "0b0", byte_aligned=True)
+        assert a.to_bin() == "00001111011"
+        a.replace("0b1", "0b0", byte_aligned=False)
+        assert a.to_bin() == "00000000000"
+
+    def test_replace3(self):
+        a = Mutibs("0b0")
+        a.replace("0b0", "0b110011111", byte_aligned=True)
+        assert a.to_bin() == "110011111"
+        a.replace("0b11", "", byte_aligned=False)
+        assert a.to_bin() == "001"
+
+    def test_replace4(self):
+        a = Mutibs("0x00114723ef4732344700")
+        a.replace("0x47", "0x00", byte_aligned=True)
+        assert a.to_hex() == "00110023ef0032340000"
+        a.replace("0x00", "", byte_aligned=True)
+        assert a.to_hex() == "1123ef3234"
+        a.replace("0x11", "", start=1, byte_aligned=True)
+        assert a.to_hex() == "1123ef3234"
+        a.replace("0x11", "0xfff", start=7, byte_aligned=True)
+        assert a.to_hex() == "1123ef3234"
+        a.replace("0x11", "0xfff", start=0, byte_aligned=True)
+        assert a.to_hex() == "fff23ef3234"
+
+    def test_replace5(self):
+        a = Tibs.from_string("0xab")
+        b = Tibs.from_string("0xcd")
+        c = Tibs.from_string("0xabef")
+        c = c.to_mutibs().replace(a, b)
+        assert c == "0xcdef"
+        assert a == "0xab"
+        assert b == "0xcd"
+        a = Mutibs("0x0011223344").replace("0x11", "0xfff", byte_aligned=True)
+        assert a == "0x00fff223344"
+
+    def test_replace_with_self(self):
+        a = Mutibs("0b11")
+        a.replace("0b1", a)
+        assert a == "0xf"
+        a.replace(a, a)
+        assert a == "0xf"
+
+    def test_replace_count(self):
+        a = Mutibs("0x223344223344223344")
+        a.replace("0x2", "0x0", count=0, byte_aligned=True)
+        assert a.to_hex() == "223344223344223344"
+        a.replace("0x2", "0x0", count=1, byte_aligned=True)
+        assert a.to_hex() == "023344223344223344"
+        a.replace("0x33", "", count=2, byte_aligned=True)
+        assert a.to_hex() == "02442244223344"
+        a.replace("0x44", "0x4444", count=1435, byte_aligned=True)
+        assert a.to_hex() == "02444422444422334444"
+
+    def test_replace_errors(self):
+        a = Mutibs("0o123415")
+        with pytest.raises(ValueError):
+            a.replace("", Tibs("0o7"), byte_aligned=True)
+
+
+
 
 def test_empty_bitstring():
     s = Tibs()
