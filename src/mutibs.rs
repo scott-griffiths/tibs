@@ -1287,6 +1287,9 @@ impl Mutibs {
         py: Python,
     ) -> PyResult<PyRefMut<'a, Self>> {
         let old = tibs_from_any(old, py)?;
+        if old.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to replace."));
+        }
         let new = tibs_from_any(new, py)?;
 
         let (start, end) = validate_slice(slf.len(), start, end)?;

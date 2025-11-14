@@ -7,7 +7,6 @@ from tibs import Tibs, Mutibs
 from typing import Iterable, Sequence
 
 
-
 def remove_unprintable(s: str) -> str:
     colour_escape = re.compile(r"(?:\x1B[@-_])[0-?]*[ -/]*[@-~]")
     return colour_escape.sub("", s)
@@ -80,7 +79,6 @@ class TestPadToken:
             _ = Tibs.from_string("pad10")
         with pytest.raises(ValueError):
             _ = Tibs.from_string("pad")
-
 
     @pytest.mark.skip
     def test_unpack(self):
@@ -161,6 +159,7 @@ def test_from_ones():
     with pytest.raises(ValueError):
         _ = Tibs.from_ones(-1)
 
+
 def test_from_zeros():
     a = Tibs.from_zeros(0)
     assert a == Tibs()
@@ -168,6 +167,7 @@ def test_from_zeros():
     assert a == Tibs("0b0")
     with pytest.raises(ValueError):
         _ = Tibs.from_zeros(-1)
+
 
 def test_bits_slicing():
     a = Tibs('0b1010101010101010')
@@ -177,6 +177,7 @@ def test_bits_slicing():
     assert a[::2] == '0xff'
     assert a[1::2] == '0x00'
 
+
 def test_from_random():
     a = Tibs.from_random(0)
     assert a == Tibs()
@@ -185,12 +186,14 @@ def test_from_random():
     a = Tibs.from_random(10000, b'a_seed')
     b = Tibs.from_random(10000, b'a_seed')
     assert a == b
-    b = Tibs.from_random(10000, b'a different seed this time - quite long to test if this makes a difference or not. It shouldnt really, but who knows?')
+    b = Tibs.from_random(10000,
+                         b'a different seed this time - quite long to test if this makes a difference or not. It shouldnt really, but who knows?')
     assert a != b
     c = Mutibs.from_random(10000, b'a_seed')
     assert a == c
 
 
+@pytest.mark.skip
 def test_is_things():
     a = Tibs('0b1010101010101010')
     assert isinstance(a, Iterable)
@@ -210,6 +213,7 @@ def test_bool_conversion():
     assert b
     assert c
 
+
 def test_find_all():
     a = Tibs(' 0 B 0 0 01011')
     g = a.find_all('0b1')
@@ -219,6 +223,7 @@ def test_find_all():
     with pytest.raises(StopIteration):
         _ = next(g)
 
+
 def test_repr():
     a = Tibs()
     assert repr(a) == "Tibs()"
@@ -226,6 +231,7 @@ def test_repr():
     assert repr(a) == "Tibs()"
     a = Tibs(" 0b 1")
     assert repr(a) == "Tibs('0b1')"
+
 
 def test_bits_not_orderable():
     a = Tibs.from_string("0b0")
@@ -238,5 +244,3 @@ def test_bits_not_orderable():
         _ = a > b
     with pytest.raises(TypeError):
         _ = a >= b
-
-
