@@ -2,7 +2,7 @@ use crate::core::validate_logical_op_lengths;
 use crate::core::{str_to_tibs, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::mutable_bits_from_any;
+use crate::mutibs::mutibs_from_any;
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
@@ -22,37 +22,34 @@ use std::ops::Not;
 
 // ---- Exported Python helper methods ----
 
-#[pyfunction]
-pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
-    let any_bound = any.bind(py);
-
+pub fn tibs_from_any(any: Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it of type Tibs?
-    if let Ok(any_bits) = any_bound.extract::<PyRef<Tibs>>() {
+    if let Ok(any_bits) = any.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.clone());
     }
 
     // Is it of type Mutibs?
-    if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
+    if let Ok(any_mutable_bits) = any.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.to_tibs());
     }
 
     // Is it a string?
-    if let Ok(any_string) = any_bound.extract::<String>() {
+    if let Ok(any_string) = any.extract::<String>() {
         return str_to_tibs(any_string);
     }
 
     // Is it a bytes, bytearray or memoryview?
-    if any_bound.is_instance_of::<PyBytes>()
-        || any_bound.is_instance_of::<PyByteArray>()
-        || any_bound.is_instance_of::<PyMemoryView>()
+    if any.is_instance_of::<PyBytes>()
+        || any.is_instance_of::<PyByteArray>()
+        || any.is_instance_of::<PyMemoryView>()
     {
-        if let Ok(any_bytes) = any_bound.extract::<Vec<u8>>() {
+        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
             return Ok(<Tibs as BitCollection>::from_bytes(any_bytes));
         }
     }
 
     // Is it an iterable that we can convert each element to a bool?
-    if let Ok(iter) = any_bound.try_iter() {
+    if let Ok(iter) = any.try_iter() {
         let mut bv = BV::new();
         for item in iter {
             bv.push(item?.is_truthy()?);
@@ -60,7 +57,7 @@ pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
         return Ok(Tibs::new(bv));
     }
 
-    let type_name = match any_bound.get_type().name() {
+    let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
         Err(_) => "<unknown>".to_string(),
     };
@@ -338,8 +335,7 @@ impl Tibs {
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return self.data == b.inner.data;
         }
-        let py = other.py();
-        let maybe = tibs_from_any(other.clone().unbind(), py);
+        let maybe = tibs_from_any(other.clone());
         match maybe {
             Ok(b) => self.data == b.data,
             Err(_) => false,
@@ -380,7 +376,7 @@ impl Tibs {
         byte_aligned: bool,
         py: Python,
     ) -> PyResult<Py<FindAllIterator>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(b.bind(py).clone())?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let iter_obj = FindAllIterator {
@@ -605,18 +601,14 @@ impl Tibs {
     ///     b = Tibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
     ///
     #[classmethod]
-    pub fn from_joined(
-        _cls: &Bound<'_, PyType>,
-        sequence: &Bound<'_, PyAny>,
-        py: Python,
-    ) -> PyResult<Self> {
+    pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Convert each item to Tibs, store, and sum total length for a single allocation.
         let iter = sequence.try_iter()?;
         let mut parts: Vec<Tibs> = Vec::new();
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
-            let bits = tibs_from_any(obj.into(), py)?;
+            let bits = tibs_from_any(obj.into())?;
             total_len += bits.len();
             parts.push(bits);
         }
@@ -749,7 +741,7 @@ impl Tibs {
         byte_aligned: bool,
         py: Python,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(b.bind(py).clone())?;
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
@@ -774,7 +766,7 @@ impl Tibs {
         byte_aligned: bool,
         py: Python,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(b.bind(py).clone())?;
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
@@ -813,7 +805,7 @@ impl Tibs {
     ///     False
     ///
     pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let prefix = tibs_from_any(prefix, py)?;
+        let prefix = tibs_from_any(prefix.bind(py).clone())?;
         let n = prefix.len();
         if n <= self.len() {
             Ok(&prefix.data == &self.data[..n])
@@ -835,7 +827,7 @@ impl Tibs {
     ///     False
     ///
     pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let suffix = tibs_from_any(suffix, py)?;
+        let suffix = tibs_from_any(suffix.bind(py).clone())?;
         let n = suffix.len();
         if n <= self.len() {
             Ok(&suffix.data == &self.data[self.len() - n..])
@@ -1012,7 +1004,7 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let bs = tibs_from_any(bs, py)?;
+        let bs = tibs_from_any(bs.bind(py).clone())?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.data);
         data.extend_from_bitslice(&bs.data);
@@ -1021,7 +1013,7 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let mut bs = mutable_bits_from_any(bs, py)?;
+        let mut bs = mutibs_from_any(bs.bind(py).clone())?;
         bs.inner.data.extend_from_bitslice(&self.data);
         Ok(Tibs::new(bs.inner.data))
     }
@@ -1032,7 +1024,7 @@ impl Tibs {
     ///
     pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         self._and(&other)
     }
 
@@ -1042,7 +1034,7 @@ impl Tibs {
     ///
     pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         self._or(&other)
     }
 
@@ -1051,7 +1043,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         self._xor(&other)
     }
 
@@ -1062,7 +1054,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         other._and(&self)
     }
 
@@ -1073,7 +1065,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         other._or(&self)
     }
 
@@ -1084,7 +1076,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs.bind(py).clone())?;
         other._xor(&self)
     }
 
