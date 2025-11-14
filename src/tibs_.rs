@@ -20,7 +20,7 @@ use once_cell::sync::OnceCell;
 
 
 #[pyfunction]
-pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
+pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
     let any_bound = any.bind(py);
 
     // Is it of type Tibs?
@@ -28,7 +28,7 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
         return Ok(any_bits.clone());
     }
 
-    // Is it of type MutableBits?
+    // Is it of type Mutib?
     if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.to_tibs());
     }
@@ -76,7 +76,6 @@ pub fn bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 ///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
 ///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
 ///     * ``Tibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
-///     * ``Tibs.from_dtype(dtype, value)`` - Combine a data type with a value.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
 ///     Using the constructor ``Tibs(s)`` is an alias for ``Tibs.from_string(s)``.
@@ -166,7 +165,7 @@ impl Tibs {
 
         if s.is_instance_of::<Mutibs>() {
             err.push_str(
-                "You can use the 'to_tibs()' method on the `MutableBits` instance instead.",
+                "You can use the 'to_tibs()' method on the `Mutibs` instance instead.",
             );
         } else if s.is_instance_of::<PyBytes>()
             || s.is_instance_of::<PyByteArray>()
@@ -184,7 +183,7 @@ impl Tibs {
         } else {
             err.push_str(
                 "To create from other types use from_bytes(), from_bools(), from_joined(), \
-                 from_ones(), from_zeros(), from_dtype() or from_random().",
+                 from_ones(), from_zeros() or from_random().",
             );
         }
         Err(PyTypeError::new_err(err))
@@ -271,7 +270,7 @@ impl Tibs {
         Py::new(py, iter)
     }
 
-    // A bit of a hack so that the Python can use _chunks on Tibs and MutableBits. Can remove later.
+    // A bit of a hack so that the Python can use _chunks on Tibs and Mutibs. Can remove later.
     #[pyo3(signature = (chunk_size, count = None))]
     pub fn _chunks(
         slf: PyRef<'_, Self>,
@@ -296,7 +295,7 @@ impl Tibs {
         if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
             return self.data == b.inner.data;
         }
-        match bits_from_any(other, py) {
+        match tibs_from_any(other, py) {
             Ok(b) => self.data == b.data,
             Err(_) => false,
         }
@@ -328,7 +327,7 @@ impl Tibs {
         end: Option<usize>,
         byte_aligned: bool, py: Python
     ) -> PyResult<Py<FindAllIterator>> {
-        let b = bits_from_any(b, py)?;
+        let b = tibs_from_any(b, py)?;
         let step = if byte_aligned { 8 } else { 1 };
         let start = start.unwrap_or(0);
         let iter_obj = FindAllIterator {
@@ -560,7 +559,7 @@ impl Tibs {
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
-            let bits = bits_from_any(obj.into(), py)?;
+            let bits = tibs_from_any(obj.into(), py)?;
             total_len += bits.len();
             parts.push(bits);
         }
@@ -682,7 +681,7 @@ impl Tibs {
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find(&self, b: Py<PyAny>, start: Option<i64>, end: Option<i64>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
-        let b = bits_from_any(b, py)?;
+        let b = tibs_from_any(b, py)?;
         let (start, end) = validate_slice(self.len(), start, end)?;
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
@@ -696,7 +695,7 @@ impl Tibs {
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
-        let b = bits_from_any(b, py)?;
+        let b = tibs_from_any(b, py)?;
         let start = start.unwrap_or(0);
         let end = end.unwrap_or(self.len());
         if b.len() + start > end {
@@ -732,7 +731,7 @@ impl Tibs {
     ///     False
     ///
     pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let prefix = bits_from_any(prefix, py)?;
+        let prefix = tibs_from_any(prefix, py)?;
         let n = prefix.len();
         if n <= self.len() {
             Ok(&prefix.data == &self.data[..n])
@@ -754,7 +753,7 @@ impl Tibs {
     ///     False
     ///
     pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let suffix = bits_from_any(suffix, py)?;
+        let suffix = tibs_from_any(suffix, py)?;
         let n = suffix.len();
         if n <= self.len() {
             Ok(&suffix.data == &self.data[self.len() - n..])
@@ -831,7 +830,7 @@ impl Tibs {
         self.data.any()
     }
 
-    /// Create and return a mutable copy of the Tibs as a MutableBits instance.
+    /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
         Mutibs {
             inner: Tibs::new(self.data.clone()),
@@ -839,7 +838,7 @@ impl Tibs {
     }
 
     /// Move the bitvec out, leaving this Tibs empty.
-    /// Only to be done as part of MutableBits construction
+    /// Only to be done as part of Mutibs construction
     /// when the transient Tibs isn't visible externally.
     /// Definitely not part of public interface!
     pub fn _as_mutable_bits(mut slf: PyRefMut<Self>) -> Mutibs {
@@ -935,7 +934,7 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let bs = bits_from_any(bs, py)?;
+        let bs = tibs_from_any(bs, py)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.data);
         data.extend_from_bitslice(&bs.data);
@@ -955,7 +954,7 @@ impl Tibs {
     ///
     pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._and(&other)
     }
 
@@ -965,7 +964,7 @@ impl Tibs {
     ///
     pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._or(&other)
     }
 
@@ -974,7 +973,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._xor(&other)
     }
 
@@ -985,7 +984,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         other._and(&self)
     }
 
@@ -996,7 +995,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         other._or(&self)
     }
 
@@ -1007,7 +1006,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         other._xor(&self)
     }
 
@@ -1063,13 +1062,13 @@ impl Tibs {
 
     pub fn __setitem__(&self, _key: Py<PyAny>, _value: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item assignment. Did you mean to use the MutableBits class? Call to_mutibs() to convert to a MutableBits."
+            "Tibs objects do not support item assignment. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
         ))
     }
 
     pub fn __delitem__(&self, _key: Py<PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item deletion. Did you mean to use the MutableBits class? Call to_mutibs() to convert to a MutableBits."
+            "Tibs objects do not support item deletion. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
         ))
     }
 }

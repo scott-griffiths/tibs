@@ -294,7 +294,7 @@ class TestOverwriting:
         s = Mutibs("0x342563fedec")
         s2 = s[:]
         s[23:23] = Tibs()
-        assert s.to_bin() == s2.bin
+        assert s.to_bin() == s2.to_bin()
 
     def test_overwrite_position(self):
         s1 = Mutibs("0x0123456")
