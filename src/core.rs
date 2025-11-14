@@ -266,9 +266,10 @@ impl BitCollection for Tibs {
         if self.len() > 64 {
             return self.build_bin_string();
         }
-        self.bin_cache.get_or_init(|| {
-            self.build_bin_string()
-        }).clone()
+        self.build_bin_string()
+        // self.bin_cache.get_or_init(|| {
+        //     self.build_bin_string()
+        // }).clone()
     }
 
 
@@ -284,9 +285,10 @@ impl BitCollection for Tibs {
         if len > 64 {
             return Ok(self.build_oct_string());
         }
-        Ok(self.oct_cache.get_or_init(|| {
-            self.build_oct_string()
-        }).clone())
+        Ok(self.build_oct_string())
+        // Ok(self.oct_cache.get_or_init(|| {
+        //     self.build_oct_string()
+        // }).clone())
     }
 
     #[inline]
@@ -301,9 +303,10 @@ impl BitCollection for Tibs {
         if len > 64 {
             return Ok(self.build_hex_string());
         }
-        Ok(self.hex_cache.get_or_init(|| {
-            self.build_hex_string()
-        }).clone())
+        Ok(self.build_hex_string())
+        // Ok(self.hex_cache.get_or_init(|| {
+        //     self.build_hex_string()
+        // }).clone())
 
     }
 }

@@ -1,4 +1,4 @@
-use crate::tibs_::{bits_from_any, Tibs};
+use crate::tibs_::{tibs_from_any, Tibs};
 use crate::core::str_to_tibs;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
@@ -131,7 +131,7 @@ impl Mutibs {
         if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
             return self.inner.data == b.inner.data;
         }
-        match bits_from_any(other, py) {
+        match tibs_from_any(other, py) {
             Ok(b) => self.inner.data == b.data,
             Err(_) => false,
         }
@@ -483,7 +483,7 @@ impl Mutibs {
             let bs = if value.as_ptr() == slf.as_ptr() {
                 Tibs::new(slf.inner.data.clone())
             } else {
-                bits_from_any(value, py)?
+                tibs_from_any(value, py)?
             };
 
             let indices = slice.indices(length as isize)?;
@@ -659,7 +659,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._and(&other)
     }
 
@@ -668,7 +668,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._or(&other)
     }
 
@@ -677,7 +677,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = bits_from_any(bs, py)?;
+        let other = tibs_from_any(bs, py)?;
         self._xor(&other)
     }
 
@@ -1164,7 +1164,7 @@ impl Mutibs {
 
     /// Concatenate Mutibs and return a new Mutibs.
     pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let bs = bits_from_any(bs, py)?;
+        let bs = tibs_from_any(bs, py)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.inner.data);
         data.extend_from_bitslice(&bs.data);
@@ -1191,7 +1191,7 @@ impl Mutibs {
             slf.inner.data.extend_from_bitslice(&bits_clone);
         } else {
             // Normal case - convert bs to Tibs and append
-            let bs = bits_from_any(bs, py)?;
+            let bs = tibs_from_any(bs, py)?;
             slf.inner.data.extend_from_bitslice(&bs.data);
         }
         Ok(())
@@ -1220,7 +1220,7 @@ impl Mutibs {
             slf.inner.data.extend_from_bitslice(&bits_clone);
         } else {
             // Normal case - convert bs to Tibs and append
-            let bs = bits_from_any(bs, py)?;
+            let bs = tibs_from_any(bs, py)?;
             slf.inner.data.extend_from_bitslice(&bs.data);
         }
         Ok(slf)
@@ -1248,7 +1248,7 @@ impl Mutibs {
             new_data.extend_from_bitslice(&slf.inner.data);
             slf.inner.data = new_data;
         } else {
-            let to_prepend = bits_from_any(bs, py)?;
+            let to_prepend = tibs_from_any(bs, py)?;
             if to_prepend.is_empty() {
                 return Ok(slf);
             }
@@ -1267,8 +1267,8 @@ impl Mutibs {
                        end: Option<i64>,
                        count: Option<i64>,
                        byte_aligned: bool, py: Python) -> PyResult<PyRefMut<'a, Self>> {
-        let old = bits_from_any(old, py)?;
-        let new = bits_from_any(new, py)?;
+        let old = tibs_from_any(old, py)?;
+        let new = tibs_from_any(new, py)?;
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
 
