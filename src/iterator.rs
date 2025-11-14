@@ -1,6 +1,6 @@
-use crate::tibs_::Tibs;
 use crate::core::BitCollection;
 use crate::helpers;
+use crate::tibs_::Tibs;
 use pyo3::prelude::*;
 use pyo3::PyResult;
 
@@ -34,7 +34,7 @@ pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
     pub needle: Py<Tibs>,
     pub start: usize,
-    pub end: Option<usize>,
+    pub end: usize,
     pub byte_aligned: bool,
     pub step: usize,
     pub current_pos: usize,
@@ -69,12 +69,11 @@ impl FindAllIterator {
             }
 
             let haystack_len = haystack_rs.len();
-            let end = slf.end.unwrap_or(haystack_len);
             if current_pos >= haystack_len || haystack_len.saturating_sub(current_pos) < needle_len
             {
                 return Ok(None); // No space left for the needle or already past the end
             }
-            helpers::find_bitvec(&haystack_rs, &needle_rs, current_pos, end, byte_aligned)
+            helpers::find_bitvec(&haystack_rs, &needle_rs, current_pos, slf.end, byte_aligned)
         };
 
         // Now, `slf` can be mutably accessed without conflicting with the previous borrows.

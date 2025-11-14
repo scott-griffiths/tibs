@@ -1,23 +1,26 @@
-use crate::mutibs::mutable_bits_from_any;
 use crate::core::validate_logical_op_lengths;
 use crate::core::{str_to_tibs, BitCollection};
-use crate::helpers::{find_bitvec, validate_index, BV, validate_slice};
+use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
+use crate::mutibs::mutable_bits_from_any;
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
+use once_cell::sync::OnceCell;
 use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyMemoryView, PySlice, PyType, PyInt, PyTuple, PyList};
+use pyo3::types::{
+    PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PySlice, PyTuple, PyType,
+};
 use pyo3::{pyclass, pymethods, PyRef, PyResult};
-use std::ops::Not;
-use rand::{RngCore, SeedableRng};
 use rand::rngs::StdRng;
-use once_cell::sync::OnceCell;
+use rand::{RngCore, SeedableRng};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::ops::Not;
 
 // ---- Exported Python helper methods ----
-
 
 #[pyfunction]
 pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
@@ -70,7 +73,10 @@ pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 ///
 ///     To construct, use a builder 'from' method:
 ///
-///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` object.
+///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
+///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
+///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
 ///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
@@ -90,7 +96,12 @@ pub struct Tibs {
 }
 
 impl Tibs {
-    pub(crate) fn _getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
+    pub(crate) fn _getslice_with_step(
+        &self,
+        start_bit: i64,
+        end_bit: i64,
+        step: i64,
+    ) -> PyResult<Self> {
         if step == 0 {
             return Err(PyValueError::new_err("Slice step cannot be zero."));
         }
@@ -142,7 +153,6 @@ impl Tibs {
     }
 }
 
-
 /// Public Python-facing methods.
 #[pymethods]
 impl Tibs {
@@ -164,9 +174,7 @@ impl Tibs {
         );
 
         if s.is_instance_of::<Mutibs>() {
-            err.push_str(
-                "You can use the 'to_tibs()' method on the `Mutibs` instance instead.",
-            );
+            err.push_str("You can use the 'to_tibs()' method on the `Mutibs` instance instead.");
         } else if s.is_instance_of::<PyBytes>()
             || s.is_instance_of::<PyByteArray>()
             || s.is_instance_of::<PyMemoryView>()
@@ -174,9 +182,7 @@ impl Tibs {
             err.push_str("You can use 'Tibs.from_bytes()' instead.");
         } else if s.is_instance_of::<PyInt>() {
             err.push_str("Perhaps you want to use 'Tibs.from_zeros()', 'Tibs.from_ones()' or 'Tibs.from_random()'?");
-        } else if s.is_instance_of::<PyTuple>()
-            || s.is_instance_of::<PyList>()
-        {
+        } else if s.is_instance_of::<PyTuple>() || s.is_instance_of::<PyList>() {
             err.push_str(
                 "Perhaps you want to use 'Tibs.from_joined()' or 'Tibs.from_bools()' instead?",
             );
@@ -194,9 +200,19 @@ impl Tibs {
         if self.is_empty() {
             return "".to_string();
         }
-        match self.to_hexadecimal() {
-            Ok(hex) => format!("0x{}", hex),
-            Err(_) => format!("0b{}", self.to_bin()),
+        const MAX_BITS_TO_PRINT: usize = 10000;
+        debug_assert!(MAX_BITS_TO_PRINT % 4 == 0);
+        if self.len() <= MAX_BITS_TO_PRINT {
+            match self.to_hexadecimal() {
+                Ok(hex) => format!("0x{}", hex),
+                Err(_) => format!("0b{}", self.to_bin()),
+            }
+        } else {
+            format!(
+                "0x{}... # length={}",
+                self.slice(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
+                self.len()
+            )
         }
     }
 
@@ -319,17 +335,24 @@ impl Tibs {
         self.data[start..start + length].load_be::<i64>()
     }
 
+    // pub fn __hash__(&self) -> u64 {
+    //     let mut hasher = DefaultHasher::new();
+    //     self.hash(&mut hasher);
+    //     hasher.finish()
+    // }
+
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
         b: Py<PyAny>,
-        start: Option<usize>,
-        end: Option<usize>,
-        byte_aligned: bool, py: Python
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
     ) -> PyResult<Py<FindAllIterator>> {
         let b = tibs_from_any(b, py)?;
+        let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
-        let start = start.unwrap_or(0);
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             needle: Py::new(py, b)?,
@@ -499,7 +522,11 @@ impl Tibs {
     ///
     #[classmethod]
     #[pyo3(signature = (length, seed=None))]
-    pub fn from_random(_cls: &Bound<'_, PyType>, length: i64, seed: Option<Vec<u8>>) -> PyResult<Self> {
+    pub fn from_random(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        seed: Option<Vec<u8>>,
+    ) -> PyResult<Self> {
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
@@ -606,7 +633,11 @@ impl Tibs {
         let len_bits = self.len();
         match self.data.as_bitslice().domain() {
             // Fast path: element-aligned and length is a multiple of 8
-            bitvec::domain::Domain::Region { head: None, body, tail: None } => {
+            bitvec::domain::Domain::Region {
+                head: None,
+                body,
+                tail: None,
+            } => {
                 // Already byte-aligned; copy the bytes directly.
                 body.to_vec()
             }
@@ -680,9 +711,20 @@ impl Tibs {
     }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
-    pub fn find(&self, b: Py<PyAny>, start: Option<i64>, end: Option<i64>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
+    pub fn find(
+        &self,
+        b: Py<PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
+    ) -> PyResult<Option<usize>> {
         let b = tibs_from_any(b, py)?;
+        if b.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
         let (start, end) = validate_slice(self.len(), start, end)?;
+
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 
@@ -694,10 +736,20 @@ impl Tibs {
     }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
-    pub fn rfind(&self, b: Py<PyAny>, start: Option<usize>, end: Option<usize>, byte_aligned: bool, py: Python) -> PyResult<Option<usize>> {
+    pub fn rfind(
+        &self,
+        b: Py<PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
+    ) -> PyResult<Option<usize>> {
         let b = tibs_from_any(b, py)?;
-        let start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.len());
+        if b.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to rfind."));
+        }
+
+        let (start, end) = validate_slice(self.len(), start, end)?;
         if b.len() + start > end {
             return Ok(None);
         }
@@ -720,7 +772,7 @@ impl Tibs {
 
     /// Return whether the current Tibs starts with prefix.
     ///
-    /// :param prefix: The Tibs to search for.
+    /// :param prefix: The bits to search for.
     /// :return: True if the Tibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -742,7 +794,7 @@ impl Tibs {
 
     /// Return whether the current Tibs ends with suffix.
     ///
-    /// :param suffix: The Tibs to search for.
+    /// :param suffix: The bits to search for.
     /// :return: True if the Tibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -873,7 +925,14 @@ impl Tibs {
             let step: i64 = indices.step.try_into()?;
 
             let result = if step == 1 {
-                self._getslice(start as usize, if stop > start { (stop - start) as usize } else { 0 })?
+                self._getslice(
+                    start as usize,
+                    if stop > start {
+                        (stop - start) as usize
+                    } else {
+                        0
+                    },
+                )?
             } else {
                 self._getslice_with_step(start, stop, step)?
             };
@@ -1010,7 +1069,6 @@ impl Tibs {
         other._xor(&self)
     }
 
-
     /// Return the instance with every bit inverted.
     ///
     /// Raises ValueError if the Tibs is empty.
@@ -1034,7 +1092,9 @@ impl Tibs {
     ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
         if n < 0 {
-            return Err(PyValueError::new_err("Cannot multiply by a negative integer."))
+            return Err(PyValueError::new_err(
+                "Cannot multiply by a negative integer.",
+            ));
         }
         let n = n as usize;
         let len = self.len();

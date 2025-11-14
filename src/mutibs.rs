@@ -1,9 +1,9 @@
-use crate::tibs_::{tibs_from_any, Tibs};
 use crate::core::str_to_tibs;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
-use crate::helpers::{validate_index, validate_slice, BV, find_bitvec};
+use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::iterator::ChunksIterator;
+use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
 use pyo3::types::{PyBool, PySlice};
@@ -47,13 +47,15 @@ pub fn mutable_bits_from_any(any: Py<PyAny>, py: Python) -> PyResult<Mutibs> {
 ///
 ///     To construct, use a builder 'from' method:
 ///
-///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` object.
+///     * ``Mutibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
+///     * ``Mutibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
+///     * ``Mutibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Mutibs.from_string(s)`` - Use a formatted string.
 ///     * ``Mutibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
 ///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
 ///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
 ///     * ``Mutibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
-///     * ``Mutibs.from_dtype(dtype, value)`` - Combine a data type with a value.
 ///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
 ///     Using the constructor ``Mutibs(s)`` is an alias for ``Mutibs.from_string(s)``.
@@ -91,9 +93,7 @@ impl Mutibs {
         );
 
         if s.is_instance_of::<Tibs>() {
-            err.push_str(
-                "You can use the 'to_mutibs()' method on the `Tibs` instance instead.",
-            );
+            err.push_str("You can use the 'to_mutibs()' method on the `Tibs` instance instead.");
         } else if s.is_instance_of::<pyo3::types::PyBytes>()
             || s.is_instance_of::<pyo3::types::PyByteArray>()
             || s.is_instance_of::<pyo3::types::PyMemoryView>()
@@ -110,7 +110,7 @@ impl Mutibs {
         } else {
             err.push_str(
                 "To create from other types use from_bytes(), from_bools(), from_joined(), \
-                 from_ones(), from_zeros(), from_dtype() or from_random().",
+                 from_ones(), from_zeros() or from_random().",
             );
         }
         Err(PyTypeError::new_err(err))
@@ -151,8 +151,6 @@ impl Mutibs {
             format!("{}('{}')", class_name, self.__str__())
         }
     }
-
-
 
     pub fn _overwrite(&mut self, start: usize, value: &Tibs) {
         self.inner.data[start..start + value.len()].copy_from_bitslice(&value.data);
@@ -231,7 +229,6 @@ impl Mutibs {
     ///
     ///     a = Mutibs.from_string("0xff01")
     ///     b = Mutibs.from_string("0b1")
-    ///     c = Mutibs.from_string("u12 = 31, f16=-0.25")
     ///
     /// The `__init__` method for `Mutibs` redirects to the `from_string` method and is sometimes more convenient:
     ///
@@ -343,10 +340,13 @@ impl Mutibs {
     ///
     #[classmethod]
     #[pyo3(signature = (length, seed=None))]
-    pub fn from_random(_cls: &Bound<'_, PyType>, length: i64, seed: Option<Vec<u8>>) -> PyResult<Self> {
+    pub fn from_random(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        seed: Option<Vec<u8>>,
+    ) -> PyResult<Self> {
         Ok(Tibs::from_random(_cls, length, seed)?.to_mutibs())
     }
-
 
     /// Create a new instance from a bytes object.
     ///
@@ -432,7 +432,6 @@ impl Mutibs {
                 } else {
                     Mutibs::empty()
                 }
-
             } else {
                 self._getslice_with_step(start, stop, step)?
             };
@@ -498,7 +497,9 @@ impl Mutibs {
                 return Ok(());
             }
             if step == 0 {
-                return Err(PyValueError::new_err("The step in __setitem__ must not be zero."));
+                return Err(PyValueError::new_err(
+                    "The step in __setitem__ must not be zero.",
+                ));
             }
             // Compute target indices in the natural slice order (respecting step sign).
             let mut positions: Vec<usize> = Vec::new();
@@ -624,8 +625,8 @@ impl Mutibs {
 
     /// Return whether the current Mutibs starts with prefix.
     ///
-    /// :param prefix: The Tibs to search for.
-    /// :return: True if the Tibs starts with the prefix, otherwise False.
+    /// :param prefix: The bits to search for.
+    /// :return: True if the Mutibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
@@ -640,8 +641,8 @@ impl Mutibs {
 
     /// Return whether the current Mutibs ends with suffix.
     ///
-    /// :param suffix: The Tibs to search for.
-    /// :return: True if the Tibs ends with the suffix, otherwise False.
+    /// :param suffix: The bits to search for.
+    /// :return: True if the Mutibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
     ///
@@ -652,6 +653,18 @@ impl Mutibs {
     ///
     pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
         self.inner.ends_with(suffix, py)
+    }
+
+    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    pub fn find(
+        &self,
+        b: Py<PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
+    ) -> PyResult<Option<usize>> {
+        self.inner.find(b, start, end, byte_aligned, py)
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -955,7 +968,10 @@ impl Mutibs {
     ///     Mutibs('0x34127856')
     ///
     #[pyo3(signature = (byte_length = None))]
-    pub fn byte_swap(mut slf: PyRefMut<'_, Self>, byte_length: Option<i64>) -> PyResult<PyRefMut<'_, Self>> {
+    pub fn byte_swap(
+        mut slf: PyRefMut<'_, Self>,
+        byte_length: Option<i64>,
+    ) -> PyResult<PyRefMut<'_, Self>> {
         let len = slf.len();
         if len % 8 != 0 {
             return Err(PyValueError::new_err(format!(
@@ -1088,7 +1104,7 @@ impl Mutibs {
     /// Create and return a Tibs instance from a copy of the Mutibs data.
     ///
     /// This copies the underlying binary data, giving a new independent Tibs object.
-    /// If you no longer need the Mutibs, consider using :meth:`as_bits` instead to avoid the copy.
+    /// If you no longer need the Mutibs, consider using :meth:`as_tibs` instead to avoid the copy.
     ///
     /// :return: A new Tibs instance with the same bit data.
     ///
@@ -1117,13 +1133,13 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0b1011')
-    ///     >>> b = a.as_bits()
+    ///     >>> b = a.as_tibs()
     ///     >>> a
     ///     Mutibs()
     ///     >>> b
     ///     Tibs('0b1101')
     ///
-    pub fn as_bits(&mut self) -> Tibs {
+    pub fn as_tibs(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut self.inner.data);
         data.shrink_to_fit();
         Tibs::new(data)
@@ -1260,13 +1276,16 @@ impl Mutibs {
     }
 
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false))]
-    pub fn replace<'a>(mut slf: PyRefMut<'a, Self>,
-                       old: Py<PyAny>,
-                       new: Py<PyAny>,
-                       start: Option<i64>,
-                       end: Option<i64>,
-                       count: Option<i64>,
-                       byte_aligned: bool, py: Python) -> PyResult<PyRefMut<'a, Self>> {
+    pub fn replace<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        old: Py<PyAny>,
+        new: Py<PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        count: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
+    ) -> PyResult<PyRefMut<'a, Self>> {
         let old = tibs_from_any(old, py)?;
         let new = tibs_from_any(new, py)?;
 
@@ -1307,10 +1326,10 @@ impl Mutibs {
         Ok(slf)
     }
 
-    /// Inserts another Tibs or Mutibs at bit position pos. Returns self.
+    /// Insert bits at position pos. Returns self.
     ///
     /// :param pos: The bit position to insert at.
-    /// :param bs: The Tibs to insert.
+    /// :param bs: The bits to insert.
     /// :return: self
     ///
     /// Raises ValueError if pos < 0 or pos > len(self).
@@ -1422,8 +1441,7 @@ impl Mutibs {
 
     pub fn __iter__(&self) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Mutibs objects are not iterable. You can use .to_tibs() or .as_bits() to convert to a Tibs object that does support iteration."
+            "Mutibs objects are not iterable. You can use .to_tibs() or .as_tibs() to convert to a Tibs object that does support iteration."
         ))
     }
-
 }
