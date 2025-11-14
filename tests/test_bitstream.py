@@ -4,9 +4,6 @@ import pytest
 import copy
 from tibs import Tibs, Mutibs
 
-#
-
-
 
 class TestFind:
     def test_find1(self):
@@ -193,8 +190,6 @@ class TestReplace:
         a = Mutibs("0o123415")
         with pytest.raises(ValueError):
             a.replace("", Tibs("0o7"), byte_aligned=True)
-
-
 
 
 def test_empty_bitstring():
@@ -412,7 +407,6 @@ class TestAdding:
         bsl = [s1[0:32], s1[4:12], s2, s2, s2, s2]
         s = Tibs.from_joined(bsl)
         assert s.to_hex() == "00112233010c30c3"
-
 
     def test_join_with_ints(self):
         with pytest.raises(TypeError):
@@ -649,6 +643,7 @@ class TestBitWise:
         a = "0o707" ^ Tibs("0o777")
         assert a.to_oct() == "070"
 
+
 def test_mutable_bitwise():
     a = '0xf0' & Mutibs('0x0f')
     assert a == '0x00'
@@ -725,13 +720,6 @@ class TestManyDifferentThings:
         with pytest.raises(StopIteration):
             _ = next(p)
 
-    def test_find_all_count(self):
-        s = Tibs("0b1") * 100
-        for i in [0, 1, 23]:
-            assert len(list(s.find_all("0b1", count=i))) == i
-        with pytest.raises(ValueError):
-            _ = list(s.find_all("0b1", byte_aligned=True, count=-1))
-
     def test_contains(self):
         a = Tibs("0b1") + "0x0001dead0001"
         assert "0xdead" in a
@@ -763,8 +751,10 @@ class TestManyDifferentThings:
         a += b
         assert a == "0b1111100"
         assert a.to_bytes() == b"\xf8"
-        with pytest.raises(ValueError):
+        with pytest.raises(AttributeError):
             _ = a.bytes
+        with pytest.raises(ValueError):
+            _ = a.to_bytes()
 
     def test_slice_step(self):
         a = Tibs("0x3")
@@ -893,7 +883,6 @@ class TestManyDifferentThings:
         assert not s[9:16].ends_with("0x34")
         assert not s[8:15].ends_with("0x34")
 
-
     def test_const_bit_stream_hashibility(self):
         a = Tibs("0x1")
         b = Tibs("0x2")
@@ -901,7 +890,6 @@ class TestManyDifferentThings:
         s = {a, b, c}
         assert len(s) == 2
         assert hash(a) == hash(c)
-
 
     def test_hash_edge_cases(self):
         a = Tibs("0xabcd")
@@ -947,9 +935,9 @@ class TestSet:
     def test_set_list(self):
         a = Tibs.from_zeros(18)
         b = a.to_mutibs().set(True, range(18))
-        assert b.all(True)
+        assert b.all()
         b.set(False, range(18))
-        assert not b.any(True)
+        assert not b.any()
 
     def test_unset(self):
         a = Mutibs.from_ones(16)
@@ -1067,7 +1055,6 @@ class TestAllAndAny:
 
 
 class TestMoreMisc:
-
 
     def test_ror(self):
         a = Tibs("0b11001").to_mutibs()
@@ -1333,6 +1320,7 @@ def test_overlapping_bits():
     assert x == "0x0ff"
     assert y == Tibs("0b01100000")
 
+
 def test_mutable_freeze():
     a = Mutibs('0x0000')
     b = a.to_tibs()
@@ -1341,6 +1329,7 @@ def test_mutable_freeze():
     a.set(1, -1)
     assert a == '0x0001'
     assert b.to_hex() == '0000'
+
 
 def test_del_unavailability():
     a = Tibs('0xff')

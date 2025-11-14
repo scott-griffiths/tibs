@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::core::BitCollection;
-    use crate::tibs_::Tibs;
     use crate::mutibs::Mutibs;
+    use crate::tibs_::Tibs;
 
     #[test]
     fn from_bytes() {
@@ -456,7 +456,7 @@ mod tests {
         let mut mutable = Mutibs::new(original.data);
         mutable._set_index(false, 0).unwrap();
         mutable._set_index(true, 1).unwrap();
-        let result = mutable.as_bits();
+        let result = mutable.as_tibs();
 
         assert_eq!(result.to_bin(), "011010");
     }
