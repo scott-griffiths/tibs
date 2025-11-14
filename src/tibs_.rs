@@ -31,7 +31,7 @@ pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
         return Ok(any_bits.clone());
     }
 
-    // Is it of type Mutib?
+    // Is it of type Mutibs?
     if let Ok(any_mutable_bits) = any_bound.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.to_tibs());
     }
@@ -87,12 +87,40 @@ pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 ///     Using the constructor ``Tibs(s)`` is an alias for ``Tibs.from_string(s)``.
 ///
 #[derive(Clone)]
-#[pyclass(module = "tibs")]
+#[pyclass(frozen, module = "tibs")]
 pub struct Tibs {
     pub(crate) data: BV,
     pub(crate) bin_cache: OnceCell<String>,
     pub(crate) oct_cache: OnceCell<String>,
     pub(crate) hex_cache: OnceCell<String>,
+}
+
+impl Hash for Tibs {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
+
+        let bits = self.data.as_bitslice();
+
+        let mut words = bits.chunks_exact(64);
+        for chunk in words.by_ref() {
+            state.write_u64(chunk.load_be::<u64>());
+        }
+
+        let mut bytes = words.remainder().chunks_exact(8);
+        for chunk in bytes.by_ref() {
+            state.write_u8(chunk.load_be::<u8>());
+        }
+
+        let tail = bytes.remainder();
+        if !tail.is_empty() {
+            let mut last = 0u8;
+            for bit in tail {
+                last = (last << 1) | (*bit as u8);
+            }
+            last <<= 8 - tail.len();
+            state.write_u8(last);
+        }
+    }
 }
 
 impl Tibs {
@@ -303,15 +331,16 @@ impl Tibs {
     /// >>> Tibs('0b1110') == '0xe'
     /// True
     ///
-    pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
-        let obj = other.bind(py);
-        if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        if let Ok(b) = other.extract::<PyRef<Tibs>>() {
             return self.data == b.data;
         }
-        if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
+        if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return self.data == b.inner.data;
         }
-        match tibs_from_any(other, py) {
+        let py = other.py();
+        let maybe = tibs_from_any(other.clone().unbind(), py);
+        match maybe {
             Ok(b) => self.data == b.data,
             Err(_) => false,
         }
@@ -335,11 +364,12 @@ impl Tibs {
         self.data[start..start + length].load_be::<i64>()
     }
 
-    // pub fn __hash__(&self) -> u64 {
-    //     let mut hasher = DefaultHasher::new();
-    //     self.hash(&mut hasher);
-    //     hasher.finish()
-    // }
+    #[pyo3(name = "__hash__")]
+    pub fn __hash__(&self) -> isize {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish() as isize
+    }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
@@ -886,17 +916,6 @@ impl Tibs {
     pub fn to_mutibs(&self) -> Mutibs {
         Mutibs {
             inner: Tibs::new(self.data.clone()),
-        }
-    }
-
-    /// Move the bitvec out, leaving this Tibs empty.
-    /// Only to be done as part of Mutibs construction
-    /// when the transient Tibs isn't visible externally.
-    /// Definitely not part of public interface!
-    pub fn _as_mutable_bits(mut slf: PyRefMut<Self>) -> Mutibs {
-        let data = std::mem::take(&mut slf.data);
-        Mutibs {
-            inner: Tibs::new(data),
         }
     }
 
