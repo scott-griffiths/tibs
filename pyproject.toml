@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tibs"
-version = "0.0.4"
+version = "0.1.0"
 description = "A Python bit manipulation library written in Rust."
 readme = "README.md"
 authors = [
