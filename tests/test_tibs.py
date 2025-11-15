@@ -55,3 +55,9 @@ def test_rfind():
     a += '0b1110001110'
     b = a.rfind('0b111')
     assert b == 6
+
+
+def test_count_large():
+    a = Tibs('0b' + '1' * 72)
+    b = a[:65]
+    assert b.count(1) == 65
