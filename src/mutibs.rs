@@ -876,13 +876,17 @@ impl Mutibs {
         self.inner.any()
     }
 
-    // pub fn _find(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-    //     self.inner.find(b, Some(start), Some(end), bytealigned)
-    // }
-
-    // pub fn _rfind(&self, b: &Tibs, start: usize, end: usize, bytealigned: bool) -> Option<usize> {
-    //     self.inner.rfind(b, start, end, bytealigned)
-    // }
+    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    pub fn rfind(
+        &self,
+        b: Py<PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        py: Python,
+    ) -> PyResult<Option<usize>> {
+        self.inner.rfind(b, start, end, byte_aligned, py)
+    }
 
     /// Return the Mutibs with one or many bits inverted between 0 and 1.
     ///
