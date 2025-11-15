@@ -565,11 +565,15 @@ impl Tibs {
         }
         let seed_arr = crate::helpers::process_seed(seed);
         let mut rng = StdRng::from_seed(seed_arr);
+        let mut bv = BV::with_capacity(length);
 
         let num_bytes = (length + 7) / 8;
-        let mut data = vec![0u8; num_bytes];
+        let mut data = Vec::<u8>::with_capacity(num_bytes);
+        unsafe {
+            data.set_len(num_bytes);
+        }
         rng.fill_bytes(&mut data);
-        let mut bv = BV::from_vec(data);
+        bv = BV::from_vec(data);
         bv.truncate(length);
         Ok(Tibs::new(bv))
     }

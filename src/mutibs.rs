@@ -1443,4 +1443,6 @@ impl Mutibs {
             "Mutibs objects are not iterable. You can use .to_tibs() or .as_tibs() to convert to a Tibs object that does support iteration."
         ))
     }
+
+    // TODO: iand, ior, ixor, imul
 }
