@@ -38,6 +38,25 @@ jobs:
             action: '3.13'
           - name: CPython 3.14
             action: '3.14'
+        exclude:
+          - os:
+              name: 🍎
+              runs-on: macos-14
+            python:
+              name: CPython 3.8
+              action: '3.8'
+          - os:
+              name: 🍎
+              runs-on: macos-14
+            python:
+              name: CPython 3.9
+              action: '3.9'
+          - os:
+              name: 🍎
+              runs-on: macos-14
+            python:
+              name: CPython 3.10
+              action: '3.10'
     steps:
       - uses: actions/checkout@v3
         with:
