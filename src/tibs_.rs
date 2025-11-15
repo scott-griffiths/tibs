@@ -849,13 +849,25 @@ impl Tibs {
     pub fn count(&self, value: Py<PyAny>, py: Python) -> PyResult<usize> {
         let count_ones = value.is_truthy(py)?;
         let len = self.len();
-        let ones = py.detach(|| {
-            // Note that using hamming::weight is about twice as fast as:
-            // self.data.count_ones()
-            // which is the way that bitvec suggests.
-            let bytes: &[u8] = bytemuck::cast_slice(self.data.as_raw_slice());
-            hamming::weight(bytes) as usize
-        });
+
+        let (mut ones, raw) = (0usize, self.data.as_raw_slice());
+        if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
+            // Considerable speed increase by casting data to usize if possible.
+            for word in words {
+                ones += word.count_ones() as usize;
+            }
+            let used_bits = words.len() * usize::BITS as usize;
+            if used_bits > len {
+                let extra = used_bits - len;
+                if let Some(last) = words.last() {
+                    ones -= ((last & (!0usize >> extra)).count_ones()) as usize;
+                }
+            }
+        } else {
+            // Fallback to library method
+            ones = self.data.count_ones();
+        }
+
         Ok(if count_ones { ones } else { len - ones })
     }
 
@@ -929,7 +941,7 @@ impl Tibs {
         }
 
         // Handle slice indexing
-        if let Ok(slice) = key.downcast::<PySlice>() {
+        if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
             let start: i64 = indices.start.try_into()?;
             let stop: i64 = indices.stop.try_into()?;

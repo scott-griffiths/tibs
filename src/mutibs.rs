@@ -413,7 +413,7 @@ impl Mutibs {
         }
 
         // Handle slice indexing
-        if let Ok(slice) = key.downcast::<PySlice>() {
+        if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
             let start: i64 = indices.start.try_into()?;
             let stop: i64 = indices.stop.try_into()?;
@@ -470,7 +470,7 @@ impl Mutibs {
             slf._set_index(value.is_truthy(py)?, index)?;
             return Ok(());
         }
-        if let Ok(slice) = key.downcast::<PySlice>() {
+        if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
                 Tibs::new(slf.inner.data.clone())
@@ -547,7 +547,7 @@ impl Mutibs {
             self.inner.data.remove(index as usize);
             return Ok(());
         }
-        if let Ok(slice) = key.downcast::<PySlice>() {
+        if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(length as isize)?;
             let start: i64 = indices.start.try_into()?;
             let stop: i64 = indices.stop.try_into()?;
@@ -1043,9 +1043,8 @@ impl Mutibs {
         let bits_instance = slf.to_tibs();
         let bits_py_obj = Py::new(py, bits_instance)?;
         let bits_py_ref = bits_py_obj.bind(py);
-        bits_py_ref
-            .call_method1("_chunks", (chunk_size, count))?
-            .extract()
+        let chunks_obj = bits_py_ref.call_method1("_chunks", (chunk_size, count))?;
+        Ok(chunks_obj.cast::<ChunksIterator>()?.clone().unbind())
     }
 
     pub fn _set_from_slice(
