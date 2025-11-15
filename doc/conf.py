@@ -4,8 +4,6 @@ import os
 import time
 import datetime
 
-from tibs._version import VERSION
-
 year = datetime.datetime.utcfromtimestamp(
     int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
 ).year
@@ -13,7 +11,7 @@ year = datetime.datetime.utcfromtimestamp(
 project = "tibs"
 copyright = f"2025 - {year}, Scott Griffiths"
 author = "Scott Griffiths"
-release = VERSION
+release = "0.1"
 
 extensions = [
     "sphinx.ext.autodoc",
