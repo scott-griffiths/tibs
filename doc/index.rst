@@ -3,10 +3,15 @@
 
 .. image:: tibs.png
 
-A fast and sleek bit library
+A sleek Python library for your binary data
 
 Introduction
 ------------
+
+``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
+It is 100% written in Rust, and from the same author as the bitstring library.
+
+It's called 'tibs' as that's (more or less) 'bits' backwards, and I needed a distinctive name.
 
 The two main classes are:
 
@@ -17,7 +22,7 @@ They are created by class methods starting with ``from_``, for example::
 
     >>> a = Tibs.from_bin('0110')
     >>> b = Tibs.from_string('0xabc, 0b11')
-    >>> c = Tibs.from_bytes(b'some_byte_data')
+    >>> c = Mutibs.from_bytes(b'some_byte_data')
     >>> d = Mutibs.from_random(1000)
     >>> e = Mutibs.from_joined([a, b, c, d])
 
@@ -26,6 +31,11 @@ and can be interpreted by methods starting with ``to_`` ::
     >>> a.to_hex()
     '6'
     >>> b.to_bin()
+    '10101011110011'
+
+You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding, replacing, setting, reversing etc.
+
+The project is currently in alpha. For now, instead of a user manual, here are the auto-generated API docs.
 
 API
 ---

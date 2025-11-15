@@ -21,7 +21,6 @@ extensions = [
 ]
 autoapi_dirs = ["../tibs/"]
 autoapi_add_toctree_entry = False
-autodoc_preserve_defaults = True
 
 add_module_names = False
 
