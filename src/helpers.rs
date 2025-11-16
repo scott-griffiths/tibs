@@ -1,12 +1,13 @@
+use crate::core::BitCollection;
 /// Helper functions.
 use crate::tibs_::Tibs;
-use crate::core::BitCollection;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::PyResult;
-use rand::RngCore;
-use sha2::Sha256;
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 use sha2::Digest;
+use sha2::Sha256;
 
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;
@@ -125,10 +126,10 @@ pub(crate) fn validate_slice(
     Ok((start as usize, end as usize))
 }
 
-pub(crate) fn process_seed(seed: Option<Vec<u8>>) -> [u8; 32] {
+pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
     match seed {
         None => {
-            let mut seed_arr = [0u8; 32];
+            let mut seed_arr = [0u8; 32]; //  TODO: from entropy?
             rand::rng().fill_bytes(&mut seed_arr);
             seed_arr
         }
@@ -141,4 +142,28 @@ pub(crate) fn process_seed(seed: Option<Vec<u8>>) -> [u8; 32] {
             seed_arr
         }
     }
+}
+
+pub fn bv_from_random(length: i64, seed: &Option<Vec<u8>>) -> PyResult<BV> {
+    if length < 0 {
+        return Err(PyValueError::new_err(format!(
+            "Negative bit length given: {}.",
+            length
+        )));
+    }
+    let length = length as usize;
+    if length == 0 {
+        return Ok(BV::new());
+    }
+    let seed_arr = process_seed(seed);
+    let mut rng = StdRng::from_seed(seed_arr);
+
+    let num_bytes = (length + 7) / 8;
+    let mut data = vec![0u8; num_bytes];
+    rng.fill_bytes(&mut data);
+    let mut bv = BV::from_vec(data);
+    if bv.len() > length {
+        bv.truncate(length);
+    }
+    Ok(bv)
 }
