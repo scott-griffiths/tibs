@@ -13,16 +13,14 @@ use pyo3::{pyclass, pymethods, PyRef, PyResult, Python};
 use pyo3::{Bound, IntoPyObject, Py, PyAny};
 use std::ops::Not;
 
-pub fn mutibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Mutibs> {
-    if let Ok(any_bits) = any.as_ref().extract::<PyRef<Tibs>>(py) {
+pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
+    if let Ok(any_bits) = any.extract::<PyRef<Tibs>>() {
         return Ok(any_bits.to_mutibs());
     }
 
-    if let Ok(any_mutable_bits) = any.as_ref().extract::<PyRef<Mutibs>>(py) {
+    if let Ok(any_mutable_bits) = any.extract::<PyRef<Mutibs>>() {
         return Ok(any_mutable_bits.__copy__());
     }
-
-    let any = any.bind(py);
 
     if let Ok(any_string) = any.extract::<String>() {
         let bits = str_to_tibs(any_string)?;
@@ -693,8 +691,8 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = mutibs_from_any(bs, py)?;
+    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = mutibs_from_any(bs)?;
         other._and(&self.inner)
     }
 
@@ -704,8 +702,8 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = mutibs_from_any(bs, py)?;
+    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = mutibs_from_any(bs)?;
         other._or(&self.inner)
     }
 
@@ -715,8 +713,8 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = mutibs_from_any(bs, py)?;
+    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = mutibs_from_any(bs)?;
         other._xor(&self.inner)
     }
 
@@ -842,8 +840,8 @@ impl Mutibs {
     ///     >>> Mutibs('0xef').count(1)
     ///     7
     ///
-    pub fn count(&self, value: Py<PyAny>, py: Python) -> PyResult<usize> {
-        self.inner.count(value, py)
+    pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+        self.inner.count(value)
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.
@@ -1183,8 +1181,8 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let mut bs = mutibs_from_any(bs, py)?;
+    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut bs = mutibs_from_any(bs)?;
         bs.inner.data.extend_from_bitslice(&self.inner.data);
         Ok(bs)
     }
@@ -1324,14 +1322,13 @@ impl Mutibs {
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
         mut pos: i64,
-        bs: Py<PyAny>,
-        py: Python<'_>,
+        bs: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
             Mutibs::new(slf.inner.data.clone())
         } else {
-            mutibs_from_any(bs, py)?
+            mutibs_from_any(bs)?
         };
         if bs.len() == 0 {
             return Ok(slf);

@@ -362,15 +362,15 @@ impl Tibs {
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
-        b: Py<PyAny>,
+        b: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<Py<FindAllIterator>> {
-        let b = tibs_from_any(&b.bind(py).clone())?;
+        let b = tibs_from_any(b)?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
+        let py = slf.py();
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             needle: Py::new(py, b)?,
@@ -820,8 +820,8 @@ impl Tibs {
     ///         >>> Tibs('0xef').count(1)
     ///         7
     ///
-    pub fn count(&self, value: Py<PyAny>, py: Python) -> PyResult<usize> {
-        let count_ones = value.is_truthy(py)?;
+    pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+        let count_ones = value.is_truthy()?;
         let len = self.len();
 
         let (mut ones, raw) = (0usize, self.data.as_raw_slice());
@@ -998,8 +998,8 @@ impl Tibs {
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __radd__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let mut bs = mutibs_from_any(bs, py)?;
+    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut bs = mutibs_from_any(bs)?;
         bs.inner.data.extend_from_bitslice(&self.data);
         Ok(Tibs::new(bs.inner.data))
     }
@@ -1117,13 +1117,13 @@ impl Tibs {
         self.__mul__(n)
     }
 
-    pub fn __setitem__(&self, _key: Py<PyAny>, _value: Py<PyAny>) -> PyResult<()> {
+    pub fn __setitem__(&self, _key: &Bound<'_, PyAny>, _value: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "Tibs objects do not support item assignment. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
         ))
     }
 
-    pub fn __delitem__(&self, _key: Py<PyAny>) -> PyResult<()> {
+    pub fn __delitem__(&self, _key: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "Tibs objects do not support item deletion. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
         ))
