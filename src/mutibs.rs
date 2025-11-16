@@ -27,8 +27,8 @@ pub fn mutibs_from_any(any: Bound<'_, PyAny>) -> PyResult<Mutibs> {
         return Ok(bits.to_mutibs());
     }
     if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-        let bits = <Tibs as BitCollection>::from_bytes(any_bytes);
-        return Ok(bits.to_mutibs());
+        let bits = <Mutibs as BitCollection>::from_bytes(any_bytes);
+        return Ok(bits);
     }
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
@@ -1191,22 +1191,9 @@ impl Mutibs {
         Ok(bs)
     }
 
-    /// Concatenate Tibs in-place.
-    pub fn __iadd__<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        bs: Py<PyAny>,
-        py: Python<'_>,
-    ) -> PyResult<()> {
-        // Check if bs is the same object as slf
-        if bs.as_ptr() == slf.as_ptr() {
-            // If bs is slf, clone inner bits first then append
-            let bits_clone = slf.inner.data.clone();
-            slf.inner.data.extend_from_bitslice(&bits_clone);
-        } else {
-            // Normal case - convert bs to Tibs and append
-            let bs = tibs_from_any(bs.bind(py).clone())?;
-            slf.inner.data.extend_from_bitslice(&bs.data);
-        }
+    /// Concatenate in-place.
+    pub fn __iadd__<'a>(slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python<'_>) -> PyResult<()> {
+        Self::append(slf, bs, py)?;
         Ok(())
     }
 
@@ -1232,7 +1219,6 @@ impl Mutibs {
             let bits_clone = slf.inner.data.clone();
             slf.inner.data.extend_from_bitslice(&bits_clone);
         } else {
-            // Normal case - convert bs to Tibs and append
             let bs = tibs_from_any(bs.bind(py).clone())?;
             slf.inner.data.extend_from_bitslice(&bs.data);
         }
