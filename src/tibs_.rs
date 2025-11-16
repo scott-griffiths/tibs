@@ -14,13 +14,9 @@ use pyo3::types::{
     PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PySlice, PyTuple, PyType,
 };
 use pyo3::{pyclass, pymethods, PyRef, PyResult};
-use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
-
-// ---- Exported Python helper methods ----
 
 pub fn tibs_from_any(any: Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it of type Tibs?
