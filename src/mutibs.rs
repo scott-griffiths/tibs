@@ -342,7 +342,8 @@ impl Mutibs {
         length: i64,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        Ok(Tibs::from_random(_cls, length, seed)?.to_mutibs())
+        let bv = crate::helpers::bv_from_random(length, &seed)?;
+        Ok(Mutibs::new(bv))
     }
 
     /// Create a new instance from a bytes object.

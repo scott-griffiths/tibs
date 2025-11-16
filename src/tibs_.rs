@@ -553,28 +553,8 @@ impl Tibs {
         length: i64,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        if length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative bit length given: {}.",
-                length
-            )));
-        }
-        let length = length as usize;
-        if length == 0 {
-            return Ok(BitCollection::empty());
-        }
-        let seed_arr = crate::helpers::process_seed(seed);
-        let mut rng = StdRng::from_seed(seed_arr);
-        let mut bv = BV::with_capacity(length);
-
-        let num_bytes = (length + 7) / 8;
-        let mut data = Vec::<u8>::with_capacity(num_bytes);
-        unsafe {
-            data.set_len(num_bytes);
-        }
-        rng.fill_bytes(&mut data);
-        bv = BV::from_vec(data);
-        bv.truncate(length);
+        let bv = crate::helpers::bv_from_random(length, &seed)?;
+        assert_eq!(bv.len(), length as usize);
         Ok(Tibs::new(bv))
     }
 
