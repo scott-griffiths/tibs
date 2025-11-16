@@ -122,15 +122,14 @@ impl Mutibs {
     /// >>> Mutibs('0xf2') == '0b11110010'
     /// True
     ///
-    pub fn __eq__(&self, other: Py<PyAny>, py: Python) -> bool {
-        let obj = other.bind(py);
-        if let Ok(b) = obj.extract::<PyRef<Tibs>>() {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        if let Ok(b) = other.extract::<PyRef<Tibs>>() {
             return self.inner.data == b.data;
         }
-        if let Ok(b) = obj.extract::<PyRef<Mutibs>>() {
+        if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return self.inner.data == b.inner.data;
         }
-        match tibs_from_any(other, py) {
+        match tibs_from_any(other) {
             Ok(b) => self.inner.data == b.data,
             Err(_) => false,
         }
@@ -457,8 +456,7 @@ impl Mutibs {
     pub fn __setitem__(
         mut slf: PyRefMut<'_, Self>,
         key: &Bound<'_, PyAny>,
-        value: Py<PyAny>,
-        py: Python,
+        value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let length = slf.len();
         if let Ok(mut index) = key.extract::<i64>() {
@@ -470,7 +468,7 @@ impl Mutibs {
                     "Bit index {index} out of range for length {length}"
                 )));
             }
-            slf._set_index(value.is_truthy(py)?, index)?;
+            slf._set_index(value.is_truthy()?, index)?;
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -478,7 +476,7 @@ impl Mutibs {
             let bs = if value.as_ptr() == slf.as_ptr() {
                 Tibs::new(slf.inner.data.clone())
             } else {
-                tibs_from_any(value, py)?
+                tibs_from_any(value)?
             };
 
             let indices = slice.indices(length as isize)?;
@@ -631,8 +629,8 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        self.inner.starts_with(prefix, py)
+    pub fn starts_with(&self, prefix: &Bound<'_, PyAny>) -> PyResult<bool> {
+        self.inner.starts_with(prefix)
     }
 
     /// Return whether the current Mutibs ends with suffix.
@@ -647,28 +645,27 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        self.inner.ends_with(suffix, py)
+    pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
+        self.inner.ends_with(suffix)
     }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
-        b: Py<PyAny>,
+        b: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<Option<usize>> {
-        self.inner.find(b, start, end, byte_aligned, py)
+        self.inner.find(b, start, end, byte_aligned)
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         self._and(&other)
     }
 
@@ -676,8 +673,8 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         self._or(&other)
     }
 
@@ -685,8 +682,8 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         self._xor(&other)
     }
 
@@ -882,13 +879,12 @@ impl Mutibs {
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
-        b: Py<PyAny>,
+        b: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<Option<usize>> {
-        self.inner.rfind(b, start, end, byte_aligned, py)
+        self.inner.rfind(b, start, end, byte_aligned)
     }
 
     /// Return the Mutibs with one or many bits inverted between 0 and 1.
@@ -1178,8 +1174,8 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let bs = tibs_from_any(bs, py)?;
+    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.inner.data);
         data.extend_from_bitslice(&bs.data);
@@ -1194,8 +1190,8 @@ impl Mutibs {
     }
 
     /// Concatenate in-place.
-    pub fn __iadd__<'a>(slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python<'_>) -> PyResult<()> {
-        Self::append(slf, bs, py)?;
+    pub fn __iadd__<'a>(slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+        Self::append(slf, bs)?;
         Ok(())
     }
 
@@ -1212,8 +1208,7 @@ impl Mutibs {
     ///
     pub fn append<'a>(
         mut slf: PyRefMut<'a, Self>,
-        bs: Py<PyAny>,
-        py: Python<'_>,
+        bs: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
@@ -1221,7 +1216,7 @@ impl Mutibs {
             let bits_clone = slf.inner.data.clone();
             slf.inner.data.extend_from_bitslice(&bits_clone);
         } else {
-            let bs = tibs_from_any(bs, py)?;
+            let bs = tibs_from_any(bs)?;
             slf.inner.data.extend_from_bitslice(&bs.data);
         }
         Ok(slf)
@@ -1240,8 +1235,7 @@ impl Mutibs {
     ///
     pub fn prepend<'a>(
         mut slf: PyRefMut<'a, Self>,
-        bs: Py<PyAny>,
-        py: Python<'_>,
+        bs: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
@@ -1249,7 +1243,7 @@ impl Mutibs {
             new_data.extend_from_bitslice(&slf.inner.data);
             slf.inner.data = new_data;
         } else {
-            let to_prepend = tibs_from_any(bs, py)?;
+            let to_prepend = tibs_from_any(bs)?;
             if to_prepend.is_empty() {
                 return Ok(slf);
             }
@@ -1263,19 +1257,18 @@ impl Mutibs {
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false))]
     pub fn replace<'a>(
         mut slf: PyRefMut<'a, Self>,
-        old: Py<PyAny>,
-        new: Py<PyAny>,
+        old: &Bound<'_, PyAny>,
+        new: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         count: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<PyRefMut<'a, Self>> {
-        let old = tibs_from_any(old, py)?;
+        let old = tibs_from_any(old)?;
         if old.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
-        let new = tibs_from_any(new, py)?;
+        let new = tibs_from_any(new)?;
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
 
@@ -1433,22 +1426,22 @@ impl Mutibs {
         ))
     }
 
-    pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+        let other = tibs_from_any(bs)?;
         validate_logical_op_lengths(slf.len(), other.len())?;
         slf.inner.data &= &other.data;
         Ok(())
     }
 
-    pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+        let other = tibs_from_any(bs)?;
         validate_logical_op_lengths(slf.len(), other.len())?;
         slf.inner.data |= &other.data;
         Ok(())
     }
 
-    pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+        let other = tibs_from_any(bs)?;
         validate_logical_op_lengths(slf.len(), other.len())?;
         slf.inner.data ^= &other.data;
         Ok(())
