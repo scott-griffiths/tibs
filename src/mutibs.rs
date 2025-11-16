@@ -1433,5 +1433,55 @@ impl Mutibs {
         ))
     }
 
-    // TODO: iand, ior, ixor, imul
+    pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
+        let other = tibs_from_any(bs, py)?;
+        validate_logical_op_lengths(slf.len(), other.len())?;
+        slf.inner.data &= &other.data;
+        Ok(())
+    }
+
+    pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
+        let other = tibs_from_any(bs, py)?;
+        validate_logical_op_lengths(slf.len(), other.len())?;
+        slf.inner.data |= &other.data;
+        Ok(())
+    }
+
+    pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: Py<PyAny>, py: Python) -> PyResult<()> {
+        let other = tibs_from_any(bs, py)?;
+        validate_logical_op_lengths(slf.len(), other.len())?;
+        slf.inner.data ^= &other.data;
+        Ok(())
+    }
+
+    pub fn __imul__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
+        match n {
+            i if i < 0 => Err(PyValueError::new_err(
+                "Cannot multiply by a negative integer.",
+            )),
+            0 => {
+                slf.clear();
+                Ok(())
+            }
+            1 => Ok(()),
+            i => {
+                let n = i as usize;
+                let orig_data = slf.inner.data.clone();
+                let len = slf.len();
+                slf.reserve(len * (n - 1));
+                let mut mul = 1;
+                while mul * 2 <= n {
+                    // Double the length
+                    let current = slf.inner.data.clone();
+                    slf.inner.data.extend_from_bitslice(&current);
+                    mul *= 2;
+                }
+                while mul < n {
+                    slf.inner.data.extend_from_bitslice(&orig_data);
+                    mul += 1;
+                }
+                Ok(())
+            }
+        }
+    }
 }
