@@ -6,7 +6,6 @@ use crate::mutibs::mutibs_from_any;
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
-use once_cell::sync::OnceCell;
 use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -21,12 +20,12 @@ use std::ops::Not;
 pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.as_ref().extract::<PyRef<Tibs>>(py) {
-        return Ok(tibs_ref.clone());
+        return Ok(tibs_ref.clone()); // TODO: Expensive clone
     }
 
     // Is it of type Mutibs?
     if let Ok(mutibs_ref) = any.as_ref().extract::<PyRef<Mutibs>>(py) {
-        return Ok(mutibs_ref.to_tibs());
+        return Ok(mutibs_ref.to_tibs()); // TODO: Expensive clone
     }
 
     let any = any.bind(py);
@@ -85,9 +84,6 @@ pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
 #[pyclass(frozen, module = "tibs")]
 pub struct Tibs {
     pub(crate) data: BV,
-    pub(crate) bin_cache: OnceCell<String>,
-    pub(crate) oct_cache: OnceCell<String>,
-    pub(crate) hex_cache: OnceCell<String>,
 }
 
 impl Hash for Tibs {
