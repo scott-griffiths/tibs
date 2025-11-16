@@ -17,18 +17,16 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
 
-pub fn tibs_from_any(any: Py<PyAny>, py: Python) -> PyResult<Tibs> {
+pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it of type Tibs?
-    if let Ok(tibs_ref) = any.as_ref().extract::<PyRef<Tibs>>(py) {
+    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
         return Ok(tibs_ref.clone()); // TODO: Expensive clone
     }
 
     // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.as_ref().extract::<PyRef<Mutibs>>(py) {
+    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
         return Ok(mutibs_ref.to_tibs()); // TODO: Expensive clone
     }
-
-    let any = any.bind(py);
 
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
@@ -329,8 +327,7 @@ impl Tibs {
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return self.data == b.inner.data;
         }
-        let py = other.py();
-        let maybe = tibs_from_any(other.clone().unbind(), py);
+        let maybe = tibs_from_any(other);
         match maybe {
             Ok(b) => self.data == b.data,
             Err(_) => false,
@@ -371,7 +368,7 @@ impl Tibs {
         byte_aligned: bool,
         py: Python,
     ) -> PyResult<Py<FindAllIterator>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(&b.bind(py).clone())?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let iter_obj = FindAllIterator {
@@ -587,8 +584,7 @@ impl Tibs {
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
-            let py = obj.py();
-            let bits = tibs_from_any(obj.unbind(), py)?;
+            let bits = tibs_from_any(&obj)?;
             total_len += bits.len();
             parts.push(bits);
         }
@@ -715,13 +711,12 @@ impl Tibs {
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
-        b: Py<PyAny>,
+        b: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(b)?;
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
@@ -730,8 +725,8 @@ impl Tibs {
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 
-    pub fn __contains__(&self, b: Py<PyAny>, py: Python) -> bool {
-        match self.find(b, None, None, false, py) {
+    pub fn __contains__(&self, b: &Bound<'_, PyAny>) -> bool {
+        match self.find(b, None, None, false) {
             Ok(Some(_)) => true,
             _ => false,
         }
@@ -740,13 +735,12 @@ impl Tibs {
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
-        b: Py<PyAny>,
+        b: &Bound<'_, PyAny>,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
-        py: Python,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b, py)?;
+        let b = tibs_from_any(b)?;
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
@@ -784,8 +778,8 @@ impl Tibs {
     ///     >>> Tibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let prefix = tibs_from_any(prefix, py)?;
+    pub fn starts_with(&self, prefix: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let prefix = tibs_from_any(prefix)?;
         let n = prefix.len();
         if n <= self.len() {
             Ok(&prefix.data == &self.data[..n])
@@ -806,8 +800,8 @@ impl Tibs {
     ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: Py<PyAny>, py: Python) -> PyResult<bool> {
-        let suffix = tibs_from_any(suffix, py)?;
+    pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let suffix = tibs_from_any(suffix)?;
         let n = suffix.len();
         if n <= self.len() {
             Ok(&suffix.data == &self.data[self.len() - n..])
@@ -995,8 +989,8 @@ impl Tibs {
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __add__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let bs = tibs_from_any(bs, py)?;
+    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.data);
         data.extend_from_bitslice(&bs.data);
@@ -1014,9 +1008,9 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
+    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs)?;
         self._and(&other)
     }
 
@@ -1024,9 +1018,9 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
+    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs, py)?;
+        let other = tibs_from_any(bs)?;
         self._or(&other)
     }
 
@@ -1034,8 +1028,8 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         self._xor(&other)
     }
 
@@ -1045,8 +1039,8 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         other._and(&self)
     }
 
@@ -1056,8 +1050,8 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         other._or(&self)
     }
 
@@ -1067,8 +1061,8 @@ impl Tibs {
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: Py<PyAny>, py: Python) -> PyResult<Self> {
-        let other = tibs_from_any(bs, py)?;
+    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = tibs_from_any(bs)?;
         other._xor(&self)
     }
 
