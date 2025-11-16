@@ -1,13 +1,13 @@
-use crate::tibs_::Tibs;
 use crate::helpers::{validate_index, BV};
 use crate::mutibs::Mutibs;
+use crate::tibs_::Tibs;
 use bitvec::bits;
 use bitvec::field::BitField;
 use bitvec::order::Msb0;
 use bitvec::prelude::Lsb0;
 use bitvec::view::BitView;
 use lru::LruCache;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::fmt;
@@ -44,29 +44,6 @@ const BITS_CACHE_SIZE: usize = 1024;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
-fn split_tokens(s: &String) -> Vec<String> {
-    // Remove whitespace
-    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    let mut tokens = Vec::new();
-    let mut token_start = 0;
-    let mut bracket_depth = 0;
-    // Find all the commas, ignoring those in other structures.
-    // This isn't a rigorous check - if brackets are mismatched it will be picked up later.
-
-    for (i, c) in s.char_indices() {
-        if c == ',' && bracket_depth == 0 {
-            tokens.push(s[token_start..i].to_string());
-            token_start = i + 1;
-        } else if c == '(' || c == '[' {
-            bracket_depth += 1;
-        } else if c == ')' || c == ']' {
-            bracket_depth -= 1;
-        }
-    }
-    tokens.push(s[token_start..].to_string());
-    tokens
-}
-
 fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
         Some("0b") => Ok(Tibs::_from_bin(s)?),
@@ -74,7 +51,7 @@ fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
         Some("0o") => Ok(Tibs::_from_oct(s)?),
         _ => Err(PyValueError::new_err(format!(
             "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
-        )))
+        ))),
     }
 }
 
@@ -86,14 +63,15 @@ pub(crate) fn str_to_tibs(s: String) -> PyResult<Tibs> {
             return Ok(Tibs::new(cached_data.clone()));
         }
     }
-    let tokens = split_tokens(&s);
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    let tokens = s.split(',');
     let mut bits_array = Vec::<Tibs>::new();
     let mut total_bit_length = 0;
     for token in tokens {
         if token.is_empty() {
             continue;
         }
-        let x= string_literal_to_tibs(&token)?;
+        let x = string_literal_to_tibs(&token)?;
         total_bit_length += x.len();
         bits_array.push(x);
     }
@@ -154,7 +132,10 @@ impl BitCollection for Tibs {
     #[inline]
     fn from_binary(binary_string: &str) -> Result<Self, String> {
         // Ignore any leading '0b' or '0B'
-        let s = binary_string.strip_prefix("0b").or_else(|| binary_string.strip_prefix("0B")).unwrap_or(binary_string);
+        let s = binary_string
+            .strip_prefix("0b")
+            .or_else(|| binary_string.strip_prefix("0B"))
+            .unwrap_or(binary_string);
         let mut b: BV = BV::with_capacity(s.len());
         for c in s.chars() {
             match c {
@@ -176,7 +157,10 @@ impl BitCollection for Tibs {
     #[inline]
     fn from_octal(octal_string: &str) -> Result<Self, String> {
         // Ignore any leading '0o'
-        let s = octal_string.strip_prefix("0o").or_else(|| octal_string.strip_prefix("0O")).unwrap_or(octal_string);
+        let s = octal_string
+            .strip_prefix("0o")
+            .or_else(|| octal_string.strip_prefix("0O"))
+            .unwrap_or(octal_string);
         let mut b: BV = BV::with_capacity(s.len() * 3);
         for c in s.chars() {
             match c {
@@ -203,7 +187,11 @@ impl BitCollection for Tibs {
     #[inline]
     fn from_hexadecimal(hex: &str) -> Result<Self, String> {
         // Ignore any leading '0x'
-        let mut new_hex = hex.strip_prefix("0x").or_else(|| hex.strip_prefix("0X")).unwrap_or(hex).to_string();
+        let mut new_hex = hex
+            .strip_prefix("0x")
+            .or_else(|| hex.strip_prefix("0X"))
+            .unwrap_or(hex)
+            .to_string();
         // Remove any underscores or whitespace characters
         new_hex.retain(|c| c != '_' && !c.is_whitespace());
         let is_odd_length: bool = new_hex.len() % 2 != 0;
@@ -272,7 +260,6 @@ impl BitCollection for Tibs {
         // }).clone()
     }
 
-
     #[inline]
     fn to_octal(&self) -> Result<String, String> {
         let len = self.len();
@@ -307,12 +294,10 @@ impl BitCollection for Tibs {
         // Ok(self.hex_cache.get_or_init(|| {
         //     self.build_hex_string()
         // }).clone())
-
     }
 }
 
 impl BitCollection for Mutibs {
-
     #[inline]
     fn len(&self) -> usize {
         self.inner.len()
@@ -486,12 +471,7 @@ impl PartialEq<Tibs> for Mutibs {
 
 impl Tibs {
     pub(crate) fn new(bv: BV) -> Self {
-        Tibs {
-            data: bv,
-            bin_cache: OnceCell::new(),
-            oct_cache: OnceCell::new(),
-            hex_cache: OnceCell::new(),
-        }
+        Tibs { data: bv }
     }
 
     /// Slice used internally without bounds checking.
