@@ -456,8 +456,8 @@ impl Tibs {
     }
 
     #[classmethod]
-    pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        BitCollection::from_binary(&s).map_err(PyValueError::new_err)
+    pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        BitCollection::from_binary(s).map_err(PyValueError::new_err)
     }
 
     pub fn to_bin(&self) -> String {
@@ -465,8 +465,8 @@ impl Tibs {
     }
 
     #[classmethod]
-    pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        BitCollection::from_octal(&s).map_err(PyValueError::new_err)
+    pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        BitCollection::from_octal(s).map_err(PyValueError::new_err)
     }
 
     pub fn to_oct(&self) -> PyResult<String> {
@@ -474,8 +474,8 @@ impl Tibs {
     }
 
     #[classmethod]
-    pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
+    pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)
     }
 
     pub fn to_hex(&self) -> PyResult<String> {
