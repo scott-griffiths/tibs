@@ -79,7 +79,7 @@ pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 ///     * ``Tibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
-///     Using the constructor ``Tibs(s)`` is an alias for ``Tibs.from_string(s)``.
+///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[derive(Clone)]
 #[pyclass(frozen, module = "tibs")]
