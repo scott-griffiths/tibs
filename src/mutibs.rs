@@ -6,38 +6,61 @@ use crate::iterator::ChunksIterator;
 use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
-use pyo3::types::{PyBool, PySlice};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView, PySlice};
 use pyo3::types::{PySliceMethods, PyType};
 use pyo3::PyRefMut;
 use pyo3::{pyclass, pymethods, PyRef, PyResult, Python};
 use pyo3::{Bound, IntoPyObject, Py, PyAny};
 use std::ops::Not;
 
-pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
-    if let Ok(any_bits) = any.extract::<PyRef<Tibs>>() {
-        return Ok(any_bits.to_mutibs());
-    }
-
-    if let Ok(any_mutable_bits) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(any_mutable_bits.__copy__());
-    }
-
+fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
+    // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
         let bits = str_to_tibs(any_string)?;
         return Ok(bits.to_mutibs());
     }
-    if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-        let bits = <Mutibs as BitCollection>::from_bytes(any_bytes);
-        return Ok(bits);
+
+    // Is it a bytes, bytearray or memoryview?
+    if any.is_instance_of::<PyBytes>()
+        || any.is_instance_of::<PyByteArray>()
+        || any.is_instance_of::<PyMemoryView>()
+    {
+        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
+            return Ok(<Mutibs as BitCollection>::from_bytes(any_bytes));
+        }
+    }
+
+    // Is it an iterable that we can convert each element to a bool?
+    if let Ok(iter) = any.try_iter() {
+        let mut bv = BV::new();
+        for item in iter {
+            bv.push(item?.is_truthy()?);
+        }
+        return Ok(Mutibs::new(bv));
     }
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
         Err(_) => "<unknown>".to_string(),
     };
-    Err(PyTypeError::new_err(format!(
-        "Cannot convert object of type {} to a Mutibs object.",
-        type_name
-    )))
+    let mut err = format!("Cannot promote object of type {type_name} to a Mutibs object. ");
+    if any.is_instance_of::<PyInt>() {
+        err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
+    };
+    Err(PyTypeError::new_err(err))
+}
+
+pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
+    // Is it of type Mutibs?
+    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
+        return Ok(mutibs_ref.__copy__());
+    }
+
+    // Is it of type Tibs?
+    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
+        return Ok(tibs_ref.to_mutibs());
+    }
+
+    promote_to_mutibs(any)
 }
 
 ///     A mutable container of binary data.
@@ -73,44 +96,12 @@ impl Mutibs {
 #[pymethods]
 impl Mutibs {
     #[new]
-    #[pyo3(signature = (s = None))]
-    pub fn py_new(s: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let Some(s) = s else {
+    #[pyo3(signature = (auto = None))]
+    pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        if let Ok(string_s) = s.extract::<String>() {
-            return str_to_tibs(string_s).map(|bits| bits.to_mutibs());
-        }
-
-        // If it's not a string, build a more helpful error message.
-        let type_name = s.get_type().name()?;
-        let mut err = format!(
-            "Expected a str for Mutibs constructor, but received a {}. ",
-            type_name
-        );
-
-        if s.is_instance_of::<Tibs>() {
-            err.push_str("You can use the 'to_mutibs()' method on the `Tibs` instance instead.");
-        } else if s.is_instance_of::<pyo3::types::PyBytes>()
-            || s.is_instance_of::<pyo3::types::PyByteArray>()
-            || s.is_instance_of::<pyo3::types::PyMemoryView>()
-        {
-            err.push_str("You can use 'Mutibs.from_bytes()' instead.");
-        } else if s.is_instance_of::<pyo3::types::PyInt>() {
-            err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
-        } else if s.is_instance_of::<pyo3::types::PyTuple>()
-            || s.is_instance_of::<pyo3::types::PyList>()
-        {
-            err.push_str(
-                "Perhaps you want to use 'Mutibs.from_joined()' or 'Mutibs.from_bools()' instead?",
-            );
-        } else {
-            err.push_str(
-                "To create from other types use from_bytes(), from_bools(), from_joined(), \
-                 from_ones(), from_zeros() or from_random().",
-            );
-        }
-        Err(PyTypeError::new_err(err))
+        promote_to_mutibs(auto)
     }
 
     /// Return True if two Mutibs have the same binary representation.
@@ -261,6 +252,10 @@ impl Mutibs {
 
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self).map_err(|e| PyValueError::new_err(e))
+    }
+
+    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
     }
 
     /// Create a new instance with all bits set to zero.
@@ -583,16 +578,6 @@ impl Mutibs {
             return Ok(());
         }
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
-    }
-
-    /// Return the Mutibs as bytes, padding with zero bits if needed.
-    ///
-    /// Up to seven zero bits will be added at the end to byte align.
-    ///
-    /// :return: The Mutibs as bytes.
-    ///
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.inner.to_bytes()
     }
 
     pub fn _slice_to_bin(&self, start: usize, end: usize) -> String {
@@ -1392,7 +1377,7 @@ impl Mutibs {
         Ok(())
     }
 
-    pub fn __bytes__(&self) -> Vec<u8> {
+    pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.inner.to_bytes()
     }
 

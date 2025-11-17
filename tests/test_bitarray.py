@@ -6,8 +6,6 @@ import math
 import copy
 
 
-
-
 class TestNoPosAttribute:
     def test_replace(self):
         s = Mutibs.from_string("0b01")
@@ -86,8 +84,6 @@ def test_not_byte_aligned():
     assert p == 20
     a = a.to_mutibs().replace("0xff", "")
     assert a == "0x000"
-
-
 
 
 class TestSliceAssignment:
@@ -234,10 +230,13 @@ class TestRepr:
 
 def test_bits_conversion_to_bytes():
     a = Tibs.from_string("0x41424344, 0b1")
-    b = bytes(a)
+    with pytest.raises(ValueError):
+        _ = bytes(a)
+    b = bytes(a + [0, 0, 0, 0, 0, 0, 0])
     assert b == b"ABCD\x80"
     a = Tibs()
     assert bytes(a) == b""
+
 
 def test_mutable_bits_conversion_to_bytes():
     a = Mutibs('0x0001')
