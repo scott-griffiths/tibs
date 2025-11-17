@@ -758,7 +758,7 @@ def test_ror_method_chaining():
     assert result is a
 
 
-def test_rol_ror_cancelation():
+def test_rol_ror_cancellation():
     # Rotating left then right should cancel out
     a = Mutibs('0b10110')
     a.rol(2).ror(2)

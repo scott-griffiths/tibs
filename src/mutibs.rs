@@ -78,7 +78,7 @@ pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
 ///     * ``Mutibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
 ///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
-///     Using the constructor ``Mutibs(s)`` is an alias for ``Mutibs.from_string(s)``.
+///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[pyclass(freelist = 8, module = "tibs")]
 pub struct Mutibs {
@@ -217,11 +217,11 @@ impl Mutibs {
     ///     a = Mutibs.from_string("0xff01")
     ///     b = Mutibs.from_string("0b1")
     ///
-    /// The `__init__` method for `Mutibs` redirects to the `from_string` method and is sometimes more convenient:
+    /// The `__init__` method for `Mutibs` can also redirect to `from_string` method:
     ///
     /// .. code-block:: python
     ///
-    ///     a = Mutibs("0xff01")  # Mutibs(s) is equivalent to Mutibs.from_string(s)
+    ///     a = Mutibs("0xff01")
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         str_to_tibs(s).map(|bits| bits.to_mutibs())
