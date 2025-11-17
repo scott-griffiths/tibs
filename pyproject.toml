@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "tibs"
-version = "0.1.1"
 description = "A Python bit manipulation library written in Rust."
+dynamic = ["version"]
 readme = "README.md"
 authors = [
     { name = "Scott Griffiths", email = "dr.scottgriffiths@gmail.com" }
