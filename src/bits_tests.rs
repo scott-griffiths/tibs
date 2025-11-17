@@ -8,46 +8,46 @@ mod tests {
     fn from_bytes() {
         let data: Vec<u8> = vec![10, 20, 30];
         let bits = <Tibs as BitCollection>::from_bytes(data);
-        assert_eq!(*bits.to_bytes(), vec![10, 20, 30]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![10, 20, 30]);
         assert_eq!(bits.len(), 24);
     }
 
     #[test]
     fn from_hex() {
         let bits = Tibs::from_hexadecimal("0x0a_14  _1e").unwrap();
-        assert_eq!(*bits.to_bytes(), vec![10, 20, 30]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![10, 20, 30]);
         assert_eq!(bits.len(), 24);
         let bits = Tibs::from_hexadecimal("").unwrap();
         assert_eq!(bits.len(), 0);
         let bits = Tibs::from_hexadecimal("hello");
         assert!(bits.is_err());
         let bits = Tibs::from_hexadecimal("1").unwrap();
-        assert_eq!(*bits.to_bytes(), vec![16]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![16]);
         assert_eq!(bits.len(), 4);
     }
 
     #[test]
     fn from_bin() {
         let bits = <Tibs as BitCollection>::from_binary("00001010").unwrap();
-        assert_eq!(*bits.to_bytes(), vec![10]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![10]);
         assert_eq!(bits.len(), 8);
         let bits = <Tibs as BitCollection>::from_binary("").unwrap();
         assert_eq!(bits.len(), 0);
         let bits = <Tibs as BitCollection>::from_binary("hello");
         assert!(bits.is_err());
         let bits = <Tibs as BitCollection>::from_binary("1").unwrap();
-        assert_eq!(*bits.to_bytes(), vec![128]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![128]);
         assert_eq!(bits.len(), 1);
     }
 
     #[test]
     fn from_zeros() {
         let bits = <Tibs as BitCollection>::from_zeros(8);
-        assert_eq!(*bits.to_bytes(), vec![0]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![0]);
         assert_eq!(bits.len(), 8);
         assert_eq!(bits.to_hexadecimal().unwrap(), "00");
         let bits = <Tibs as BitCollection>::from_zeros(9);
-        assert_eq!(*bits.to_bytes(), vec![0, 0]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![0, 0]);
         assert_eq!(bits.len(), 9);
         let bits = <Tibs as BitCollection>::empty();
         assert_eq!(bits.len(), 0);
@@ -56,13 +56,13 @@ mod tests {
     #[test]
     fn from_ones() {
         let bits = <Tibs as BitCollection>::from_ones(8);
-        assert_eq!(*bits.to_bytes(), vec![255]);
+        assert_eq!(*bits.to_bytes().unwrap(), vec![255]);
         assert_eq!(bits.len(), 8);
         assert_eq!(bits.to_hexadecimal().unwrap(), "ff");
         let bits = <Tibs as BitCollection>::from_ones(9);
         assert_eq!(bits.to_bin(), "111111111");
-        assert_eq!((*bits.to_bytes())[0], 0xff);
-        assert_eq!((*bits.to_bytes())[1] & 0x80, 0x80);
+        assert_eq!((*bits.to_bytes().unwrap())[0], 0xff);
+        assert_eq!((*bits.to_bytes().unwrap())[1] & 0x80, 0x80);
         assert_eq!(bits.len(), 9);
         let bits = <Tibs as BitCollection>::from_ones(0);
         assert_eq!(bits.len(), 0);
@@ -179,10 +179,10 @@ mod tests {
     #[test]
     fn test_to_bytes_from_slice() {
         let a = <Tibs as BitCollection>::from_ones(16);
-        assert_eq!(a.to_bytes(), vec![255, 255]);
+        assert_eq!(a.to_bytes().unwrap(), vec![255, 255]);
         let b = a._getslice(7, a.len()).unwrap();
         assert_eq!(b.to_bin(), "111111111");
-        assert_eq!(b.to_bytes(), vec![255, 128]);
+        assert_eq!(b.to_bytes().unwrap(), vec![255, 128]);
     }
 
     #[test]
@@ -469,7 +469,7 @@ mod tests {
     //     assert_eq!(m.to_bin(), "11110000");
     //     assert_eq!(m.to_hex().unwrap(), "f0");
     //     assert_eq!(m.to_oct().unwrap(), "360");
-    //     assert_eq!(m.to_bytes(), vec![0xF0]);
+    //     assert_eq!(m.to_bytes().unwrap(), vec![0xF0]);
     // }
 
     #[test]

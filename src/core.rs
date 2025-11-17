@@ -35,6 +35,7 @@ pub(crate) trait BitCollection: Sized {
     fn to_binary(&self) -> String;
     fn to_octal(&self) -> Result<String, String>;
     fn to_hexadecimal(&self) -> Result<String, String>;
+    fn to_byte_data(&self) -> Result<Vec<u8>, String>;
 }
 
 // ---- Rust-only helper methods ----
@@ -295,6 +296,38 @@ impl BitCollection for Tibs {
         //     self.build_hex_string()
         // }).clone())
     }
+
+    #[inline]
+    fn to_byte_data(&self) -> Result<Vec<u8>, String> {
+        if self.data.is_empty() {
+            return Ok(Vec::new());
+        }
+        let len_bits = self.len();
+        if len_bits % 8 != 0 {
+            return Err(format!(
+                "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
+            ));
+        }
+        match self.data.as_bitslice().domain() {
+            // Fast path: element-aligned and length is a multiple of 8
+            bitvec::domain::Domain::Region {
+                head: None,
+                body,
+                tail: None,
+            } => {
+                // Already byte-aligned; copy the bytes directly.
+                Ok(body.to_vec())
+            }
+            // Misaligned: repack by extending from the bitslice
+            _ => {
+                let mut bv = BV::with_capacity(len_bits);
+                bv.extend_from_bitslice(&self.data);
+                let new_len = (len_bits + 7) & !7;
+                bv.resize(new_len, false);
+                Ok(bv.into_vec())
+            }
+        }
+    }
 }
 
 impl BitCollection for Mutibs {
@@ -410,6 +443,11 @@ impl BitCollection for Mutibs {
     #[inline]
     fn to_hexadecimal(&self) -> Result<String, String> {
         self.inner.to_hexadecimal()
+    }
+
+    #[inline]
+    fn to_byte_data(&self) -> Result<Vec<u8>, String> {
+        self.inner.to_byte_data()
     }
 }
 

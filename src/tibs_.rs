@@ -9,25 +9,13 @@ use bytemuck;
 use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{
-    PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PySlice, PyTuple, PyType,
-};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView, PySlice, PyType};
 use pyo3::{pyclass, pymethods, PyRef, PyResult};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
 
-pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
-    // Is it of type Tibs?
-    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(tibs_ref.clone()); // TODO: Expensive clone
-    }
-
-    // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(mutibs_ref.to_tibs()); // TODO: Expensive clone
-    }
-
+fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
         return str_to_tibs(any_string);
@@ -51,14 +39,29 @@ pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
         }
         return Ok(Tibs::new(bv));
     }
-
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
         Err(_) => "<unknown>".to_string(),
     };
-    Err(PyTypeError::new_err(format!(
-        "Cannot convert object of type {type_name} to a Tibs object."
-    )))
+    let mut err = format!("Cannot promote object of type {type_name} to a Tibs object. ");
+    if any.is_instance_of::<PyInt>() {
+        err.push_str("Perhaps you want to use 'Tibs.from_zeros()', 'Tibs.from_ones()' or 'Tibs.from_random()'?");
+    };
+    Err(PyTypeError::new_err(err))
+}
+
+pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
+    // Is it of type Tibs?
+    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
+        return Ok(tibs_ref.clone()); // TODO: Expensive clone
+    }
+
+    // Is it of type Mutibs?
+    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
+        return Ok(mutibs_ref.to_tibs()); // TODO: Expensive clone
+    }
+
+    promote_to_tibs(any)
 }
 
 ///     An immutable container of binary data.
@@ -174,42 +177,12 @@ impl Tibs {
 #[pymethods]
 impl Tibs {
     #[new]
-    #[pyo3(signature = (s = None))]
-    pub fn py_new(s: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let Some(s) = s else {
+    #[pyo3(signature = (auto = None))]
+    pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        if let Ok(string_s) = s.extract::<String>() {
-            return str_to_tibs(string_s);
-        }
-
-        // If it's not a string, build a more helpful error message.
-        let type_name = s.get_type().name()?;
-        let mut err = format!(
-            "Expected a str for Tibs constructor, but received a {}. ",
-            type_name
-        );
-
-        if s.is_instance_of::<Mutibs>() {
-            err.push_str("You can use the 'to_tibs()' method on the `Mutibs` instance instead.");
-        } else if s.is_instance_of::<PyBytes>()
-            || s.is_instance_of::<PyByteArray>()
-            || s.is_instance_of::<PyMemoryView>()
-        {
-            err.push_str("You can use 'Tibs.from_bytes()' instead.");
-        } else if s.is_instance_of::<PyInt>() {
-            err.push_str("Perhaps you want to use 'Tibs.from_zeros()', 'Tibs.from_ones()' or 'Tibs.from_random()'?");
-        } else if s.is_instance_of::<PyTuple>() || s.is_instance_of::<PyList>() {
-            err.push_str(
-                "Perhaps you want to use 'Tibs.from_joined()' or 'Tibs.from_bools()' instead?",
-            );
-        } else {
-            err.push_str(
-                "To create from other types use from_bytes(), from_bools(), from_joined(), \
-                 from_ones(), from_zeros() or from_random().",
-            );
-        }
-        Err(PyTypeError::new_err(err))
+        promote_to_tibs(auto)
     }
 
     /// Return string representations for printing.
@@ -301,16 +274,6 @@ impl Tibs {
             bits_len,
         };
         Py::new(py, iter)
-    }
-
-    // A bit of a hack so that the Python can use _chunks on Tibs and Mutibs. Can remove later.
-    #[pyo3(signature = (chunk_size, count = None))]
-    pub fn _chunks(
-        slf: PyRef<'_, Self>,
-        chunk_size: i64,
-        count: Option<i64>,
-    ) -> PyResult<Py<ChunksIterator>> {
-        Tibs::chunks(slf, chunk_size, count)
     }
 
     /// Return True if two Tibs have the same binary representation.
@@ -618,45 +581,8 @@ impl Tibs {
         bv.into_vec()
     }
 
-    /// Return the Tibs as bytes, padding with zero bits if needed.
-    ///
-    /// Up to seven zero bits will be added at the end to byte align.
-    ///
-    /// :return: The Tibs as bytes.
-    ///
-    pub fn to_bytes(&self) -> Vec<u8> {
-        if self.data.is_empty() {
-            return Vec::new();
-        }
-        let len_bits = self.len();
-        match self.data.as_bitslice().domain() {
-            // Fast path: element-aligned and length is a multiple of 8
-            bitvec::domain::Domain::Region {
-                head: None,
-                body,
-                tail: None,
-            } => {
-                // Already byte-aligned; copy the bytes directly.
-                body.to_vec()
-            }
-
-            // Aligned but not a multiple of 8: clone and pad to the next byte
-            bitvec::domain::Domain::Region { head: None, .. } => {
-                let mut bv = self.data.clone();
-                let new_len = (len_bits + 7) & !7;
-                bv.resize(new_len, false);
-                bv.into_vec()
-            }
-
-            // Misaligned: repack by extending from the bitslice, then pad
-            _ => {
-                let mut bv = BV::with_capacity(len_bits);
-                bv.extend_from_bitslice(&self.data);
-                let new_len = (len_bits + 7) & !7;
-                bv.resize(new_len, false);
-                bv.into_vec()
-            }
-        }
+    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
     }
 
     pub fn _slice_to_bytes(&self, start: usize, length: usize) -> PyResult<Vec<u8>> {
@@ -1077,7 +1003,7 @@ impl Tibs {
         Ok(Tibs::new(self.data.clone().not()))
     }
 
-    pub fn __bytes__(&self) -> Vec<u8> {
+    pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
     }
 
