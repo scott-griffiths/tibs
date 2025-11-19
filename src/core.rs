@@ -25,8 +25,8 @@ pub(crate) trait BitCollection: Sized {
     fn from_binary(binary_string: &str) -> Result<Self, String>;
     fn from_octal(octal_string: &str) -> Result<Self, String>;
     fn from_hexadecimal(hex_string: &str) -> Result<Self, String>;
-    fn from_u64(value: u64, length: usize) -> Self;
-    fn from_i64(value: i64, length: usize) -> Self;
+    fn from_u128(value: u128, length: i64) -> Result<Self, String>;
+    fn from_i128(value: i128, length: i64) -> Result<Self, String>;
     fn logical_or(&self, other: &Tibs) -> Self;
     fn logical_and(&self, other: &Tibs) -> Self;
     fn logical_xor(&self, other: &Tibs) -> Self;
@@ -36,6 +36,8 @@ pub(crate) trait BitCollection: Sized {
     fn to_octal(&self) -> Result<String, String>;
     fn to_hexadecimal(&self) -> Result<String, String>;
     fn to_byte_data(&self) -> Result<Vec<u8>, String>;
+    fn to_u128(&self) -> Result<u128, String>;
+    fn to_i128(&self) -> Result<i128, String>;
 }
 
 // ---- Rust-only helper methods ----
@@ -211,17 +213,59 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_u64(value: u64, length: usize) -> Self {
-        let mut bv = BV::repeat(false, length);
+    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
+        if length <= 0 || length > 128 {
+            return Err(format!(
+                "Bit length for unsigned int must be between 1 and 128. Received {length}."
+            ));
+        }
+        let mut bv = BV::repeat(false, length as usize);
         bv.store_be(value);
-        Tibs::new(bv)
+        Ok(Tibs::new(bv))
     }
 
     #[inline]
-    fn from_i64(value: i64, length: usize) -> Self {
-        let mut bv = BV::repeat(false, length);
+    fn to_u128(&self) -> Result<u128, String> {
+        let length = self.len();
+        if length > 128 {
+            return Err(format!(
+                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
+            ));
+        }
+        let mut padded_bv = BV::new();
+        let padding = 128 - length;
+        padded_bv.resize(padding, false);
+        padded_bv.extend_from_bitslice(&self.data);
+        Ok(padded_bv.load_be::<u128>())
+    }
+
+    #[inline]
+    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
+        if length <= 0 || length > 128 {
+            return Err(format!(
+                "Bit length for signed int must be between 1 and 128. Received {length}."
+            ));
+        }
+        let repeat_bit = if value < 0 { true } else { false };
+        let mut bv = BV::repeat(repeat_bit, length as usize);
         bv.store_be(value);
-        Tibs::new(bv)
+        Ok(Tibs::new(bv))
+    }
+
+    #[inline]
+    fn to_i128(&self) -> Result<i128, String> {
+        let length = self.len();
+        if length > 128 {
+            return Err(format!(
+                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
+            ));
+        }
+        let mut padded_bv = BV::new();
+        let padding = 128 - length;
+        let pad_bit = if self.get_bit(0) { true } else { false };
+        padded_bv.resize(padding, pad_bit);
+        padded_bv.extend_from_bitslice(&self.data);
+        Ok(padded_bv.load_be::<i128>())
     }
 
     #[inline]
@@ -391,17 +435,27 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn from_u64(value: u64, length: usize) -> Self {
-        Self {
-            inner: <Tibs as BitCollection>::from_u64(value, length),
-        }
+    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
+        Ok(Self {
+            inner: <Tibs as BitCollection>::from_u128(value, length)?,
+        })
     }
 
     #[inline]
-    fn from_i64(value: i64, length: usize) -> Self {
-        Self {
-            inner: <Tibs as BitCollection>::from_i64(value, length),
-        }
+    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
+        Ok(Self {
+            inner: <Tibs as BitCollection>::from_i128(value, length)?,
+        })
+    }
+
+    #[inline]
+    fn to_u128(&self) -> Result<u128, String> {
+        self.inner.to_u128()
+    }
+
+    #[inline]
+    fn to_i128(&self) -> Result<i128, String> {
+        self.inner.to_i128()
     }
 
     #[inline]
