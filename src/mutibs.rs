@@ -195,16 +195,6 @@ impl Mutibs {
         Ok(Mutibs::logical_xor(self, other))
     }
 
-    #[staticmethod]
-    pub fn _from_u64(value: u64, length: usize) -> Self {
-        BitCollection::from_u64(value, length)
-    }
-
-    #[staticmethod]
-    pub fn _from_i64(value: i64, length: usize) -> Self {
-        BitCollection::from_i64(value, length)
-    }
-
     /// Create a new instance from a formatted string.
     ///
     /// This method initializes a new instance of :class:`Mutibs` using a formatted string.
@@ -256,6 +246,26 @@ impl Mutibs {
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
+    }
+
+    #[classmethod]
+    pub fn from_u(_cls: &Bound<'_, PyType>, u: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
+        let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_u(&self) -> PyResult<u128> {
+        Ok(BitCollection::to_u128(self).map_err(PyValueError::new_err)?)
+    }
+
+    #[classmethod]
+    pub fn from_i(_cls: &Bound<'_, PyType>, i: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
+        let value = i.extract::<i128>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_i(&self) -> PyResult<i128> {
+        Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
     }
 
     /// Create a new instance with all bits set to zero.
@@ -374,14 +384,6 @@ impl Mutibs {
     #[classmethod]
     pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Tibs::from_joined(_cls, sequence)?.to_mutibs())
-    }
-
-    pub fn _to_u64(&self, start: usize, length: usize) -> u64 {
-        self.inner._to_u64(start, length)
-    }
-
-    pub fn _to_i64(&self, start: usize, length: usize) -> i64 {
-        self.inner._to_i64(start, length)
     }
 
     pub fn __len__(&self) -> usize {

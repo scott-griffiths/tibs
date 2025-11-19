@@ -297,24 +297,6 @@ impl Tibs {
         }
     }
 
-    #[staticmethod]
-    pub fn _from_u64(value: u64, length: usize) -> Self {
-        BitCollection::from_u64(value, length)
-    }
-
-    #[staticmethod]
-    pub fn _from_i64(value: i64, length: usize) -> Self {
-        BitCollection::from_i64(value, length)
-    }
-
-    pub fn _to_u64(&self, start: usize, length: usize) -> u64 {
-        self.data[start..start + length].load_be::<u64>()
-    }
-
-    pub fn _to_i64(&self, start: usize, length: usize) -> i64 {
-        self.data[start..start + length].load_be::<i64>()
-    }
-
     #[pyo3(name = "__hash__")]
     pub fn __hash__(&self) -> isize {
         let mut hasher = DefaultHasher::new();
@@ -402,17 +384,36 @@ impl Tibs {
     ///
     ///     a = Tibs.from_string("0xff01")
     ///     b = Tibs.from_string("0b1")
-    ///     c = Tibs.from_string("u12 = 31, f16=-0.25")
     ///
-    /// The `__init__` method for `Tibs` redirects to the `from_string` method and is sometimes more convenient:
+    /// The `__init__` method for `Tibs` can also redirect to `from_string` method:
     ///
     /// .. code-block:: python
     ///
-    ///     a = Tibs("0xff01")  # Tibs(s) is equivalent to Tibs.from_string(s)
+    ///     a = Tibs("0xff01")
     ///
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         str_to_tibs(s)
+    }
+
+    #[classmethod]
+    pub fn from_u(_cls: &Bound<'_, PyType>, u: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
+        let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_u(&self) -> PyResult<u128> {
+        Ok(BitCollection::to_u128(self).map_err(PyValueError::new_err)?)
+    }
+
+    #[classmethod]
+    pub fn from_i(_cls: &Bound<'_, PyType>, i: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
+        let value = i.extract::<i128>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_i(&self) -> PyResult<i128> {
+        Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
     }
 
     #[classmethod]
@@ -430,7 +431,7 @@ impl Tibs {
     }
 
     pub fn to_oct(&self) -> PyResult<String> {
-        BitCollection::to_octal(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
 
     #[classmethod]
@@ -439,7 +440,7 @@ impl Tibs {
     }
 
     pub fn to_hex(&self) -> PyResult<String> {
-        BitCollection::to_hexadecimal(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_hexadecimal(self).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance from a bytes object.

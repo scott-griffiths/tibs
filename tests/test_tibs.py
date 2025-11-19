@@ -61,3 +61,36 @@ def test_count_large():
     a = Tibs('0b' + '1' * 72)
     b = a[:65]
     assert b.count(1) == 65
+
+
+def test_from_u():
+    a = Tibs.from_u(15, 8)
+    assert a == '0b00001111'
+    b = Mutibs.from_u(15, 8)
+    assert a == b
+    c = a.to_u()
+    assert c == 15
+
+
+def test_from_u_errors():
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(0, 129)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(0, -1)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(0, 0)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(-1, 5)
+
+
+def test_from_i():
+    a = Tibs.from_i(-9, 100)
+    b = Mutibs.from_i(-9, 100)
+    assert a == b
+    assert len(a) == 100
+    assert a.to_i() == -9
+    assert b.to_i() == -9
+
+
+def test_from_i_errors():
+    pass
