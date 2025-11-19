@@ -6,7 +6,7 @@ use crate::iterator::ChunksIterator;
 use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView, PySlice};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice};
 use pyo3::types::{PySliceMethods, PyType};
 use pyo3::PyRefMut;
 use pyo3::{pyclass, pymethods, PyRef, PyResult, Python};
@@ -266,6 +266,16 @@ impl Mutibs {
 
     pub fn to_i(&self) -> PyResult<i128> {
         Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
+    }
+
+    #[classmethod]
+    pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
+        let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_f(&self) -> PyResult<f64> {
+        Ok(BitCollection::to_f64(self).map_err(PyValueError::new_err)?)
     }
 
     /// Create a new instance with all bits set to zero.
@@ -1015,22 +1025,7 @@ impl Mutibs {
         self._set_from_sequence(value, vec![index])
     }
 
-    // Just redirects to the Tibs._chunks method. Not public part of Python interface
-    // as it's only used internally in things like pp().
-    #[pyo3(signature = (chunk_size, count = None))]
-    pub fn _chunks(
-        slf: PyRef<'_, Self>,
-        chunk_size: usize,
-        count: Option<usize>,
-    ) -> PyResult<Py<ChunksIterator>> {
-        let py = slf.py();
-        let bits_instance = slf.to_tibs();
-        let bits_py_obj = Py::new(py, bits_instance)?;
-        let bits_py_ref = bits_py_obj.bind(py);
-        let chunks_obj = bits_py_ref.call_method1("_chunks", (chunk_size, count))?;
-        Ok(chunks_obj.cast::<ChunksIterator>()?.clone().unbind())
-    }
-
+    // TODO: Not part of public interface?
     pub fn _set_from_slice(
         &mut self,
         value: bool,
@@ -1103,7 +1098,7 @@ impl Mutibs {
 
     /// Create and return a Tibs instance by moving the Mutibs data.
     ///
-    /// The data is moved to the new Tibs, so this Mutibs will be empty after the operation.
+    /// The data is moved to the new Tibs, so the Mutibs will be empty after the operation.
     /// This is more efficient than :meth:`to_tibs` if you no longer need the Mutibs.
     ///
     /// It will try to reclaim any excess memory capacity that the Mutibs may have had.

@@ -94,3 +94,22 @@ def test_from_i():
 
 def test_from_i_errors():
     pass
+
+
+def test_from_f():
+    a = Tibs.from_f(0.25, 16)
+    b = Tibs.from_f(0.25, 32)
+    c = Tibs.from_f(0.25, 64)
+    a2 = Mutibs.from_f(0.25, 16)
+    b2 = Mutibs.from_f(0.25, 32)
+    c2 = Mutibs.from_f(0.25, 64)
+    assert a == a2
+    assert b == b2
+    assert c == c2
+    f = a.to_f()
+    g = b.to_f()
+    h = c.to_f()
+    f2 = a2.to_f()
+    g2 = b2.to_f()
+    h2 = c2.to_f()
+    assert f == g == h == f2 == g2 == h2 == 0.25

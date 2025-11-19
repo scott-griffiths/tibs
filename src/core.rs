@@ -6,6 +6,7 @@ use bitvec::field::BitField;
 use bitvec::order::Msb0;
 use bitvec::prelude::Lsb0;
 use bitvec::view::BitView;
+use half::f16;
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::PyValueError;
@@ -27,6 +28,7 @@ pub(crate) trait BitCollection: Sized {
     fn from_hexadecimal(hex_string: &str) -> Result<Self, String>;
     fn from_u128(value: u128, length: i64) -> Result<Self, String>;
     fn from_i128(value: i128, length: i64) -> Result<Self, String>;
+    fn from_f64(value: f64, length: i64) -> Result<Self, String>;
     fn logical_or(&self, other: &Tibs) -> Self;
     fn logical_and(&self, other: &Tibs) -> Self;
     fn logical_xor(&self, other: &Tibs) -> Self;
@@ -38,6 +40,7 @@ pub(crate) trait BitCollection: Sized {
     fn to_byte_data(&self) -> Result<Vec<u8>, String>;
     fn to_u128(&self) -> Result<u128, String>;
     fn to_i128(&self) -> Result<i128, String>;
+    fn to_f64(&self) -> Result<f64, String>;
 }
 
 // ---- Rust-only helper methods ----
@@ -372,6 +375,55 @@ impl BitCollection for Tibs {
             }
         }
     }
+
+    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
+        let bv = match length {
+            64 => {
+                let mut bv = BV::repeat(false, 64);
+                bv.store_be(value.to_bits());
+                bv
+            }
+            32 => {
+                let value_f32 = value as f32;
+                let mut bv = BV::repeat(false, 32);
+                bv.store_be(value_f32.to_bits());
+                bv
+            }
+            16 => {
+                let value_f16 = f16::from_f64(value);
+                let mut bv = BV::repeat(false, 16);
+                bv.store_be(value_f16.to_bits());
+                bv
+            }
+            _ => {
+                return Err(format!(
+                    "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
+                ));
+            }
+        };
+        Ok(Tibs::new(bv))
+    }
+
+    fn to_f64(&self) -> Result<f64, String> {
+        let length = self.len();
+        match length {
+            64 => {
+                let bits = self.data.load_be::<u64>();
+                Ok(f64::from_bits(bits))
+            }
+            32 => {
+                let bits = self.data.load_be::<u32>();
+                Ok(f32::from_bits(bits) as f64)
+            }
+            16 => {
+                let bits = self.data.load_be::<u16>();
+                Ok(f16::from_bits(bits).to_f64())
+            }
+            _ => Err(format!(
+                "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
+            )),
+        }
+    }
 }
 
 impl BitCollection for Mutibs {
@@ -502,6 +554,16 @@ impl BitCollection for Mutibs {
     #[inline]
     fn to_byte_data(&self) -> Result<Vec<u8>, String> {
         self.inner.to_byte_data()
+    }
+
+    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
+        Ok(Self {
+            inner: <Tibs as BitCollection>::from_f64(value, length)?,
+        })
+    }
+
+    fn to_f64(&self) -> Result<f64, String> {
+        self.inner.to_f64()
     }
 }
 
