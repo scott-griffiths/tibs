@@ -9,7 +9,7 @@ use bytemuck;
 use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView, PySlice, PyType};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use pyo3::{pyclass, pymethods, PyRef, PyResult};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -303,7 +303,6 @@ impl Tibs {
         self.hash(&mut hasher);
         hasher.finish() as isize
     }
-
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
@@ -328,6 +327,7 @@ impl Tibs {
         Py::new(py, iter_obj)
     }
 
+    /// The bit length of the Tibs.
     #[inline]
     pub fn __len__(&self) -> usize {
         self.len()
@@ -375,8 +375,6 @@ impl Tibs {
 
     /// Create a new instance from a formatted string.
     ///
-    /// This method initializes a new instance of :class:`Tibs` using a formatted string.
-    ///
     /// :param s: The formatted string to convert.
     /// :return: A newly constructed ``Tibs``.
     ///
@@ -396,6 +394,13 @@ impl Tibs {
         str_to_tibs(s)
     }
 
+    /// Create a new instance from an unsigned integer.
+    ///
+    /// :param u: An unsigned integer.
+    /// :param length: The bit length to create.
+    ///
+    /// Raises ValueError if the integer doesn't fit in the length given.
+    ///
     #[classmethod]
     pub fn from_u(_cls: &Bound<'_, PyType>, u: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
         let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
@@ -414,6 +419,16 @@ impl Tibs {
 
     pub fn to_i(&self) -> PyResult<i128> {
         Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
+    }
+
+    #[classmethod]
+    pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
+        let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
+        Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
+    }
+
+    pub fn to_f(&self) -> PyResult<f64> {
+        Ok(BitCollection::to_f64(self).map_err(PyValueError::new_err)?)
     }
 
     #[classmethod]
