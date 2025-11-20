@@ -74,8 +74,6 @@ def test_from_u():
 
 def test_from_u_errors():
     with pytest.raises(ValueError):
-        _ = Tibs.from_u(0, 129)
-    with pytest.raises(ValueError):
         _ = Tibs.from_u(0, -1)
     with pytest.raises(ValueError):
         _ = Tibs.from_u(0, 0)
@@ -93,7 +91,17 @@ def test_from_i():
 
 
 def test_from_i_errors():
-    pass
+    with pytest.raises(ValueError):
+        _ = Tibs.from_i(4, 2)
+
+
+def test_from_large_ints():
+    a = Tibs.from_i(-1, 1000)
+    assert a.all()
+    b = Mutibs.from_u(0, 1000)
+    assert not b.any()
+    assert a.to_i() == -1
+    assert b.to_u() == 0
 
 
 def test_from_f():
@@ -104,6 +112,9 @@ def test_from_f():
     b2 = Mutibs.from_f(0.25, 32)
     c2 = Mutibs.from_f(0.25, 64)
     assert a == a2
+    assert len(a) == 16
+    assert len(b) == 32
+    assert len(c) == 64
     assert b == b2
     assert c == c2
     f = a.to_f()

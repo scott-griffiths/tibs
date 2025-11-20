@@ -2,7 +2,6 @@ use crate::core::str_to_tibs;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
-use crate::iterator::ChunksIterator;
 use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
@@ -249,23 +248,35 @@ impl Mutibs {
     }
 
     #[classmethod]
-    pub fn from_u(_cls: &Bound<'_, PyType>, u: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
-        let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
+    pub fn from_u(
+        _cls: &Bound<'_, PyType>,
+        u: &Bound<'_, PyInt>,
+        length: i64,
+        py: Python,
+    ) -> PyResult<Self> {
+        let tibs = Tibs::from_u(_cls, u, length, py)?;
+        Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
     }
 
-    pub fn to_u(&self) -> PyResult<u128> {
-        Ok(BitCollection::to_u128(self).map_err(PyValueError::new_err)?)
+    pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
+        let tibs = self.to_tibs(); // TODO: Better to do this the other way around.
+        tibs.to_u(py)
     }
 
     #[classmethod]
-    pub fn from_i(_cls: &Bound<'_, PyType>, i: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
-        let value = i.extract::<i128>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
+    pub fn from_i(
+        _cls: &Bound<'_, PyType>,
+        i: &Bound<'_, PyInt>,
+        length: i64,
+        py: Python,
+    ) -> PyResult<Self> {
+        let tibs = Tibs::from_i(_cls, i, length, py)?;
+        Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
     }
 
-    pub fn to_i(&self) -> PyResult<i128> {
-        Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
+    pub fn to_i(&self, py: Python) -> PyResult<Py<PyInt>> {
+        let tibs = self.to_tibs(); // TODO: Better to do this the other way around.
+        tibs.to_i(py)
     }
 
     #[classmethod]
