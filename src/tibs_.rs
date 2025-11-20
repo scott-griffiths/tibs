@@ -9,6 +9,7 @@ use bytemuck;
 use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::IntoPyDict;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use pyo3::{pyclass, pymethods, PyRef, PyResult};
 use std::collections::hash_map::DefaultHasher;
@@ -402,23 +403,99 @@ impl Tibs {
     /// Raises ValueError if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    pub fn from_u(_cls: &Bound<'_, PyType>, u: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
-        let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
+    pub fn from_u(
+        _cls: &Bound<'_, PyType>,
+        u: &Bound<'_, PyInt>,
+        length: i64,
+        py: Python,
+    ) -> PyResult<Self> {
+        if length <= 0 {
+            return Err(PyValueError::new_err(
+                "The length for an unsigned integer must be positive.",
+            ));
+        }
+        let length = length as usize;
+        if length <= 128 {
+            let value = u.extract::<u128>().map_err(PyValueError::new_err)?;
+            Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
+        } else {
+            // For integers longer than 128 bits, use Python's to_bytes method.
+            let num_bytes = ((length + 7) / 8) as usize;
+            let kwargs = [("signed", false)].into_py_dict(py)?;
+            let bytes_obj = u
+                .call_method("to_bytes", (num_bytes, "big"), Some(&kwargs))?
+                .extract::<Vec<u8>>()?;
+
+            let mut bv = <Tibs as BitCollection>::from_bytes(bytes_obj).data;
+            if bv.len() > length {
+                // Trim excess bits from the most significant end.
+                bv.drain(..(bv.len() - length));
+            }
+            Ok(Tibs::new(bv))
+        }
     }
 
-    pub fn to_u(&self) -> PyResult<u128> {
-        Ok(BitCollection::to_u128(self).map_err(PyValueError::new_err)?)
+    pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
+        if self.len() <= 128 {
+            Ok(BitCollection::to_u128(self)
+                .map_err(PyValueError::new_err)?
+                .into_pyobject(py)?
+                .unbind())
+        } else {
+            let bytes = self._to_int_byte_data(false);
+            let kwargs = [("signed", false)].into_py_dict(py)?;
+            let int_type = py.get_type::<PyInt>();
+            let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
+            Ok(result.cast::<PyInt>()?.clone().unbind())
+        }
     }
 
     #[classmethod]
-    pub fn from_i(_cls: &Bound<'_, PyType>, i: &Bound<'_, PyInt>, length: i64) -> PyResult<Self> {
-        let value = i.extract::<i128>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
+    pub fn from_i(
+        _cls: &Bound<'_, PyType>,
+        i: &Bound<'_, PyInt>,
+        length: i64,
+        py: Python,
+    ) -> PyResult<Self> {
+        if length <= 0 {
+            return Err(PyValueError::new_err(
+                "The length for a signed integer must be positive.",
+            ));
+        }
+        let length = length as usize;
+        if length <= 128 {
+            let value = i.extract::<i128>().map_err(PyValueError::new_err)?;
+            Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
+        } else {
+            // For integers longer than 128 bits, use Python's to_bytes method.
+            let num_bytes = ((length + 7) / 8) as usize;
+            let kwargs = [("signed", true)].into_py_dict(py)?;
+            let bytes_obj = i
+                .call_method("to_bytes", (num_bytes, "big"), Some(&kwargs))?
+                .extract::<Vec<u8>>()?;
+
+            let mut bv = <Tibs as BitCollection>::from_bytes(bytes_obj).data;
+            if bv.len() > length {
+                // Trim excess bits from the most significant end.
+                bv.drain(..(bv.len() - length));
+            }
+            Ok(Tibs::new(bv))
+        }
     }
 
-    pub fn to_i(&self) -> PyResult<i128> {
-        Ok(BitCollection::to_i128(self).map_err(PyValueError::new_err)?)
+    pub fn to_i(&self, py: Python) -> PyResult<Py<PyInt>> {
+        if self.len() <= 128 {
+            Ok(BitCollection::to_i128(self)
+                .map_err(PyValueError::new_err)?
+                .into_pyobject(py)?
+                .unbind())
+        } else {
+            let bytes = self._to_int_byte_data(false);
+            let kwargs = [("signed", true)].into_py_dict(py)?;
+            let int_type = py.get_type::<PyInt>();
+            let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
+            Ok(result.cast::<PyInt>()?.clone().unbind())
+        }
     }
 
     #[classmethod]

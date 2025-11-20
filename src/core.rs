@@ -26,8 +26,8 @@ pub(crate) trait BitCollection: Sized {
     fn from_binary(binary_string: &str) -> Result<Self, String>;
     fn from_octal(octal_string: &str) -> Result<Self, String>;
     fn from_hexadecimal(hex_string: &str) -> Result<Self, String>;
-    fn from_u128(value: u128, length: i64) -> Result<Self, String>;
-    fn from_i128(value: i128, length: i64) -> Result<Self, String>;
+    fn from_u128(value: u128, length: usize) -> Result<Self, String>;
+    fn from_i128(value: i128, length: usize) -> Result<Self, String>;
     fn from_f64(value: f64, length: i64) -> Result<Self, String>;
     fn logical_or(&self, other: &Tibs) -> Self;
     fn logical_and(&self, other: &Tibs) -> Self;
@@ -216,13 +216,16 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
-        if length <= 0 || length > 128 {
+    fn from_u128(value: u128, length: usize) -> Result<Self, String> {
+        if length == 0 || length > 128 {
             return Err(format!(
                 "Bit length for unsigned int must be between 1 and 128. Received {length}."
             ));
         }
-        let mut bv = BV::repeat(false, length as usize);
+        if length < 128 && value >= (1u128 << length) {
+            return Err(format!("Value {value} does not fit in {length} bits."));
+        }
+        let mut bv = BV::repeat(false, length);
         bv.store_be(value);
         Ok(Tibs::new(bv))
     }
@@ -243,11 +246,20 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
-        if length <= 0 || length > 128 {
+    fn from_i128(value: i128, length: usize) -> Result<Self, String> {
+        if length == 0 || length > 128 {
             return Err(format!(
                 "Bit length for signed int must be between 1 and 128. Received {length}."
             ));
+        }
+        if length < 128 {
+            let min_val = -(1i128 << (length - 1));
+            let max_val = (1i128 << (length - 1)) - 1;
+            if value < min_val || value > max_val {
+                return Err(format!(
+                    "Value {value} does not fit in {length} signed bits."
+                ));
+            }
         }
         let repeat_bit = if value < 0 { true } else { false };
         let mut bv = BV::repeat(repeat_bit, length as usize);
@@ -487,14 +499,14 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
+    fn from_u128(value: u128, length: usize) -> Result<Self, String> {
         Ok(Self {
             inner: <Tibs as BitCollection>::from_u128(value, length)?,
         })
     }
 
     #[inline]
-    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
+    fn from_i128(value: i128, length: usize) -> Result<Self, String> {
         Ok(Self {
             inner: <Tibs as BitCollection>::from_i128(value, length)?,
         })
