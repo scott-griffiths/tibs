@@ -72,6 +72,9 @@ pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 ///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
 ///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
 ///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Tibs.from_u(u, length)`` - Create from an unsigned int to a given length.
+///     * ``Tibs.from_i(i, length)`` - Create from a signed int to a given length.
+///     * ``Tibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(i)`` - Convert each element in ``i`` to a bool.

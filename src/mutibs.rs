@@ -69,6 +69,9 @@ pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
 ///     * ``Mutibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
 ///     * ``Mutibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
 ///     * ``Mutibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Mutibs.from_u(u, length)`` - Create from an unsigned int to a given length.
+///     * ``Mutibs.from_i(i, length)`` - Create from a signed int to a given length.
+///     * ``Mutibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Mutibs.from_string(s)`` - Use a formatted string.
 ///     * ``Mutibs.from_bools(i)`` - Convert each element in ``i`` to a bool.

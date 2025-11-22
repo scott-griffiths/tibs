@@ -509,4 +509,15 @@ mod tests {
 
         assert!(m._getslice(9, 10).is_err());
     }
+
+    #[test]
+    fn bit_ops_performance() {
+        let bv1 = crate::helpers::bv_from_random(10_000_000, &None).unwrap();
+        let bv2 = crate::helpers::bv_from_random(10_000_000, &None).unwrap();
+        let b1 = Tibs::new(bv1);
+        let b2 = Tibs::new(bv2);
+        for _ in 0..100 {
+            let b3 = b1._or(&b2).unwrap();
+        }
+    }
 }
