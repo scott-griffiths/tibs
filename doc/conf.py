@@ -34,6 +34,10 @@ html_show_sphinx = False
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
+html_sidebars = {
+    "**": []
+}
+
 html_theme = "pydata_sphinx_theme"
 html_logo = "tibs.png"
 html_theme_options = {
@@ -57,7 +61,10 @@ html_theme_options = {
             "icon": "fa-brands fa-python",
             "type": "fontawesome",
         },
-    ]
+    ],
+    "footer_start": ["copyright"],
+    "footer_end": ["last-updated"],
+    "secondary_sidebar_items": ["page-toc"],
 }
 
 from pathlib import Path
