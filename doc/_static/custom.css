@@ -7,3 +7,8 @@ h1, h2, h3 {
 h1, h2 {
     color: #f47228;
 }
+
+html[data-theme=dark] .bd-content img:not(.only-dark,.dark-light) {
+
+ background-color: rgba(0, 0, 0, 0.0);
+}
