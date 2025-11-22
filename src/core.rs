@@ -3,9 +3,7 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::bits;
 use bitvec::field::BitField;
-use bitvec::order::Msb0;
 use bitvec::prelude::Lsb0;
-use bitvec::view::BitView;
 use half::f16;
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -130,8 +128,7 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
-        let bits = data.view_bits::<Msb0>();
-        let bv = BV::from_bitslice(bits);
+        let bv = BV::from_slice(&*data);
         Tibs::new(bv)
     }
 
