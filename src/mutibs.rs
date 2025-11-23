@@ -184,17 +184,17 @@ impl Mutibs {
 
     pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(Mutibs::logical_or(self, other))
+        Ok(BitCollection::logical_or(self, other))
     }
 
     pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(Mutibs::logical_and(self, other))
+        Ok(BitCollection::logical_and(self, other))
     }
 
     pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(Mutibs::logical_xor(self, other))
+        Ok(BitCollection::logical_xor(self, other))
     }
 
     /// Create a new instance from a formatted string.
