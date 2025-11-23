@@ -128,7 +128,7 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
-        let bv = BV::from_slice(&*data);
+        let bv = BV::from_vec(data);
         Tibs::new(bv)
     }
 
@@ -283,21 +283,24 @@ impl BitCollection for Tibs {
     #[inline]
     fn logical_or(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
-        let result = self.data.clone() | &other.data;
+        let mut result = self.data.clone();
+        result |= &other.data;
         Tibs::new(result)
     }
 
     #[inline]
     fn logical_and(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
-        let result = self.data.clone() & &other.data;
+        let mut result = self.data.clone();
+        result &= &other.data;
         Tibs::new(result)
     }
 
     #[inline]
     fn logical_xor(&self, other: &Tibs) -> Self {
         debug_assert!(self.len() == other.len());
-        let result = self.data.clone() ^ &other.data;
+        let mut result = self.data.clone();
+        result ^= &other.data;
         Tibs::new(result)
     }
 
@@ -308,9 +311,6 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn to_binary(&self) -> String {
-        if self.len() > 64 {
-            return self.build_bin_string();
-        }
         self.build_bin_string()
         // self.bin_cache.get_or_init(|| {
         //     self.build_bin_string()
@@ -326,9 +326,6 @@ impl BitCollection for Tibs {
                 len
             ));
         }
-        if len > 64 {
-            return Ok(self.build_oct_string());
-        }
         Ok(self.build_oct_string())
         // Ok(self.oct_cache.get_or_init(|| {
         //     self.build_oct_string()
@@ -343,9 +340,6 @@ impl BitCollection for Tibs {
                 "Cannot interpret as hex - length of {} is not a multiple of 4 bits.",
                 len
             ));
-        }
-        if len > 64 {
-            return Ok(self.build_hex_string());
         }
         Ok(self.build_hex_string())
         // Ok(self.hex_cache.get_or_init(|| {
@@ -645,8 +639,8 @@ impl Tibs {
     #[inline]
     fn build_bin_string(&self) -> String {
         let mut s = String::with_capacity(self.len());
-        for i in 0..self.len() {
-            s.push(if self.get_bit(i) { '1' } else { '0' });
+        for bit in self.data.iter() {
+            s.push(if *bit { '1' } else { '0' });
         }
         s
     }

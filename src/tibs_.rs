@@ -714,20 +714,17 @@ impl Tibs {
 
     pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        let result = self.data.clone() & &other.data;
-        Ok(Tibs::new(result))
+        Ok(BitCollection::logical_and(self, other))
     }
 
     pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        let result = self.data.clone() | &other.data;
-        Ok(Tibs::new(result))
+        Ok(BitCollection::logical_or(self, other))
     }
 
     pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        let result = self.data.clone() ^ &other.data;
-        Ok(Tibs::new(result))
+        Ok(BitCollection::logical_xor(self, other))
     }
 
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
