@@ -307,6 +307,29 @@ impl Tibs {
         self.hash(&mut hasher);
         hasher.finish() as isize
     }
+
+    /// Find all occurrences of a bit sequence. Return generator of bit positions.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position of the slice to search. Defaults to 0.
+    /// :param end: The end bit position of the slice to search. Defaults to len(self).
+    /// :param count: The maximum number of occurrences to find.
+    /// :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
+    /// :return: A generator yielding bit positions.
+    ///
+    /// Raises ValueError if b is empty, if start < 0, if end > len(self) or
+    /// if end < start.
+    ///
+    /// All occurrences of b are found, even if they overlap.
+    ///
+    /// Note that this method is not available for :class:`Mutibs` as its value could change while the
+    /// generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_tibs`.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> list(Tibs('0b10111011').find_all('0b11'))
+    ///     [2, 3, 6]
+    ///
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
@@ -387,7 +410,7 @@ impl Tibs {
     ///     a = Tibs.from_string("0xff01")
     ///     b = Tibs.from_string("0b1")
     ///
-    /// The `__init__` method for `Tibs` can also redirect to `from_string` method:
+    /// The ``__init__`` method can also redirect to ``from_string`` method:
     ///
     /// .. code-block:: python
     ///
@@ -511,6 +534,14 @@ impl Tibs {
         Ok(BitCollection::to_f64(self).map_err(PyValueError::new_err)?)
     }
 
+    /// Create a new instance from a binary string.
+    ///
+    /// :param s: A string of '0' and '1's, optionally preceded with '0b'.
+    ///
+    /// .. code-block:: python
+    ///
+    ///     a = Tibs.from_bin("0000_1111_0101")
+    ///
     #[classmethod]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         BitCollection::from_binary(s).map_err(PyValueError::new_err)
@@ -540,11 +571,11 @@ impl Tibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes object to convert to a :class:`Tibs`.
+    /// :param b: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
     ///
     /// .. code-block:: python
     ///
-    /// a = Tibs.from_bytes(b"some_bytes_maybe_from_a_file")
+    ///     a = Tibs.from_bytes(b"some_bytes_maybe_from_a_file")
     ///
     #[classmethod]
     #[inline]
@@ -727,6 +758,21 @@ impl Tibs {
         Ok(BitCollection::logical_xor(self, other))
     }
 
+    /// Find first occurrence of a bit sequence.
+    ///
+    /// Returns the bit position if found, or None if not found.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position. Defaults to 0.
+    /// :param end: The end position. Defaults to len(self).
+    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :return: The bit position if found, or None if not found.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///      >>> Tibs('0xc3e').find('0b1111')
+    ///      6
+    ///
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
@@ -814,7 +860,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0b101100').ends_with('0b10-')
+    ///     >>> Tibs('0b101100').ends_with('0b100')
     ///     True
     ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False

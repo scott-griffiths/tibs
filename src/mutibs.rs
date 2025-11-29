@@ -219,6 +219,14 @@ impl Mutibs {
         str_to_tibs(s).map(|bits| bits.to_mutibs())
     }
 
+    /// Create a new instance from a binary string.
+    ///
+    /// :param s: A string of '0' and '1's, optionally preceded with '0b'.
+    ///
+    /// .. code-block:: python
+    ///
+    ///     a = Mutibs.from_bin("0000_1111_0101")
+    ///
     #[classmethod]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         BitCollection::from_binary(&s).map_err(PyValueError::new_err)
@@ -376,7 +384,7 @@ impl Mutibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes object to convert to a :class:`Mutibs`.
+    /// :param b: The bytes, bytearray or memoryview object to convert to a :class:`Mutibs`.
     ///
     /// .. code-block:: python
     ///
@@ -649,7 +657,7 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0b101100').ends_with('0b10-')
+    ///     >>> Mutibs('0b101100').ends_with('0b100')
     ///     True
     ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
@@ -658,6 +666,21 @@ impl Mutibs {
         self.inner.ends_with(suffix)
     }
 
+    /// Find first occurrence of a bit sequence.
+    ///
+    /// Returns the bit position if found, or None if not found.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position. Defaults to 0.
+    /// :param end: The end position. Defaults to len(self).
+    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :return: The bit position if found, or None if not found.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///      >>> Mutibs('0xc3e').find('0b1111')
+    ///      6
+    ///
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
