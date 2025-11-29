@@ -640,21 +640,6 @@ impl Tibs {
         Ok(Tibs::new(bv))
     }
 
-    #[staticmethod]
-    pub fn _from_bin(binary_string: &str) -> PyResult<Self> {
-        BitCollection::from_binary(binary_string).map_err(PyValueError::new_err)
-    }
-
-    #[staticmethod]
-    pub fn _from_hex(hex: &str) -> PyResult<Self> {
-        BitCollection::from_hexadecimal(hex).map_err(PyValueError::new_err)
-    }
-
-    #[staticmethod]
-    pub fn _from_oct(oct: &str) -> PyResult<Self> {
-        BitCollection::from_octal(oct).map_err(PyValueError::new_err)
-    }
-
     /// Create a new instance by concatenating a sequence of Tibs objects.
     ///
     /// This method concatenates a sequence of Tibs objects into a single Tibs object.
