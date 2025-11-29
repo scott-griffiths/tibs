@@ -50,9 +50,9 @@ static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
 
 fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => Ok(Tibs::_from_bin(s)?),
-        Some("0x") => Ok(Tibs::_from_hex(s)?),
-        Some("0o") => Ok(Tibs::_from_oct(s)?),
+        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
+        Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
+        Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
         _ => Err(PyValueError::new_err(format!(
             "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
         ))),
