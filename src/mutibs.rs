@@ -1273,11 +1273,20 @@ impl Mutibs {
         count: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<PyRefMut<'a, Self>> {
-        let old = tibs_from_any(old)?;
+        let old = if old.as_ptr() == slf.as_ptr() {
+            slf.to_tibs()
+        } else {
+            tibs_from_any(old)?
+        };
+
         if old.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
-        let new = tibs_from_any(new)?;
+        let new = if new.as_ptr() == slf.as_ptr() {
+            slf.to_tibs()
+        } else {
+            tibs_from_any(new)?
+        };
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
 
