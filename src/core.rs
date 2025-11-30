@@ -48,7 +48,7 @@ const BITS_CACHE_SIZE: usize = 1024;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
-fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
+fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
         Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
         Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
@@ -59,23 +59,23 @@ fn string_literal_to_tibs(s: &str) -> PyResult<Tibs> {
     }
 }
 
-pub(crate) fn str_to_tibs(s: String) -> PyResult<Tibs> {
+pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     // Check cache first
     {
         let mut cache = BITS_CACHE.lock().unwrap();
         if let Some(cached_data) = cache.get(&s) {
-            return Ok(Tibs::new(cached_data.clone()));
+            return Ok(Mutibs::new(cached_data.clone()));
         }
     }
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     let tokens = s.split(',');
-    let mut bits_array = Vec::<Tibs>::new();
+    let mut bits_array = Vec::<Mutibs>::new();
     let mut total_bit_length = 0;
     for token in tokens {
         if token.is_empty() {
             continue;
         }
-        let x = string_literal_to_tibs(&token)?;
+        let x = string_literal_to_mutibs(&token)?;
         total_bit_length += x.len();
         bits_array.push(x);
     }
@@ -88,14 +88,14 @@ pub(crate) fn str_to_tibs(s: String) -> PyResult<Tibs> {
     } else {
         let mut result = BV::with_capacity(total_bit_length);
         for bits in bits_array {
-            result.extend_from_bitslice(&bits.data);
+            result.extend_from_bitslice(&bits.inner.data);
         }
-        Tibs::new(result)
+        Mutibs::new(result)
     };
     // Update cache with new result
     {
         let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.data.clone());
+        cache.put(s, result.inner.data.clone());
     }
     Ok(result)
 }
