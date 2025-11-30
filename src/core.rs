@@ -575,17 +575,14 @@ impl fmt::Debug for Tibs {
         if self.len() > 100 {
             return f
                 .debug_struct("Tibs")
-                .field(
-                    "hex",
-                    &self.slice(0, 100)._slice_to_hex(0, self.len()).unwrap(),
-                )
+                .field("hex", &self.slice(0, 100).to_hex().unwrap())
                 .field("length", &self.len())
                 .finish();
         }
         if self.len() % 4 == 0 {
             return f
                 .debug_struct("Tibs")
-                .field("hex", &self._slice_to_hex(0, self.len()).unwrap())
+                .field("hex", &self.to_hex().unwrap())
                 .field("length", &self.len())
                 .finish();
         }
