@@ -278,7 +278,7 @@ impl Mutibs {
                 .into_pyobject(py)?
                 .unbind())
         } else {
-            let bytes = self._to_int_byte_data(false);
+            let bytes = self.to_int_byte_data(false);
             let kwargs = [("signed", false)].into_py_dict(py)?;
             let int_type = py.get_type::<PyInt>();
             let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
@@ -624,10 +624,6 @@ impl Mutibs {
             return Ok(());
         }
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
-    }
-
-    pub fn _to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        self.inner._to_int_byte_data(signed)
     }
 
     /// Return whether the current Mutibs starts with prefix.

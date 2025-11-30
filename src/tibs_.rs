@@ -467,7 +467,7 @@ impl Tibs {
                 .into_pyobject(py)?
                 .unbind())
         } else {
-            let bytes = self._to_int_byte_data(false);
+            let bytes = self.to_int_byte_data(false);
             let kwargs = [("signed", false)].into_py_dict(py)?;
             let int_type = py.get_type::<PyInt>();
             let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
@@ -515,7 +515,7 @@ impl Tibs {
                 .into_pyobject(py)?
                 .unbind())
         } else {
-            let bytes = self._to_int_byte_data(false);
+            let bytes = self.to_int_byte_data(false);
             let kwargs = [("signed", true)].into_py_dict(py)?;
             let int_type = py.get_type::<PyInt>();
             let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
@@ -669,27 +669,6 @@ impl Tibs {
             bv.extend_from_bitslice(&bits.data);
         }
         Ok(Tibs::new(bv))
-    }
-
-    /// Return bytes that can easily be converted to an int in Python
-    pub fn _to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        if self.is_empty() {
-            return Vec::new();
-        }
-
-        // TODO: Is this next line right?
-        let needed_bits = (self.len() + 7) & !7;
-        let mut bv = BV::with_capacity(needed_bits);
-
-        let sign_bit = signed && self.data[0];
-        let padding = needed_bits - self.len();
-
-        for _ in 0..padding {
-            bv.push(sign_bit);
-        }
-        bv.extend_from_bitslice(&self.data);
-
-        bv.into_vec()
     }
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {

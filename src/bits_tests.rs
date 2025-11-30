@@ -188,13 +188,13 @@ mod tests {
     #[test]
     fn test_to_int_byte_data() {
         let a = <Tibs as BitCollection>::from_binary("111111111").unwrap();
-        let b = a._to_int_byte_data(false);
+        let b = a.to_int_byte_data(false);
         assert_eq!(b, vec![1, 255]);
-        let c = a._to_int_byte_data(true);
+        let c = a.to_int_byte_data(true);
         assert_eq!(c, vec![255, 255]);
         let s = a.slice(5, 3);
-        assert_eq!(s._to_int_byte_data(false), vec![7]);
-        assert_eq!(s._to_int_byte_data(true), vec![255]);
+        assert_eq!(s.to_int_byte_data(false), vec![7]);
+        assert_eq!(s.to_int_byte_data(true), vec![255]);
     }
 
     #[test]

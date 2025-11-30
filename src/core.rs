@@ -39,6 +39,8 @@ pub(crate) trait BitCollection: Sized {
     fn to_u128(&self) -> Result<u128, String>;
     fn to_i128(&self) -> Result<i128, String>;
     fn to_f64(&self) -> Result<f64, String>;
+    /// Return bytes that can easily be converted to an int in Python
+    fn to_int_byte_data(&self, signed: bool) -> Vec<u8>;
 }
 
 // ---- Rust-only helper methods ----
@@ -379,6 +381,25 @@ impl BitCollection for Tibs {
         }
     }
 
+    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+
+        let needed_bits = (self.len() + 7) & !7;
+        let mut bv = BV::with_capacity(needed_bits);
+
+        let sign_bit = signed && self.data[0];
+        let padding = needed_bits - self.len();
+
+        for _ in 0..padding {
+            bv.push(sign_bit);
+        }
+        bv.extend_from_bitslice(&self.data);
+
+        bv.into_vec()
+    }
+
     fn from_f64(value: f64, length: i64) -> Result<Self, String> {
         let bv = match length {
             64 => {
@@ -557,6 +578,10 @@ impl BitCollection for Mutibs {
     #[inline]
     fn to_byte_data(&self) -> Result<Vec<u8>, String> {
         self.inner.to_byte_data()
+    }
+
+    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
+        self.inner.to_int_byte_data(signed)
     }
 
     fn from_f64(value: f64, length: i64) -> Result<Self, String> {
