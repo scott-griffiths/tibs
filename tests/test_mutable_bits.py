@@ -300,17 +300,6 @@ def test_invert():
     assert a == '0b1110'
 
 
-@pytest.mark.skip
-def test_properties():
-    a = Mutibs('0x0000')
-    assert a.u == a.u_be == a.u_le == a.u_ne == 0
-    assert a.i == a.i_be == a.i_le == a.i_ne == 0
-    assert a.f == a.f_be == a.f_le == a.f_ne == 0.0
-    a = Mutibs('0x0001')
-    assert a.u_le == 256
-    assert a.u_le == 256
-
-
 def test_insert_basic():
     # Basic insert functionality
     a = Mutibs('0b1010')

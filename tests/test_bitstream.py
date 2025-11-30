@@ -168,7 +168,6 @@ class TestReplace:
         a = Mutibs("0x0011223344").replace("0x11", "0xfff", byte_aligned=True)
         assert a == "0x00fff223344"
 
-    @pytest.mark.skip
     def test_replace_with_self(self):
         a = Mutibs("0b11")
         a.replace("0b1", a)
@@ -747,13 +746,12 @@ class TestManyDifferentThings:
             b = b + Tibs.from_bools([bit])
         assert a == b
 
-    @pytest.mark.skip
     def test_non_zero_bits_at_end(self):
         a = Tibs.from_bytes(b"\xff")[:5]
         b = Tibs("0b00")
         a += b
         assert a == "0b1111100"
-        assert a.to_bytes() == b"\xf8"
+        assert (a + [0]).to_bytes() == b"\xf8"
         with pytest.raises(AttributeError):
             _ = a.bytes
         with pytest.raises(ValueError):

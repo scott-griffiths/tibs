@@ -31,24 +31,21 @@ def test_count(benchmark):
     c = benchmark(count)
     assert c == 4
 
-@pytest.mark.skip
+
 def test_token_parsing(benchmark):
     def token_parsing():
         s = Mutibs()
         for i in range(10000):
-            s += "u12=244, f32=0.4"
             s += "0x3e44f, 0b11011, 0o75523"
             s += Tibs.from_bools([0, 1, 2, 0, 0, 1, 2, 0, -1, 0, "hello"])
             s += Tibs.from_zeros(104)
 
     benchmark(token_parsing)
 
-@pytest.mark.skip
+
 def test_find_all(benchmark):
     def finding():
-        random.seed(999)
-        i = random.randrange(0, 2**2000000)
-        s = Tibs.from_dtype("u20000000", i)
+        s = Tibs.from_random(20000000, b"99")
         for ss in [
             "0b11010010101",
             "0xabcdef1234, 0b000101111010101010011010100100101010101",
@@ -58,18 +55,7 @@ def test_find_all(benchmark):
         return x
 
     c = benchmark(finding)
-    assert c == 37
-
-@pytest.mark.skip
-def test_repeated_reading(benchmark):
-    def repeating_reading():
-        random.seed(1414)
-        i = random.randrange(0, 2**800000)
-        s = Tibs.from_dtype("u800000", i)
-        for _ in range(800000 // 40):
-            _ = s.unpack("u4, f32, bool, bool, bool, bool".split(","))
-
-    benchmark(repeating_reading)
+    assert c == 305
 
 
 def test_primes(benchmark):
