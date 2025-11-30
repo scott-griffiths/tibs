@@ -1,4 +1,4 @@
-use crate::core::str_to_tibs;
+use crate::core::str_to_mutibs;
 use crate::core::validate_logical_op_lengths;
 use crate::core::BitCollection;
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
@@ -15,8 +15,8 @@ use std::ops::Not;
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
-        let bits = str_to_tibs(any_string)?;
-        return Ok(bits.to_mutibs());
+        let bits = str_to_mutibs(any_string)?;
+        return Ok(bits);
     }
 
     // Is it a bytes, bytearray or memoryview?
@@ -216,7 +216,7 @@ impl Mutibs {
     ///     a = Mutibs("0xff01")
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        str_to_tibs(s).map(|bits| bits.to_mutibs())
+        str_to_mutibs(s)
     }
 
     /// Create a new instance from a binary string.

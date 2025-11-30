@@ -1,5 +1,5 @@
 use crate::core::validate_logical_op_lengths;
-use crate::core::{str_to_tibs, BitCollection};
+use crate::core::{str_to_mutibs, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::mutibs_from_any;
@@ -19,7 +19,7 @@ use std::ops::Not;
 fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
-        return str_to_tibs(any_string);
+        return Ok(str_to_mutibs(any_string)?.as_tibs());
     }
 
     // Is it a bytes, bytearray or memoryview?
@@ -418,7 +418,7 @@ impl Tibs {
     ///
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        str_to_tibs(s)
+        Ok(str_to_mutibs(s)?.as_tibs())
     }
 
     /// Create a new instance from an unsigned integer.
