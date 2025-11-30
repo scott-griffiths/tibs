@@ -5,6 +5,7 @@ use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
+use pyo3::types::IntoPyDict;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice};
 use pyo3::types::{PySliceMethods, PyType};
 use pyo3::PyRefMut;
@@ -214,6 +215,7 @@ impl Mutibs {
     /// .. code-block:: python
     ///
     ///     a = Mutibs("0xff01")
+    ///
     #[classmethod]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         str_to_mutibs(s)
@@ -270,8 +272,18 @@ impl Mutibs {
     }
 
     pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
-        let tibs = self.to_tibs(); // TODO: Better to do this the other way around.
-        tibs.to_u(py)
+        if self.len() <= 128 {
+            Ok(BitCollection::to_u128(self)
+                .map_err(PyValueError::new_err)?
+                .into_pyobject(py)?
+                .unbind())
+        } else {
+            let bytes = self._to_int_byte_data(false);
+            let kwargs = [("signed", false)].into_py_dict(py)?;
+            let int_type = py.get_type::<PyInt>();
+            let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
+            Ok(result.cast::<PyInt>()?.clone().unbind())
+        }
     }
 
     #[classmethod]
@@ -612,22 +624,6 @@ impl Mutibs {
             return Ok(());
         }
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
-    }
-
-    pub fn _slice_to_bin(&self, start: usize, end: usize) -> String {
-        self.inner._slice_to_bin(start, end)
-    }
-
-    pub fn _slice_to_oct(&self, start: usize, end: usize) -> PyResult<String> {
-        self.inner._slice_to_oct(start, end)
-    }
-
-    pub fn _slice_to_hex(&self, start: usize, end: usize) -> PyResult<String> {
-        self.inner._slice_to_hex(start, end)
-    }
-
-    pub fn _slice_to_bytes(&self, start: usize, end: usize) -> PyResult<Vec<u8>> {
-        self.inner._slice_to_bytes(start, end)
     }
 
     pub fn _to_int_byte_data(&self, signed: bool) -> Vec<u8> {
@@ -1023,7 +1019,7 @@ impl Mutibs {
             )));
         }
 
-        let mut bytes = slf.inner._slice_to_bytes(0, len)?;
+        let mut bytes = slf.inner.to_bytes()?;
         for chunk in bytes.chunks_mut(byte_length) {
             chunk.reverse();
         }

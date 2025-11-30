@@ -220,11 +220,11 @@ mod tests {
     #[test]
     fn test_to_oct() {
         let bits = <Tibs as BitCollection>::from_binary("001010011").unwrap();
-        assert_eq!(bits._slice_to_oct(0, bits.len()).unwrap(), "123");
+        assert_eq!(bits.to_oct().unwrap(), "123");
         let bits = <Tibs as BitCollection>::from_binary("111").unwrap();
-        assert_eq!(bits._slice_to_oct(0, 3).unwrap(), "7");
+        assert_eq!(bits._getslice(0, 3).unwrap().to_oct().unwrap(), "7");
         let bits = <Tibs as BitCollection>::from_binary("000").unwrap();
-        assert_eq!(bits._slice_to_oct(0, 3).unwrap(), "0");
+        assert_eq!(bits.to_oct().unwrap(), "0");
     }
 
     #[test]
@@ -517,7 +517,7 @@ mod tests {
         let b1 = Tibs::new(bv1);
         let b2 = Tibs::new(bv2);
         for _ in 0..100 {
-            let b3 = b1._or(&b2).unwrap();
+            let _ = b1._or(&b2).unwrap();
         }
     }
 }

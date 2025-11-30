@@ -6,12 +6,11 @@ use crate::mutibs::mutibs_from_any;
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
-use pyo3::conversion::IntoPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
-use pyo3::{pyclass, pymethods, PyRef, PyResult};
+use pyo3::{pyclass, pymethods, IntoPyObject, PyRef, PyResult};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -695,37 +694,6 @@ impl Tibs {
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
-    }
-
-    pub fn _slice_to_bytes(&self, start: usize, length: usize) -> PyResult<Vec<u8>> {
-        if length % 8 != 0 {
-            return Err(PyValueError::new_err(format!(
-                "Cannot interpret as bytes - length of {} is not a multiple of 8 bits. Use the to_bytes() method if you want to add zero padding bits.",
-                length
-            )));
-        }
-        if length == 0 {
-            return Ok(Vec::new());
-        }
-        let mut bv = BV::with_capacity(length);
-        bv.extend_from_bitslice(&self.data[start..start + length]);
-        Ok(bv.into_vec())
-    }
-
-    pub fn _slice_to_bin(&self, start: usize, length: usize) -> String {
-        self.slice(start, length).to_bin()
-    }
-
-    pub fn _slice_to_oct(&self, start: usize, length: usize) -> PyResult<String> {
-        self.slice(start, length)
-            .to_oct()
-            .map_err(PyValueError::new_err)
-    }
-
-    pub fn _slice_to_hex(&self, start: usize, length: usize) -> PyResult<String> {
-        self.slice(start, length)
-            .to_hexadecimal()
-            .map_err(PyValueError::new_err)
     }
 
     pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
