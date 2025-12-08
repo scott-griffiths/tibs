@@ -18,7 +18,7 @@ A sleek Python library for your binary data
 
 # Documentation
 
-The API documentation is available on [Read the Docs](https://mutibs.readthedocs.io/en/latest/).
+The full documentation is available on [Read the Docs](https://mutibs.readthedocs.io/en/latest/).
 
 ## Getting started
 
