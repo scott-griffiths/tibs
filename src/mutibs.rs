@@ -382,7 +382,7 @@ impl Mutibs {
     /// Create a new instance with all bits pseudo-randomly set.
     ///
     /// :param length: The number of bits to set. Must be positive.
-    /// :param seed: An optional seed as a bytes or bytearray.
+    /// :param seed: A bytes or bytearray to use as an optional seed.
     /// :return: A newly constructed ``Mutibs`` with random data.
     ///
     /// Note that this uses a pseudo-random number generator and so
@@ -394,7 +394,7 @@ impl Mutibs {
     ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, seed=None), text_signature="(cls, length, seed=None)")]
+    #[pyo3(signature = (length, /, seed=None), text_signature="(cls, length, /, seed=None)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
