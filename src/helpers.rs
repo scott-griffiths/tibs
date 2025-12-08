@@ -104,6 +104,7 @@ pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
     Ok(index_p as usize)
 }
 
+#[inline]
 pub(crate) fn validate_slice(
     length: usize,
     start: Option<i64>,
@@ -120,7 +121,7 @@ pub(crate) fn validate_slice(
 
     if !(0 <= start && start <= end && end <= length as i64) {
         return Err(PyValueError::new_err(format!(
-            "Invalid slice positions for Mutibs of length {length}: start={start}, end={end}."
+            "Invalid slice positions for length of {length}: start={start}, end={end}."
         )));
     }
     Ok((start as usize, end as usize))

@@ -81,20 +81,20 @@ To get the data out of the ``Tibs`` there are similar methods starting with ``to
 There isn't a ``to_bools`` method, but creating a ``list`` from the ``Tibs`` instance will have the same effect.
 You can also use ``Tibs`` instances as iterators of bits.
 
-Instances of ``Tibs`` are immutable, so once created they can't change in value, much like the Python `bytes` and `str` types.
+Instances of ``Tibs`` are immutable, so once created they can't change in value, much like the Python ``bytes`` and ``str`` types.
 This allows them to be hashed, stored in sets, used as dictionary keys etc., and also allows various optimizations to be used to make them more efficient.
 They should be used by default if values don't need to be changed.
 
-This means that the standard pieces of advice for working with things like Python strings does apply, and why something like this line::
+This means that the standard pieces of advice for working with things like Python strings do apply, and why something like this line::
 
     i = Tibs()
     for t in [a, b, c, d, e, f, g, h]:
         i += t  # NOT RECOMMENDED!
 
-is an anti-pattern to avoid, as it will create a new instance every time it appends. Use `from_joined` instead.
+is an anti-pattern to avoid, as it will create a new instance every time it appends. Use :meth:`Tibs.from_joined` instead.
 
-For the times when you do need to a mutable container use :class:`Mutibs`.
-This can do everything that ``Tibs`` can do, except that it's not hashable, so can't be used as a dictionary key, in sets etc.
+For the times when you do need a mutable container use :class:`Mutibs`.
+This can do almost everything that ``Tibs`` can do, except that it's not hashable, so can't be used as a dictionary key, in sets etc.
 It also has several extra methods that will mutate the value in-place. ::
 
     >>> m = Mutibs()

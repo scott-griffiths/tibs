@@ -217,6 +217,7 @@ impl Mutibs {
     ///     a = Mutibs("0xff01")
     ///
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         str_to_mutibs(s)
     }
@@ -230,6 +231,7 @@ impl Mutibs {
     ///     a = Mutibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         BitCollection::from_binary(&s).map_err(PyValueError::new_err)
     }
@@ -239,6 +241,7 @@ impl Mutibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         BitCollection::from_octal(&s).map_err(PyValueError::new_err)
     }
@@ -248,6 +251,7 @@ impl Mutibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
     }
@@ -261,6 +265,7 @@ impl Mutibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: &Bound<'_, PyInt>,
@@ -287,6 +292,7 @@ impl Mutibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: &Bound<'_, PyInt>,
@@ -303,6 +309,7 @@ impl Mutibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
         Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
@@ -322,6 +329,7 @@ impl Mutibs {
     ///     a = Mutibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
+    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         if length < 0 {
             return Err(PyValueError::new_err(format!(
@@ -342,6 +350,7 @@ impl Mutibs {
     ///     Mutibs('0b11111')
     ///
     #[classmethod]
+    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         if length < 0 {
             return Err(PyValueError::new_err(format!(
@@ -361,6 +370,7 @@ impl Mutibs {
     ///     a = Mutibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
+    #[pyo3(signature = (values, /), text_signature = "(cls, values, /)")]
     pub fn from_bools(
         _cls: &Bound<'_, PyType>,
         values: Vec<Py<PyAny>>,
@@ -384,7 +394,7 @@ impl Mutibs {
     ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, seed=None))]
+    #[pyo3(signature = (length, seed=None), text_signature="(cls, length, seed=None)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
@@ -403,6 +413,8 @@ impl Mutibs {
     ///     a = Mutibs.from_bytes(b"some_bytes_maybe_from_a_file")
     ///
     #[classmethod]
+    #[inline]
+    #[pyo3(signature = (data, /), text_signature = "(cls, data, /)")]
     pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>) -> Self {
         BitCollection::from_bytes(data)
     }
@@ -426,6 +438,7 @@ impl Mutibs {
     ///     b = Mutibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
     ///
     #[classmethod]
+    #[pyo3(signature = (sequence, /), text_signature = "(cls, sequence, /)")]
     pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Tibs::from_joined(_cls, sequence)?.to_mutibs())
     }
