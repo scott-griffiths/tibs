@@ -369,6 +369,7 @@ impl Tibs {
     ///     a = Tibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
+    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         if length < 0 {
             return Err(PyValueError::new_err(format!(
@@ -389,6 +390,7 @@ impl Tibs {
     ///     Tibs('0b11111')
     ///
     #[classmethod]
+    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         if length < 0 {
             return Err(PyValueError::new_err(format!(
@@ -416,6 +418,7 @@ impl Tibs {
     ///     a = Tibs("0xff01")
     ///
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
         Ok(str_to_mutibs(s)?.as_tibs())
     }
@@ -428,6 +431,7 @@ impl Tibs {
     /// Raises ValueError if the integer doesn't fit in the length given.
     ///
     #[classmethod]
+    #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: &Bound<'_, PyInt>,
@@ -445,7 +449,7 @@ impl Tibs {
             Ok(BitCollection::from_u128(value, length).map_err(PyValueError::new_err)?)
         } else {
             // For integers longer than 128 bits, use Python's to_bytes method.
-            let num_bytes = ((length + 7) / 8) as usize;
+            let num_bytes = (length + 7) / 8;
             let kwargs = [("signed", false)].into_py_dict(py)?;
             let bytes_obj = u
                 .call_method("to_bytes", (num_bytes, "big"), Some(&kwargs))?
@@ -476,6 +480,7 @@ impl Tibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: &Bound<'_, PyInt>,
@@ -493,7 +498,7 @@ impl Tibs {
             Ok(BitCollection::from_i128(value, length).map_err(PyValueError::new_err)?)
         } else {
             // For integers longer than 128 bits, use Python's to_bytes method.
-            let num_bytes = ((length + 7) / 8) as usize;
+            let num_bytes = (length + 7) / 8;
             let kwargs = [("signed", true)].into_py_dict(py)?;
             let bytes_obj = i
                 .call_method("to_bytes", (num_bytes, "big"), Some(&kwargs))?
@@ -524,6 +529,7 @@ impl Tibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
         Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
@@ -542,6 +548,7 @@ impl Tibs {
     ///     a = Tibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         BitCollection::from_binary(s).map_err(PyValueError::new_err)
     }
@@ -551,6 +558,7 @@ impl Tibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         BitCollection::from_octal(s).map_err(PyValueError::new_err)
     }
@@ -560,6 +568,7 @@ impl Tibs {
     }
 
     #[classmethod]
+    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)
     }
@@ -570,7 +579,7 @@ impl Tibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
+    /// :param data: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
     ///
     /// .. code-block:: python
     ///
@@ -578,6 +587,7 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
+    #[pyo3(signature = (data, /), text_signature = "(cls, data, /)")]
     pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>) -> Self {
         BitCollection::from_bytes(data)
     }
@@ -599,6 +609,7 @@ impl Tibs {
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
+    #[pyo3(signature = (values, /), text_signature = "(cls, values, /)")]
     pub fn from_bools(
         _cls: &Bound<'_, PyType>,
         values: Vec<Py<PyAny>>,
@@ -628,14 +639,13 @@ impl Tibs {
     ///     b = Tibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, seed=None))]
+    #[pyo3(signature = (length, seed=None), text_signature="(cls, length, seed=None)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
         let bv = crate::helpers::bv_from_random(length, &seed)?;
-        assert_eq!(bv.len(), length as usize);
         Ok(Tibs::new(bv))
     }
 
@@ -651,6 +661,7 @@ impl Tibs {
     ///     b = Tibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
     ///
     #[classmethod]
+    #[pyo3(signature = (sequence, /), text_signature = "(cls, sequence, /)")]
     pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Convert each item to Tibs, store, and sum total length for a single allocation.
         let iter = sequence.try_iter()?;
@@ -831,7 +842,7 @@ impl Tibs {
             if used_bits > len {
                 let extra = used_bits - len;
                 if let Some(last) = words.last() {
-                    ones -= ((last & (!0usize >> extra)).count_ones()) as usize;
+                    ones -= (last & (!0usize >> extra)).count_ones() as usize;
                 }
             }
         } else {
