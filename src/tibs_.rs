@@ -585,11 +585,11 @@ impl Tibs {
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
+        BitCollection::from_f64(value, length).map_err(PyValueError::new_err)
     }
 
     pub fn to_f(&self) -> PyResult<f64> {
-        Ok(BitCollection::to_f64(self).map_err(PyValueError::new_err)?)
+        BitCollection::to_f64(self).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance from a binary string.
@@ -727,7 +727,7 @@ impl Tibs {
     }
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
 
     /// Find first occurrence of a bit sequence.
@@ -792,7 +792,7 @@ impl Tibs {
             pos = pos / 8 * 8;
         }
         while pos >= start {
-            if &self.data[pos..pos + b.len()] == &b.data {
+            if self.data[pos..pos + b.len()] == b.data {
                 return Ok(Some(pos));
             }
             if pos < step {
@@ -819,7 +819,7 @@ impl Tibs {
         let prefix = tibs_from_any(prefix)?;
         let n = prefix.len();
         if n <= self.len() {
-            Ok(&prefix.data == &self.data[..n])
+            Ok(prefix.data == self.data[..n])
         } else {
             Ok(false)
         }
@@ -841,7 +841,7 @@ impl Tibs {
         let suffix = tibs_from_any(suffix)?;
         let n = suffix.len();
         if n <= self.len() {
-            Ok(&suffix.data == &self.data[self.len() - n..])
+            Ok(suffix.data == self.data[self.len() - n..])
         } else {
             Ok(false)
         }
@@ -1047,7 +1047,7 @@ impl Tibs {
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._and(&self)
+        other._and(self)
     }
 
     /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -1058,7 +1058,7 @@ impl Tibs {
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._or(&self)
+        other._or(self)
     }
 
     /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -1069,7 +1069,7 @@ impl Tibs {
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._xor(&self)
+        other._xor(self)
     }
 
     /// Return the instance with every bit inverted.

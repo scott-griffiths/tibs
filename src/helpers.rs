@@ -136,7 +136,7 @@ pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
         }
         Some(seed_bytes) => {
             let mut hasher = Sha256::new();
-            hasher.update(&seed_bytes);
+            hasher.update(seed_bytes);
             let digest = hasher.finalize();
             let mut seed_arr = [0u8; 32];
             seed_arr.copy_from_slice(&digest);
@@ -153,7 +153,7 @@ pub fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyRe
             length
         )));
     }
-    if secure == true && seed.is_some() {
+    if secure && seed.is_some() {
         return Err(PyValueError::new_err(
             "A seed cannot be used when generating secure random data.",
         ));

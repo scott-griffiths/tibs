@@ -77,7 +77,7 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
         if token.is_empty() {
             continue;
         }
-        let x = string_literal_to_mutibs(&token)?;
+        let x = string_literal_to_mutibs(token)?;
         total_bit_length += x.len();
         bits_array.push(x);
     }
@@ -260,8 +260,8 @@ impl BitCollection for Tibs {
                 ));
             }
         }
-        let repeat_bit = if value < 0 { true } else { false };
-        let mut bv = BV::repeat(repeat_bit, length as usize);
+        let repeat_bit = value < 0;
+        let mut bv = BV::repeat(repeat_bit, length);
         bv.store_be(value);
         Ok(Tibs::new(bv))
     }
@@ -276,7 +276,7 @@ impl BitCollection for Tibs {
         }
         let mut padded_bv = BV::new();
         let padding = 128 - length;
-        let pad_bit = if self.get_bit(0) { true } else { false };
+        let pad_bit = self.get_bit(0);
         padded_bv.resize(padding, pad_bit);
         padded_bv.extend_from_bitslice(&self.data);
         Ok(padded_bv.load_be::<i128>())
