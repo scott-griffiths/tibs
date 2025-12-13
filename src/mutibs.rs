@@ -113,21 +113,21 @@ impl Mutibs {
         }
     }
 
-    pub(crate) fn ixor(&mut self, other: &Mutibs) -> PyResult<()> {
+    pub(crate) fn ixor(&mut self, other: &Tibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data ^= &other.inner.data;
+        self.inner.data ^= &other.data;
         Ok(())
     }
 
-    pub(crate) fn ior(&mut self, other: &Mutibs) -> PyResult<()> {
+    pub(crate) fn ior(&mut self, other: &Tibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data |= &other.inner.data;
+        self.inner.data |= &other.data;
         Ok(())
     }
 
-    pub(crate) fn iand(&mut self, other: &Mutibs) -> PyResult<()> {
+    pub(crate) fn iand(&mut self, other: &Tibs) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data &= &other.inner.data;
+        self.inner.data &= &other.data;
         Ok(())
     }
 
@@ -1463,23 +1463,17 @@ impl Mutibs {
 
     pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(slf.len(), other.len())?;
-        slf.inner.data &= &other.data;
-        Ok(())
+        slf.iand(&other)
     }
 
     pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(slf.len(), other.len())?;
-        slf.inner.data |= &other.data;
-        Ok(())
+        slf.ior(&other)
     }
 
     pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(slf.len(), other.len())?;
-        slf.inner.data ^= &other.data;
-        Ok(())
+        slf.ixor(&other)
     }
 
     pub fn __imul__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {

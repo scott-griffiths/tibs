@@ -32,12 +32,12 @@ mod tests {
     #[test]
     fn test_iand_ior_ixor() {
         let mut mb1 = <Mutibs as BitCollection>::from_ones(4);
-        let mb2 = <Mutibs as BitCollection>::from_zeros(4);
+        let mb2 = <Tibs as BitCollection>::from_zeros(4);
         mb1.iand(&mb2).unwrap();
         assert_eq!(mb1.to_binary(), "0000");
-        mb1.ior(&<Mutibs as BitCollection>::from_ones(4)).unwrap();
+        mb1.ior(&<Tibs as BitCollection>::from_ones(4)).unwrap();
         assert_eq!(mb1.to_binary(), "1111");
-        mb1.ixor(&<Mutibs as BitCollection>::from_ones(4)).unwrap();
+        mb1.ixor(&<Tibs as BitCollection>::from_ones(4)).unwrap();
         assert_eq!(mb1.to_binary(), "0000");
     }
 
