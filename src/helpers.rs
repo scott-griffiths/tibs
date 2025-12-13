@@ -2,10 +2,10 @@ use crate::core::BitCollection;
 /// Helper functions.
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::PyResult;
-use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
+use rand::rngs::{OsRng, StdRng};
+use rand::{RngCore, SeedableRng, TryRngCore};
 use sha2::Digest;
 use sha2::Sha256;
 
@@ -146,23 +146,33 @@ pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
 }
 
 // TODO: Similar helper methods for from_joined, from_bools etc.
-pub fn bv_from_random(length: i64, seed: &Option<Vec<u8>>) -> PyResult<BV> {
+pub fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
     if length < 0 {
         return Err(PyValueError::new_err(format!(
             "Negative bit length given: {}.",
             length
         )));
     }
+    if secure == true && seed.is_some() {
+        return Err(PyValueError::new_err(
+            "A seed cannot be used when generating secure random data.",
+        ));
+    }
     let length = length as usize;
     if length == 0 {
         return Ok(BV::new());
     }
     let seed_arr = process_seed(seed);
-    let mut rng = StdRng::from_seed(seed_arr);
-
     let num_bytes = (length + 7) / 8;
     let mut data = vec![0u8; num_bytes];
-    rng.fill_bytes(&mut data);
+    if secure {
+        OsRng
+            .try_fill_bytes(&mut data)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    } else {
+        let mut rng = StdRng::from_seed(seed_arr);
+        rng.fill_bytes(&mut data);
+    }
     let mut bv = BV::from_vec(data);
     if bv.len() > length {
         bv.truncate(length);
