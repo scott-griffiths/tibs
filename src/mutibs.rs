@@ -88,11 +88,71 @@ pub struct Mutibs {
     pub(crate) inner: Tibs,
 }
 
+// Internal methods, not exported to Python
 impl Mutibs {
-    fn _getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
+    pub(crate) fn new(bv: BV) -> Self {
+        Self {
+            inner: Tibs::new(bv),
+        }
+    }
+
+    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         self.inner
-            ._getslice_with_step(start_bit, end_bit, step)
+            .getslice_with_step(start_bit, end_bit, step)
             .map(|bits| Mutibs { inner: bits })
+    }
+
+    pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<i64>) -> PyResult<()> {
+        for idx in indices {
+            let pos: usize = validate_index(idx, self.inner.len())?;
+            self.inner.data.set(pos, value);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn set_from_slice(
+        &mut self,
+        value: bool,
+        start: i64,
+        stop: i64,
+        step: i64,
+    ) -> PyResult<()> {
+        let len = self.inner.len() as i64;
+        if len == 0 {
+            return Ok(());
+        }
+        let mut positive_start = if start < 0 { start + len } else { start };
+        let mut positive_stop = if stop < 0 { stop + len } else { stop };
+        if positive_start < 0 || positive_start >= len {
+            return Err(PyIndexError::new_err("Start of slice out of bounds."));
+        }
+        if positive_stop < 0 || positive_stop > len {
+            return Err(PyIndexError::new_err("End of slice out of bounds."));
+        }
+        if step == 0 {
+            return Err(PyValueError::new_err("Step cannot be zero."));
+        }
+        if step < 0 {
+            positive_stop = positive_start - 1;
+            positive_start = positive_stop - (positive_stop - positive_start) / step;
+        }
+        let positive_step = if step > 0 {
+            step as usize
+        } else {
+            -step as usize
+        };
+
+        let mut index = positive_start as usize;
+        let stop = positive_stop as usize;
+
+        while index < stop {
+            unsafe {
+                self.inner.data.set_unchecked(index, value);
+            }
+            index += positive_step;
+        }
+
+        Ok(())
     }
 }
 
@@ -420,7 +480,7 @@ impl Mutibs {
     #[staticmethod]
     pub fn _from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
         Self {
-            inner: Tibs::_from_bytes_with_offset(data, offset),
+            inner: Tibs::from_bytes_with_offset(data, offset),
         }
     }
 
@@ -446,12 +506,12 @@ impl Mutibs {
     }
 
     pub fn _getindex(&self, bit_index: i64) -> PyResult<bool> {
-        self.inner._getindex(bit_index)
+        self.inner.get_index(bit_index)
     }
 
     pub fn _getslice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         self.inner
-            ._getslice(start_bit, length)
+            .get_slice(start_bit, length)
             .map(|bits| Mutibs { inner: bits })
     }
 
@@ -478,7 +538,7 @@ impl Mutibs {
                     Mutibs::empty()
                 }
             } else {
-                self._getslice_with_step(start, stop, step)?
+                self.getslice_with_step(start, stop, step)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -855,13 +915,13 @@ impl Mutibs {
             let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<i64>()?;
             let step = pos.getattr("step")?.extract::<Option<i64>>()?.unwrap_or(1);
-            slf._set_from_slice(v, start, stop, step)?;
+            slf.set_from_slice(v, start, stop, step)?;
         }
         // Otherwise treat as a sequence
         else {
             // Convert to Vec<i64> if possible
             let indices = pos.extract::<Vec<i64>>()?;
-            slf._set_from_sequence(v, indices)?;
+            slf.set_from_sequence(v, indices)?;
         }
 
         Ok(slf)
@@ -1062,53 +1122,7 @@ impl Mutibs {
     }
 
     pub fn _set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
-        self._set_from_sequence(value, vec![index])
-    }
-
-    // TODO: Not part of public interface?
-    pub fn _set_from_slice(
-        &mut self,
-        value: bool,
-        start: i64,
-        stop: i64,
-        step: i64,
-    ) -> PyResult<()> {
-        let len = self.inner.len() as i64;
-        if len == 0 {
-            return Ok(());
-        }
-        let mut positive_start = if start < 0 { start + len } else { start };
-        let mut positive_stop = if stop < 0 { stop + len } else { stop };
-        if positive_start < 0 || positive_start >= len {
-            return Err(PyIndexError::new_err("Start of slice out of bounds."));
-        }
-        if positive_stop < 0 || positive_stop > len {
-            return Err(PyIndexError::new_err("End of slice out of bounds."));
-        }
-        if step == 0 {
-            return Err(PyValueError::new_err("Step cannot be zero."));
-        }
-        if step < 0 {
-            positive_stop = positive_start - 1;
-            positive_start = positive_stop - (positive_stop - positive_start) / step;
-        }
-        let positive_step = if step > 0 {
-            step as usize
-        } else {
-            -step as usize
-        };
-
-        let mut index = positive_start as usize;
-        let stop = positive_stop as usize;
-
-        while index < stop {
-            unsafe {
-                self.inner.data.set_unchecked(index, value);
-            }
-            index += positive_step;
-        }
-
-        Ok(())
+        self.set_from_sequence(value, vec![index])
     }
 
     /// Return a new copy of the Mutibs for the copy module.
@@ -1398,7 +1412,7 @@ impl Mutibs {
     ///     '110000'
     ///
     pub fn __ilshift__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
-        let shift = slf.inner._validate_shift(n)?;
+        let shift = slf.inner.validate_shift(n)?;
         slf.inner.data.shift_left(shift);
         Ok(())
     }
@@ -1418,7 +1432,7 @@ impl Mutibs {
     ///     '000011'
     ///
     pub fn __irshift__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
-        let shift = slf.inner._validate_shift(n)?;
+        let shift = slf.inner.validate_shift(n)?;
         slf.inner.data.shift_right(shift);
         Ok(())
     }

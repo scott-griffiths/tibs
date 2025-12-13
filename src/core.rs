@@ -1,4 +1,4 @@
-use crate::helpers::{validate_index, BV};
+use crate::helpers::BV;
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::bits;
@@ -696,22 +696,6 @@ pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {
         Err(PyValueError::new_err(format!("For logical operations the lengths of both objects must match. Received lengths of {a} and {b} bits.")))
     } else {
-        Ok(())
-    }
-}
-
-impl Mutibs {
-    pub fn new(bv: BV) -> Self {
-        Self {
-            inner: Tibs::new(bv),
-        }
-    }
-
-    pub fn _set_from_sequence(&mut self, value: bool, indices: Vec<i64>) -> PyResult<()> {
-        for idx in indices {
-            let pos: usize = validate_index(idx, self.inner.len())?;
-            self.inner.data.set(pos, value);
-        }
         Ok(())
     }
 }
