@@ -100,13 +100,6 @@ impl Tibs {
         Ok(self.data[index])
     }
 
-    pub(crate) fn from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
-        debug_assert!(offset < 8);
-        let mut bv: BV = <Tibs as BitCollection>::from_bytes(data).data;
-        bv.drain(..offset);
-        Tibs::new(bv)
-    }
-
     #[inline]
     pub(crate) fn validate_shift(&self, n: i64) -> PyResult<usize> {
         if self.is_empty() {
@@ -131,17 +124,17 @@ impl Tibs {
         Ok(self.slice(start_bit, length))
     }
 
-    pub(crate) fn _and(&self, other: &Tibs) -> PyResult<Self> {
+    pub(crate) fn and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_and(self, other))
     }
 
-    pub(crate) fn _or(&self, other: &Tibs) -> PyResult<Self> {
+    pub(crate) fn or(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_or(self, other))
     }
 
-    pub(crate) fn _xor(&self, other: &Tibs) -> PyResult<Self> {
+    pub(crate) fn xor(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_xor(self, other))
     }
@@ -1017,7 +1010,7 @@ impl Tibs {
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        self._and(&other)
+        self.and(&other)
     }
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -1027,7 +1020,7 @@ impl Tibs {
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        self._or(&other)
+        self.or(&other)
     }
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -1036,7 +1029,7 @@ impl Tibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self._xor(&other)
+        self.xor(&other)
     }
 
     /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -1047,7 +1040,7 @@ impl Tibs {
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._and(self)
+        other.and(self)
     }
 
     /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -1058,7 +1051,7 @@ impl Tibs {
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._or(self)
+        other.or(self)
     }
 
     /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -1069,7 +1062,7 @@ impl Tibs {
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other._xor(self)
+        other.xor(self)
     }
 
     /// Return the instance with every bit inverted.
