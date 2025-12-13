@@ -244,3 +244,17 @@ def test_bits_not_orderable():
         _ = a > b
     with pytest.raises(TypeError):
         _ = a >= b
+
+
+def test_bools_from_iterable():
+    v = [1, 0, 0, 1]
+    i = iter(v)
+    b = Tibs.from_bools(i)
+    assert b == '0b1001'
+
+
+def test_joined_from_iterable():
+    v = [[0], '0b11']
+    i = iter(v)
+    b = Tibs.from_joined(v)
+    assert b == '0b011'
