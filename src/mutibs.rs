@@ -210,18 +210,16 @@ impl Mutibs {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
             self._overwrite(start, value);
+        } else if start == end {
+            // Not sure why but splice doesn't work for this case, so we do it explicitly
+            let tail = self.inner.data.split_off(start);
+            self.inner.data.extend_from_bitslice(&value.data);
+            self.inner.data.extend_from_bitslice(&tail);
         } else {
-            if start == end {
-                // Not sure why but splice doesn't work for this case, so we do it explicitly
-                let tail = self.inner.data.split_off(start);
-                self.inner.data.extend_from_bitslice(&value.data);
-                self.inner.data.extend_from_bitslice(&tail);
-            } else {
-                let tail = self.inner.data.split_off(end);
-                self.inner.data.truncate(start);
-                self.inner.data.extend_from_bitslice(&value.data);
-                self.inner.data.extend_from_bitslice(&tail);
-            }
+            let tail = self.inner.data.split_off(end);
+            self.inner.data.truncate(start);
+            self.inner.data.extend_from_bitslice(&value.data);
+            self.inner.data.extend_from_bitslice(&tail);
         }
     }
 
@@ -307,7 +305,7 @@ impl Mutibs {
     }
 
     pub fn to_oct(&self) -> PyResult<String> {
-        BitCollection::to_octal(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
 
     #[classmethod]
@@ -317,11 +315,11 @@ impl Mutibs {
     }
 
     pub fn to_hex(&self) -> PyResult<String> {
-        BitCollection::to_hexadecimal(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_hexadecimal(self).map_err(PyValueError::new_err)
     }
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
+        BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
 
     #[classmethod]
@@ -372,11 +370,11 @@ impl Mutibs {
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
-        Ok(BitCollection::from_f64(value, length).map_err(PyValueError::new_err)?)
+        BitCollection::from_f64(value, length).map_err(PyValueError::new_err)
     }
 
     pub fn to_f(&self) -> PyResult<f64> {
-        Ok(BitCollection::to_f64(self).map_err(PyValueError::new_err)?)
+        BitCollection::to_f64(self).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance with all bits set to zero.
