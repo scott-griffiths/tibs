@@ -75,10 +75,10 @@ pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
 ///     * ``Mutibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Mutibs.from_string(s)`` - Use a formatted string.
-///     * ``Mutibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
+///     * ``Mutibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
 ///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
 ///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
-///     * ``Mutibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
+///     * ``Mutibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
 ///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
@@ -363,20 +363,16 @@ impl Mutibs {
 
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
-    /// :param i: The iterable to convert to a :class:`Mutibs`.
+    /// :param iterable: The iterable to convert to a :class:`Mutibs`.
     ///
     /// .. code-block:: python
     ///
     ///     a = Mutibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (values, /), text_signature = "(cls, values, /)")]
-    pub fn from_bools(
-        _cls: &Bound<'_, PyType>,
-        values: Vec<Py<PyAny>>,
-        py: Python,
-    ) -> PyResult<Self> {
-        Ok(Tibs::from_bools(_cls, values, py)?.to_mutibs())
+    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
+    pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Tibs::from_bools(_cls, iterable)?.to_mutibs())
     }
 
     /// Create a new instance with all bits randomly set.
@@ -432,17 +428,17 @@ impl Mutibs {
     ///
     /// This method concatenates a sequence of Tibs objects into a single Mutibs object.
     ///
-    /// :param sequence: A sequence to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
+    /// :param iterable: An iterable to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
     ///
     /// .. code-block:: python
     ///
     ///     a = Mutibs.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = Mutibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
+    ///     b = Mutibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (sequence, /), text_signature = "(cls, sequence, /)")]
-    pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Tibs::from_joined(_cls, sequence)?.to_mutibs())
+    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
+    pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Tibs::from_joined(_cls, iterable)?.to_mutibs())
     }
 
     pub fn __len__(&self) -> usize {

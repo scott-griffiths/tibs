@@ -76,10 +76,10 @@ pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 ///     * ``Tibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
-///     * ``Tibs.from_bools(i)`` - Convert each element in ``i`` to a bool.
+///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
 ///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
 ///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
-///     * ``Tibs.from_random(length, [seed])`` - Initialise with ``length`` pseudo-randomly set bits.
+///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
 ///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
@@ -602,24 +602,21 @@ impl Tibs {
 
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
-    /// :param i: The iterable to convert to a :class:`Tibs`.
+    /// :param iterable: The iterable to convert to a :class:`Tibs`.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (values, /), text_signature = "(cls, values, /)")]
-    pub fn from_bools(
-        _cls: &Bound<'_, PyType>,
-        values: Vec<Py<PyAny>>,
-        py: Python,
-    ) -> PyResult<Self> {
-        let mut bv = BV::with_capacity(values.len());
+    #[pyo3(signature = (iterable, /), text_signature = "(cls, values, /)")]
+    pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+        // For sequences, we can pre-allocate the capacity.
+        let capacity = iterable.len().unwrap_or(0);
+        let mut bv = BV::with_capacity(capacity);
 
-        for value in values {
-            let b = value.is_truthy(py)?;
-            bv.push(b);
+        for value in iterable.try_iter()? {
+            bv.push(value?.is_truthy()?);
         }
         Ok(Tibs::new(bv))
     }
@@ -655,18 +652,18 @@ impl Tibs {
     ///
     /// This method concatenates a sequence of Tibs objects into a single Tibs object.
     ///
-    /// :param sequence: A sequence to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
+    /// :param iterable: An iterable to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = Tibs.from_joined(['0x01', 'i4 = -1', b'some_bytes'])
+    ///     b = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (sequence, /), text_signature = "(cls, sequence, /)")]
-    pub fn from_joined(_cls: &Bound<'_, PyType>, sequence: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
+    pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Convert each item to Tibs, store, and sum total length for a single allocation.
-        let iter = sequence.try_iter()?;
+        let iter = iterable.try_iter()?;
         let mut parts: Vec<Tibs> = Vec::new();
         let mut total_len: usize = 0;
         for item in iter {
