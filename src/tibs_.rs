@@ -64,32 +64,6 @@ pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     promote_to_tibs(any)
 }
 
-///     An immutable container of binary data.
-///
-///     To construct, use a builder 'from' method:
-///
-///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
-///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
-///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
-///     * ``Tibs.from_u(u, length)`` - Create from an unsigned int to a given length.
-///     * ``Tibs.from_i(i, length)`` - Create from a signed int to a given length.
-///     * ``Tibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
-///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
-///     * ``Tibs.from_string(s)`` - Use a formatted string.
-///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
-///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
-///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
-///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
-///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
-///
-///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
-///
-#[derive(Clone)]
-#[pyclass(frozen, module = "tibs")]
-pub struct Tibs {
-    pub(crate) data: BV,
-}
-
 impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
@@ -119,7 +93,60 @@ impl Hash for Tibs {
 }
 
 impl Tibs {
-    pub(crate) fn _getslice_with_step(
+    /// Returns the bool value at a given bit index.
+    #[inline]
+    pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
+        let index = validate_index(bit_index, self.len())?;
+        Ok(self.data[index])
+    }
+
+    pub(crate) fn from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
+        debug_assert!(offset < 8);
+        let mut bv: BV = <Tibs as BitCollection>::from_bytes(data).data;
+        bv.drain(..offset);
+        Tibs::new(bv)
+    }
+
+    #[inline]
+    pub(crate) fn validate_shift(&self, n: i64) -> PyResult<usize> {
+        if self.is_empty() {
+            return Err(PyValueError::new_err("Cannot shift an empty Tibs."));
+        }
+        if n < 0 {
+            return Err(PyValueError::new_err("Cannot shift by a negative amount."));
+        }
+        Ok(n as usize)
+    }
+
+    /// Return a slice of the current Tibs.
+    pub(crate) fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
+        if length == 0 {
+            return Ok(BitCollection::empty());
+        }
+        if start_bit + length > self.len() {
+            return Err(PyValueError::new_err(
+                "End bit of the slice goes past the end of the Tibs.",
+            ));
+        }
+        Ok(self.slice(start_bit, length))
+    }
+
+    pub(crate) fn _and(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, other))
+    }
+
+    pub(crate) fn _or(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, other))
+    }
+
+    pub(crate) fn _xor(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, other))
+    }
+
+    pub(crate) fn getslice_with_step(
         &self,
         start_bit: i64,
         end_bit: i64,
@@ -174,6 +201,32 @@ impl Tibs {
             ))
         }
     }
+}
+
+///     An immutable container of binary data.
+///
+///     To construct, use a builder 'from' method:
+///
+///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
+///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
+///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Tibs.from_u(u, length)`` - Create from an unsigned int to a given length.
+///     * ``Tibs.from_i(i, length)`` - Create from a signed int to a given length.
+///     * ``Tibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
+///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
+///     * ``Tibs.from_string(s)`` - Use a formatted string.
+///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
+///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
+///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
+///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
+///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
+///
+///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
+///
+#[derive(Clone)]
+#[pyclass(frozen, module = "tibs")]
+pub struct Tibs {
+    pub(crate) data: BV,
 }
 
 /// Public Python-facing methods.
@@ -592,14 +645,6 @@ impl Tibs {
         BitCollection::from_bytes(data)
     }
 
-    #[staticmethod]
-    pub fn _from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
-        debug_assert!(offset < 8);
-        let mut bv: BV = <Tibs as BitCollection>::from_bytes(data).data;
-        bv.drain(..offset);
-        Tibs::new(bv)
-    }
-
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
     /// :param iterable: The iterable to convert to a :class:`Tibs`.
@@ -683,21 +728,6 @@ impl Tibs {
 
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self).map_err(|e| PyValueError::new_err(e))
-    }
-
-    pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, other))
-    }
-
-    pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, other))
-    }
-
-    pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, other))
     }
 
     /// Find first occurrence of a bit sequence.
@@ -852,19 +882,6 @@ impl Tibs {
         Ok(if count_ones { ones } else { len - ones })
     }
 
-    /// Return a slice of the current Tibs.
-    pub fn _getslice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
-        if length == 0 {
-            return Ok(BitCollection::empty());
-        }
-        if start_bit + length > self.len() {
-            return Err(PyValueError::new_err(
-                "End bit of the slice goes past the end of the Tibs.",
-            ));
-        }
-        Ok(self.slice(start_bit, length))
-    }
-
     /// Return True if all bits are equal to 1, otherwise return False.
     ///
     /// :return: ``True`` if all bits are 1, otherwise ``False``.
@@ -904,19 +921,12 @@ impl Tibs {
         }
     }
 
-    /// Returns the bool value at a given bit index.
-    #[inline]
-    pub fn _getindex(&self, bit_index: i64) -> PyResult<bool> {
-        let index = validate_index(bit_index, self.len())?;
-        Ok(self.data[index])
-    }
-
     #[inline]
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
         if let Ok(index) = key.extract::<i64>() {
-            let value: bool = self._getindex(index)?;
+            let value: bool = self.get_index(index)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }
@@ -929,7 +939,7 @@ impl Tibs {
             let step: i64 = indices.step.try_into()?;
 
             let result = if step == 1 {
-                self._getslice(
+                self.get_slice(
                     start as usize,
                     if stop > start {
                         (stop - start) as usize
@@ -938,7 +948,7 @@ impl Tibs {
                     },
                 )?
             } else {
-                self._getslice_with_step(start, stop, step)?
+                self.getslice_with_step(start, stop, step)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -947,23 +957,12 @@ impl Tibs {
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
-    #[inline]
-    pub(crate) fn _validate_shift(&self, n: i64) -> PyResult<usize> {
-        if self.is_empty() {
-            return Err(PyValueError::new_err("Cannot shift an empty Tibs."));
-        }
-        if n < 0 {
-            return Err(PyValueError::new_err("Cannot shift by a negative amount."));
-        }
-        Ok(n as usize)
-    }
-
     /// Return new Tibs shifted by n to the left.
     ///
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = self._validate_shift(n)?;
+        let shift = self.validate_shift(n)?;
         if shift == 0 {
             return Ok(self.clone());
         }
@@ -982,7 +981,7 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = self._validate_shift(n)?;
+        let shift = self.validate_shift(n)?;
         if shift == 0 {
             return Ok(self.clone());
         }
