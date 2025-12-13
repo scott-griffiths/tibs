@@ -96,7 +96,62 @@ impl Mutibs {
         }
     }
 
-    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
+    pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
+        if end - start == value.len() {
+            // This is an overwrite, so no need to move data around.
+            self.inner.data[start..start + value.len()].copy_from_bitslice(&value.data);
+        } else if start == end {
+            // Not sure why but splice doesn't work for this case, so we do it explicitly
+            let tail = self.inner.data.split_off(start);
+            self.inner.data.extend_from_bitslice(&value.data);
+            self.inner.data.extend_from_bitslice(&tail);
+        } else {
+            let tail = self.inner.data.split_off(end);
+            self.inner.data.truncate(start);
+            self.inner.data.extend_from_bitslice(&value.data);
+            self.inner.data.extend_from_bitslice(&tail);
+        }
+    }
+
+    pub(crate) fn ixor(&mut self, other: &Mutibs) -> PyResult<()> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        self.inner.data ^= &other.inner.data;
+        Ok(())
+    }
+
+    pub(crate) fn ior(&mut self, other: &Mutibs) -> PyResult<()> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        self.inner.data |= &other.inner.data;
+        Ok(())
+    }
+
+    pub(crate) fn iand(&mut self, other: &Mutibs) -> PyResult<()> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        self.inner.data &= &other.inner.data;
+        Ok(())
+    }
+
+    pub(crate) fn or(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, other))
+    }
+
+    pub(crate) fn and(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, other))
+    }
+
+    pub(crate) fn xor(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, other))
+    }
+
+    pub(crate) fn get_slice_with_step(
+        &self,
+        start_bit: i64,
+        end_bit: i64,
+        step: i64,
+    ) -> PyResult<Self> {
         self.inner
             .getslice_with_step(start_bit, end_bit, step)
             .map(|bits| Mutibs { inner: bits })
@@ -200,60 +255,6 @@ impl Mutibs {
         } else {
             format!("{}('{}')", class_name, self.__str__())
         }
-    }
-
-    pub fn _overwrite(&mut self, start: usize, value: &Tibs) {
-        self.inner.data[start..start + value.len()].copy_from_bitslice(&value.data);
-    }
-
-    pub fn _set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
-        if end - start == value.len() {
-            // This is an overwrite, so no need to move data around.
-            self._overwrite(start, value);
-        } else if start == end {
-            // Not sure why but splice doesn't work for this case, so we do it explicitly
-            let tail = self.inner.data.split_off(start);
-            self.inner.data.extend_from_bitslice(&value.data);
-            self.inner.data.extend_from_bitslice(&tail);
-        } else {
-            let tail = self.inner.data.split_off(end);
-            self.inner.data.truncate(start);
-            self.inner.data.extend_from_bitslice(&value.data);
-            self.inner.data.extend_from_bitslice(&tail);
-        }
-    }
-
-    pub fn _ixor(&mut self, other: &Mutibs) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data ^= &other.inner.data;
-        Ok(())
-    }
-
-    pub fn _ior(&mut self, other: &Mutibs) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data |= &other.inner.data;
-        Ok(())
-    }
-
-    pub fn _iand(&mut self, other: &Mutibs) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        self.inner.data &= &other.inner.data;
-        Ok(())
-    }
-
-    pub fn _or(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, other))
-    }
-
-    pub fn _and(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, other))
-    }
-
-    pub fn _xor(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, other))
     }
 
     /// Create a new instance from a formatted string.
@@ -475,13 +476,6 @@ impl Mutibs {
         BitCollection::from_bytes(data)
     }
 
-    #[staticmethod]
-    pub fn _from_bytes_with_offset(data: Vec<u8>, offset: usize) -> Self {
-        Self {
-            inner: Tibs::from_bytes_with_offset(data, offset),
-        }
-    }
-
     /// Create a new instance by concatenating a sequence of Tibs objects.
     ///
     /// This method concatenates a sequence of Tibs objects into a single Mutibs object.
@@ -513,6 +507,7 @@ impl Mutibs {
             .map(|bits| Mutibs { inner: bits })
     }
 
+    // TODO: Why doesn't this delegate?
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
@@ -536,7 +531,7 @@ impl Mutibs {
                     Mutibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step)?
+                self.get_slice_with_step(start, stop, step)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -595,7 +590,7 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                slf._set_slice(start as usize, stop as usize, &bs);
+                slf.set_slice(start as usize, stop as usize, &bs);
                 return Ok(());
             }
             if step == 0 {
@@ -759,7 +754,7 @@ impl Mutibs {
     ///
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self._and(&other)
+        self.and(&other)
     }
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
@@ -768,7 +763,7 @@ impl Mutibs {
     ///
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self._or(&other)
+        self.or(&other)
     }
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -777,7 +772,7 @@ impl Mutibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self._xor(&other)
+        self.xor(&other)
     }
 
     /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -788,7 +783,7 @@ impl Mutibs {
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = mutibs_from_any(bs)?;
-        other._and(&self.inner)
+        other.and(&self.inner)
     }
 
     /// Reverse bit-wise 'or' between two Mutibs. Returns new Mutibs.
@@ -799,7 +794,7 @@ impl Mutibs {
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = mutibs_from_any(bs)?;
-        other._or(&self.inner)
+        other.or(&self.inner)
     }
 
     /// Reverse bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -810,7 +805,7 @@ impl Mutibs {
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = mutibs_from_any(bs)?;
-        other._xor(&self.inner)
+        other.xor(&self.inner)
     }
 
     /// Rotates bit pattern to the left. Returns self.
