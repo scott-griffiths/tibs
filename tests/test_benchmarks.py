@@ -45,7 +45,7 @@ def test_token_parsing(benchmark):
 
 def test_find_all(benchmark):
     def finding():
-        s = Tibs.from_random(20000000, b"99")
+        s = Tibs.from_random(20000000, seed=b"99")
         for ss in [
             "0b11010010101",
             "0xabcdef1234, 0b000101111010101010011010100100101010101",

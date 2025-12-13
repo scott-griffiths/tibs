@@ -183,13 +183,13 @@ def test_from_random():
     assert a == Tibs()
     a = Tibs.from_random(1)
     assert a == '0b1' or a == '0b0'
-    a = Tibs.from_random(10000, b'a_seed')
-    b = Tibs.from_random(10000, b'a_seed')
+    a = Tibs.from_random(10000, seed=b'a_seed')
+    b = Tibs.from_random(10000, seed=b'a_seed')
     assert a == b
     b = Tibs.from_random(10000,
-                         b'a different seed this time - quite long to test if this makes a difference or not. It shouldnt really, but who knows?')
+                         seed=b'a different seed this time - quite long to test if this makes a difference or not. It shouldnt really, but who knows?')
     assert a != b
-    c = Mutibs.from_random(10000, b'a_seed')
+    c = Mutibs.from_random(10000, seed=b'a_seed')
     assert a == c
 
 

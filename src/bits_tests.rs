@@ -512,8 +512,8 @@ mod tests {
 
     #[test]
     fn bit_ops_performance() {
-        let bv1 = crate::helpers::bv_from_random(10_000_000, &None).unwrap();
-        let bv2 = crate::helpers::bv_from_random(10_000_000, &None).unwrap();
+        let bv1 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
+        let bv2 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
         let b1 = Tibs::new(bv1);
         let b2 = Tibs::new(bv2);
         for _ in 0..100 {

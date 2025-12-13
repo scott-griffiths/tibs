@@ -624,14 +624,15 @@ impl Tibs {
         Ok(Tibs::new(bv))
     }
 
-    /// Create a new instance with all bits pseudo-randomly set.
+    /// Create a new instance with all bits randomly set.
     ///
     /// :param length: The number of bits to set. Must be positive.
-    /// :param seed: A bytes or bytearray to use as an optional seed.
+    /// :param secure: If ``True``, use the OS's cryptographically secure generator. Default is ``False``.
+    /// :param seed: A bytes or bytearray to use as an optional seed, only if ``secure`` is ``False``.
     /// :return: A newly constructed ``Tibs`` with random data.
     ///
-    /// Note that this uses a pseudo-random number generator and so
-    /// might not suitable for cryptographic or other more serious purposes.
+    /// The 'secure' option uses the OS's random data source, so will be slower and could potentially
+    /// fail.
     ///
     /// .. code-block:: python
     ///
@@ -639,13 +640,14 @@ impl Tibs {
     ///     b = Tibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, seed=None), text_signature="(cls, length, /, seed=None)")]
+    #[pyo3(signature = (length, /, secure=false, seed=None), text_signature="(cls, length, /, secure=False, seed=None)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
+        secure: bool,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        let bv = crate::helpers::bv_from_random(length, &seed)?;
+        let bv = crate::helpers::bv_from_random(length, secure, &seed)?;
         Ok(Tibs::new(bv))
     }
 
