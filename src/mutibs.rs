@@ -952,6 +952,7 @@ impl Mutibs {
         self.inner.any()
     }
 
+
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
@@ -1201,7 +1202,7 @@ impl Mutibs {
     }
 
     /// Concatenate in-place.
-    pub fn __iadd__<'a>(slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn __iadd__(slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         Self::append(slf, bs)?;
         Ok(())
     }
