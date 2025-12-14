@@ -15,6 +15,22 @@ use std::sync::Mutex;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
+
+    fn and(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, other))
+    }
+
+    fn or(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, other))
+    }
+
+    fn xor(&self, other: &Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, other))
+    }
+
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
     fn empty() -> Self;
@@ -115,23 +131,23 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn empty() -> Self {
-        Tibs::new(BV::new())
+        Self::new(BV::new())
     }
 
     #[inline]
     fn from_zeros(length: usize) -> Self {
-        Tibs::new(BV::repeat(false, length))
+        Self::new(BV::repeat(false, length))
     }
 
     #[inline]
     fn from_ones(length: usize) -> Self {
-        Tibs::new(BV::repeat(true, length))
+        Self::new(BV::repeat(true, length))
     }
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
         let bv = BV::from_vec(data);
-        Tibs::new(bv)
+        Self::new(bv)
     }
 
     #[inline]
@@ -156,7 +172,7 @@ impl BitCollection for Tibs {
             }
         }
         b.set_uninitialized(false);
-        Ok(Tibs::new(b))
+        Ok(Self::new(b))
     }
 
     #[inline]
@@ -186,7 +202,7 @@ impl BitCollection for Tibs {
                 }
             }
         }
-        Ok(Tibs::new(b))
+        Ok(Self::new(b))
     }
 
     #[inline]
@@ -207,11 +223,11 @@ impl BitCollection for Tibs {
             Ok(d) => d,
             Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
         };
-        let mut bv = <Tibs as BitCollection>::from_bytes(data).data;
+        let mut bv = <Self as BitCollection>::from_bytes(data).data;
         if is_odd_length {
             bv.drain(bv.len() - 4..bv.len());
         }
-        Ok(Tibs::new(bv))
+        Ok(Self::new(bv))
     }
 
     #[inline]
@@ -226,7 +242,7 @@ impl BitCollection for Tibs {
         }
         let mut bv = BV::repeat(false, length);
         bv.store_be(value);
-        Ok(Tibs::new(bv))
+        Ok(Self::new(bv))
     }
 
     #[inline]
@@ -248,7 +264,7 @@ impl BitCollection for Tibs {
         let repeat_bit = value < 0;
         let mut bv = BV::repeat(repeat_bit, length);
         bv.store_be(value);
-        Ok(Tibs::new(bv))
+        Ok(Self::new(bv))
     }
 
     fn from_f64(value: f64, length: i64) -> Result<Self, String> {
@@ -276,32 +292,32 @@ impl BitCollection for Tibs {
                 ));
             }
         };
-        Ok(Tibs::new(bv))
+        Ok(Self::new(bv))
     }
 
     #[inline]
-    fn logical_or(&self, other: &Tibs) -> Self {
+    fn logical_or(&self, other: &Self) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
         result |= &other.data;
-        Tibs::new(result)
+        Self::new(result)
     }
 
 
     #[inline]
-    fn logical_and(&self, other: &Tibs) -> Self {
+    fn logical_and(&self, other: &Self) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
         result &= &other.data;
-        Tibs::new(result)
+        Self::new(result)
     }
 
     #[inline]
-    fn logical_xor(&self, other: &Tibs) -> Self {
+    fn logical_xor(&self, other: &Self) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
         result ^= &other.data;
-        Tibs::new(result)
+        Self::new(result)
     }
 
     #[inline]
@@ -312,9 +328,6 @@ impl BitCollection for Tibs {
     #[inline]
     fn to_binary(&self) -> String {
         self.build_bin_string()
-        // self.bin_cache.get_or_init(|| {
-        //     self.build_bin_string()
-        // }).clone()
     }
 
     #[inline]
@@ -327,9 +340,6 @@ impl BitCollection for Tibs {
             ));
         }
         Ok(self.build_oct_string())
-        // Ok(self.oct_cache.get_or_init(|| {
-        //     self.build_oct_string()
-        // }).clone())
     }
 
     #[inline]
@@ -342,9 +352,6 @@ impl BitCollection for Tibs {
             ));
         }
         Ok(self.build_hex_string())
-        // Ok(self.hex_cache.get_or_init(|| {
-        //     self.build_hex_string()
-        // }).clone())
     }
 
     #[inline]
