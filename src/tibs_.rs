@@ -595,6 +595,9 @@ impl Tibs {
         BitCollection::to_binary(self)
     }
 
+    /// Create a new instance from an octal string.
+    ///
+    /// :param s: A string of octal digits, optionally preceded with '0o'.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
@@ -608,6 +611,9 @@ impl Tibs {
         BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
 
+    /// Create a new instance from a hexadecimal string.
+    ///
+    /// :param s: A string of hexadecimal digits, optionally preceded with '0x'.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
@@ -1089,6 +1095,9 @@ impl Tibs {
         Ok(Tibs::new(self.data.clone().not()))
     }
 
+    /// Return the Tibs as a bytes object.
+    ///
+    /// Raises ValueError if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
     }
