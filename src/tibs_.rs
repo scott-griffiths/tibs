@@ -1,7 +1,6 @@
 use crate::core::{str_to_mutibs, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::mutibs_from_any;
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use bytemuck;
@@ -49,7 +48,7 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     Err(PyTypeError::new_err(err))
 }
 
-pub fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
+pub(crate) fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
         return Ok(tibs_ref.clone()); // TODO: Expensive clone
@@ -554,7 +553,7 @@ impl Tibs {
                 .into_pyobject(py)?
                 .unbind())
         } else {
-            let bytes = self.to_int_byte_data(false);
+            let bytes = self.to_int_byte_data(true);
             let kwargs = [("signed", true)].into_py_dict(py)?;
             let int_type = py.get_type::<PyInt>();
             let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
@@ -1017,9 +1016,11 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let mut bs = mutibs_from_any(bs)?;
-        bs.inner.data.extend_from_bitslice(&self.data);
-        Ok(Tibs::new(bs.inner.data))
+        let bs = tibs_from_any(bs)?;
+        let mut data = BV::with_capacity(bs.len() + self.len());
+        data.extend_from_bitslice(&bs.data);
+        data.extend_from_bitslice(&self.data);
+        Ok(Tibs::new(data))
     }
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.

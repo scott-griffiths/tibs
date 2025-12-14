@@ -49,7 +49,7 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     Err(PyTypeError::new_err(err))
 }
 
-pub fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
+fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     // Is it of type Mutibs?
     if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
         return Ok(mutibs_ref.__copy__());
@@ -855,12 +855,12 @@ impl Mutibs {
     ///     Mutibs('0b1110')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
-    pub fn rol<'a>(
-        mut slf: PyRefMut<'a, Self>,
+    pub fn rol(
+        mut slf: PyRefMut<'_, Self>,
         n: i64,
         start: Option<i64>,
         end: Option<i64>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    ) -> PyResult<PyRefMut<'_, Self>> {
         if slf.is_empty() {
             return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
@@ -890,12 +890,12 @@ impl Mutibs {
     ///     Mutibs('0b1101')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
-    pub fn ror<'a>(
-        mut slf: PyRefMut<'a, Self>,
+    pub fn ror(
+        mut slf: PyRefMut<'_, Self>,
         n: i64,
         start: Option<i64>,
         end: Option<i64>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    ) -> PyResult<PyRefMut<'_, Self>> {
         if slf.is_empty() {
             return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
@@ -1441,7 +1441,7 @@ impl Mutibs {
     ///     >>> b.bin
     ///     '110000'
     ///
-    pub fn __ilshift__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
+    pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = slf.inner.validate_shift(n)?;
         slf.inner.data.shift_left(shift);
         Ok(())
@@ -1461,7 +1461,7 @@ impl Mutibs {
     ///     >>> b.bin
     ///     '000011'
     ///
-    pub fn __irshift__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
+    pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = slf.inner.validate_shift(n)?;
         slf.inner.data.shift_right(shift);
         Ok(())
@@ -1503,25 +1503,25 @@ impl Mutibs {
     }
 
     /// In-place bit-wise 'and'.
-    pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn __iand__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.iand(&other)
     }
 
     /// In-place bit-wise 'or'.
-    pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn __ior__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.ior(&other)
     }
 
     /// In-place bit-wise 'xor'.
-    pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn __ixor__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.ixor(&other)
     }
 
     /// In-place multiplication by a non-negative integer.
-    pub fn __imul__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
+    pub fn __imul__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         match n {
             i if i < 0 => Err(PyValueError::new_err(
                 "Cannot multiply by a negative integer.",

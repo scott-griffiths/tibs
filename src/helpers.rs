@@ -146,7 +146,7 @@ pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
 }
 
 // TODO: Similar helper methods for from_joined, from_bools etc.
-pub fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
+pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
     if length < 0 {
         return Err(PyValueError::new_err(format!(
             "Negative bit length given: {}.",
