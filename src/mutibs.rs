@@ -96,6 +96,20 @@ impl Mutibs {
         }
     }
 
+    pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
+        self.inner.get_index(bit_index)
+    }
+
+    pub fn set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
+        self.set_from_sequence(value, vec![index])
+    }
+
+    pub(crate) fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
+        self.inner
+            .get_slice(start_bit, length)
+            .map(|bits| Mutibs { inner: bits })
+    }
+
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
@@ -497,22 +511,11 @@ impl Mutibs {
         self.inner.len()
     }
 
-    pub fn _getindex(&self, bit_index: i64) -> PyResult<bool> {
-        self.inner.get_index(bit_index)
-    }
-
-    pub fn _getslice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
-        self.inner
-            .get_slice(start_bit, length)
-            .map(|bits| Mutibs { inner: bits })
-    }
-
-    // TODO: Why doesn't this delegate?
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
         if let Ok(index) = key.extract::<i64>() {
-            let value: bool = self._getindex(index)?;
+            let value: bool = self.get_index(index)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }
@@ -526,7 +529,7 @@ impl Mutibs {
 
             let result = if step == 1 {
                 if start < stop {
-                    self._getslice(start as usize, (stop - start) as usize)?
+                    self.get_slice(start as usize, (stop - start) as usize)?
                 } else {
                     Mutibs::empty()
                 }
@@ -571,7 +574,7 @@ impl Mutibs {
                     "Bit index {index} out of range for length {length}"
                 )));
             }
-            slf._set_index(value.is_truthy()?, index)?;
+            slf.set_index(value.is_truthy()?, index)?;
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -903,7 +906,7 @@ impl Mutibs {
         let v = value.is_truthy()?;
 
         if let Ok(index) = pos.extract::<i64>() {
-            slf._set_index(v, index)?;
+            slf.set_index(v, index)?;
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
             let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<i64>()?;
@@ -1112,10 +1115,6 @@ impl Mutibs {
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
         Ok(Mutibs::new(self.inner.__rshift__(n)?.data))
-    }
-
-    pub fn _set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
-        self.set_from_sequence(value, vec![index])
     }
 
     /// Return a new copy of the Mutibs for the copy module.

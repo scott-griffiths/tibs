@@ -932,14 +932,11 @@ impl Tibs {
             let step: i64 = indices.step.try_into()?;
 
             let result = if step == 1 {
-                self.get_slice(
-                    start as usize,
-                    if stop > start {
-                        (stop - start) as usize
-                    } else {
-                        0
-                    },
-                )?
+                if start < stop {
+                    self.get_slice(start as usize, (stop - start) as usize)?
+                } else {
+                    Tibs::empty()
+                }
             } else {
                 self.getslice_with_step(start, stop, step)?
             };

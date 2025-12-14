@@ -168,11 +168,11 @@ mod tests {
     #[test]
     fn test_set_index() {
         let mut b = <Mutibs as BitCollection>::from_zeros(10);
-        b._set_index(true, 0).unwrap();
+        b.set_index(true, 0).unwrap();
         assert_eq!(b.to_binary(), "1000000000");
-        b._set_index(true, -1).unwrap();
+        b.set_index(true, -1).unwrap();
         assert_eq!(b.to_binary(), "1000000001");
-        b._set_index(false, 0).unwrap();
+        b.set_index(false, 0).unwrap();
         assert_eq!(b.to_binary(), "0000000001");
     }
 
@@ -323,8 +323,8 @@ mod tests {
     #[test]
     fn modify_then_freeze() {
         let mut mutable = Mutibs::from_binary("0000").unwrap();
-        mutable._set_index(true, 1).unwrap();
-        mutable._set_index(true, 2).unwrap();
+        mutable.set_index(true, 1).unwrap();
+        mutable.set_index(true, 2).unwrap();
         let immutable = mutable.to_tibs();
         assert_eq!(immutable.to_bin(), "0110");
     }
@@ -361,7 +361,7 @@ mod tests {
     fn mutable_getslice() {
         let m = Mutibs::from_binary("11001010").unwrap();
 
-        let slice1 = m._getslice(2, 6).unwrap();
+        let slice1 = m.get_slice(2, 6).unwrap();
         assert_eq!(slice1.to_binary(), "0010");
     }
 
@@ -379,8 +379,8 @@ mod tests {
     fn mutable_set_operations() {
         let mut m = <Mutibs as BitCollection>::from_zeros(8);
 
-        m._set_index(true, 0).unwrap();
-        m._set_index(true, 7).unwrap();
+        m.set_index(true, 0).unwrap();
+        m.set_index(true, 7).unwrap();
         assert_eq!(m.to_binary(), "10000001");
 
         m.set_from_slice(true, 2, 6, 1).unwrap();
@@ -415,16 +415,16 @@ mod tests {
     fn mutable_edge_index_operations() {
         let mut m = Mutibs::from_binary("1010").unwrap();
 
-        m._set_index(false, 0).unwrap();
-        m._set_index(false, 3).unwrap();
+        m.set_index(false, 0).unwrap();
+        m.set_index(false, 3).unwrap();
         assert_eq!(m.to_binary(), "0010");
 
-        m._set_index(true, -1).unwrap();
-        m._set_index(true, -4).unwrap();
+        m.set_index(true, -1).unwrap();
+        m.set_index(true, -4).unwrap();
         assert_eq!(m.to_binary(), "1011");
 
-        assert!(m._set_index(true, 4).is_err());
-        assert!(m._set_index(true, -5).is_err());
+        assert!(m.set_index(true, 4).is_err());
+        assert!(m.set_index(true, -5).is_err());
     }
 
     #[test]
@@ -446,8 +446,8 @@ mod tests {
     fn conversion_round_trip() {
         let original = <Tibs as BitCollection>::from_binary("101010").unwrap();
         let mut mutable = Mutibs::new(original.data);
-        mutable._set_index(false, 0).unwrap();
-        mutable._set_index(true, 1).unwrap();
+        mutable.set_index(false, 0).unwrap();
+        mutable.set_index(true, 1).unwrap();
         let result = mutable.as_tibs();
 
         assert_eq!(result.to_bin(), "011010");
@@ -484,22 +484,22 @@ mod tests {
     fn negative_indexing_in_mutable() {
         let m = Mutibs::from_binary("10101010").unwrap();
 
-        assert_eq!(m._getindex(-3).unwrap(), false);
-        assert_eq!(m._getindex(-8).unwrap(), true);
-        assert!(m._getindex(-9).is_err());
+        assert_eq!(m.get_index(-3).unwrap(), false);
+        assert_eq!(m.get_index(-8).unwrap(), true);
+        assert!(m.get_index(-9).is_err());
     }
 
     #[test]
     fn mutable_getslice_edge_cases() {
         let m = Mutibs::from_binary("11001010").unwrap();
 
-        let empty = m._getslice(4, 4).unwrap();
+        let empty = m.get_slice(4, 4).unwrap();
         assert_eq!(empty.to_binary(), "");
 
-        let full = m._getslice(0, m.len()).unwrap();
+        let full = m.get_slice(0, m.len()).unwrap();
         assert_eq!(full.to_binary(), "11001010");
 
-        assert!(m._getslice(9, 10).is_err());
+        assert!(m.get_slice(9, 10).is_err());
     }
 
     #[test]
