@@ -230,21 +230,6 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn to_u128(&self) -> Result<u128, String> {
-        let length = self.len();
-        if length > 128 {
-            return Err(format!(
-                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
-            ));
-        }
-        let mut padded_bv = BV::new();
-        let padding = 128 - length;
-        padded_bv.resize(padding, false);
-        padded_bv.extend_from_bitslice(&self.data);
-        Ok(padded_bv.load_be::<u128>())
-    }
-
-    #[inline]
     fn from_i128(value: i128, length: usize) -> Result<Self, String> {
         if length == 0 || length > 128 {
             return Err(format!(
@@ -266,20 +251,32 @@ impl BitCollection for Tibs {
         Ok(Tibs::new(bv))
     }
 
-    #[inline]
-    fn to_i128(&self) -> Result<i128, String> {
-        let length = self.len();
-        if length > 128 {
-            return Err(format!(
-                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
-            ));
-        }
-        let mut padded_bv = BV::new();
-        let padding = 128 - length;
-        let pad_bit = self.get_bit(0);
-        padded_bv.resize(padding, pad_bit);
-        padded_bv.extend_from_bitslice(&self.data);
-        Ok(padded_bv.load_be::<i128>())
+    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
+        let bv = match length {
+            64 => {
+                let mut bv = BV::repeat(false, 64);
+                bv.store_be(value.to_bits());
+                bv
+            }
+            32 => {
+                let value_f32 = value as f32;
+                let mut bv = BV::repeat(false, 32);
+                bv.store_be(value_f32.to_bits());
+                bv
+            }
+            16 => {
+                let value_f16 = f16::from_f64(value);
+                let mut bv = BV::repeat(false, 16);
+                bv.store_be(value_f16.to_bits());
+                bv
+            }
+            _ => {
+                return Err(format!(
+                    "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
+                ));
+            }
+        };
+        Ok(Tibs::new(bv))
     }
 
     #[inline]
@@ -289,6 +286,7 @@ impl BitCollection for Tibs {
         result |= &other.data;
         Tibs::new(result)
     }
+
 
     #[inline]
     fn logical_and(&self, other: &Tibs) -> Self {
@@ -381,51 +379,35 @@ impl BitCollection for Tibs {
         }
     }
 
-    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        if self.is_empty() {
-            return Vec::new();
+    #[inline]
+    fn to_u128(&self) -> Result<u128, String> {
+        let length = self.len();
+        if length > 128 {
+            return Err(format!(
+                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
+            ));
         }
-
-        let needed_bits = (self.len() + 7) & !7;
-        let mut bv = BV::with_capacity(needed_bits);
-
-        let sign_bit = signed && self.data[0];
-        let padding = needed_bits - self.len();
-
-        for _ in 0..padding {
-            bv.push(sign_bit);
-        }
-        bv.extend_from_bitslice(&self.data);
-
-        bv.into_vec()
+        let mut padded_bv = BV::new();
+        let padding = 128 - length;
+        padded_bv.resize(padding, false);
+        padded_bv.extend_from_bitslice(&self.data);
+        Ok(padded_bv.load_be::<u128>())
     }
 
-    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
-        let bv = match length {
-            64 => {
-                let mut bv = BV::repeat(false, 64);
-                bv.store_be(value.to_bits());
-                bv
-            }
-            32 => {
-                let value_f32 = value as f32;
-                let mut bv = BV::repeat(false, 32);
-                bv.store_be(value_f32.to_bits());
-                bv
-            }
-            16 => {
-                let value_f16 = f16::from_f64(value);
-                let mut bv = BV::repeat(false, 16);
-                bv.store_be(value_f16.to_bits());
-                bv
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
-                ));
-            }
-        };
-        Ok(Tibs::new(bv))
+    #[inline]
+    fn to_i128(&self) -> Result<i128, String> {
+        let length = self.len();
+        if length > 128 {
+            return Err(format!(
+                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
+            ));
+        }
+        let mut padded_bv = BV::new();
+        let padding = 128 - length;
+        let pad_bit = self.get_bit(0);
+        padded_bv.resize(padding, pad_bit);
+        padded_bv.extend_from_bitslice(&self.data);
+        Ok(padded_bv.load_be::<i128>())
     }
 
     fn to_f64(&self) -> Result<f64, String> {
@@ -447,6 +429,25 @@ impl BitCollection for Tibs {
                 "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
             )),
         }
+    }
+
+    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+
+        let needed_bits = (self.len() + 7) & !7;
+        let mut bv = BV::with_capacity(needed_bits);
+
+        let sign_bit = signed && self.data[0];
+        let padding = needed_bits - self.len();
+
+        for _ in 0..padding {
+            bv.push(sign_bit);
+        }
+        bv.extend_from_bitslice(&self.data);
+
+        bv.into_vec()
     }
 }
 
@@ -524,14 +525,10 @@ impl BitCollection for Mutibs {
         })
     }
 
-    #[inline]
-    fn to_u128(&self) -> Result<u128, String> {
-        self.inner.to_u128()
-    }
-
-    #[inline]
-    fn to_i128(&self) -> Result<i128, String> {
-        self.inner.to_i128()
+    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
+        Ok(Self {
+            inner: <Tibs as BitCollection>::from_f64(value, length)?,
+        })
     }
 
     #[inline]
@@ -580,18 +577,22 @@ impl BitCollection for Mutibs {
         self.inner.to_byte_data()
     }
 
-    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        self.inner.to_int_byte_data(signed)
+    #[inline]
+    fn to_u128(&self) -> Result<u128, String> {
+        self.inner.to_u128()
     }
 
-    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
-        Ok(Self {
-            inner: <Tibs as BitCollection>::from_f64(value, length)?,
-        })
+    #[inline]
+    fn to_i128(&self) -> Result<i128, String> {
+        self.inner.to_i128()
     }
 
     fn to_f64(&self) -> Result<f64, String> {
         self.inner.to_f64()
+    }
+
+    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
+        self.inner.to_int_byte_data(signed)
     }
 }
 

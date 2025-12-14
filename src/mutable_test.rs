@@ -7,10 +7,10 @@ mod tests {
     #[test]
     fn test_set_and_get_index() {
         let mut mb = <Mutibs as BitCollection>::from_zeros(8);
-        mb._set_index(true, 3).unwrap();
-        assert_eq!(mb._getindex(3).unwrap(), true);
-        mb._set_index(false, 3).unwrap();
-        assert_eq!(mb._getindex(3).unwrap(), false);
+        mb.set_index(true, 3).unwrap();
+        assert_eq!(mb.get_index(3).unwrap(), true);
+        mb.set_index(false, 3).unwrap();
+        assert_eq!(mb.get_index(3).unwrap(), false);
     }
 
     #[test]
