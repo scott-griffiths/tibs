@@ -299,6 +299,9 @@ impl Mutibs {
         BitCollection::to_binary(self)
     }
 
+    /// Create a new instance from an octal string.
+    ///
+    /// :param s: A string of octal digits, optionally preceded with '0o'.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
@@ -312,6 +315,9 @@ impl Mutibs {
         BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
 
+    /// Create a new instance from a hexadecimal string.
+    ///
+    /// :param s: A string of hexadecimal digits, optionally preceded with '0x'.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
@@ -332,6 +338,12 @@ impl Mutibs {
         BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
 
+    /// Create a new instance from an unsigned integer.
+    ///
+    /// :param u: An unsigned integer.
+    /// :param length: The bit length to create.
+    ///
+    /// Raises ValueError if the integer doesn't fit in the length given.
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(
@@ -360,6 +372,12 @@ impl Mutibs {
         }
     }
 
+    /// Create a new instance from a signed integer.
+    ///
+    /// :param i: A signed integer.
+    /// :param length: The bit length to create.
+    ///
+    /// Raises ValueError if the integer doesn't fit in the length given.
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(
@@ -378,6 +396,10 @@ impl Mutibs {
         tibs.to_i(py)
     }
 
+    /// Create a new instance from a floating point number.
+    ///
+    /// :param f: A float.
+    /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
