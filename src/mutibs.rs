@@ -145,21 +145,6 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn or(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, other))
-    }
-
-    pub(crate) fn and(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, other))
-    }
-
-    pub(crate) fn xor(&self, other: &Tibs) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, other))
-    }
-
     pub(crate) fn get_slice_with_step(
         &self,
         start_bit: i64,
