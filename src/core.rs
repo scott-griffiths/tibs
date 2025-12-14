@@ -16,6 +16,8 @@ use std::sync::Mutex;
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
 
+    fn get_data(&self) -> &BV;
+
     fn and(&self, other: &Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_and(self, other))
@@ -119,6 +121,11 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
 }
 
 impl BitCollection for Tibs {
+    #[inline]
+    fn get_data(&self) -> &BV {
+        &self.data
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.data.len()
@@ -459,6 +466,11 @@ impl BitCollection for Tibs {
 }
 
 impl BitCollection for Mutibs {
+    #[inline]
+    fn get_data(&self) -> &BV {
+        &self.inner.data
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.inner.len()
