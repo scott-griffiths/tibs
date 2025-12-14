@@ -249,6 +249,7 @@ impl Tibs {
         }
     }
 
+    /// Iterate over the bits of the Tibs, yielding each bit as a boolean.
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<BoolIterator>> {
         let py = slf.py();
         let length = slf.len();
@@ -331,6 +332,7 @@ impl Tibs {
     }
 
     #[pyo3(name = "__hash__")]
+    /// Return a hash of the Tibs.
     pub fn __hash__(&self) -> isize {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -494,6 +496,7 @@ impl Tibs {
         }
     }
 
+    /// Return the unsigned integer representation of the Tibs.
     pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
         if self.len() <= 128 {
             Ok(BitCollection::to_u128(self)
@@ -543,6 +546,7 @@ impl Tibs {
         }
     }
 
+    /// Return the signed integer representation of the Tibs.
     pub fn to_i(&self, py: Python) -> PyResult<Py<PyInt>> {
         if self.len() <= 128 {
             Ok(BitCollection::to_i128(self)
@@ -565,6 +569,9 @@ impl Tibs {
         BitCollection::from_f64(value, length).map_err(PyValueError::new_err)
     }
 
+    /// Return the floating point representation of the Tibs.
+    ///
+    /// The length must be 16, 32 or 64.
     pub fn to_f(&self) -> PyResult<f64> {
         BitCollection::to_f64(self).map_err(PyValueError::new_err)
     }
@@ -583,6 +590,7 @@ impl Tibs {
         BitCollection::from_binary(s).map_err(PyValueError::new_err)
     }
 
+    /// Return the binary representation of the Tibs as a string.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
     }
@@ -593,6 +601,9 @@ impl Tibs {
         BitCollection::from_octal(s).map_err(PyValueError::new_err)
     }
 
+    /// Return the octal representation of the Tibs as a string.
+    ///
+    /// Raises ValueError if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
@@ -603,6 +614,9 @@ impl Tibs {
         BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)
     }
 
+    /// Return the hexadecimal representation of the Tibs as a string.
+    ///
+    /// Raises ValueError if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self).map_err(PyValueError::new_err)
     }
@@ -703,6 +717,9 @@ impl Tibs {
         Ok(Tibs::new(bv))
     }
 
+    /// Return the Tibs as a bytes object.
+    ///
+    /// Raises ValueError if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
@@ -739,6 +756,7 @@ impl Tibs {
         Ok(find_bitvec(self, &b, start, end, byte_aligned))
     }
 
+    /// Return True if b is a sub-sequence of self.
     pub fn __contains__(&self, b: &Bound<'_, PyAny>) -> bool {
         match self.find(b, None, None, false) {
             Ok(Some(_)) => true,
@@ -746,6 +764,15 @@ impl Tibs {
         }
     }
 
+    /// Find last occurrence of a bit sequence.
+    ///
+    /// Returns the bit position if found, or None if not found.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position. Defaults to 0.
+    /// :param end: The end position. Defaults to len(self).
+    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :return: The bit position if found, or None if not found.
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
@@ -899,6 +926,11 @@ impl Tibs {
     }
 
     #[inline]
+    /// Get a bit or a slice of bits.
+    ///
+    /// :param key: The index or slice to get.
+    /// :return: A bool for a single index, or a new Tibs for a slice.
+    /// :raises IndexError: If the index is out of range.
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
@@ -1097,12 +1129,14 @@ impl Tibs {
         self.__mul__(n)
     }
 
+    /// Item assignment is not supported for immutable Tibs objects.
     pub fn __setitem__(&self, _key: &Bound<'_, PyAny>, _value: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "Tibs objects do not support item assignment. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
         ))
     }
 
+    /// Item deletion is not supported for immutable Tibs objects.
     pub fn __delitem__(&self, _key: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "Tibs objects do not support item deletion. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."

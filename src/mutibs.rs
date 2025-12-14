@@ -294,6 +294,7 @@ impl Mutibs {
         BitCollection::from_binary(&s).map_err(PyValueError::new_err)
     }
 
+    /// Return the binary representation of the Mutibs as a string.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
     }
@@ -304,6 +305,9 @@ impl Mutibs {
         BitCollection::from_octal(&s).map_err(PyValueError::new_err)
     }
 
+    /// Return the octal representation of the Mutibs as a string.
+    ///
+    /// Raises ValueError if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self).map_err(PyValueError::new_err)
     }
@@ -314,10 +318,16 @@ impl Mutibs {
         BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
     }
 
+    /// Return the hexadecimal representation of the Mutibs as a string.
+    ///
+    /// Raises ValueError if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self).map_err(PyValueError::new_err)
     }
 
+    /// Return the Mutibs as a bytes object.
+    ///
+    /// Raises ValueError if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
@@ -334,6 +344,7 @@ impl Mutibs {
         Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
     }
 
+    /// Return the unsigned integer representation of the Mutibs.
     pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
         if self.len() <= 128 {
             Ok(BitCollection::to_u128(self)
@@ -361,6 +372,7 @@ impl Mutibs {
         Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
     }
 
+    /// Return the signed integer representation of the Mutibs.
     pub fn to_i(&self, py: Python) -> PyResult<Py<PyInt>> {
         let tibs = self.to_tibs(); // TODO: Better to do this the other way around.
         tibs.to_i(py)
@@ -373,6 +385,9 @@ impl Mutibs {
         BitCollection::from_f64(value, length).map_err(PyValueError::new_err)
     }
 
+    /// Return the floating point representation of the Mutibs.
+    ///
+    /// The length must be 16, 32 or 64.
     pub fn to_f(&self) -> PyResult<f64> {
         BitCollection::to_f64(self).map_err(PyValueError::new_err)
     }
@@ -492,10 +507,16 @@ impl Mutibs {
         Ok(Tibs::from_joined(_cls, iterable)?.to_mutibs())
     }
 
+    /// The bit length of the Mutibs.
     pub fn __len__(&self) -> usize {
         self.inner.len()
     }
 
+    /// Get a bit or a slice of bits.
+    ///
+    /// :param key: The index or slice to get.
+    /// :return: A bool for a single index, or a new Mutibs for a slice.
+    /// :raises IndexError: If the index is out of range.
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
@@ -953,6 +974,15 @@ impl Mutibs {
     }
 
 
+    /// Find last occurrence of a bit sequence.
+    ///
+    /// Returns the bit position if found, or None if not found.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position. Defaults to 0.
+    /// :param end: The end position. Defaults to len(self).
+    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :return: The bit position if found, or None if not found.
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
@@ -1415,6 +1445,9 @@ impl Mutibs {
         Ok(())
     }
 
+    /// Return the Mutibs as a bytes object.
+    ///
+    /// Raises ValueError if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.inner.to_bytes()
     }
@@ -1440,27 +1473,32 @@ impl Mutibs {
         self.__mul__(n)
     }
 
+    /// Iteration is not supported for mutable objects.
     pub fn __iter__(&self) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "Mutibs objects are not iterable. You can use .to_tibs() or .as_tibs() to convert to a Tibs object that does support iteration."
         ))
     }
 
+    /// In-place bit-wise 'and'.
     pub fn __iand__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.iand(&other)
     }
 
+    /// In-place bit-wise 'or'.
     pub fn __ior__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.ior(&other)
     }
 
+    /// In-place bit-wise 'xor'.
     pub fn __ixor__<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
         slf.ixor(&other)
     }
 
+    /// In-place multiplication by a non-negative integer.
     pub fn __imul__<'a>(mut slf: PyRefMut<'a, Self>, n: i64) -> PyResult<()> {
         match n {
             i if i < 0 => Err(PyValueError::new_err(
