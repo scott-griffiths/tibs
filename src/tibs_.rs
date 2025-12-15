@@ -342,7 +342,7 @@ impl Tibs {
             return self.data == b.data;
         }
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
-            return self.data == b.data;
+            return self.data == *b.data();
         }
         let maybe = tibs_from_any(other);
         match maybe {
@@ -916,9 +916,7 @@ impl Tibs {
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
-        Mutibs {
-            data: self.data.clone(),
-        }
+        Mutibs::new(self.data().clone())
     }
 
     #[inline]

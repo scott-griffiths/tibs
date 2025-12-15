@@ -78,19 +78,24 @@ fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
 ///
 #[pyclass(freelist = 8, module = "tibs")]
 pub struct Mutibs {
-    pub(crate) data: BV,
+    data: BV,
 }
 
 // Internal methods, not exported to Python
 impl Mutibs {
 
     pub(crate) fn new(bv: BV) -> Self {
-    Mutibs { data: bv }
+        Mutibs { data: bv }
     }
 
     #[inline]
     pub(crate) fn data(&self) -> &BV {
         &self.data
+    }
+
+    #[inline]
+    pub(crate) fn mut_data(&mut self) -> &mut BV {
+        &mut self.data
     }
 
     /// Slice used internally without bounds checking. // TODO this and Tibs version in BitCollection?
@@ -1326,13 +1331,14 @@ impl Mutibs {
         if bs.as_ptr() == slf.as_ptr() {
             let mut new_data = slf.data.clone();
             new_data.extend_from_bitslice(&slf.data);
-            slf.data = new_data;
+            *slf.mut_data() = new_data;
         } else {
             let to_prepend = tibs_from_any(bs)?;
             if to_prepend.is_empty() {
                 return Ok(slf);
             }
-            let mut new_data = to_prepend.get_data().clone(); // TODO: Remove clone
+            let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
+            new_data.extend_from_bitslice(to_prepend.get_data());
             new_data.extend_from_bitslice(&slf.data);
             slf.data = new_data;
         }
