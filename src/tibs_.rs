@@ -1,5 +1,5 @@
 use crate::core::{str_to_mutibs, BitCollection};
-use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
+use crate::helpers::{find_bitvec, validate_shift, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
@@ -100,69 +100,6 @@ impl Tibs {
         &self.data
     }
 
-    /// Returns the bool value at a given bit index.
-    #[inline]
-    pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
-        let index = validate_index(bit_index, self.len())?;
-        Ok(self.data[index])
-    }
-    
-
-    pub(crate) fn getslice_with_step(
-        &self,
-        start_bit: i64,
-        end_bit: i64,
-        step: i64,
-    ) -> PyResult<Self> {
-        if step == 0 {
-            return Err(PyValueError::new_err("Slice step cannot be zero."));
-        }
-        // Note that a start_bit or end_bit of -1 means to stop at the beginning when using a negative step.
-        // Otherwise they should both be positive indices.
-        debug_assert!(start_bit >= -1);
-        debug_assert!(end_bit >= -1);
-        debug_assert!(step != 0);
-        if start_bit < -1 || end_bit < -1 {
-            return Err(PyValueError::new_err(
-                "Indices less than -1 are not valid values.",
-            ));
-        }
-        if step > 0 {
-            if start_bit >= end_bit {
-                return Ok(BitCollection::empty());
-            }
-            if end_bit as usize > self.len() {
-                return Err(PyValueError::new_err(
-                    "Slice end goes past the end of the Tibs.",
-                ));
-            }
-            Ok(Tibs::new(
-                self.data[start_bit as usize..end_bit as usize]
-                    .iter()
-                    .step_by(step as usize)
-                    .collect(),
-            ))
-        } else {
-            if start_bit <= end_bit || start_bit == -1 {
-                return Ok(BitCollection::empty());
-            }
-            if start_bit as usize > self.len() {
-                return Err(PyValueError::new_err(
-                    "Slice start bit is past the end of the Tibs.",
-                ));
-            }
-            // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
-            debug_assert!(step < 0);
-            let adjusted_end_bit = (end_bit + 1) as usize;
-            Ok(Tibs::new(
-                self.data[adjusted_end_bit..=start_bit as usize]
-                    .iter()
-                    .rev()
-                    .step_by(-step as usize)
-                    .collect(),
-            ))
-        }
-    }
 }
 
 ///     An immutable container of binary data.
