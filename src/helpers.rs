@@ -1,12 +1,11 @@
-use crate::core::BitCollection;
-/// Helper functions.
-use crate::tibs_::Tibs;
+
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
 use sha2::{Digest, Sha256};
+use crate::core::BitCollection;
 
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;
@@ -36,8 +35,8 @@ fn compute_lps(pattern: &BS) -> Vec<usize> {
 }
 
 pub(crate) fn find_bitvec(
-    haystack: &Tibs,
-    needle: &Tibs,
+    haystack: &BV,
+    needle: &BV,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -53,8 +52,8 @@ pub(crate) fn find_bitvec(
 
 #[inline]
 fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
-    haystack: &Tibs,
-    needle: &Tibs,
+    haystack: &BV,
+    needle: &BV,
     start: usize,
     end: usize,
 ) -> Option<usize> {
@@ -62,13 +61,13 @@ fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
         return None;
     }
 
-    let lps = compute_lps(&needle.data);
+    let lps = compute_lps(&needle);
     let needle_len = needle.len();
     let mut i = start;
     let mut j = 0;
 
     while i < end {
-        if needle.data[j] == haystack.data[i] {
+        if needle[j] == haystack[i] {
             i += 1;
             j += 1;
 
@@ -101,6 +100,16 @@ pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
         )));
     }
     Ok(index_p as usize)
+}
+
+pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {
+    if s.is_empty() {
+        return Err(PyValueError::new_err("Cannot use a bit shift on an empty container."));
+    }
+    if n < 0 {
+        return Err(PyValueError::new_err("Cannot bit shift by a negative amount."));
+    }
+    Ok(n as usize)
 }
 
 #[inline]

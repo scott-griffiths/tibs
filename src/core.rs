@@ -14,12 +14,122 @@ use std::sync::Mutex;
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
 
+    fn to_string(&self) -> String
+    {
+        if self.is_empty() {
+            return "".to_string();
+        }
+        const MAX_BITS_TO_PRINT: usize = 10000;
+        debug_assert!(MAX_BITS_TO_PRINT % 4 == 0);
+        if self.len() <= MAX_BITS_TO_PRINT {
+            match self.to_hexadecimal() {
+                Ok(hex) => format!("0x{}", hex),
+                Err(_) => format!("0b{}", self.to_binary()),
+            }
+        } else {
+            format!(
+                "0x{}... # length={}",
+                self.slice(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
+                self.len()
+            )
+        }
+    }
+
+    fn starts_with(&self, prefix: impl BitCollection) -> bool {
+        let n = prefix.len();
+        if n <= self.len() {
+            *prefix.get_data() == self.get_data()[..n]
+        } else {
+            false
+        }
+    }
+
+    fn ends_with(&self, suffix: impl BitCollection) -> bool {
+        let n = suffix.len();
+        if n <= self.len() {
+            *suffix.get_data() == self.get_data()[self.len() - n..]
+        } else {
+            false
+        }
+    }
+
+    fn new(bv: BV) -> Self;
+
+    fn slice(&self, start_bit: usize, length: usize) -> Self {
+        Self::new(self.get_data()[start_bit..start_bit + length].to_bitvec())
+    }
+
+    fn count(&self, count_ones: bool) -> usize {
+        let len = self.len();
+
+        let (mut ones, raw) = (0usize, self.get_data().as_raw_slice());
+        if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
+            // Considerable speed increase by casting data to usize if possible.
+            for word in words {
+                ones += word.count_ones() as usize;
+            }
+            let used_bits = words.len() * usize::BITS as usize;
+            if used_bits > len {
+                let extra = used_bits - len;
+                if let Some(last) = words.last() {
+                    ones -= (last & (!0usize >> extra)).count_ones() as usize;
+                }
+            }
+        } else {
+            // Fallback to library method
+            ones = self.get_data().count_ones();
+        }
+
+        if count_ones { ones } else { len - ones }
+    }
+
+    fn multiply(&self, n: usize) -> Self {
+        let len = self.len();
+        if n == 0 || len == 0 {
+            return BitCollection::empty();
+        }
+        let mut bv = BV::with_capacity(len * n);
+        bv.extend_from_bitslice(&self.get_data());
+        // TODO: This could be done more efficiently with doubling.
+        for _ in 1..n {
+            bv.extend_from_bitslice(&self.get_data());
+        }
+        Self::new(bv)
+    }
+
+    fn lshift(&self, n: usize) -> Self {
+        if n == 0 {
+            return Self::new(self.get_data().clone());
+        }
+        let len = self.len();
+        if n >= len {
+            return BitCollection::from_zeros(len);
+        }
+        let mut result_data = BV::with_capacity(len);
+        result_data.extend_from_bitslice(&self.get_data()[n..]);
+        result_data.resize(len, false);
+        Self::new(result_data)
+    }
+    
+    fn rshift(&self, n: usize) -> Self {
+        if n == 0 {
+            return Self::new(self.get_data().clone());
+        }
+        let len = self.len();
+        if n >= len {
+            return BitCollection::from_zeros(len);
+        }
+        let mut result_data = BV::repeat(false, n);
+        result_data.extend_from_bitslice(&self.get_data()[..len - n]);
+        Self::new(result_data)
+    }
+
     fn get_data(&self) -> &BV;
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
-    fn and(&self, other: &Tibs) -> PyResult<Self> {
+    fn and(&self, other: &impl BitCollection) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_and(self, other))
     }
@@ -27,7 +137,7 @@ pub(crate) trait BitCollection: Sized {
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
-    fn or(&self, other: &Tibs) -> PyResult<Self> {
+    fn or(&self, other: &impl BitCollection) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_or(self, other))
     }
@@ -35,7 +145,7 @@ pub(crate) trait BitCollection: Sized {
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
     /// Raises ValueError if the two Tibs have differing lengths.
-    fn xor(&self, other: &Tibs) -> PyResult<Self> {
+    fn xor(&self, other: &impl BitCollection) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_xor(self, other))
     }
@@ -52,9 +162,9 @@ pub(crate) trait BitCollection: Sized {
     fn from_u128(value: u128, length: usize) -> Result<Self, String>;
     fn from_i128(value: i128, length: usize) -> Result<Self, String>;
     fn from_f64(value: f64, length: i64) -> Result<Self, String>;
-    fn logical_or(&self, other: &Tibs) -> Self;
-    fn logical_and(&self, other: &Tibs) -> Self;
-    fn logical_xor(&self, other: &Tibs) -> Self;
+    fn logical_or(&self, other: &impl BitCollection) -> Self;
+    fn logical_and(&self, other: &impl BitCollection) -> Self;
+    fn logical_xor(&self, other: &impl BitCollection) -> Self;
 
     fn get_bit(&self, i: usize) -> bool;
     fn to_binary(&self) -> String;
@@ -115,19 +225,24 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     } else {
         let mut result = BV::with_capacity(total_bit_length);
         for bits in bits_array {
-            result.extend_from_bitslice(&bits.inner.data);
+            result.extend_from_bitslice(&bits.data);
         }
         Mutibs::new(result)
     };
     // Update cache with new result
     {
         let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.inner.data.clone());
+        cache.put(s, result.data.clone());
     }
     Ok(result)
 }
 
 impl BitCollection for Tibs {
+
+    fn new(bv: BV) -> Self {
+        Tibs { data: bv }
+    }
+
     #[inline]
     fn get_data(&self) -> &BV {
         &self.data
@@ -310,27 +425,27 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn logical_or(&self, other: &Self) -> Self {
+    fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
-        result |= &other.data;
+        result |= other.get_data();
         Self::new(result)
     }
 
 
     #[inline]
-    fn logical_and(&self, other: &Self) -> Self {
+    fn logical_and(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
-        result &= &other.data;
+        result &= other.get_data();
         Self::new(result)
     }
 
     #[inline]
-    fn logical_xor(&self, other: &Self) -> Self {
+    fn logical_xor(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
         let mut result = self.data.clone();
-        result ^= &other.data;
+        result ^= other.get_data();
         Self::new(result)
     }
 
@@ -473,152 +588,162 @@ impl BitCollection for Tibs {
 }
 
 impl BitCollection for Mutibs {
+
+    fn new(bv: BV) -> Self {
+        Mutibs { data: bv }
+    }
+
     #[inline]
     fn get_data(&self) -> &BV {
-        &self.inner.data
+        &self.data
     }
 
     #[inline]
     fn len(&self) -> usize {
-        self.inner.len()
+        self.data.len()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+        self.data.is_empty()
     }
 
     #[inline]
     fn empty() -> Self {
         Self {
-            inner: <Tibs as BitCollection>::empty(),
+            data: <Tibs as BitCollection>::empty().data,
         }
     }
 
     #[inline]
     fn from_zeros(length: usize) -> Self {
         Self {
-            inner: <Tibs as BitCollection>::from_zeros(length),
+            data: <Tibs as BitCollection>::from_zeros(length).data,
         }
     }
 
     #[inline]
     fn from_ones(length: usize) -> Self {
         Self {
-            inner: <Tibs as BitCollection>::from_ones(length),
+            data: <Tibs as BitCollection>::from_ones(length).data,
         }
     }
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
         Self {
-            inner: <Tibs as BitCollection>::from_bytes(data),
+            data: <Tibs as BitCollection>::from_bytes(data).data,
         }
     }
 
     #[inline]
     fn from_binary(binary_string: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_binary(binary_string)?,
+            data: <Tibs as BitCollection>::from_binary(binary_string)?.data,
         })
     }
 
     #[inline]
     fn from_octal(oct: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_octal(oct)?,
+            data: <Tibs as BitCollection>::from_octal(oct)?.data,
         })
     }
 
     #[inline]
     fn from_hexadecimal(hex: &str) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_hexadecimal(hex)?,
+            data: <Tibs as BitCollection>::from_hexadecimal(hex)?.data,
         })
     }
 
     #[inline]
     fn from_u128(value: u128, length: usize) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_u128(value, length)?,
+            data: <Tibs as BitCollection>::from_u128(value, length)?.data,
         })
     }
 
     #[inline]
     fn from_i128(value: i128, length: usize) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_i128(value, length)?,
+            data: <Tibs as BitCollection>::from_i128(value, length)?.data,
         })
     }
 
     fn from_f64(value: f64, length: i64) -> Result<Self, String> {
         Ok(Self {
-            inner: <Tibs as BitCollection>::from_f64(value, length)?,
+            data: <Tibs as BitCollection>::from_f64(value, length)?.data,
         })
     }
 
     #[inline]
-    fn logical_or(&self, other: &Tibs) -> Self {
+    fn logical_or(&self, other: &impl BitCollection) -> Self {
+        let t = Tibs { data: self.data.clone() };
         Self {
-            inner: self.inner.logical_or(other),
+            data: t.logical_or(other).data,
         }
     }
 
     #[inline]
-    fn logical_and(&self, other: &Tibs) -> Self {
+    fn logical_and(&self, other: &impl BitCollection) -> Self {
+        // TODO: c.f. Tibs::logical_and
+        let t = Tibs { data: self.data.clone() };
         Self {
-            inner: self.inner.logical_and(other),
+            data: t.logical_and(other).data,
         }
     }
 
     #[inline]
-    fn logical_xor(&self, other: &Tibs) -> Self {
+    fn logical_xor(&self, other: &impl BitCollection) -> Self {
+        let t = Tibs { data: self.data.clone() };
         Self {
-            inner: self.inner.logical_xor(other),
+            data: t.logical_xor(other).data,
         }
     }
 
     #[inline]
     fn get_bit(&self, i: usize) -> bool {
-        self.inner.data[i]
+        self.data[i]
     }
 
     #[inline]
     fn to_binary(&self) -> String {
-        self.inner.to_binary()
+        // TODO: No clone should be needed here
+        Tibs { data: self.data.clone() }.to_binary()
     }
 
     #[inline]
     fn to_octal(&self) -> Result<String, String> {
-        self.inner.to_octal()
+        Tibs { data: self.data.clone() }.to_octal()
     }
 
     #[inline]
     fn to_hexadecimal(&self) -> Result<String, String> {
-        self.inner.to_hexadecimal()
+        Tibs { data: self.data.clone() }.to_hexadecimal()
     }
 
     #[inline]
     fn to_byte_data(&self) -> Result<Vec<u8>, String> {
-        self.inner.to_byte_data()
+        Tibs { data: self.data.clone() }.to_byte_data()
     }
 
     #[inline]
     fn to_u128(&self) -> Result<u128, String> {
-        self.inner.to_u128()
+        Tibs { data: self.data.clone() }.to_u128()
     }
 
     #[inline]
     fn to_i128(&self) -> Result<i128, String> {
-        self.inner.to_i128()
+        Tibs { data: self.data.clone() }.to_i128()
     }
 
     fn to_f64(&self) -> Result<f64, String> {
-        self.inner.to_f64()
+        Tibs { data: self.data.clone() }.to_f64()
     }
 
     fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        self.inner.to_int_byte_data(signed)
+        Tibs { data: self.data.clone() }.to_int_byte_data(signed)
     }
 }
 
@@ -655,69 +780,25 @@ impl PartialEq for Tibs {
 impl PartialEq<Mutibs> for Tibs {
     #[inline]
     fn eq(&self, other: &Mutibs) -> bool {
-        self.data == other.inner.data
+        self.data == other.data
     }
 }
 
 impl PartialEq for Mutibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.inner.data == other.inner.data
+        self.data == other.data
     }
 }
 
 impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
-        self.inner.data == other.data
+        self.data == other.data
     }
 }
 
-// ---- Tibs private helper methods. Not part of the Python interface. ----
 
-impl Tibs {
-    pub(crate) fn new(bv: BV) -> Self {
-        Tibs { data: bv }
-    }
-
-    /// Slice used internally without bounds checking.
-    pub(crate) fn slice(&self, start_bit: usize, length: usize) -> Self {
-        Tibs::new(self.data[start_bit..start_bit + length].to_bitvec())
-    }
-
-    #[inline]
-    fn build_bin_string(&self) -> String {
-        let mut s = String::with_capacity(self.len());
-        for bit in self.data.iter() {
-            s.push(if *bit { '1' } else { '0' });
-        }
-        s
-    }
-
-    #[inline]
-    fn build_oct_string(&self) -> String {
-        debug_assert!(self.len() % 3 == 0);
-        let mut s = String::with_capacity(self.len() / 3);
-        for chunk in self.data.chunks(3) {
-            let tribble = chunk.load_be::<u8>();
-            let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
-            s.push(oct_char);
-        }
-        s
-    }
-
-    #[inline]
-    fn build_hex_string(&self) -> String {
-        debug_assert!(self.len() % 4 == 0);
-        let mut s = String::with_capacity(self.len() / 4);
-        for chunk in self.data.chunks(4) {
-            let nibble = chunk.load_be::<u8>();
-            let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
-            s.push(hex_char);
-        }
-        s
-    }
-}
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {

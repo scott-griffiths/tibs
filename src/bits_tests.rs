@@ -395,7 +395,7 @@ mod tests {
         let pattern1 = Mutibs::from_binary("1100").unwrap();
         let pattern2 = <Tibs as BitCollection>::from_binary("0011").unwrap();
 
-        let mut m = Mutibs::new(pattern1.inner.data);
+        let mut m = Mutibs::new(pattern1.data);
 
         m.set_slice(0, 2, &pattern2);
         assert_eq!(m.to_binary(), "001100");
