@@ -72,7 +72,7 @@ impl FindAllIterator {
             {
                 return Ok(None); // No space left for the needle or already past the end
             }
-            helpers::find_bitvec(&haystack_rs, &needle_rs, current_pos, slf.end, byte_aligned)
+            helpers::find_bitvec(&haystack_rs.data, &needle_rs.data, current_pos, slf.end, byte_aligned)
         };
 
         // Now, `slf` can be mutably accessed without conflicting with the previous borrows.

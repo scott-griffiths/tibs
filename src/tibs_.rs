@@ -1,9 +1,8 @@
 use crate::core::{str_to_mutibs, BitCollection};
-use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
+use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
-use bytemuck;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
@@ -88,23 +87,59 @@ impl Hash for Tibs {
     }
 }
 
+// ---- Tibs private helper methods. Not part of the Python interface. ----
+
 impl Tibs {
+
+    // #[inline]
+    // pub(crate) fn get_data(&self) -> &BV {
+    //     &self.data
+    // }
+
+    /// Slice used internally without bounds checking.
+    pub(crate) fn slice(&self, start_bit: usize, length: usize) -> Self {
+        Tibs::new(self.data[start_bit..start_bit + length].to_bitvec())
+    }
+
+    #[inline]
+    pub(crate) fn build_bin_string(&self) -> String {
+        let mut s = String::with_capacity(self.len());
+        for bit in self.data.iter() {
+            s.push(if *bit { '1' } else { '0' });
+        }
+        s
+    }
+
+    #[inline]
+    pub(crate) fn build_oct_string(&self) -> String {
+        debug_assert!(self.len() % 3 == 0);
+        let mut s = String::with_capacity(self.len() / 3);
+        for chunk in self.data.chunks(3) {
+            let tribble = chunk.load_be::<u8>();
+            let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
+            s.push(oct_char);
+        }
+        s
+    }
+
+    #[inline]
+    pub(crate) fn build_hex_string(&self) -> String {
+        debug_assert!(self.len() % 4 == 0);
+        let mut s = String::with_capacity(self.len() / 4);
+        for chunk in self.data.chunks(4) {
+            let nibble = chunk.load_be::<u8>();
+            let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
+            s.push(hex_char);
+        }
+        s
+    }
+
+
     /// Returns the bool value at a given bit index.
     #[inline]
     pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len())?;
         Ok(self.data[index])
-    }
-
-    #[inline]
-    pub(crate) fn validate_shift(&self, n: i64) -> PyResult<usize> {
-        if self.is_empty() {
-            return Err(PyValueError::new_err("Cannot shift an empty Tibs."));
-        }
-        if n < 0 {
-            return Err(PyValueError::new_err("Cannot shift by a negative amount."));
-        }
-        Ok(n as usize)
     }
 
     /// Return a slice of the current Tibs.
@@ -200,7 +235,7 @@ impl Tibs {
 #[derive(Clone)]
 #[pyclass(frozen, module = "tibs")]
 pub struct Tibs {
-    pub(crate) data: BV,
+    pub data: BV,
 }
 
 /// Public Python-facing methods.
@@ -217,23 +252,7 @@ impl Tibs {
 
     /// Return string representations for printing.
     pub fn __str__(&self) -> String {
-        if self.is_empty() {
-            return "".to_string();
-        }
-        const MAX_BITS_TO_PRINT: usize = 10000;
-        debug_assert!(MAX_BITS_TO_PRINT % 4 == 0);
-        if self.len() <= MAX_BITS_TO_PRINT {
-            match self.to_hexadecimal() {
-                Ok(hex) => format!("0x{}", hex),
-                Err(_) => format!("0b{}", self.to_bin()),
-            }
-        } else {
-            format!(
-                "0x{}... # length={}",
-                self.slice(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
-                self.len()
-            )
-        }
+        self.to_string()
     }
 
     /// Return representation that could be used to recreate the instance.
@@ -319,7 +338,7 @@ impl Tibs {
             return self.data == b.data;
         }
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
-            return self.data == b.inner.data;
+            return self.data == b.data;
         }
         let maybe = tibs_from_any(other);
         match maybe {
@@ -756,7 +775,7 @@ impl Tibs {
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
 
-        Ok(find_bitvec(self, &b, start, end, byte_aligned))
+        Ok(find_bitvec(&self.data, &b.data, start, end, byte_aligned))
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -824,12 +843,7 @@ impl Tibs {
     ///
     pub fn starts_with(&self, prefix: &Bound<'_, PyAny>) -> PyResult<bool> {
         let prefix = tibs_from_any(prefix)?;
-        let n = prefix.len();
-        if n <= self.len() {
-            Ok(prefix.data == self.data[..n])
-        } else {
-            Ok(false)
-        }
+        Ok(<Tibs as BitCollection>::starts_with(self, prefix))
     }
 
     /// Return whether the current Tibs ends with suffix.
@@ -846,12 +860,7 @@ impl Tibs {
     ///
     pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
         let suffix = tibs_from_any(suffix)?;
-        let n = suffix.len();
-        if n <= self.len() {
-            Ok(suffix.data == self.data[self.len() - n..])
-        } else {
-            Ok(false)
-        }
+        Ok(<Tibs as BitCollection>::ends_with(self, suffix))
     }
 
     /// Return count of total number of either zero or one bits.
@@ -866,27 +875,7 @@ impl Tibs {
     ///
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
         let count_ones = value.is_truthy()?;
-        let len = self.len();
-
-        let (mut ones, raw) = (0usize, self.data.as_raw_slice());
-        if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
-            // Considerable speed increase by casting data to usize if possible.
-            for word in words {
-                ones += word.count_ones() as usize;
-            }
-            let used_bits = words.len() * usize::BITS as usize;
-            if used_bits > len {
-                let extra = used_bits - len;
-                if let Some(last) = words.last() {
-                    ones -= (last & (!0usize >> extra)).count_ones() as usize;
-                }
-            }
-        } else {
-            // Fallback to library method
-            ones = self.data.count_ones();
-        }
-
-        Ok(if count_ones { ones } else { len - ones })
+        Ok(<Tibs as BitCollection>::count(self, count_ones))
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.
@@ -924,7 +913,7 @@ impl Tibs {
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
         Mutibs {
-            inner: Tibs::new(self.data.clone()),
+            data: self.data.clone(),
         }
     }
 
@@ -971,18 +960,8 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = self.validate_shift(n)?;
-        if shift == 0 {
-            return Ok(self.clone());
-        }
-        let len = self.len();
-        if shift >= len {
-            return Ok(BitCollection::from_zeros(len));
-        }
-        let mut result_data = BV::with_capacity(len);
-        result_data.extend_from_bitslice(&self.data[shift..]);
-        result_data.resize(len, false);
-        Ok(Self::new(result_data))
+        let shift = validate_shift(self, n)?;
+        Ok(self.lshift(shift))
     }
 
     /// Return new Tibs shifted by n to the right.
@@ -990,17 +969,8 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = self.validate_shift(n)?;
-        if shift == 0 {
-            return Ok(self.clone());
-        }
-        let len = self.len();
-        if shift >= len {
-            return Ok(BitCollection::from_zeros(len));
-        }
-        let mut result_data = BV::repeat(false, shift);
-        result_data.extend_from_bitslice(&self.data[..len - shift]);
-        Ok(Self::new(result_data))
+        let shift = validate_shift(self, n)?;
+        Ok(self.rshift(shift))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -1113,18 +1083,7 @@ impl Tibs {
                 "Cannot multiply by a negative integer.",
             ));
         }
-        let n = n as usize;
-        let len = self.len();
-        if n == 0 || len == 0 {
-            return Ok(BitCollection::empty());
-        }
-        let mut bv = BV::with_capacity(len * n);
-        bv.extend_from_bitslice(&self.data);
-        // TODO: This could be done more efficiently with doubling.
-        for _ in 1..n {
-            bv.extend_from_bitslice(&self.data);
-        }
-        Ok(Tibs::new(bv))
+        Ok(self.multiply(n as usize))
     }
 
     /// Return Tibs consisting of n concatenations of self.
