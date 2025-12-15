@@ -1,4 +1,4 @@
-use crate::helpers::BV;
+use crate::helpers::{BV, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -13,31 +13,31 @@ use std::sync::Mutex;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
-    
+
     #[inline]
     fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.get_data().clone();
-        result |= other.get_data();
+        let mut result = self.data().clone();
+        result |= other.data();
         Self::new(result)
     }
 
     #[inline]
     fn logical_and(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.get_data().clone();
-        result &= other.get_data();
+        let mut result = self.data().clone();
+        result &= other.data();
         Self::new(result)
     }
 
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.get_data().clone();
-        result ^= other.get_data();
+        let mut result = self.data().clone();
+        result ^= other.data();
         Self::new(result)
     }
-    
+
     #[inline]
     fn from_zeros(length: usize) -> Self {
         Self::new(BV::repeat(false, length))
@@ -68,7 +68,7 @@ pub(crate) trait BitCollection: Sized {
         } else {
             format!(
                 "0x{}... # length={}",
-                self.slice(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
+                self.get_slice_unchecked(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
                 self.len()
             )
         }
@@ -77,7 +77,7 @@ pub(crate) trait BitCollection: Sized {
     fn starts_with(&self, prefix: impl BitCollection) -> bool {
         let n = prefix.len();
         if n <= self.len() {
-            *prefix.get_data() == self.get_data()[..n]
+            *prefix.data() == self.data()[..n]
         } else {
             false
         }
@@ -92,7 +92,7 @@ pub(crate) trait BitCollection: Sized {
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
         let n = suffix.len();
         if n <= self.len() {
-            *suffix.get_data() == self.get_data()[self.len() - n..]
+            *suffix.data() == self.data()[self.len() - n..]
         } else {
             false
         }
@@ -100,9 +100,72 @@ pub(crate) trait BitCollection: Sized {
 
     fn new(bv: BV) -> Self;
 
+    /// Returns the bool value at a given bit index.
+    #[inline]
+    fn get_index(&self, bit_index: i64) -> PyResult<bool> {
+        let index = validate_index(bit_index, self.len())?;
+        Ok(self.data()[index])
+    }
+
+    fn getslice_with_step(
+        &self,
+        start_bit: i64,
+        end_bit: i64,
+        step: i64,
+    ) -> PyResult<Self> {
+        if step == 0 {
+            return Err(PyValueError::new_err("Slice step cannot be zero."));
+        }
+        // Note that a start_bit or end_bit of -1 means to stop at the beginning when using a negative step.
+        // Otherwise they should both be positive indices.
+        debug_assert!(start_bit >= -1);
+        debug_assert!(end_bit >= -1);
+        debug_assert!(step != 0);
+        if start_bit < -1 || end_bit < -1 {
+            return Err(PyValueError::new_err(
+                "Indices less than -1 are not valid values.",
+            ));
+        }
+        if step > 0 {
+            if start_bit >= end_bit {
+                return Ok(BitCollection::empty());
+            }
+            if end_bit as usize > self.len() {
+                return Err(PyValueError::new_err(
+                    "Slice end goes past the end of the container.",
+                ));
+            }
+            Ok(Self::new(
+                self.data()[start_bit as usize..end_bit as usize]
+                    .iter()
+                    .step_by(step as usize)
+                    .collect(),
+            ))
+        } else {
+            if start_bit <= end_bit || start_bit == -1 {
+                return Ok(BitCollection::empty());
+            }
+            if start_bit as usize > self.len() {
+                return Err(PyValueError::new_err(
+                    "Slice start bit is past the end of the container.",
+                ));
+            }
+            // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
+            debug_assert!(step < 0);
+            let adjusted_end_bit = (end_bit + 1) as usize;
+            Ok(Self::new(
+                self.data()[adjusted_end_bit..=start_bit as usize]
+                    .iter()
+                    .rev()
+                    .step_by(-step as usize)
+                    .collect(),
+            ))
+        }
+    }
+
     // Unchecked version
-    fn slice(&self, start_bit: usize, length: usize) -> Self {
-        Self::new(self.get_data()[start_bit..start_bit + length].to_bitvec())
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
+        Self::new(self.data()[start_bit..start_bit + length].to_bitvec())
     }
 
     /// Checked version
@@ -115,13 +178,13 @@ pub(crate) trait BitCollection: Sized {
                 "End bit of the slice goes past the end of the container.",
             ));
         }
-        Ok(self.slice(start_bit, length))
+        Ok(self.get_slice_unchecked(start_bit, length))
     }
 
     fn count(&self, count_ones: bool) -> usize {
         let len = self.len();
 
-        let (mut ones, raw) = (0usize, self.get_data().as_raw_slice());
+        let (mut ones, raw) = (0usize, self.data().as_raw_slice());
         if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
             // Considerable speed increase by casting data to usize if possible.
             for word in words {
@@ -136,7 +199,7 @@ pub(crate) trait BitCollection: Sized {
             }
         } else {
             // Fallback to library method
-            ones = self.get_data().count_ones();
+            ones = self.data().count_ones();
         }
 
         if count_ones { ones } else { len - ones }
@@ -148,42 +211,42 @@ pub(crate) trait BitCollection: Sized {
             return BitCollection::empty();
         }
         let mut bv = BV::with_capacity(len * n);
-        bv.extend_from_bitslice(&self.get_data());
+        bv.extend_from_bitslice(&self.data());
         // TODO: This could be done more efficiently with doubling.
         for _ in 1..n {
-            bv.extend_from_bitslice(&self.get_data());
+            bv.extend_from_bitslice(&self.data());
         }
         Self::new(bv)
     }
 
     fn lshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::new(self.get_data().clone());
+            return Self::new(self.data().clone());
         }
         let len = self.len();
         if n >= len {
             return BitCollection::from_zeros(len);
         }
         let mut result_data = BV::with_capacity(len);
-        result_data.extend_from_bitslice(&self.get_data()[n..]);
+        result_data.extend_from_bitslice(&self.data()[n..]);
         result_data.resize(len, false);
         Self::new(result_data)
     }
     
     fn rshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::new(self.get_data().clone());
+            return Self::new(self.data().clone());
         }
         let len = self.len();
         if n >= len {
             return BitCollection::from_zeros(len);
         }
         let mut result_data = BV::repeat(false, n);
-        result_data.extend_from_bitslice(&self.get_data()[..len - n]);
+        result_data.extend_from_bitslice(&self.data()[..len - n]);
         Self::new(result_data)
     }
 
-    fn get_data(&self) -> &BV;
+    fn data(&self) -> &BV;
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
@@ -282,7 +345,7 @@ pub(crate) trait BitCollection: Sized {
             Ok(d) => d,
             Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
         };
-        let mut bv = <Self as BitCollection>::from_bytes(data).get_data().clone();
+        let mut bv = <Self as BitCollection>::from_bytes(data).data().clone();
         if is_odd_length {
             bv.drain(bv.len() - 4..bv.len());
         }
@@ -355,19 +418,43 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn build_bin_string(&self) -> String {
+    fn to_binary(&self) -> String {
         let mut s = String::with_capacity(self.len());
-        for bit in self.get_data().iter() {
+        for bit in self.data().iter() {
             s.push(if *bit { '1' } else { '0' });
         }
         s
     }
 
     #[inline]
+    fn to_octal(&self) -> Result<String, String> {
+        let len = self.len();
+        if len % 3 != 0 {
+            return Err(format!(
+                "Cannot interpret as octal - length of {} is not a multiple of 3 bits.",
+                len
+            ));
+        }
+        Ok(self.build_oct_string())
+    }
+
+    #[inline]
+    fn to_hexadecimal(&self) -> Result<String, String> {
+        let len = self.len();
+        if len % 4 != 0 {
+            return Err(format!(
+                "Cannot interpret as hex - length of {} is not a multiple of 4 bits.",
+                len
+            ));
+        }
+        Ok(self.build_hex_string())
+    }
+
+    #[inline]
     fn build_oct_string(&self) -> String {
         debug_assert!(self.len() % 3 == 0);
         let mut s = String::with_capacity(self.len() / 3);
-        for chunk in self.get_data().chunks(3) {
+        for chunk in self.data().chunks(3) {
             let tribble = chunk.load_be::<u8>();
             let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
             s.push(oct_char);
@@ -379,7 +466,7 @@ pub(crate) trait BitCollection: Sized {
     fn build_hex_string(&self) -> String {
         debug_assert!(self.len() % 4 == 0);
         let mut s = String::with_capacity(self.len() / 4);
-        for chunk in self.get_data().chunks(4) {
+        for chunk in self.data().chunks(4) {
             let nibble = chunk.load_be::<u8>();
             let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
             s.push(hex_char);
@@ -391,9 +478,6 @@ pub(crate) trait BitCollection: Sized {
     fn is_empty(&self) -> bool;
 
     fn get_bit(&self, i: usize) -> bool;
-    fn to_binary(&self) -> String;
-    fn to_octal(&self) -> Result<String, String>;
-    fn to_hexadecimal(&self) -> Result<String, String>;
     fn to_byte_data(&self) -> Result<Vec<u8>, String>;
     fn to_u128(&self) -> Result<u128, String>;
     fn to_i128(&self) -> Result<i128, String>;
@@ -467,56 +551,28 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn get_data(&self) -> &BV {
+    fn data(&self) -> &BV {
         self.data()
     }
 
     #[inline]
     fn len(&self) -> usize {
-        self.get_data().len()
+        self.data().len()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.get_data().is_empty()
+        self.data().is_empty()
     }
 
-    
-    
+
+
 
     #[inline]
     fn get_bit(&self, i: usize) -> bool {
-        self.get_data()[i]
+        self.data()[i]
     }
 
-    #[inline]
-    fn to_binary(&self) -> String {
-        self.build_bin_string()
-    }
-
-    #[inline]
-    fn to_octal(&self) -> Result<String, String> {
-        let len = self.len();
-        if len % 3 != 0 {
-            return Err(format!(
-                "Cannot interpret as octal - length of {} is not a multiple of 3 bits.",
-                len
-            ));
-        }
-        Ok(self.build_oct_string())
-    }
-
-    #[inline]
-    fn to_hexadecimal(&self) -> Result<String, String> {
-        let len = self.len();
-        if len % 4 != 0 {
-            return Err(format!(
-                "Cannot interpret as hex - length of {} is not a multiple of 4 bits.",
-                len
-            ));
-        }
-        Ok(self.build_hex_string())
-    }
 
     #[inline]
     fn to_byte_data(&self) -> Result<Vec<u8>, String> {
@@ -529,7 +585,7 @@ impl BitCollection for Tibs {
                 "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
             ));
         }
-        match self.get_data().as_bitslice().domain() {
+        match self.data().as_bitslice().domain() {
             // Fast path: element-aligned and length is a multiple of 8
             bitvec::domain::Domain::Region {
                 head: None,
@@ -542,7 +598,7 @@ impl BitCollection for Tibs {
             // Misaligned: repack by extending from the bitslice
             _ => {
                 let mut bv = BV::with_capacity(len_bits);
-                bv.extend_from_bitslice(&self.get_data());
+                bv.extend_from_bitslice(&self.data());
                 let new_len = (len_bits + 7) & !7;
                 bv.resize(new_len, false);
                 Ok(bv.into_vec())
@@ -561,7 +617,7 @@ impl BitCollection for Tibs {
         let mut padded_bv = BV::new();
         let padding = 128 - length;
         padded_bv.resize(padding, false);
-        padded_bv.extend_from_bitslice(&self.get_data());
+        padded_bv.extend_from_bitslice(&self.data());
         Ok(padded_bv.load_be::<u128>())
     }
 
@@ -577,7 +633,7 @@ impl BitCollection for Tibs {
         let padding = 128 - length;
         let pad_bit = self.get_bit(0);
         padded_bv.resize(padding, pad_bit);
-        padded_bv.extend_from_bitslice(&self.get_data());
+        padded_bv.extend_from_bitslice(&self.data());
         Ok(padded_bv.load_be::<i128>())
     }
 
@@ -585,15 +641,15 @@ impl BitCollection for Tibs {
         let length = self.len();
         match length {
             64 => {
-                let bits = self.get_data().load_be::<u64>();
+                let bits = self.data().load_be::<u64>();
                 Ok(f64::from_bits(bits))
             }
             32 => {
-                let bits = self.get_data().load_be::<u32>();
+                let bits = self.data().load_be::<u32>();
                 Ok(f32::from_bits(bits) as f64)
             }
             16 => {
-                let bits = self.get_data().load_be::<u16>();
+                let bits = self.data().load_be::<u16>();
                 Ok(f16::from_bits(bits).to_f64())
             }
             _ => Err(format!(
@@ -610,13 +666,13 @@ impl BitCollection for Tibs {
         let needed_bits = (self.len() + 7) & !7;
         let mut bv = BV::with_capacity(needed_bits);
 
-        let sign_bit = signed && self.get_data()[0];
+        let sign_bit = signed && self.data()[0];
         let padding = needed_bits - self.len();
 
         for _ in 0..padding {
             bv.push(sign_bit);
         }
-        bv.extend_from_bitslice(self.get_data());
+        bv.extend_from_bitslice(self.data());
 
         bv.into_vec()
     }
@@ -628,7 +684,7 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn get_data(&self) -> &BV {
+    fn data(&self) -> &BV {
         self.data()
     }
 
@@ -646,22 +702,6 @@ impl BitCollection for Mutibs {
     #[inline]
     fn get_bit(&self, i: usize) -> bool {
         self.data()[i]
-    }
-
-    #[inline]
-    fn to_binary(&self) -> String {
-        // TODO: No clone should be needed here
-        Tibs::new(self.data().clone()).to_binary()
-    }
-
-    #[inline]
-    fn to_octal(&self) -> Result<String, String> {
-        Tibs::new(self.data().clone()).to_octal()
-    }
-
-    #[inline]
-    fn to_hexadecimal(&self) -> Result<String, String> {
-        Tibs::new(self.data().clone()).to_hexadecimal()
     }
 
     #[inline]
@@ -693,7 +733,7 @@ impl fmt::Debug for Tibs {
         if self.len() > 100 {
             return f
                 .debug_struct("Tibs")
-                .field("hex", &self.slice(0, 100).to_hex().unwrap())
+                .field("hex", &self.get_slice_unchecked(0, 100).to_hex().unwrap())
                 .field("length", &self.len())
                 .finish();
         }
@@ -714,28 +754,28 @@ impl fmt::Debug for Tibs {
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.get_data() == other.get_data()
+        self.data() == other.data()
     }
 }
 
 impl PartialEq<Mutibs> for Tibs {
     #[inline]
     fn eq(&self, other: &Mutibs) -> bool {
-        self.get_data() == other.get_data()
+        self.data() == other.data()
     }
 }
 
 impl PartialEq for Mutibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.get_data() == other.get_data()
+        self.data() == other.data()
     }
 }
 
 impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
-        self.get_data() == other.get_data()
+        self.data() == other.data()
     }
 }
 

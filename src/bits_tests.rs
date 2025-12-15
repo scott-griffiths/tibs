@@ -128,7 +128,7 @@ mod tests {
         let a3 = a1.and(&a2).unwrap();
         let b = Tibs::from_hexadecimal("103").unwrap();
         assert_eq!(a3, b);
-        let a4 = a1.slice(4, 8).and(&a2.slice(4, 8)).unwrap();
+        let a4 = a1.get_slice_unchecked(4, 8).and(&a2.get_slice_unchecked(4, 8)).unwrap();
         assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
     }
 
@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(b, vec![1, 255]);
         let c = a.to_int_byte_data(true);
         assert_eq!(c, vec![255, 255]);
-        let s = a.slice(5, 3);
+        let s = a.get_slice_unchecked(5, 3);
         assert_eq!(s.to_int_byte_data(false), vec![7]);
         assert_eq!(s.to_int_byte_data(true), vec![255]);
     }
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn mutable_from_immutable() {
         let immutable = <Tibs as BitCollection>::from_binary("1010").unwrap();
-        let mutable = Mutibs::new(immutable.get_data().clone());
+        let mutable = Mutibs::new(immutable.data().clone());
         assert_eq!(mutable.to_binary(), "1010");
     }
 
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn conversion_round_trip() {
         let original = <Tibs as BitCollection>::from_binary("101010").unwrap();
-        let mut mutable = Mutibs::new(original.get_data().clone());
+        let mut mutable = Mutibs::new(original.data().clone());
         mutable.set_index(false, 0).unwrap();
         mutable.set_index(true, 1).unwrap();
         let result = mutable.as_tibs();
