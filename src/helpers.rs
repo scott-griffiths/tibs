@@ -3,11 +3,10 @@ use crate::core::BitCollection;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
-use pyo3::PyResult;
+use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
-use sha2::Digest;
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;

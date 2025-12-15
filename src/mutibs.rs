@@ -1,16 +1,9 @@
-use crate::core::str_to_mutibs;
-use crate::core::validate_logical_op_lengths;
-use crate::core::BitCollection;
+use crate::core::{validate_logical_op_lengths, str_to_mutibs, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_slice, BV};
 use crate::tibs_::{tibs_from_any, Tibs};
+use pyo3::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
-use pyo3::prelude::{PyAnyMethods, PyTypeMethods};
-use pyo3::types::IntoPyDict;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice};
-use pyo3::types::{PySliceMethods, PyType};
-use pyo3::PyRefMut;
-use pyo3::{pyclass, pymethods, PyRef, PyResult, Python};
-use pyo3::{Bound, IntoPyObject, Py, PyAny};
+use pyo3::types::{IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use std::ops::Not;
 
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {

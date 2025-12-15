@@ -2,7 +2,6 @@ use crate::core::BitCollection;
 use crate::helpers;
 use crate::tibs_::Tibs;
 use pyo3::prelude::*;
-use pyo3::PyResult;
 
 #[pyclass]
 pub struct BoolIterator {
