@@ -100,64 +100,13 @@ impl Tibs {
         &self.data
     }
 
-    /// Slice used internally without bounds checking.
-    pub(crate) fn slice(&self, start_bit: usize, length: usize) -> Self {
-        Tibs::new(self.data[start_bit..start_bit + length].to_bitvec())
-    }
-
-    #[inline]
-    pub(crate) fn build_bin_string(&self) -> String {
-        let mut s = String::with_capacity(self.len());
-        for bit in self.data.iter() {
-            s.push(if *bit { '1' } else { '0' });
-        }
-        s
-    }
-
-    #[inline]
-    pub(crate) fn build_oct_string(&self) -> String {
-        debug_assert!(self.len() % 3 == 0);
-        let mut s = String::with_capacity(self.len() / 3);
-        for chunk in self.data.chunks(3) {
-            let tribble = chunk.load_be::<u8>();
-            let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
-            s.push(oct_char);
-        }
-        s
-    }
-
-    #[inline]
-    pub(crate) fn build_hex_string(&self) -> String {
-        debug_assert!(self.len() % 4 == 0);
-        let mut s = String::with_capacity(self.len() / 4);
-        for chunk in self.data.chunks(4) {
-            let nibble = chunk.load_be::<u8>();
-            let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
-            s.push(hex_char);
-        }
-        s
-    }
-
-
     /// Returns the bool value at a given bit index.
     #[inline]
     pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len())?;
         Ok(self.data[index])
     }
-
-    /// Return a slice of the current Tibs.
-    pub(crate) fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
-        if length == 0 {
-            return Ok(BitCollection::empty());
-        }
-        if start_bit + length > self.len() {
-            return Err(PyValueError::new_err(
-                "End bit of the slice goes past the end of the Tibs.",
-            ));
-        }
-        Ok(self.slice(start_bit, length))
-    }
+    
 
     pub(crate) fn getslice_with_step(
         &self,

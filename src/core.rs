@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
-
+    
     #[inline]
     fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
@@ -21,7 +21,6 @@ pub(crate) trait BitCollection: Sized {
         result |= other.get_data();
         Self::new(result)
     }
-
 
     #[inline]
     fn logical_and(&self, other: &impl BitCollection) -> Self {
@@ -38,6 +37,7 @@ pub(crate) trait BitCollection: Sized {
         result ^= other.get_data();
         Self::new(result)
     }
+    
     #[inline]
     fn from_zeros(length: usize) -> Self {
         Self::new(BV::repeat(false, length))
@@ -100,8 +100,22 @@ pub(crate) trait BitCollection: Sized {
 
     fn new(bv: BV) -> Self;
 
+    // Unchecked version
     fn slice(&self, start_bit: usize, length: usize) -> Self {
         Self::new(self.get_data()[start_bit..start_bit + length].to_bitvec())
+    }
+
+    /// Checked version
+    fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
+        if length == 0 {
+            return Ok(BitCollection::empty());
+        }
+        if start_bit + length > self.len() {
+            return Err(PyValueError::new_err(
+                "End bit of the slice goes past the end of the container.",
+            ));
+        }
+        Ok(self.slice(start_bit, length))
     }
 
     fn count(&self, count_ones: bool) -> usize {
@@ -340,6 +354,39 @@ pub(crate) trait BitCollection: Sized {
         Ok(Self::new(bv))
     }
 
+    #[inline]
+    fn build_bin_string(&self) -> String {
+        let mut s = String::with_capacity(self.len());
+        for bit in self.get_data().iter() {
+            s.push(if *bit { '1' } else { '0' });
+        }
+        s
+    }
+
+    #[inline]
+    fn build_oct_string(&self) -> String {
+        debug_assert!(self.len() % 3 == 0);
+        let mut s = String::with_capacity(self.len() / 3);
+        for chunk in self.get_data().chunks(3) {
+            let tribble = chunk.load_be::<u8>();
+            let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
+            s.push(oct_char);
+        }
+        s
+    }
+
+    #[inline]
+    fn build_hex_string(&self) -> String {
+        debug_assert!(self.len() % 4 == 0);
+        let mut s = String::with_capacity(self.len() / 4);
+        for chunk in self.get_data().chunks(4) {
+            let nibble = chunk.load_be::<u8>();
+            let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
+            s.push(hex_char);
+        }
+        s
+    }
+
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
 
@@ -434,6 +481,8 @@ impl BitCollection for Tibs {
         self.get_data().is_empty()
     }
 
+    
+    
 
     #[inline]
     fn get_bit(&self, i: usize) -> bool {

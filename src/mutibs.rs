@@ -98,11 +98,6 @@ impl Mutibs {
         &mut self.data
     }
 
-    /// Slice used internally without bounds checking. // TODO this and Tibs version in BitCollection?
-    fn slice(&self, start_bit: usize, length: usize) -> Self {
-        Mutibs::new(self.data[start_bit..start_bit + length].to_bitvec())
-    }
-
     pub(crate) fn get_index(&self, bit_index: i64) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len())?;
         Ok(self.data[index])
@@ -110,18 +105,6 @@ impl Mutibs {
 
     pub fn set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
         self.set_from_sequence(value, vec![index])
-    }
-
-    pub(crate) fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
-        if length == 0 {
-            return Ok(BitCollection::empty());
-        }
-        if start_bit + length > self.len() {
-            return Err(PyValueError::new_err(
-                "End bit of the slice goes past the end of the Mutibs.",
-            ));
-        }
-        Ok(self.slice(start_bit, length))
     }
 
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
