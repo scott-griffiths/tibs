@@ -91,10 +91,14 @@ impl Hash for Tibs {
 
 impl Tibs {
 
-    // #[inline]
-    // pub(crate) fn get_data(&self) -> &BV {
-    //     &self.data
-    // }
+    pub(crate) fn new(bv: BV) -> Self {
+        Tibs { data: bv }
+    }
+
+    #[inline]
+    pub(crate) fn data(&self) -> &BV {
+        &self.data
+    }
 
     /// Slice used internally without bounds checking.
     pub(crate) fn slice(&self, start_bit: usize, length: usize) -> Self {
@@ -235,7 +239,7 @@ impl Tibs {
 #[derive(Clone)]
 #[pyclass(frozen, module = "tibs")]
 pub struct Tibs {
-    pub data: BV,
+    data: BV,
 }
 
 /// Public Python-facing methods.
