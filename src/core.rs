@@ -1,4 +1,4 @@
-use crate::helpers::{BV, validate_index};
+use crate::helpers::{validate_index, BV};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -10,7 +10,6 @@ use pyo3::prelude::*;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
-
 
 // ---- Rust-only helper methods ----
 
@@ -59,7 +58,7 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     } else {
         let mut result = BV::with_capacity(total_bit_length);
         for bits in bits_array {
-            result.extend_from_bitslice(&bits.data());
+            result.extend_from_bitslice(bits.data());
         }
         Mutibs::new(result)
     };
@@ -71,10 +70,8 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     Ok(result)
 }
 
-
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
-
     #[inline]
     fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
@@ -114,8 +111,7 @@ pub(crate) trait BitCollection: Sized {
         let bv = BV::from_vec(data);
         Self::new(bv)
     }
-    fn to_string(&self) -> String
-    {
+    fn to_string(&self) -> String {
         if self.is_empty() {
             return "".to_string();
         }
@@ -129,7 +125,9 @@ pub(crate) trait BitCollection: Sized {
         } else {
             format!(
                 "0x{}... # length={}",
-                self.get_slice_unchecked(0, MAX_BITS_TO_PRINT).to_hexadecimal().unwrap(),
+                self.get_slice_unchecked(0, MAX_BITS_TO_PRINT)
+                    .to_hexadecimal()
+                    .unwrap(),
                 self.len()
             )
         }
@@ -149,7 +147,6 @@ pub(crate) trait BitCollection: Sized {
         Self::new(BV::new())
     }
 
-
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
         let n = suffix.len();
         if n <= self.len() {
@@ -168,12 +165,7 @@ pub(crate) trait BitCollection: Sized {
         Ok(self.data()[index])
     }
 
-    fn getslice_with_step(
-        &self,
-        start_bit: i64,
-        end_bit: i64,
-        step: i64,
-    ) -> PyResult<Self> {
+    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         if step == 0 {
             return Err(PyValueError::new_err("Slice step cannot be zero."));
         }
@@ -263,7 +255,11 @@ pub(crate) trait BitCollection: Sized {
             ones = self.data().count_ones();
         }
 
-        if count_ones { ones } else { len - ones }
+        if count_ones {
+            ones
+        } else {
+            len - ones
+        }
     }
 
     fn multiply(&self, n: usize) -> Self {
@@ -272,10 +268,10 @@ pub(crate) trait BitCollection: Sized {
             return BitCollection::empty();
         }
         let mut bv = BV::with_capacity(len * n);
-        bv.extend_from_bitslice(&self.data());
+        bv.extend_from_bitslice(self.data());
         // TODO: This could be done more efficiently with doubling.
         for _ in 1..n {
-            bv.extend_from_bitslice(&self.data());
+            bv.extend_from_bitslice(self.data());
         }
         Self::new(bv)
     }
@@ -293,7 +289,7 @@ pub(crate) trait BitCollection: Sized {
         result_data.resize(len, false);
         Self::new(result_data)
     }
-    
+
     fn rshift(&self, n: usize) -> Self {
         if n == 0 {
             return Self::new(self.data().clone());
@@ -559,7 +555,7 @@ pub(crate) trait BitCollection: Sized {
             // Misaligned: repack by extending from the bitslice
             _ => {
                 let mut bv = BV::with_capacity(len_bits);
-                bv.extend_from_bitslice(&self.data());
+                bv.extend_from_bitslice(self.data());
                 let new_len = (len_bits + 7) & !7;
                 bv.resize(new_len, false);
                 Ok(bv.into_vec())
@@ -578,7 +574,7 @@ pub(crate) trait BitCollection: Sized {
         let mut padded_bv = BV::new();
         let padding = 128 - length;
         padded_bv.resize(padding, false);
-        padded_bv.extend_from_bitslice(&self.data());
+        padded_bv.extend_from_bitslice(self.data());
         Ok(padded_bv.load_be::<u128>())
     }
 
@@ -594,7 +590,7 @@ pub(crate) trait BitCollection: Sized {
         let padding = 128 - length;
         let pad_bit = self.get_bit(0);
         padded_bv.resize(padding, pad_bit);
-        padded_bv.extend_from_bitslice(&self.data());
+        padded_bv.extend_from_bitslice(self.data());
         Ok(padded_bv.load_be::<i128>())
     }
 
@@ -643,7 +639,6 @@ pub(crate) trait BitCollection: Sized {
         self.data().is_empty()
     }
 
-
     #[inline]
     fn get_bit(&self, i: usize) -> bool {
         self.data()[i]
@@ -653,9 +648,7 @@ pub(crate) trait BitCollection: Sized {
     fn len(&self) -> usize {
         self.data().len()
     }
-
 }
-
 
 impl BitCollection for Tibs {
     fn new(bv: BV) -> Self {
@@ -666,9 +659,6 @@ impl BitCollection for Tibs {
     fn data(&self) -> &BV {
         self.data_to_bv()
     }
-
-
-
 }
 
 impl BitCollection for Mutibs {
@@ -680,8 +670,6 @@ impl BitCollection for Mutibs {
     fn data(&self) -> &BV {
         self.data_to_bv()
     }
-
-
 }
 
 impl fmt::Debug for Tibs {
@@ -734,8 +722,6 @@ impl PartialEq<Tibs> for Mutibs {
         self.data() == other.data()
     }
 }
-
-
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {

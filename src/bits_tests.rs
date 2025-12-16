@@ -128,7 +128,10 @@ mod tests {
         let a3 = a1.and(&a2).unwrap();
         let b = Tibs::from_hexadecimal("103").unwrap();
         assert_eq!(a3, b);
-        let a4 = a1.get_slice_unchecked(4, 8).and(&a2.get_slice_unchecked(4, 8)).unwrap();
+        let a4 = a1
+            .get_slice_unchecked(4, 8)
+            .and(&a2.get_slice_unchecked(4, 8))
+            .unwrap();
         assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
     }
 

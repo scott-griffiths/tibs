@@ -1,9 +1,11 @@
-use crate::core::{validate_logical_op_lengths, str_to_mutibs, BitCollection};
+use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
 use crate::tibs_::{tibs_from_any, Tibs};
-use pyo3::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
-use pyo3::types::{IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
+use pyo3::prelude::*;
+use pyo3::types::{
+    IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
+};
 use std::ops::Not;
 
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
@@ -83,7 +85,6 @@ pub struct Mutibs {
 
 // Internal methods, not exported to Python
 impl Mutibs {
-
     pub(crate) fn new_from_bv(bv: BV) -> Self {
         Mutibs { data: bv }
     }
@@ -105,16 +106,16 @@ impl Mutibs {
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
-            self.data[start..start + value.len()].copy_from_bitslice(&value.data());
+            self.data[start..start + value.len()].copy_from_bitslice(value.data());
         } else if start == end {
             // Not sure why but splice doesn't work for this case, so we do it explicitly
             let tail = self.data.split_off(start);
-            self.data.extend_from_bitslice(&value.data());
+            self.data.extend_from_bitslice(value.data());
             self.data.extend_from_bitslice(&tail);
         } else {
             let tail = self.data.split_off(end);
             self.data.truncate(start);
-            self.data.extend_from_bitslice(&value.data());
+            self.data.extend_from_bitslice(value.data());
             self.data.extend_from_bitslice(&tail);
         }
     }
@@ -734,7 +735,6 @@ impl Mutibs {
     pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
         let suffix = tibs_from_any(suffix)?;
         Ok(<Mutibs as BitCollection>::ends_with(self, suffix))
-
     }
 
     /// Find first occurrence of a bit sequence.
@@ -984,7 +984,6 @@ impl Mutibs {
     pub fn any(&self) -> bool {
         self.data.any()
     }
-
 
     /// Find last occurrence of a bit sequence.
     ///
@@ -1349,7 +1348,9 @@ impl Mutibs {
                     break;
                 }
             }
-            if let Some(found_pos) = find_bitvec(&slf.data, old.data(), current_pos, end, byte_aligned) {
+            if let Some(found_pos) =
+                find_bitvec(&slf.data, old.data(), current_pos, end, byte_aligned)
+            {
                 starting_points.push(found_pos);
                 current_pos = found_pos + old.len();
             } else {

@@ -5,7 +5,9 @@ use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
+use pyo3::types::{
+    IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
+};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -90,7 +92,6 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
-
     pub(crate) fn new_from_bv(bv: BV) -> Self {
         Tibs { data: bv }
     }
@@ -99,7 +100,6 @@ impl Tibs {
     pub(crate) fn data_to_bv(&self) -> &BV {
         &self.data
     }
-
 }
 
 ///     An immutable container of binary data.
