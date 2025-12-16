@@ -91,12 +91,12 @@ impl Hash for Tibs {
 
 impl Tibs {
 
-    pub(crate) fn new(bv: BV) -> Self {
+    pub(crate) fn new_from_bv(bv: BV) -> Self {
         Tibs { data: bv }
     }
 
     #[inline]
-    pub(crate) fn data(&self) -> &BV {
+    pub(crate) fn data_to_bv(&self) -> &BV {
         &self.data
     }
 

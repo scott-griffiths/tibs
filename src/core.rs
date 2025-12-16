@@ -11,6 +11,67 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
 
+
+// ---- Rust-only helper methods ----
+
+// Define a static LRU cache.
+const BITS_CACHE_SIZE: usize = 1024;
+static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
+
+fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
+    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
+        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
+        Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
+        Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
+        _ => Err(PyValueError::new_err(format!(
+            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
+        ))),
+    }
+}
+
+pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
+    // Check cache first
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        if let Some(cached_data) = cache.get(&s) {
+            return Ok(Mutibs::new(cached_data.clone()));
+        }
+    }
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    let tokens = s.split(',');
+    let mut bits_array = Vec::<Mutibs>::new();
+    let mut total_bit_length = 0;
+    for token in tokens {
+        if token.is_empty() {
+            continue;
+        }
+        let x = string_literal_to_mutibs(token)?;
+        total_bit_length += x.len();
+        bits_array.push(x);
+    }
+    if bits_array.is_empty() {
+        return Ok(BitCollection::empty());
+    }
+    // Combine all bits
+    let result = if bits_array.len() == 1 {
+        bits_array.pop().unwrap()
+    } else {
+        let mut result = BV::with_capacity(total_bit_length);
+        for bits in bits_array {
+            result.extend_from_bitslice(&bits.data());
+        }
+        Mutibs::new(result)
+    };
+    // Update cache with new result
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        cache.put(s, result.data().clone());
+    }
+    Ok(result)
+}
+
+
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
 
@@ -474,106 +535,6 @@ pub(crate) trait BitCollection: Sized {
         s
     }
 
-    fn len(&self) -> usize;
-    fn is_empty(&self) -> bool;
-
-    fn get_bit(&self, i: usize) -> bool;
-    fn to_byte_data(&self) -> Result<Vec<u8>, String>;
-    fn to_u128(&self) -> Result<u128, String>;
-    fn to_i128(&self) -> Result<i128, String>;
-    fn to_f64(&self) -> Result<f64, String>;
-    /// Return bytes that can easily be converted to an int in Python
-    fn to_int_byte_data(&self, signed: bool) -> Vec<u8>;
-}
-
-// ---- Rust-only helper methods ----
-
-// Define a static LRU cache.
-const BITS_CACHE_SIZE: usize = 1024;
-static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
-    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
-
-fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
-    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
-        Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
-        Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
-        _ => Err(PyValueError::new_err(format!(
-            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
-        ))),
-    }
-}
-
-pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
-    // Check cache first
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        if let Some(cached_data) = cache.get(&s) {
-            return Ok(Mutibs::new(cached_data.clone()));
-        }
-    }
-    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    let tokens = s.split(',');
-    let mut bits_array = Vec::<Mutibs>::new();
-    let mut total_bit_length = 0;
-    for token in tokens {
-        if token.is_empty() {
-            continue;
-        }
-        let x = string_literal_to_mutibs(token)?;
-        total_bit_length += x.len();
-        bits_array.push(x);
-    }
-    if bits_array.is_empty() {
-        return Ok(BitCollection::empty());
-    }
-    // Combine all bits
-    let result = if bits_array.len() == 1 {
-        bits_array.pop().unwrap()
-    } else {
-        let mut result = BV::with_capacity(total_bit_length);
-        for bits in bits_array {
-            result.extend_from_bitslice(&bits.data());
-        }
-        Mutibs::new(result)
-    };
-    // Update cache with new result
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.data().clone());
-    }
-    Ok(result)
-}
-
-impl BitCollection for Tibs {
-    fn new(bv: BV) -> Self {
-        Self::new(bv)
-    }
-
-    #[inline]
-    fn data(&self) -> &BV {
-        self.data()
-    }
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.data().len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.data().is_empty()
-    }
-
-
-
-
-    #[inline]
-    fn get_bit(&self, i: usize) -> bool {
-        self.data()[i]
-    }
-
-
     #[inline]
     fn to_byte_data(&self) -> Result<Vec<u8>, String> {
         if self.is_empty() {
@@ -657,7 +618,7 @@ impl BitCollection for Tibs {
             )),
         }
     }
-
+    /// Return bytes that can easily be converted to an int in Python
     fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
         if self.is_empty() {
             return Vec::new();
@@ -676,22 +637,6 @@ impl BitCollection for Tibs {
 
         bv.into_vec()
     }
-}
-
-impl BitCollection for Mutibs {
-    fn new(bv: BV) -> Self {
-        Self::new(bv)
-    }
-
-    #[inline]
-    fn data(&self) -> &BV {
-        self.data()
-    }
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.data().len()
-    }
 
     #[inline]
     fn is_empty(&self) -> bool {
@@ -705,27 +650,38 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn to_byte_data(&self) -> Result<Vec<u8>, String> {
-        Tibs::new(self.data().clone()).to_byte_data()
+    fn len(&self) -> usize {
+        self.data().len()
+    }
+
+}
+
+
+impl BitCollection for Tibs {
+    fn new(bv: BV) -> Self {
+        Self::new_from_bv(bv)
     }
 
     #[inline]
-    fn to_u128(&self) -> Result<u128, String> {
-        Tibs::new(self.data().clone()).to_u128()
+    fn data(&self) -> &BV {
+        self.data_to_bv()
+    }
+
+
+
+}
+
+impl BitCollection for Mutibs {
+    fn new(bv: BV) -> Self {
+        Self::new_from_bv(bv)
     }
 
     #[inline]
-    fn to_i128(&self) -> Result<i128, String> {
-        Tibs::new(self.data().clone()).to_i128()
+    fn data(&self) -> &BV {
+        self.data_to_bv()
     }
 
-    fn to_f64(&self) -> Result<f64, String> {
-        Tibs::new(self.data().clone()).to_f64()
-    }
 
-    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        Tibs::new(self.data().clone()).to_int_byte_data(signed)
-    }
 }
 
 impl fmt::Debug for Tibs {
