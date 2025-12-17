@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 import pytest
-import re
 from hypothesis import given
 import hypothesis.strategies as st
 from tibs import Tibs, Mutibs
-from typing import Iterable, Sequence
+from typing import Iterable
 
 
 class TestCreation:
