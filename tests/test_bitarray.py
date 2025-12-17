@@ -211,15 +211,15 @@ def test_adding():
     assert b == "0b11"
 
 
-# def test_copy_method():
-#     s = Tibs.from_zeros(9000)
-#     t = copy.copy(s)
-#     assert s == t
-#     assert s is t
-#     s = s.to_mutibs()
-#     t = copy.copy(s)
-#     assert s == t
-#     assert s is not t
+def test_copy_method():
+    s = Tibs.from_zeros(9000)
+    t = copy.copy(s)
+    assert s == t
+    assert s is t
+    s = s.to_mutibs()
+    t = copy.copy(s)
+    assert s == t
+    assert s is not t
 
 
 class TestRepr:
