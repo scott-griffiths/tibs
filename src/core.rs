@@ -410,8 +410,8 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_u128(value: u128, length: usize) -> Result<Self, String> {
-        if length == 0 || length > 128 {
+    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
+        if length <= 0 || length > 128 {
             return Err(format!(
                 "Bit length for unsigned int must be between 1 and 128. Received {length}."
             ));
@@ -419,14 +419,14 @@ pub(crate) trait BitCollection: Sized {
         if length < 128 && value >= (1u128 << length) {
             return Err(format!("Value {value} does not fit in {length} bits."));
         }
-        let mut bv = BV::repeat(false, length);
+        let mut bv = BV::repeat(false, length as usize);
         bv.store_be(value);
         Ok(Self::new(bv))
     }
 
     #[inline]
-    fn from_i128(value: i128, length: usize) -> Result<Self, String> {
-        if length == 0 || length > 128 {
+    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
+        if length <= 0 || length > 128 {
             return Err(format!(
                 "Bit length for signed int must be between 1 and 128. Received {length}."
             ));
@@ -441,7 +441,7 @@ pub(crate) trait BitCollection: Sized {
             }
         }
         let repeat_bit = value < 0;
-        let mut bv = BV::repeat(repeat_bit, length);
+        let mut bv = BV::repeat(repeat_bit, length as usize);
         bv.store_be(value);
         Ok(Self::new(bv))
     }
@@ -613,25 +613,6 @@ pub(crate) trait BitCollection: Sized {
                 "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
             )),
         }
-    }
-    /// Return bytes that can easily be converted to an int in Python
-    fn to_int_byte_data(&self, signed: bool) -> Vec<u8> {
-        if self.is_empty() {
-            return Vec::new();
-        }
-
-        let needed_bits = (self.len() + 7) & !7;
-        let mut bv = BV::with_capacity(needed_bits);
-
-        let sign_bit = signed && self.data()[0];
-        let padding = needed_bits - self.len();
-
-        for _ in 0..padding {
-            bv.push(sign_bit);
-        }
-        bv.extend_from_bitslice(self.data());
-
-        bv.into_vec()
     }
 
     #[inline]
