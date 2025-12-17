@@ -123,7 +123,7 @@ impl Tibs {
 ///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[derive(Clone)]
-#[pyclass(frozen, module = "tibs")]
+#[pyclass(frozen, sequence, module = "tibs")]
 pub struct Tibs {
     data: BV,
 }
@@ -674,6 +674,11 @@ impl Tibs {
             Ok(Some(_)) => true,
             _ => false,
         }
+    }
+
+    /// As Tibs is immutable, this returns the same instance.
+    pub fn __copy__(slf: PyRef<'_, Self>) -> Py<Self> {
+        slf.into()
     }
 
     /// Find last occurrence of a bit sequence.

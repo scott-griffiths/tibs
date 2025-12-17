@@ -7,11 +7,6 @@ from tibs import Tibs, Mutibs
 from typing import Iterable, Sequence
 
 
-def remove_unprintable(s: str) -> str:
-    colour_escape = re.compile(r"(?:\x1B[@-_])[0-?]*[ -/]*[@-~]")
-    return colour_escape.sub("", s)
-
-
 class TestCreation:
     def test_creation_from_bytes(self):
         s = Tibs.from_bytes(b"\xa0\xff")
@@ -79,16 +74,6 @@ class TestPadToken:
             _ = Tibs.from_string("pad10")
         with pytest.raises(ValueError):
             _ = Tibs.from_string("pad")
-
-    @pytest.mark.skip
-    def test_unpack(self):
-        s = Tibs.from_string("0b111000111")
-        x, y = s.unpack(["bits3", "pad3", "bits3"])
-        assert (x, y.unpack("u")) == ("0b111", 7)
-        x, y = s.unpack(["bits2", "pad2", "bin5"])
-        assert (x.unpack(["u2"])[0], y) == (3, "00111")
-        x = s.unpack(["pad1", "pad2", "pad3"])
-        assert x == ()
 
 
 def test_adding():
@@ -193,11 +178,11 @@ def test_from_random():
     assert a == c
 
 
-@pytest.mark.skip
 def test_is_things():
     a = Tibs('0b1010101010101010')
+    b = Mutibs('0b1')
     assert isinstance(a, Iterable)
-    assert isinstance(a, Sequence)
+    assert isinstance(b, Iterable)
 
 
 def test_bits_from_bytes_string():

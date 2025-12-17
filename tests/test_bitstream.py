@@ -186,7 +186,6 @@ class TestReplace:
         a.replace("0x44", "0x4444", count=1435, byte_aligned=True)
         assert a.to_hex() == "02444422444422334444"
 
-    @pytest.mark.skip
     def test_replace_errors(self):
         a = Mutibs("0o123415")
         with pytest.raises(ValueError):
@@ -884,7 +883,6 @@ class TestManyDifferentThings:
         assert not s[9:16].ends_with("0x34")
         assert not s[8:15].ends_with("0x34")
 
-    @pytest.mark.skip
     def test_const_bit_stream_hashability(self):
         a = Tibs("0x1")
         b = Tibs("0x2")
@@ -893,7 +891,6 @@ class TestManyDifferentThings:
         assert len(s) == 2
         assert hash(a) == hash(c)
 
-    @pytest.mark.skip
     def test_hash_edge_cases(self):
         a = Tibs("0xabcd")
         b = Tibs("0xabcd")
@@ -901,7 +898,6 @@ class TestManyDifferentThings:
         assert hash(a) == hash(b)
         assert hash(a) != hash(c)
 
-    @pytest.mark.skip
     def test_const_bits_copy(self):
         a = Tibs("0xabc")
         b = copy.copy(a)
