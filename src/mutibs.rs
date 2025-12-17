@@ -1,10 +1,10 @@
 use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
 use crate::tibs_::{tibs_from_any, Tibs};
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
-    IntoPyDict, PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
+    PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
 };
 use std::ops::Not;
 
@@ -330,28 +330,16 @@ impl Mutibs {
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
-        u: &Bound<'_, PyInt>,
+        u: u128,
         length: i64,
-        py: Python,
     ) -> PyResult<Self> {
-        let tibs = Tibs::from_u(_cls, u, length, py)?;
-        Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
+        Ok(BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)?)
     }
 
     /// Return the unsigned integer representation of the Mutibs.
-    pub fn to_u(&self, py: Python) -> PyResult<Py<PyInt>> {
-        if self.len() <= 128 {
-            Ok(BitCollection::to_u128(self)
-                .map_err(PyValueError::new_err)?
-                .into_pyobject(py)?
-                .unbind())
-        } else {
-            let bytes = self.to_int_byte_data(false);
-            let kwargs = [("signed", false)].into_py_dict(py)?;
-            let int_type = py.get_type::<PyInt>();
-            let result = int_type.call_method("from_bytes", (&bytes, "big"), Some(&kwargs))?;
-            Ok(result.cast::<PyInt>()?.clone().unbind())
-        }
+    pub fn to_u(&self) -> PyResult<u128> {
+        Ok(BitCollection::to_u128(self)
+            .map_err(PyValueError::new_err)?)
     }
 
     /// Create a new instance from a signed integer.
@@ -364,18 +352,16 @@ impl Mutibs {
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
-        i: &Bound<'_, PyInt>,
+        i: i128,
         length: i64,
-        py: Python,
     ) -> PyResult<Self> {
-        let tibs = Tibs::from_i(_cls, i, length, py)?;
-        Ok(tibs.to_mutibs()) // TODO: Better to do this the other way around.
+        Ok(BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)?)
     }
 
     /// Return the signed integer representation of the Mutibs.
-    pub fn to_i(&self, py: Python) -> PyResult<Py<PyInt>> {
-        let tibs = self.to_tibs(); // TODO: Better to do this the other way around.
-        tibs.to_i(py)
+    pub fn to_i(&self) -> PyResult<i128> {
+        Ok(BitCollection::to_i128(self)
+            .map_err(PyValueError::new_err)?)
     }
 
     /// Create a new instance from a floating point number.
