@@ -121,19 +121,19 @@ mod tests {
     //     assert_eq!(b1.find(&b2, None, None, false), Some(9));
     // }
 
-    #[test]
-    fn test_and() {
-        let a1 = Tibs::from_hexadecimal("f0f").unwrap();
-        let a2 = Tibs::from_hexadecimal("123").unwrap();
-        let a3 = a1.and(&a2).unwrap();
-        let b = Tibs::from_hexadecimal("103").unwrap();
-        assert_eq!(a3, b);
-        let a4 = a1
-            .get_slice_unchecked(4, 8)
-            .and(&a2.get_slice_unchecked(4, 8))
-            .unwrap();
-        assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
-    }
+    // #[test]
+    // fn test_and() {
+    //     let a1 = Tibs::from_hexadecimal("f0f").unwrap();
+    //     let a2 = Tibs::from_hexadecimal("123").unwrap();
+    //     let a3 = a1.and(&a2).unwrap();
+    //     let b = Tibs::from_hexadecimal("103").unwrap();
+    //     assert_eq!(a3, b);
+    //     let a4 = a1
+    //         .get_slice_unchecked(4, 8)
+    //         .and(&a2.get_slice_unchecked(4, 8))
+    //         .unwrap();
+    //     assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
+    // }
 
     #[test]
     fn test_set_mutable_slice() {
@@ -237,29 +237,29 @@ mod tests {
         assert!(bits.any());
     }
 
-    #[test]
-    fn test_xor() {
-        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
-        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
-        let result = a.xor(&b).unwrap();
-        assert_eq!(result.to_bin(), "0110");
-    }
-
-    #[test]
-    fn test_or() {
-        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
-        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
-        let result = a.or(&b).unwrap();
-        assert_eq!(result.to_bin(), "1110");
-    }
-
-    #[test]
-    fn test_and2() {
-        let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
-        let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
-        let result = a.and(&b).unwrap();
-        assert_eq!(result.to_bin(), "1000");
-    }
+    // #[test]
+    // fn test_xor() {
+    //     let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+    //     let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
+    //     let result = a.xor(&b).unwrap();
+    //     assert_eq!(result.to_bin(), "0110");
+    // }
+    //
+    // #[test]
+    // fn test_or() {
+    //     let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+    //     let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
+    //     let result = a.or(&b).unwrap();
+    //     assert_eq!(result.to_bin(), "1110");
+    // }
+    //
+    // #[test]
+    // fn test_and2() {
+    //     let a = <Tibs as BitCollection>::from_binary("1100").unwrap();
+    //     let b = <Tibs as BitCollection>::from_binary("1010").unwrap();
+    //     let result = a.and(&b).unwrap();
+    //     assert_eq!(result.to_bin(), "1000");
+    // }
 
     #[test]
     fn test_len() {
@@ -493,14 +493,14 @@ mod tests {
         assert!(m.get_slice(9, 10).is_err());
     }
 
-    #[test]
-    fn bit_ops_performance() {
-        let bv1 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
-        let bv2 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
-        let b1 = Tibs::new(bv1);
-        let b2 = Tibs::new(bv2);
-        for _ in 0..100 {
-            let _ = b1.or(&b2).unwrap();
-        }
-    }
+    // #[test]
+    // fn bit_ops_performance() {
+    //     let bv1 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
+    //     let bv2 = crate::helpers::bv_from_random(10_000_000, false, &None).unwrap();
+    //     let b1 = Tibs::new(bv1);
+    //     let b2 = Tibs::new(bv2);
+    //     for _ in 0..100 {
+    //         let _ = b1.or(&b2).unwrap();
+    //     }
+    // }
 }

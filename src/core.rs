@@ -305,30 +305,6 @@ pub(crate) trait BitCollection: Sized {
 
     fn data(&self) -> &BV;
 
-    /// Bit-wise 'and' between two Tibs. Returns new Tibs.
-    ///
-    /// Raises ValueError if the two Tibs have differing lengths.
-    fn and(&self, other: &impl BitCollection) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, other))
-    }
-
-    /// Bit-wise 'or' between two Tibs. Returns new Tibs.
-    ///
-    /// Raises ValueError if the two Tibs have differing lengths.
-    fn or(&self, other: &impl BitCollection) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, other))
-    }
-
-    /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
-    ///
-    /// Raises ValueError if the two Tibs have differing lengths.
-    fn xor(&self, other: &impl BitCollection) -> PyResult<Self> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, other))
-    }
-
     #[inline]
     fn from_binary(binary_string: &str) -> Result<Self, String> {
         // Ignore any leading '0b' or '0B'

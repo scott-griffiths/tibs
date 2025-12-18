@@ -42,20 +42,6 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     Err(PyTypeError::new_err(err))
 }
 
-// TODO: Use PolyTibs here to avoid the copy.
-fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
-    // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(mutibs_ref.__copy__());
-    }
-
-    // Is it of type Tibs?
-    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(tibs_ref.to_mutibs());
-    }
-
-    promote_to_mutibs(any)
-}
 
 ///     A mutable container of binary data.
 ///
@@ -749,14 +735,14 @@ impl Mutibs {
     ///
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self.and(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, &other))
     }
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
-    // TODO: Do this change for xor and and etc, and remove unused methods.
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
         validate_logical_op_lengths(self.len(), other.len())?;
@@ -769,7 +755,8 @@ impl Mutibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self.xor(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, &other))
     }
 
     /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -779,8 +766,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = mutibs_from_any(bs)?;
-        other.and(self)
+        self.__and__(bs)
     }
 
     /// Reverse bit-wise 'or' between two Mutibs. Returns new Mutibs.
@@ -790,8 +776,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = mutibs_from_any(bs)?;
-        other.or(self)
+        self.__or__(bs)
     }
 
     /// Reverse bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -801,8 +786,7 @@ impl Mutibs {
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = mutibs_from_any(bs)?;
-        other.xor(self)
+        self.__xor__(bs)
     }
 
     /// Rotates bit pattern to the left. Returns self.
@@ -1218,9 +1202,11 @@ impl Mutibs {
 
     /// Concatenate Mutibs and return a new Mutibs.
     pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let mut bs = mutibs_from_any(bs)?;
-        bs.data.extend_from_bitslice(&self.data);
-        Ok(bs)
+        let bs = tibs_from_any(bs)?;
+        let mut data = BV::with_capacity(self.len() + bs.len());
+        data.extend_from_bitslice(bs.data());
+        data.extend_from_bitslice(&self.data);
+        Ok(Mutibs::new(data))
     }
 
     /// Concatenate in-place.
@@ -1374,9 +1360,9 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
-            Mutibs::new(slf.data.clone())
+            PolyTibs::Owned(slf.__copy__().as_tibs())
         } else {
-            mutibs_from_any(bs)?
+            tibs_from_any(bs)?
         };
         if bs.len() == 0 {
             return Ok(slf);
@@ -1391,11 +1377,11 @@ impl Mutibs {
             pos = slf.len() as i64;
         }
         if bs.len() == 1 {
-            slf.data.insert(pos as usize, bs.data[0]);
+            slf.data.insert(pos as usize, bs.data()[0]);
             return Ok(slf);
         }
         let tail = slf.data.split_off(pos as usize);
-        slf.data.extend_from_bitslice(&bs.data);
+        slf.data.extend_from_bitslice(&bs.data());
         slf.data.extend_from_bitslice(&tail);
         Ok(slf)
     }
