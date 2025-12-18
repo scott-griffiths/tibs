@@ -5,9 +5,7 @@ use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{
-    PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
-};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -370,18 +368,13 @@ impl Tibs {
     ///
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
-    pub fn from_u(
-        _cls: &Bound<'_, PyType>,
-        u: u128,
-        length: i64,
-    ) -> PyResult<Self> {
+    pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
         BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)
     }
 
     /// Return the unsigned integer representation of the Tibs.
     pub fn to_u(&self) -> PyResult<u128> {
         BitCollection::to_u128(self).map_err(PyValueError::new_err)
-
     }
 
     /// Create a new instance from a signed integer.
@@ -393,11 +386,7 @@ impl Tibs {
     ///
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
-    pub fn from_i(
-        _cls: &Bound<'_, PyType>,
-        i: i128,
-        length: i64,
-    ) -> PyResult<Self> {
+    pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
         BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)
     }
 

@@ -1,8 +1,8 @@
-pub mod tibs_;
 pub mod core;
 pub mod helpers;
 pub mod iterator;
 pub mod mutibs;
+pub mod tibs_;
 
 use pyo3::prelude::*;
 
@@ -13,6 +13,6 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+mod bits_tests;
 #[cfg(test)]
 mod mutable_test;
-mod bits_tests;
