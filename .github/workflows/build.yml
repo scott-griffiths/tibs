@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-13, macos-14 ]
+        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15, macos-14 ]
 
     steps:
       - uses: actions/checkout@v5
@@ -29,8 +29,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: >-
-            ${{ (matrix.os == 'macos-13' && 'x86_64-apple-darwin') ||
-                (matrix.os == 'macos-14' && 'aarch64-apple-darwin') ||
+            ${{ (matrix.os == 'macos-14' && 'x86_64-apple-darwin') ||
+                (matrix.os == 'macos-15' && 'aarch64-apple-darwin') ||
                 (matrix.os == 'ubuntu-latest' && 'x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,powerpc64le-unknown-linux-gnu') ||
                 (matrix.os == 'ubuntu-24.04-arm' && 'aarch64-unknown-linux-gnu') ||
                 (matrix.os == 'windows-latest' && 'x86_64-pc-windows-msvc,i686-pc-windows-msvc') ||

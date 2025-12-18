@@ -323,9 +323,10 @@ impl Mutibs {
     /// Create a new instance from an unsigned integer.
     ///
     /// :param u: An unsigned integer.
-    /// :param length: The bit length to create.
+    /// :param length: The bit length to create. Can be up to 128.
     ///
     /// Raises ValueError if the integer doesn't fit in the length given.
+    ///
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(
@@ -333,21 +334,21 @@ impl Mutibs {
         u: u128,
         length: i64,
     ) -> PyResult<Self> {
-        Ok(BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)?)
+        BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)
     }
 
     /// Return the unsigned integer representation of the Mutibs.
     pub fn to_u(&self) -> PyResult<u128> {
-        Ok(BitCollection::to_u128(self)
-            .map_err(PyValueError::new_err)?)
+        BitCollection::to_u128(self).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance from a signed integer.
     ///
     /// :param i: A signed integer.
-    /// :param length: The bit length to create.
+    /// :param length: The bit length to create. Can be up to 128.
     ///
     /// Raises ValueError if the integer doesn't fit in the length given.
+    ///
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(
@@ -355,13 +356,12 @@ impl Mutibs {
         i: i128,
         length: i64,
     ) -> PyResult<Self> {
-        Ok(BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)?)
+        BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)
     }
 
     /// Return the signed integer representation of the Mutibs.
     pub fn to_i(&self) -> PyResult<i128> {
-        Ok(BitCollection::to_i128(self)
-            .map_err(PyValueError::new_err)?)
+        BitCollection::to_i128(self).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance from a floating point number.
