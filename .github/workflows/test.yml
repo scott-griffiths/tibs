@@ -20,7 +20,7 @@ jobs:
           - name: 🐧
             runs-on: ubuntu-latest
           - name: 🍎
-            runs-on: macos-15
+            runs-on: macos-14
           - name: 🪟
             runs-on: windows-latest
         python:
@@ -41,19 +41,19 @@ jobs:
         exclude:
           - os:
               name: 🍎
-              runs-on: macos-15
+              runs-on: macos-14
             python:
               name: CPython 3.8
               action: '3.8'
           - os:
               name: 🍎
-              runs-on: macos-15
+              runs-on: macos-14
             python:
               name: CPython 3.9
               action: '3.9'
           - os:
               name: 🍎
-              runs-on: macos-15
+              runs-on: macos-14
             python:
               name: CPython 3.10
               action: '3.10'
