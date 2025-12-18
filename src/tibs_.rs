@@ -48,7 +48,7 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 // Enum allows us to wrap and use a Tibs or Mutibs without copying it or owning it.
 pub(crate) enum PolyTibs<'a> {
     BorrowedTibs(PyRef<'a, Tibs>),
-    BorrowedMutibs(PyRef<'a, Mutibs>),
+    BorrowedMutibs(PyRefMut<'a, Mutibs>),
     Owned(Tibs),
 }
 
@@ -73,7 +73,7 @@ pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<PolyTibs<
     }
 
     // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
+    if let Ok(mutibs_ref) = any.extract::<PyRefMut<Mutibs>>() {
         return Ok(PolyTibs::BorrowedMutibs(mutibs_ref));
     }
 
@@ -843,7 +843,8 @@ impl Tibs {
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        self.and(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, &other))
     }
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -863,7 +864,8 @@ impl Tibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self.xor(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, &other))
     }
 
     /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -873,8 +875,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        self.and(&other)
+        self.__and__(bs)
     }
 
     /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -884,8 +885,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        self.or(&other)
+        self.__or__(bs)
     }
 
     /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -895,8 +895,7 @@ impl Tibs {
     /// Raises ValueError if the two Tibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        self.xor(&other)
+        self.__xor__(bs)
     }
 
     /// Return the instance with every bit inverted.
