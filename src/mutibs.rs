@@ -3,9 +3,7 @@ use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice
 use crate::tibs_::{tibs_from_any, Tibs};
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{
-    PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType,
-};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use std::ops::Not;
 
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
@@ -329,11 +327,7 @@ impl Mutibs {
     ///
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
-    pub fn from_u(
-        _cls: &Bound<'_, PyType>,
-        u: u128,
-        length: i64,
-    ) -> PyResult<Self> {
+    pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
         BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)
     }
 
@@ -351,11 +345,7 @@ impl Mutibs {
     ///
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
-    pub fn from_i(
-        _cls: &Bound<'_, PyType>,
-        i: i128,
-        length: i64,
-    ) -> PyResult<Self> {
+    pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
         BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)
     }
 

@@ -221,7 +221,7 @@ pub(crate) trait BitCollection: Sized {
         Self::new(self.data()[start_bit..start_bit + length].to_bitvec())
     }
 
-    /// Checked version
+    // Checked version
     fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         if length == 0 {
             return Ok(BitCollection::empty());
