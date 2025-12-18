@@ -1,6 +1,6 @@
 use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
 use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
-use crate::tibs_::{tibs_from_any, Tibs};
+use crate::tibs_::{tibs_from_any, PolyTibs, Tibs};
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
@@ -42,6 +42,7 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     Err(PyTypeError::new_err(err))
 }
 
+// TODO: Use PolyTibs here to avoid the copy.
 fn mutibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     // Is it of type Mutibs?
     if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
@@ -118,21 +119,21 @@ impl Mutibs {
         }
     }
 
-    pub(crate) fn ixor(&mut self, other: &Tibs) -> PyResult<()> {
+    pub(crate) fn ixor(&mut self, other: &BV) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.data ^= other.data();
+        self.data ^= other;
         Ok(())
     }
 
-    pub(crate) fn ior(&mut self, other: &Tibs) -> PyResult<()> {
+    pub(crate) fn ior(&mut self, other: &BV) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.data |= other.data();
+        self.data |= other;
         Ok(())
     }
 
-    pub(crate) fn iand(&mut self, other: &Tibs) -> PyResult<()> {
+    pub(crate) fn iand(&mut self, other: &BV) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
-        self.data &= other.data();
+        self.data &= other;
         Ok(())
     }
 
@@ -551,22 +552,14 @@ impl Mutibs {
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let length = slf.len();
-        if let Ok(mut index) = key.extract::<i64>() {
-            if index < 0 {
-                index += length as i64;
-            }
-            if index < 0 || index >= length as i64 {
-                return Err(PyIndexError::new_err(format!(
-                    "Bit index {index} out of range for length {length}"
-                )));
-            }
+        if let Ok(index) = key.extract::<i64>() {
             slf.set_index(value.is_truthy()?, index)?;
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                Tibs::new(slf.data.clone())
+                PolyTibs::Owned(Tibs::new(slf.data.clone()))
             } else {
                 tibs_from_any(value)?
             };
@@ -579,6 +572,12 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
+                let bs: Tibs = match bs {
+                    PolyTibs::BorrowedTibs(t) => t.clone(),
+                    PolyTibs::BorrowedMutibs(m) => m.to_tibs(),
+                    PolyTibs::Owned(t) => t,
+                };
+
                 slf.set_slice(start as usize, stop as usize, &bs);
                 return Ok(());
             }
@@ -757,9 +756,11 @@ impl Mutibs {
     ///
     /// Raises ValueError if the two Mutibs have differing lengths.
     ///
+    // TODO: Do this change for xor and and etc, and remove unused methods.
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        self.or(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, &other))
     }
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -1299,7 +1300,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<PyRefMut<'a, Self>> {
         let old = if old.as_ptr() == slf.as_ptr() {
-            slf.to_tibs()
+            PolyTibs::Owned(slf.to_tibs())
         } else {
             tibs_from_any(old)?
         };
@@ -1308,7 +1309,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
         let new = if new.as_ptr() == slf.as_ptr() {
-            slf.to_tibs()
+            PolyTibs::Owned(slf.to_tibs())
         } else {
             tibs_from_any(new)?
         };
@@ -1481,19 +1482,19 @@ impl Mutibs {
     /// In-place bit-wise 'and'.
     pub fn __iand__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.iand(&other)
+        slf.iand(other.data())
     }
 
     /// In-place bit-wise 'or'.
     pub fn __ior__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.ior(&other)
+        slf.ior(other.data())
     }
 
     /// In-place bit-wise 'xor'.
     pub fn __ixor__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.ixor(&other)
+        slf.ixor(other.data())
     }
 
     /// In-place multiplication by a non-negative integer.

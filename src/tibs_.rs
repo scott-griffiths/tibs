@@ -1,4 +1,4 @@
-use crate::core::{str_to_mutibs, BitCollection};
+use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
 use crate::helpers::{find_bitvec, validate_shift, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -45,18 +45,40 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     Err(PyTypeError::new_err(err))
 }
 
-pub(crate) fn tibs_from_any(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
+// Enum allows us to wrap and use a Tibs or Mutibs without copying it or owning it.
+pub(crate) enum PolyTibs<'a> {
+    BorrowedTibs(PyRef<'a, Tibs>),
+    BorrowedMutibs(PyRef<'a, Mutibs>),
+    Owned(Tibs),
+}
+
+impl BitCollection for PolyTibs<'_> {
+    fn new(bv: BV) -> Self {
+        PolyTibs::Owned(Tibs::new_from_bv(bv))
+    }
+
+    fn data(&self) -> &BV {
+        match self {
+            PolyTibs::BorrowedTibs(t) => t.data(),
+            PolyTibs::BorrowedMutibs(m) => m.data(),
+            PolyTibs::Owned(t) => t.data(),
+        }
+    }
+}
+
+pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<PolyTibs<'a>> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(tibs_ref.clone()); // TODO: Expensive clone
+        return Ok(PolyTibs::BorrowedTibs(tibs_ref));
     }
 
     // Is it of type Mutibs?
     if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(mutibs_ref.to_tibs()); // TODO: Expensive clone
+        return Ok(PolyTibs::BorrowedMutibs(mutibs_ref));
     }
 
-    promote_to_tibs(any)
+    let tibs = promote_to_tibs(any)?;
+    Ok(PolyTibs::Owned(tibs))
 }
 
 impl Hash for Tibs {
@@ -222,15 +244,8 @@ impl Tibs {
     /// True
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        if let Ok(b) = other.extract::<PyRef<Tibs>>() {
-            return self.data == b.data;
-        }
-        if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
-            return self.data == *b.data();
-        }
-        let maybe = tibs_from_any(other);
-        match maybe {
-            Ok(b) => self.data == b.data,
+        match tibs_from_any(other) {
+            Ok(b) => self.data == *b.data(),
             Err(_) => false,
         }
     }
@@ -277,9 +292,14 @@ impl Tibs {
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
+        let needle: Py<Tibs> = match b {
+            PolyTibs::BorrowedTibs(t) => t.into(),
+            PolyTibs::BorrowedMutibs(m) => Py::new(py, m.to_tibs())?,
+            PolyTibs::Owned(t) => Py::new(py, t)?,
+        };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
-            needle: Py::new(py, b)?,
+            needle,
             start,
             end,
             byte_aligned,
@@ -545,13 +565,18 @@ impl Tibs {
             let obj = item?;
             let bits = tibs_from_any(&obj)?;
             total_len += bits.len();
-            parts.push(bits);
+            let owned_tibs = match bits {
+                PolyTibs::BorrowedTibs(t) => t.clone(),
+                PolyTibs::BorrowedMutibs(m) => m.to_tibs(),
+                PolyTibs::Owned(t) => t,
+            };
+            parts.push(owned_tibs);
         }
 
         // Concatenate.
         let mut bv = BV::with_capacity(total_len);
         for bits in &parts {
-            bv.extend_from_bitslice(&bits.data);
+            bv.extend_from_bitslice(&bits.data());
         }
         Ok(Tibs::new(bv))
     }
@@ -592,7 +617,7 @@ impl Tibs {
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
 
-        Ok(find_bitvec(&self.data, &b.data, start, end, byte_aligned))
+        Ok(find_bitvec(&self.data, &b.data(), start, end, byte_aligned))
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -640,7 +665,7 @@ impl Tibs {
             pos = pos / 8 * 8;
         }
         while pos >= start {
-            if self.data[pos..pos + b.len()] == b.data {
+            if self.data[pos..pos + b.len()] == *b.data() {
                 return Ok(Some(pos));
             }
             if pos < step {
@@ -798,7 +823,7 @@ impl Tibs {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(&self.data);
-        data.extend_from_bitslice(&bs.data);
+        data.extend_from_bitslice(bs.data());
         Ok(Tibs::new(data))
     }
 
@@ -806,7 +831,7 @@ impl Tibs {
     pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(bs.len() + self.len());
-        data.extend_from_bitslice(&bs.data);
+        data.extend_from_bitslice(bs.data());
         data.extend_from_bitslice(&self.data);
         Ok(Tibs::new(data))
     }
@@ -828,7 +853,8 @@ impl Tibs {
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        self.or(&other)
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, &other))
     }
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -848,7 +874,7 @@ impl Tibs {
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other.and(self)
+        self.and(&other)
     }
 
     /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -859,7 +885,7 @@ impl Tibs {
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other.or(self)
+        self.or(&other)
     }
 
     /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -870,7 +896,7 @@ impl Tibs {
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        other.xor(self)
+        self.xor(&other)
     }
 
     /// Return the instance with every bit inverted.
