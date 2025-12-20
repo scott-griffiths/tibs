@@ -72,28 +72,93 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
+
+
+    fn raw_data(&self) -> (&[u8], usize, usize) {
+        let raw_bytes = self.data().as_raw_slice();
+        let slice = self.data().as_bitslice();
+        let offset = match slice.domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem),
+                ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        (raw_bytes, offset, self.len())
+    }
+
     #[inline]
     fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.data().clone();
-        result |= other.data();
-        Self::new(result)
+
+        // TODO: We only have the 150x speedup when both offsets are zero.
+        let (lhs, lhs_offset, _) = self.raw_data();
+        let (rhs, rhs_offset, _) = other.raw_data();
+
+        if lhs_offset == 0 && rhs_offset == 0 {
+            let data: Vec<u8> = lhs.iter()
+                .zip(rhs.iter())
+                .map(|(&a, &b)| a | b)
+                .collect();
+            let mut bv = BV::from_vec(data);
+            bv.truncate(self.len());
+            Self::new(bv)
+        }
+        else {
+            let mut result = self.data().clone();
+            result |= other.data();
+            Self::new(result)
+        }
+
     }
 
     #[inline]
     fn logical_and(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.data().clone();
-        result &= other.data();
-        Self::new(result)
+
+        let (lhs, lhs_offset, _) = self.raw_data();
+        let (rhs, rhs_offset, _) = other.raw_data();
+
+        if lhs_offset == 0 && rhs_offset == 0 {
+            let data: Vec<u8> = lhs.iter()
+                .zip(rhs.iter())
+                .map(|(&a, &b)| a & b)
+                .collect();
+            let mut bv = BV::from_vec(data);
+            bv.truncate(self.len());
+            Self::new(bv)
+        }
+        else {
+            let mut result = self.data().clone();
+            result &= other.data();
+            Self::new(result)
+        }
+
     }
 
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
-        let mut result = self.data().clone();
-        result ^= other.data();
-        Self::new(result)
+
+        let (lhs, lhs_offset, _) = self.raw_data();
+        let (rhs, rhs_offset, _) = other.raw_data();
+
+        if lhs_offset == 0 && rhs_offset == 0 {
+            let data: Vec<u8> = lhs.iter()
+                .zip(rhs.iter())
+                .map(|(&a, &b)| a ^ b)
+                .collect();
+            let mut bv = BV::from_vec(data);
+            bv.truncate(self.len());
+            Self::new(bv)
+        }
+        else {
+            let mut result = self.data().clone();
+            result ^= other.data();
+            Self::new(result)
+        }
+
     }
 
     #[inline]
@@ -111,6 +176,7 @@ pub(crate) trait BitCollection: Sized {
         let bv = BV::from_vec(data);
         Self::new(bv)
     }
+
     fn to_string(&self) -> String {
         if self.is_empty() {
             return "".to_string();
@@ -332,7 +398,7 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn from_octal(octal_string: &str) -> Result<Self, String> {
-        // Ignore any leading '0o'
+        // Ignore any leading '0o' or '0O'
         let s = octal_string
             .strip_prefix("0o")
             .or_else(|| octal_string.strip_prefix("0O"))
@@ -362,7 +428,7 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn from_hexadecimal(hex: &str) -> Result<Self, String> {
-        // Ignore any leading '0x'
+        // Ignore any leading '0x' or '0X'
         let mut new_hex = hex
             .strip_prefix("0x")
             .or_else(|| hex.strip_prefix("0X"))

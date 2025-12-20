@@ -178,17 +178,7 @@ impl Tibs {
     ///     assert t == Tibs.from_bytes(raw_bytes)[offset:offset + length]
     ///
     pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
-        let raw_bytes = self.data.as_raw_slice();
-        let slice = self.data.as_bitslice();
-        let offset = match slice.domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem),
-                ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
-        (raw_bytes, offset, self.len())
+        self.raw_data()
     }
 
     /// Return string representations for printing.

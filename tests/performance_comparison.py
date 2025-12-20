@@ -114,6 +114,18 @@ def test_primes_tibs():
     assert twin_primes == 239101
 
 
+def test_reverse_find_bitarray():
+    b = bitarray()
+    b.frombytes(some_bytes)
+    pattern = bitarray('11011110101011011110')
+    l = len(list(b.search(pattern, right=True)))
+    assert l == 8
+
+def test_reverse_find_tibs():
+    t = Tibs.from_bytes(some_bytes)
+    l = len(list(t.find_all('0xdeade')))
+    assert l == 8
+
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):
         self.name = name
@@ -158,6 +170,7 @@ def main():
         FunctionPairs("Random Generation", test_rand_bitarray, test_rand_tibs),
         FunctionPairs("Construction", test_construction_bitarray, test_construction_tibs),
         FunctionPairs("Find all", test_findall_bitarray, test_findall_tibs),
+        FunctionPairs("Find all reversed", test_reverse_find_bitarray, test_reverse_find_tibs),
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
     ]
     ts = TestSuite(fn_pairs)

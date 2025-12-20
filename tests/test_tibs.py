@@ -151,4 +151,5 @@ def test_mutibs_raw_bytes_and_offset():
     raw_bytes, offset, length = b.as_raw_data()
     assert Tibs.from_bytes(raw_bytes) & '0x0fff' == '0x0f77'
     assert offset == 4
+    assert length == 12
     assert b == []

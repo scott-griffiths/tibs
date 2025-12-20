@@ -325,23 +325,13 @@ impl Mutibs {
     ///     assert t == Mutibs.from_bytes(raw_bytes)[offset:offset + length]
     ///
     pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
-        let raw_bytes = self.data.as_raw_slice();
-        let slice = self.data.as_bitslice();
-        let offset = match slice.domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem),
-                ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
-        (raw_bytes, offset, self.len())
+        self.raw_data()
     }
 
-    /// Return the raw bytes and offset information.
+    /// Return the raw bytes and offset information, leaving the Mutibs empty.
     ///
-    /// This returns the underlying byte data and can contain leading and trailing
-    /// bits that are not considered part of the object's value. Usually using
+    /// This returns the underlying byte data using a move rather than a copy, and can contain
+    /// leading and trailing bits that are not considered part of the object's value. Usually using
     /// :meth:`~to_bytes` is what you really need.
     ///
     /// The way that the data is stored is not considered part of the public interface
@@ -367,9 +357,10 @@ impl Mutibs {
             } => elem.head().into_inner() as usize,
             _ => 0,
         };
+        let len = self.len();
         let bv = std::mem::take(&mut self.data);
         let raw_bytes = bv.into_vec();
-        (raw_bytes, offset, self.len())
+        (raw_bytes, offset, len)
     }
 
     /// Create a new instance from an unsigned integer.
