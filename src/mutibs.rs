@@ -305,6 +305,73 @@ impl Mutibs {
         BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
     }
 
+    /// Return a copy of the raw byte information.
+    ///
+    /// This returns the underlying byte data and can contain leading and trailing
+    /// bits that are not considered part of the object's value. Usually using
+    /// :meth:`~to_bytes` is what you really need.
+    ///
+    /// The way that the data is stored is not considered part of the public interface
+    /// and so the output of this method may change between point releases, and even
+    /// during the running of a program.
+    ///
+    /// See also :meth:`~as_raw_data` which moves the byte data instead of copying it.
+    ///
+    /// :return: A tuple of the raw bytes, the bit offset and the bit length.
+    ///
+    /// .. code-block:: python
+    ///
+    ///     raw_bytes, offset, length = t.to_raw_data()
+    ///     assert t == Mutibs.from_bytes(raw_bytes)[offset:offset + length]
+    ///
+    pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
+        let raw_bytes = self.data.as_raw_slice();
+        let slice = self.data.as_bitslice();
+        let offset = match slice.domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem),
+                ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        (raw_bytes, offset, self.len())
+    }
+
+    /// Return the raw bytes and offset information.
+    ///
+    /// This returns the underlying byte data and can contain leading and trailing
+    /// bits that are not considered part of the object's value. Usually using
+    /// :meth:`~to_bytes` is what you really need.
+    ///
+    /// The way that the data is stored is not considered part of the public interface
+    /// and so the output of this method may change between point releases, and even
+    /// during the running of a program.
+    ///
+    /// See also :meth:`~to_raw_data` which copies the byte data instead of moving it.
+    ///
+    /// :return: A tuple of the raw bytes, the bit offset and the bit length.
+    ///
+    /// .. code-block:: python
+    ///
+    ///     raw_bytes, offset, length = t.as_raw_data()
+    ///     assert t == []
+    ///
+    pub fn as_raw_data(&mut self) -> (Vec<u8>, usize, usize) {
+        let slice = self.data.as_bitslice();
+        let offset = match slice.domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem),
+                ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        let bv = std::mem::take(&mut self.data);
+        let raw_bytes = bv.into_vec();
+        (raw_bytes, offset, self.len())
+    }
+
     /// Create a new instance from an unsigned integer.
     ///
     /// :param u: An unsigned integer.

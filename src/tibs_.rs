@@ -160,6 +160,37 @@ impl Tibs {
         promote_to_tibs(auto)
     }
 
+    /// Return a copy of the raw byte information.
+    ///
+    /// This returns the underlying byte data and can contain leading and trailing
+    /// bits that are not considered part of the object's data. Usually using
+    /// :meth:`~to_bytes` is what you really need.
+    ///
+    /// The way that the data is stored is not considered part of the public interface
+    /// and so the output of this method may change between point releases, and even
+    /// during the running of a program.
+    ///
+    /// :return: A tuple of the raw bytes, the bit offset and the bit length.
+    ///
+    /// .. code-block:: python
+    ///
+    ///     raw_bytes, offset, length = t.to_raw_data()
+    ///     assert t == Tibs.from_bytes(raw_bytes)[offset:offset + length]
+    ///
+    pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
+        let raw_bytes = self.data.as_raw_slice();
+        let slice = self.data.as_bitslice();
+        let offset = match slice.domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem),
+                ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        (raw_bytes, offset, self.len())
+    }
+
     /// Return string representations for printing.
     pub fn __str__(&self) -> String {
         self.to_string()
