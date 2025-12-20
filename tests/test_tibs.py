@@ -128,3 +128,27 @@ def test_from_f():
     g2 = b2.to_f()
     h2 = c2.to_f()
     assert f == g == h == f2 == g2 == h2 == 0.25
+
+def test_raw_bytes_and_offset():
+    a = Tibs('0xff00ff')
+    raw_bytes, offset, length = a.to_raw_data()
+    assert raw_bytes == b'\xff\x00\xff'
+    assert offset == 0
+    b = a[4:20]
+    raw_bytes, offset, length = b.to_raw_data()
+    assert offset == 4
+    assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == '0x0f00f0'
+
+def test_mutibs_raw_bytes_and_offset():
+    a = Mutibs('0xff')
+    b = a[4:]
+    b += '0x77'
+    assert b == '0xf77'
+    raw_bytes, offset, length = b.to_raw_data()
+    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == '0x0f77'
+    assert offset == 4
+    assert b == '0xf77'
+    raw_bytes, offset, length = b.as_raw_data()
+    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == '0x0f77'
+    assert offset == 4
+    assert b == []
