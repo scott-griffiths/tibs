@@ -96,12 +96,15 @@ pub(crate) trait BitCollection: Sized {
         let (lhs, lhs_offset, _) = self.raw_data();
         let (rhs, rhs_offset, _) = other.raw_data();
 
-        if lhs_offset == 0 && rhs_offset == 0 {
+        if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter()
                 .zip(rhs.iter())
                 .map(|(&a, &b)| a | b)
                 .collect();
             let mut bv = BV::from_vec(data);
+            if lhs_offset > 0 {
+                bv.drain(..lhs_offset);
+            }
             bv.truncate(self.len());
             Self::new(bv)
         }
@@ -120,12 +123,16 @@ pub(crate) trait BitCollection: Sized {
         let (lhs, lhs_offset, _) = self.raw_data();
         let (rhs, rhs_offset, _) = other.raw_data();
 
-        if lhs_offset == 0 && rhs_offset == 0 {
+        if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter()
                 .zip(rhs.iter())
                 .map(|(&a, &b)| a & b)
                 .collect();
+
             let mut bv = BV::from_vec(data);
+            if lhs_offset > 0 {
+                bv.drain(..lhs_offset);
+            }
             bv.truncate(self.len());
             Self::new(bv)
         }
@@ -144,12 +151,15 @@ pub(crate) trait BitCollection: Sized {
         let (lhs, lhs_offset, _) = self.raw_data();
         let (rhs, rhs_offset, _) = other.raw_data();
 
-        if lhs_offset == 0 && rhs_offset == 0 {
+        if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter()
                 .zip(rhs.iter())
                 .map(|(&a, &b)| a ^ b)
                 .collect();
             let mut bv = BV::from_vec(data);
+            if lhs_offset > 0 {
+                bv.drain(..lhs_offset);
+            }
             bv.truncate(self.len());
             Self::new(bv)
         }
@@ -254,12 +264,16 @@ pub(crate) trait BitCollection: Sized {
                     "Slice end goes past the end of the container.",
                 ));
             }
-            Ok(Self::new(
-                self.data()[start_bit as usize..end_bit as usize]
-                    .iter()
-                    .step_by(step as usize)
-                    .collect(),
-            ))
+            // TODO: This alternate method might be faster
+            // Ok(Self::new(
+            //     self.data()[start_bit as usize..end_bit as usize]
+            //         .iter()
+            //         .step_by(step as usize)
+            //         .collect(),
+            // ))
+            let mut new_data = self.data()[start_bit as usize..end_bit as usize].to_bitvec();
+            new_data.retain(|idx, _| idx % step as usize == 0);
+            Ok(Self::new(new_data))
         } else {
             if start_bit <= end_bit || start_bit == -1 {
                 return Ok(BitCollection::empty());
