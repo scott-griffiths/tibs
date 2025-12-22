@@ -606,7 +606,7 @@ impl Tibs {
         // Concatenate.
         let mut bv = BV::with_capacity(total_len);
         for bits in &parts {
-            bv.extend_from_bitslice(&bits.data());
+            bv.extend_from_bitslice(bits.data());
         }
         Ok(Tibs::new(bv))
     }
@@ -647,7 +647,7 @@ impl Tibs {
         }
         let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
 
-        Ok(find_bitvec(&self.data, &b.data(), start, end, byte_aligned))
+        Ok(find_bitvec(&self.data, b.data(), start, end, byte_aligned))
     }
 
     /// Return True if b is a sub-sequence of self.
