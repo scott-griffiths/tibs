@@ -183,8 +183,35 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn from_bytes(data: Vec<u8>) -> Self {
-        let bv = BV::from_vec(data);
-        Self::new(bv)
+        Self::new(BV::from_vec(data))
+    }
+
+    #[inline]
+    fn from_bytes_slice(data: Vec<u8>, length: Option<i64>, offset: Option<i64>) -> Result<Self, String> {
+        if length.is_none() && offset.is_none() {
+            return Ok(Self::new(BV::from_vec(data)));
+        }
+        let start_bit = offset.unwrap_or(0);
+        if start_bit < 0 {
+            return Err(format!("Cannot create using a negative offset of {start_bit}."));
+        }
+        let start_bit = start_bit as usize;
+        let data_length = data.len() * 8;
+        if start_bit > data_length {
+            return Err(format!("Offset of {start_bit} is greater than the data length ({data_length} bits)."));
+        }
+        let length = length.unwrap_or(data_length as i64 - start_bit as i64);
+        if length < 0 {
+            return Err(format!("Negative length of {length} bits provided."));
+        }
+        let length = length as usize;
+        if start_bit + length > data_length {
+            return Err(format!("Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."));
+        }
+        let mut bv = BV::from_vec(data);
+        bv.drain(..start_bit);
+        bv.truncate(length);
+        Ok(Self::new(bv))
     }
 
     fn to_string(&self) -> String {
@@ -450,19 +477,16 @@ pub(crate) trait BitCollection: Sized {
             .to_string();
         // Remove any underscores or whitespace characters
         new_hex.retain(|c| c != '_' && !c.is_whitespace());
-        let is_odd_length: bool = new_hex.len() % 2 != 0;
-        if is_odd_length {
+        let new_hex_length = new_hex.len() as i64;
+        if new_hex_length % 2 != 0 {
             new_hex.push('0');
         }
-        let data = match hex::decode(new_hex) {
+        let data = match hex::decode(&new_hex) {
             Ok(d) => d,
             Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
         };
-        let mut bv = <Self as BitCollection>::from_bytes(data).data().clone();
-        if is_odd_length {
-            bv.drain(bv.len() - 4..bv.len());
-        }
-        Ok(Self::new(bv))
+        let t = <Self as BitCollection>::from_bytes_slice(data, Some(new_hex_length * 4), None)?;
+        Ok(t)
     }
 
     #[inline]

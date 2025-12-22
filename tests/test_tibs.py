@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 import pytest
-import io
-import re
-from hypothesis import given
-import tibs
 from tibs import Tibs, Mutibs
-from typing import Iterable, Sequence
 
 
 def test_from_bin():
@@ -153,3 +148,34 @@ def test_mutibs_raw_bytes_and_offset():
     assert offset == 4
     assert length == 12
     assert b == []
+
+def test_from_bytes_offsets():
+    x = b'\xff\x00\xee\x11'
+    a = Tibs.from_bytes(x)
+    assert a == '0xff00ee11'
+    b = Tibs.from_bytes(x, 16)
+    assert b == '0xff00'
+    c = Tibs.from_bytes(x, offset=16)
+    assert c == '0xee11'
+    d = Tibs.from_bytes(x, 12, 4)
+    assert d == '0xf00'
+    e = Mutibs.from_bytes(x, offset=28, length=4)
+    assert e == '0x1'
+    f = Mutibs.from_bytes(x, 32, 0)
+    assert f == a
+    g = Mutibs.from_bytes(x, 0, 0)
+    assert g == []
+
+
+def test_from_bytes_errors():
+    x = b'\xff\x00\xee\x11'
+    with pytest.raises(ValueError):
+        _ = Tibs.from_bytes(x, 33)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_bytes(x, -1)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_bytes(x, offset=-1)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_bytes(x, length=-1)
+    with pytest.raises(ValueError):
+        _ = Tibs.from_bytes(x, offset=28, length=5)

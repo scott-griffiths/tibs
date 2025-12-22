@@ -502,7 +502,9 @@ impl Mutibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param b: The bytes, bytearray or memoryview object to convert to a :class:`Mutibs`.
+    /// :param data: The bytes, bytearray or memoryview object to convert to a :class:`Mutibs`.
+    /// :param length: The bit length to use. Defaults to the whole of the data.
+    /// :param offset: The bit offset from the start. Defaults to zero.
     ///
     /// .. code-block:: python
     ///
@@ -510,9 +512,9 @@ impl Mutibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /), text_signature = "(cls, data, /)")]
-    pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>) -> Self {
-        BitCollection::from_bytes(data)
+    #[pyo3(signature = (data, /, length=None, offset=None), text_signature = "(cls, data, /, length=None, offset=None)")]
+    pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>, length: Option<i64>, offset: Option<i64>) -> PyResult<Self> {
+        BitCollection::from_bytes_slice(data, length, offset).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance by concatenating a sequence of Tibs objects.
