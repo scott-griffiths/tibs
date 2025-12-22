@@ -1164,3 +1164,12 @@ def test_iter():
     a = Mutibs('0b110')
     with pytest.raises(TypeError):
         _ = [bool(q) for q in a]
+
+
+def test_partial_update():
+    a = Mutibs.from_ones(10)
+    try:
+        a.set(0, [0, 1, 1000])
+    except IndexError:
+        pass
+    assert a == '0b1111111111'

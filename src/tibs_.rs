@@ -3,7 +3,7 @@ use crate::helpers::{find_bitvec, validate_shift, validate_slice, BV};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use std::collections::hash_map::DefaultHasher;
@@ -795,7 +795,7 @@ impl Tibs {
         let py = key.py();
         // Handle integer indexing
         if let Ok(index) = key.extract::<i64>() {
-            let value: bool = self.get_index(index)?;
+            let value: bool = self.get_index(index).map_err(PyIndexError::new_err)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }
@@ -814,7 +814,7 @@ impl Tibs {
                     Tibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step)?
+                self.getslice_with_step(start, stop, step).map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());

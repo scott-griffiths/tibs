@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
@@ -87,16 +87,16 @@ fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
     None
 }
 
-pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
+pub(crate) fn validate_index(index: i64, length: usize) -> Result<usize, String> {
     let index_p = if index < 0 {
         length as i64 + index
     } else {
         index
     };
     if index_p >= length as i64 || index_p < 0 {
-        return Err(PyIndexError::new_err(format!(
+        return Err(format!(
             "Index of {index} is out of range for length of {length}"
-        )));
+        ));
     }
     Ok(index_p as usize)
 }

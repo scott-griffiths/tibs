@@ -124,9 +124,12 @@ impl Mutibs {
     }
 
     pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<i64>) -> PyResult<()> {
+        let mut validated = Vec::with_capacity(indices.len());
         for idx in indices {
-            let pos: usize = validate_index(idx, self.len())?;
-            self.data.set(pos, value);
+            validated.push(validate_index(idx, self.len()).map_err(PyIndexError::new_err)?);
+        }
+        for idx in validated {
+            self.data.set(idx, value);
         }
         Ok(())
     }
@@ -548,7 +551,7 @@ impl Mutibs {
         let py = key.py();
         // Handle integer indexing
         if let Ok(index) = key.extract::<i64>() {
-            let value: bool = self.get_index(index)?;
+            let value: bool = self.get_index(index).map_err(PyIndexError::new_err)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }
@@ -567,7 +570,7 @@ impl Mutibs {
                     Mutibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step)?
+                self.getslice_with_step(start, stop, step).map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -1056,12 +1059,12 @@ impl Mutibs {
             }
             Some(p) => {
                 if let Ok(pos) = p.extract::<i64>() {
-                    let pos: usize = validate_index(pos, slf.len())?;
+                    let pos: usize = validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
                     let value = slf.data[pos];
                     slf.data.set(pos, !value);
                 } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
                     for pos in pos_list {
-                        let pos: usize = validate_index(pos, slf.len())?;
+                        let pos: usize = validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
                         let value = slf.data[pos];
                         slf.data.set(pos, !value);
                     }
