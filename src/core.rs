@@ -263,14 +263,14 @@ pub(crate) trait BitCollection: Sized {
 
     /// Returns the bool value at a given bit index.
     #[inline]
-    fn get_index(&self, bit_index: i64) -> PyResult<bool> {
+    fn get_index(&self, bit_index: i64) -> Result<bool, String> {
         let index = validate_index(bit_index, self.len())?;
         Ok(self.data()[index])
     }
 
-    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
+    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> Result<Self, String> {
         if step == 0 {
-            return Err(PyValueError::new_err("Slice step cannot be zero."));
+            return Err("Slice step cannot be zero.".to_string());
         }
         // Note that a start_bit or end_bit of -1 means to stop at the beginning when using a negative step.
         // Otherwise they should both be positive indices.
@@ -278,18 +278,18 @@ pub(crate) trait BitCollection: Sized {
         debug_assert!(end_bit >= -1);
         debug_assert!(step != 0);
         if start_bit < -1 || end_bit < -1 {
-            return Err(PyValueError::new_err(
-                "Indices less than -1 are not valid values.",
-            ));
+            return Err(
+                "Indices less than -1 are not valid values.".to_string(),
+            );
         }
         if step > 0 {
             if start_bit >= end_bit {
                 return Ok(BitCollection::empty());
             }
             if end_bit as usize > self.len() {
-                return Err(PyValueError::new_err(
-                    "Slice end goes past the end of the container.",
-                ));
+                return Err(
+                    "Slice end goes past the end of the container.".to_string(),
+                );
             }
             // TODO: This alternate method might be faster
             // Ok(Self::new(
@@ -306,9 +306,9 @@ pub(crate) trait BitCollection: Sized {
                 return Ok(BitCollection::empty());
             }
             if start_bit as usize > self.len() {
-                return Err(PyValueError::new_err(
-                    "Slice start bit is past the end of the container.",
-                ));
+                return Err(
+                    "Slice start bit is past the end of the container.".to_string(),
+                );
             }
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
