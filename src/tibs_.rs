@@ -13,6 +13,16 @@ use std::hash::{Hash, Hasher};
 use std::ops::Not;
 
 fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
+    // Is it of type Tibs?
+    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
+        return Ok(tibs_ref.clone());
+    }
+
+    // Is it of type Mutibs? Try an immutable borrow first.
+    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
+        return Ok(mutibs_ref.to_tibs());
+    }
+
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
         return Ok(str_to_mutibs(any_string)?.as_tibs());
@@ -47,10 +57,9 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     Err(PyTypeError::new_err(err))
 }
 
-// Enum allows us to wrap and use a Tibs or Mutibs without copying it or owning it.
+// Enum allows us to wrap and use a Tibs without copying it or owning it.
 pub(crate) enum PolyTibs<'a> {
-    BorrowedTibs(PyRef<'a, Tibs>),
-    BorrowedMutibs(PyRefMut<'a, Mutibs>),
+    Borrowed(PyRef<'a, Tibs>),
     Owned(Tibs),
 }
 
@@ -61,8 +70,7 @@ impl BitCollection for PolyTibs<'_> {
 
     fn data(&self) -> &BV {
         match self {
-            PolyTibs::BorrowedTibs(t) => t.data(),
-            PolyTibs::BorrowedMutibs(m) => m.data(),
+            PolyTibs::Borrowed(t) => t.data(),
             PolyTibs::Owned(t) => t.data(),
         }
     }
@@ -71,12 +79,12 @@ impl BitCollection for PolyTibs<'_> {
 pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<PolyTibs<'a>> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(PolyTibs::BorrowedTibs(tibs_ref));
+        return Ok(PolyTibs::Borrowed(tibs_ref));
     }
 
     // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.extract::<PyRefMut<Mutibs>>() {
-        return Ok(PolyTibs::BorrowedMutibs(mutibs_ref));
+    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
+        return Ok(PolyTibs::Owned(mutibs_ref.to_tibs()));
     }
 
     let tibs = promote_to_tibs(any)?;
@@ -316,8 +324,7 @@ impl Tibs {
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let needle: Py<Tibs> = match b {
-            PolyTibs::BorrowedTibs(t) => t.into(),
-            PolyTibs::BorrowedMutibs(m) => Py::new(py, m.to_tibs())?,
+            PolyTibs::Borrowed(t) => t.into(),
             PolyTibs::Owned(t) => Py::new(py, t)?,
         };
         let iter_obj = FindAllIterator {
@@ -596,8 +603,7 @@ impl Tibs {
             let bits = tibs_from_any(&obj)?;
             total_len += bits.len();
             let owned_tibs = match bits {
-                PolyTibs::BorrowedTibs(t) => t.clone(),
-                PolyTibs::BorrowedMutibs(m) => m.to_tibs(),
+                PolyTibs::Borrowed(t) => t.clone(),
                 PolyTibs::Owned(t) => t,
             };
             parts.push(owned_tibs);
