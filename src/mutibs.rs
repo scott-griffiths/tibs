@@ -1183,7 +1183,7 @@ impl Mutibs {
         byte_length: Option<i64>,
     ) -> PyResult<PyRefMut<'_, Self>> {
         let len = slf.len();
-        if len % 8 != 0 {
+        if !len.is_multiple_of(8) {
             return Err(PyValueError::new_err(format!(
                 "Bit length must be an multiple of 8 to use byte_swap (got length of {len} bits). This error can also be caused by using an endianness modifier on non-whole byte data."
             )));
@@ -1199,7 +1199,7 @@ impl Mutibs {
         }
         let byte_length = byte_length as usize;
         let self_byte_length = len / 8;
-        if self_byte_length % byte_length != 0 {
+        if !self_byte_length.is_multiple_of(byte_length) {
             return Err(PyValueError::new_err(format!(
                 "The Mutibs to byte_swap is {self_byte_length} bytes long, but it needs to be a multiple of {byte_length} bytes."
             )));
@@ -1514,7 +1514,7 @@ impl Mutibs {
             return Ok(slf);
         }
         let tail = slf.data.split_off(pos as usize);
-        slf.data.extend_from_bitslice(&bs.data());
+        slf.data.extend_from_bitslice(bs.data());
         slf.data.extend_from_bitslice(&tail);
         Ok(slf)
     }

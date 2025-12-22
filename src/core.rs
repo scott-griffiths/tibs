@@ -146,7 +146,9 @@ pub(crate) trait BitCollection: Sized {
             return "".to_string();
         }
         const MAX_BITS_TO_PRINT: usize = 10000;
-        debug_assert!(MAX_BITS_TO_PRINT % 4 == 0);
+        const {
+            assert!(MAX_BITS_TO_PRINT.is_multiple_of(4));
+        }
         if self.len() <= MAX_BITS_TO_PRINT {
             match self.to_hexadecimal() {
                 Ok(hex) => format!("0x{}", hex),
@@ -481,7 +483,7 @@ pub(crate) trait BitCollection: Sized {
     #[inline]
     fn to_octal(&self) -> Result<String, String> {
         let len = self.len();
-        if len % 3 != 0 {
+        if !len.is_multiple_of(3) {
             return Err(format!(
                 "Cannot interpret as octal - length of {} is not a multiple of 3 bits.",
                 len
@@ -493,7 +495,7 @@ pub(crate) trait BitCollection: Sized {
     #[inline]
     fn to_hexadecimal(&self) -> Result<String, String> {
         let len = self.len();
-        if len % 4 != 0 {
+        if !len.is_multiple_of(4) {
             return Err(format!(
                 "Cannot interpret as hex - length of {} is not a multiple of 4 bits.",
                 len
@@ -504,7 +506,7 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn build_oct_string(&self) -> String {
-        debug_assert!(self.len() % 3 == 0);
+        debug_assert!(self.len().is_multiple_of(3));
         let mut s = String::with_capacity(self.len() / 3);
         for chunk in self.data().chunks(3) {
             let tribble = chunk.load_be::<u8>();
@@ -516,7 +518,7 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn build_hex_string(&self) -> String {
-        debug_assert!(self.len() % 4 == 0);
+        debug_assert!(self.len().is_multiple_of(4));
         let mut s = String::with_capacity(self.len() / 4);
         for chunk in self.data().chunks(4) {
             let nibble = chunk.load_be::<u8>();
@@ -532,7 +534,7 @@ pub(crate) trait BitCollection: Sized {
             return Ok(Vec::new());
         }
         let len_bits = self.len();
-        if len_bits % 8 != 0 {
+        if !len_bits.is_multiple_of(8) {
             return Err(format!(
                 "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
             ));
@@ -657,7 +659,7 @@ impl fmt::Debug for Tibs {
                 .field("length", &self.len())
                 .finish();
         }
-        if self.len() % 4 == 0 {
+        if self.len().is_multiple_of(4) {
             return f
                 .debug_struct("Tibs")
                 .field("hex", &self.to_hex().unwrap())
