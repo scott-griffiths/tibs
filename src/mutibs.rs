@@ -690,8 +690,7 @@ impl Mutibs {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
                 let bs: Tibs = match bs {
-                    PolyTibs::BorrowedTibs(t) => t.clone(),
-                    PolyTibs::BorrowedMutibs(m) => m.to_tibs(),
+                    PolyTibs::Borrowed(t) => t.clone(),
                     PolyTibs::Owned(t) => t,
                 };
 
