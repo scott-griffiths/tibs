@@ -1,7 +1,7 @@
-use pyo3::exceptions::PyIndexError;
 use crate::core::BitCollection;
 use crate::helpers;
 use crate::tibs_::Tibs;
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
 #[pyclass]

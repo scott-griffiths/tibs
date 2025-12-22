@@ -1,7 +1,9 @@
-use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
-use crate::helpers::{find_bitvec, validate_shift, validate_slice, BV};
+use crate::core::BitCollection;
+use crate::helpers::{
+    BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice,
+};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::Mutibs;
+use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -228,16 +230,16 @@ impl Tibs {
         count: Option<i64>,
     ) -> PyResult<Py<ChunksIterator>> {
         if chunk_size <= 0 {
-            return Err(PyValueError::new_err(
-                format!("Cannot create chunk generator - chunk_size of {chunk_size} given, but it must be > 0."),
-            ));
+            return Err(PyValueError::new_err(format!(
+                "Cannot create chunk generator - chunk_size of {chunk_size} given, but it must be > 0."
+            )));
         }
         let max_chunks = match count {
             Some(c) => {
                 if c < 0 {
-                    return Err(PyValueError::new_err(
-                        format!("Cannot create chunk generator - count of {c} given, but it must be > 0 if present.")
-                    ));
+                    return Err(PyValueError::new_err(format!(
+                        "Cannot create chunk generator - count of {c} given, but it must be > 0 if present."
+                    )));
                 }
                 c as usize
             }
@@ -310,7 +312,7 @@ impl Tibs {
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         let b = tibs_from_any(b)?;
-        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let needle: Py<Tibs> = match b {
@@ -514,7 +516,12 @@ impl Tibs {
     #[classmethod]
     #[inline]
     #[pyo3(signature = (data, /, length=None, offset=None), text_signature = "(cls, data, /, length=None, offset=None)")]
-    pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>, length: Option<i64>, offset: Option<i64>) -> PyResult<Self> {
+    pub fn from_bytes(
+        _cls: &Bound<'_, PyType>,
+        data: Vec<u8>,
+        length: Option<i64>,
+        offset: Option<i64>,
+    ) -> PyResult<Self> {
         BitCollection::from_bytes_slice(data, length, offset).map_err(PyValueError::new_err)
     }
 
@@ -638,7 +645,7 @@ impl Tibs {
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
-        let (start, end) = validate_slice(self.len(), start, end)?;
+        let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
 
         Ok(find_bitvec(&self.data, &b.data(), start, end, byte_aligned))
     }
@@ -678,7 +685,7 @@ impl Tibs {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
 
-        let (start, end) = validate_slice(self.len(), start, end)?;
+        let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
         if b.len() + start > end {
             return Ok(None);
         }
@@ -809,12 +816,14 @@ impl Tibs {
 
             let result = if step == 1 {
                 if start < stop {
-                    self.get_slice(start as usize, (stop - start) as usize)?
+                    self.get_slice(start as usize, (stop - start) as usize)
+                        .map_err(PyIndexError::new_err)?
                 } else {
                     Tibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step).map_err(PyIndexError::new_err)?
+                self.getslice_with_step(start, stop, step)
+                    .map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -828,7 +837,7 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n)?;
+        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
         Ok(self.lshift(shift))
     }
 
@@ -837,7 +846,7 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n)?;
+        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
         Ok(self.rshift(shift))
     }
 
@@ -866,7 +875,7 @@ impl Tibs {
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_and(self, &other))
     }
 
@@ -877,7 +886,7 @@ impl Tibs {
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_or(self, &other))
     }
 
@@ -887,7 +896,7 @@ impl Tibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_xor(self, &other))
     }
 
@@ -967,14 +976,14 @@ impl Tibs {
     /// Item assignment is not supported for immutable Tibs objects.
     pub fn __setitem__(&self, _key: &Bound<'_, PyAny>, _value: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item assignment. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
+            "Tibs objects do not support item assignment. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs.",
         ))
     }
 
     /// Item deletion is not supported for immutable Tibs objects.
     pub fn __delitem__(&self, _key: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Tibs objects do not support item deletion. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs."
+            "Tibs objects do not support item deletion. Did you mean to use the Mutibs class? Call to_mutibs() to convert to a Mutibs.",
         ))
     }
 }

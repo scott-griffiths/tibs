@@ -1,10 +1,73 @@
-use crate::core::{str_to_mutibs, validate_logical_op_lengths, BitCollection};
-use crate::helpers::{find_bitvec, validate_index, validate_shift, validate_slice, BV};
-use crate::tibs_::{tibs_from_any, PolyTibs, Tibs};
+use crate::core::BitCollection;
+use crate::helpers::{
+    BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice,
+};
+use crate::tibs_::{PolyTibs, Tibs, tibs_from_any};
+use lru::LruCache;
+use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
+use std::num::NonZeroUsize;
 use std::ops::Not;
+use std::sync::Mutex;
+
+// Define a static LRU cache.
+const BITS_CACHE_SIZE: usize = 1024;
+static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
+
+fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
+    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
+        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
+        Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
+        Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
+        _ => Err(PyValueError::new_err(format!(
+            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
+        ))),
+    }
+}
+
+pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
+    // Check cache first
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        if let Some(cached_data) = cache.get(&s) {
+            return Ok(Mutibs::new(cached_data.clone()));
+        }
+    }
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    let tokens = s.split(',');
+    let mut bits_array = Vec::<Mutibs>::new();
+    let mut total_bit_length = 0;
+    for token in tokens {
+        if token.is_empty() {
+            continue;
+        }
+        let x = string_literal_to_mutibs(token)?;
+        total_bit_length += x.len();
+        bits_array.push(x);
+    }
+    if bits_array.is_empty() {
+        return Ok(BitCollection::empty());
+    }
+    // Combine all bits
+    let result = if bits_array.len() == 1 {
+        bits_array.pop().unwrap()
+    } else {
+        let mut result = BV::with_capacity(total_bit_length);
+        for bits in bits_array {
+            result.extend_from_bitslice(bits.data());
+        }
+        Mutibs::new(result)
+    };
+    // Update cache with new result
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        cache.put(s, result.data().clone());
+    }
+    Ok(result)
+}
 
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     // Is it a string?
@@ -41,7 +104,6 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     };
     Err(PyTypeError::new_err(err))
 }
-
 
 ///     A mutable container of binary data.
 ///
@@ -106,19 +168,19 @@ impl Mutibs {
     }
 
     pub(crate) fn ixor(&mut self, other: &BV) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         self.data ^= other;
         Ok(())
     }
 
     pub(crate) fn ior(&mut self, other: &BV) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         self.data |= other;
         Ok(())
     }
 
     pub(crate) fn iand(&mut self, other: &BV) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         self.data &= other;
         Ok(())
     }
@@ -355,8 +417,7 @@ impl Mutibs {
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
             bitvec::domain::Domain::Region {
-                head: Some(elem),
-                ..
+                head: Some(elem), ..
             } => elem.head().into_inner() as usize,
             _ => 0,
         };
@@ -516,7 +577,12 @@ impl Mutibs {
     #[classmethod]
     #[inline]
     #[pyo3(signature = (data, /, length=None, offset=None), text_signature = "(cls, data, /, length=None, offset=None)")]
-    pub fn from_bytes(_cls: &Bound<'_, PyType>, data: Vec<u8>, length: Option<i64>, offset: Option<i64>) -> PyResult<Self> {
+    pub fn from_bytes(
+        _cls: &Bound<'_, PyType>,
+        data: Vec<u8>,
+        length: Option<i64>,
+        offset: Option<i64>,
+    ) -> PyResult<Self> {
         BitCollection::from_bytes_slice(data, length, offset).map_err(PyValueError::new_err)
     }
 
@@ -565,12 +631,14 @@ impl Mutibs {
 
             let result = if step == 1 {
                 if start < stop {
-                    self.get_slice(start as usize, (stop - start) as usize)?
+                    self.get_slice(start as usize, (stop - start) as usize)
+                        .map_err(PyIndexError::new_err)?
                 } else {
                     Mutibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step).map_err(PyIndexError::new_err)?
+                self.getslice_with_step(start, stop, step)
+                    .map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -788,7 +856,7 @@ impl Mutibs {
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
-        let (start, end) = validate_slice(self.len(), start, end)?;
+        let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
         Ok(find_bitvec(&self.data, b.data(), start, end, byte_aligned))
     }
 
@@ -798,7 +866,7 @@ impl Mutibs {
     ///
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_and(self, &other))
     }
 
@@ -808,7 +876,7 @@ impl Mutibs {
     ///
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_or(self, &other))
     }
 
@@ -818,7 +886,7 @@ impl Mutibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
+        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         Ok(BitCollection::logical_xor(self, &other))
     }
 
@@ -881,7 +949,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
         }
 
-        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
         let n = (n % (end as i64 - start as i64)) as usize;
         slf.data[start..end].rotate_left(n);
         Ok(slf)
@@ -916,7 +984,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
         }
 
-        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
         let n = (n % (end as i64 - start as i64)) as usize;
         slf.data[start..end].rotate_right(n);
         Ok(slf)
@@ -1059,12 +1127,14 @@ impl Mutibs {
             }
             Some(p) => {
                 if let Ok(pos) = p.extract::<i64>() {
-                    let pos: usize = validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
+                    let pos: usize =
+                        validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
                     let value = slf.data[pos];
                     slf.data.set(pos, !value);
                 } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
                     for pos in pos_list {
-                        let pos: usize = validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
+                        let pos: usize =
+                            validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
                         let value = slf.data[pos];
                         slf.data.set(pos, !value);
                     }
@@ -1159,7 +1229,7 @@ impl Mutibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n)?;
+        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
         Ok(self.lshift(shift))
     }
 
@@ -1168,7 +1238,7 @@ impl Mutibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n)?;
+        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
         Ok(self.rshift(shift))
     }
 
@@ -1363,7 +1433,7 @@ impl Mutibs {
             tibs_from_any(new)?
         };
 
-        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
 
         // Find all non-overlapping occurrences
         let mut starting_points: Vec<usize> = Vec::new();
@@ -1464,7 +1534,7 @@ impl Mutibs {
     ///     '110000'
     ///
     pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
-        let shift = validate_shift(&*slf, n)?;
+        let shift = validate_shift(&*slf, n).map_err(PyValueError::new_err)?;
         slf.data.shift_left(shift);
         Ok(())
     }
@@ -1484,7 +1554,7 @@ impl Mutibs {
     ///     '000011'
     ///
     pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
-        let shift = validate_shift(&*slf, n)?;
+        let shift = validate_shift(&*slf, n).map_err(PyValueError::new_err)?;
         slf.data.shift_right(shift);
         Ok(())
     }
@@ -1524,7 +1594,7 @@ impl Mutibs {
     /// Iteration is not supported for mutable objects.
     pub fn __iter__(&self) -> PyResult<()> {
         Err(PyTypeError::new_err(
-            "Mutibs objects are not iterable. You can use .to_tibs() or .as_tibs() to convert to a Tibs object that does support iteration."
+            "Mutibs objects are not iterable. You can use .to_tibs() or .as_tibs() to convert to a Tibs object that does support iteration.",
         ))
     }
 

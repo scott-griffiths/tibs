@@ -9,6 +9,16 @@ use sha2::{Digest, Sha256};
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;
 
+pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> Result<(), String> {
+    if a != b {
+        Err(format!(
+            "For logical operations the lengths of both objects must match. Received lengths of {a} and {b} bits."
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 // An implementation of the KMP algorithm for bit slices.
 fn compute_lps(pattern: &BS) -> Vec<usize> {
     let len = pattern.len();
@@ -101,16 +111,12 @@ pub(crate) fn validate_index(index: i64, length: usize) -> Result<usize, String>
     Ok(index_p as usize)
 }
 
-pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {
+pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> Result<usize, String> {
     if s.is_empty() {
-        return Err(PyValueError::new_err(
-            "Cannot use a bit shift on an empty container.",
-        ));
+        return Err("Cannot use a bit shift on an empty container.".to_string());
     }
     if n < 0 {
-        return Err(PyValueError::new_err(
-            "Cannot bit shift by a negative amount.",
-        ));
+        return Err("Cannot bit shift by a negative amount.".to_string());
     }
     Ok(n as usize)
 }
@@ -120,7 +126,7 @@ pub(crate) fn validate_slice(
     length: usize,
     start: Option<i64>,
     end: Option<i64>,
-) -> PyResult<(usize, usize)> {
+) -> Result<(usize, usize), String> {
     let mut start = start.unwrap_or(0);
     let mut end = end.unwrap_or(length as i64);
     if start < 0 {
@@ -131,9 +137,9 @@ pub(crate) fn validate_slice(
     }
 
     if !(0 <= start && start <= end && end <= length as i64) {
-        return Err(PyValueError::new_err(format!(
+        return Err(format!(
             "Invalid slice positions for length of {length}: start={start}, end={end}."
-        )));
+        ));
     }
     Ok((start as usize, end as usize))
 }

@@ -28,7 +28,6 @@ mod tests {
         mb.set_slice(2, 4, &br);
         assert_eq!(mb.to_binary(), "001100");
     }
-    
 
     #[test]
     fn test_unusual_slice_setting() {
