@@ -1,87 +1,19 @@
-use crate::helpers::{validate_index, BV};
+use crate::helpers::{BV, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
-use lru::LruCache;
-use once_cell::sync::Lazy;
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
 use std::fmt;
-use std::num::NonZeroUsize;
-use std::sync::Mutex;
-
-// ---- Rust-only helper methods ----
-
-// Define a static LRU cache.
-const BITS_CACHE_SIZE: usize = 1024;
-static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
-    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
-
-fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
-    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
-        Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
-        Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
-        _ => Err(PyValueError::new_err(format!(
-            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
-        ))),
-    }
-}
-
-pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
-    // Check cache first
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        if let Some(cached_data) = cache.get(&s) {
-            return Ok(Mutibs::new(cached_data.clone()));
-        }
-    }
-    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    let tokens = s.split(',');
-    let mut bits_array = Vec::<Mutibs>::new();
-    let mut total_bit_length = 0;
-    for token in tokens {
-        if token.is_empty() {
-            continue;
-        }
-        let x = string_literal_to_mutibs(token)?;
-        total_bit_length += x.len();
-        bits_array.push(x);
-    }
-    if bits_array.is_empty() {
-        return Ok(BitCollection::empty());
-    }
-    // Combine all bits
-    let result = if bits_array.len() == 1 {
-        bits_array.pop().unwrap()
-    } else {
-        let mut result = BV::with_capacity(total_bit_length);
-        for bits in bits_array {
-            result.extend_from_bitslice(bits.data());
-        }
-        Mutibs::new(result)
-    };
-    // Update cache with new result
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.data().clone());
-    }
-    Ok(result)
-}
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
-
-
     fn raw_data(&self) -> (&[u8], usize, usize) {
         let raw_bytes = self.data().as_raw_slice();
         let slice = self.data().as_bitslice();
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
             bitvec::domain::Domain::Region {
-                head: Some(elem),
-                ..
+                head: Some(elem), ..
             } => elem.head().into_inner() as usize,
             _ => 0,
         };
@@ -97,23 +29,18 @@ pub(crate) trait BitCollection: Sized {
         let (rhs, rhs_offset, _) = other.raw_data();
 
         if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter()
-                .zip(rhs.iter())
-                .map(|(&a, &b)| a | b)
-                .collect();
+            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
             let mut bv = BV::from_vec(data);
             if lhs_offset > 0 {
                 bv.drain(..lhs_offset);
             }
             bv.truncate(self.len());
             Self::new(bv)
-        }
-        else {
+        } else {
             let mut result = self.data().clone();
             result |= other.data();
             Self::new(result)
         }
-
     }
 
     #[inline]
@@ -124,10 +51,7 @@ pub(crate) trait BitCollection: Sized {
         let (rhs, rhs_offset, _) = other.raw_data();
 
         if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter()
-                .zip(rhs.iter())
-                .map(|(&a, &b)| a & b)
-                .collect();
+            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a & b).collect();
 
             let mut bv = BV::from_vec(data);
             if lhs_offset > 0 {
@@ -135,13 +59,11 @@ pub(crate) trait BitCollection: Sized {
             }
             bv.truncate(self.len());
             Self::new(bv)
-        }
-        else {
+        } else {
             let mut result = self.data().clone();
             result &= other.data();
             Self::new(result)
         }
-
     }
 
     #[inline]
@@ -152,23 +74,18 @@ pub(crate) trait BitCollection: Sized {
         let (rhs, rhs_offset, _) = other.raw_data();
 
         if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter()
-                .zip(rhs.iter())
-                .map(|(&a, &b)| a ^ b)
-                .collect();
+            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
             let mut bv = BV::from_vec(data);
             if lhs_offset > 0 {
                 bv.drain(..lhs_offset);
             }
             bv.truncate(self.len());
             Self::new(bv)
-        }
-        else {
+        } else {
             let mut result = self.data().clone();
             result ^= other.data();
             Self::new(result)
         }
-
     }
 
     #[inline]
@@ -187,18 +104,26 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_bytes_slice(data: Vec<u8>, length: Option<i64>, offset: Option<i64>) -> Result<Self, String> {
+    fn from_bytes_slice(
+        data: Vec<u8>,
+        length: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Self, String> {
         if length.is_none() && offset.is_none() {
             return Ok(Self::new(BV::from_vec(data)));
         }
         let start_bit = offset.unwrap_or(0);
         if start_bit < 0 {
-            return Err(format!("Cannot create using a negative offset of {start_bit}."));
+            return Err(format!(
+                "Cannot create using a negative offset of {start_bit}."
+            ));
         }
         let start_bit = start_bit as usize;
         let data_length = data.len() * 8;
         if start_bit > data_length {
-            return Err(format!("Offset of {start_bit} is greater than the data length ({data_length} bits)."));
+            return Err(format!(
+                "Offset of {start_bit} is greater than the data length ({data_length} bits)."
+            ));
         }
         let length = length.unwrap_or(data_length as i64 - start_bit as i64);
         if length < 0 {
@@ -206,7 +131,9 @@ pub(crate) trait BitCollection: Sized {
         }
         let length = length as usize;
         if start_bit + length > data_length {
-            return Err(format!("Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."));
+            return Err(format!(
+                "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
+            ));
         }
         let mut bv = BV::from_vec(data);
         bv.drain(..start_bit);
@@ -278,18 +205,14 @@ pub(crate) trait BitCollection: Sized {
         debug_assert!(end_bit >= -1);
         debug_assert!(step != 0);
         if start_bit < -1 || end_bit < -1 {
-            return Err(
-                "Indices less than -1 are not valid values.".to_string(),
-            );
+            return Err("Indices less than -1 are not valid values.".to_string());
         }
         if step > 0 {
             if start_bit >= end_bit {
                 return Ok(BitCollection::empty());
             }
             if end_bit as usize > self.len() {
-                return Err(
-                    "Slice end goes past the end of the container.".to_string(),
-                );
+                return Err("Slice end goes past the end of the container.".to_string());
             }
             // TODO: This alternate method might be faster
             // Ok(Self::new(
@@ -306,9 +229,7 @@ pub(crate) trait BitCollection: Sized {
                 return Ok(BitCollection::empty());
             }
             if start_bit as usize > self.len() {
-                return Err(
-                    "Slice start bit is past the end of the container.".to_string(),
-                );
+                return Err("Slice start bit is past the end of the container.".to_string());
             }
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
@@ -329,14 +250,12 @@ pub(crate) trait BitCollection: Sized {
     }
 
     // Checked version
-    fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
+    fn get_slice(&self, start_bit: usize, length: usize) -> Result<Self, String> {
         if length == 0 {
             return Ok(BitCollection::empty());
         }
         if start_bit + length > self.len() {
-            return Err(PyValueError::new_err(
-                "End bit of the slice goes past the end of the container.",
-            ));
+            return Err("End bit of the slice goes past the end of the container.".to_string());
         }
         Ok(self.get_slice_unchecked(start_bit, length))
     }
@@ -362,11 +281,7 @@ pub(crate) trait BitCollection: Sized {
             ones = self.data().count_ones();
         }
 
-        if count_ones {
-            ones
-        } else {
-            len - ones
-        }
+        if count_ones { ones } else { len - ones }
     }
 
     fn multiply(&self, n: usize) -> Self {
@@ -429,7 +344,7 @@ pub(crate) trait BitCollection: Sized {
                 _ => {
                     return Err(format!(
                         "Cannot convert from bin '{binary_string}: Invalid character '{c}'."
-                    ))
+                    ));
                 }
             }
         }
@@ -460,7 +375,7 @@ pub(crate) trait BitCollection: Sized {
                 _ => {
                     return Err(format!(
                         "Cannot convert from oct '{octal_string}': Invalid character '{c}'."
-                    ))
+                    ));
                 }
             }
         }
@@ -781,13 +696,5 @@ impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
         self.data() == other.data()
-    }
-}
-
-pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
-    if a != b {
-        Err(PyValueError::new_err(format!("For logical operations the lengths of both objects must match. Received lengths of {a} and {b} bits.")))
-    } else {
-        Ok(())
     }
 }
