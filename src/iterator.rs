@@ -74,8 +74,8 @@ impl FindAllIterator {
                 return Ok(None); // No space left for the needle or already past the end
             }
             helpers::find_bitvec(
-                haystack_rs.data(),
-                needle_rs.data(),
+                haystack_rs.as_bv(),
+                needle_rs.as_bv(),
                 current_pos,
                 slf.end,
                 byte_aligned,
@@ -127,7 +127,7 @@ impl ChunksIterator {
         // Borrow only long enough to copy out the bits slice
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
-            let slice = &bits.data()[start..end];
+            let slice = &bits.as_bv()[start..end];
             Tibs::new(slice.to_bitvec())
         };
 

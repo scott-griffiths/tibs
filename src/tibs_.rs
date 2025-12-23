@@ -68,10 +68,10 @@ impl BitCollection for PolyTibs<'_> {
         PolyTibs::Owned(Tibs::new_from_bv(bv))
     }
 
-    fn data(&self) -> &BV {
+    fn as_bv(&self) -> &BV {
         match self {
-            PolyTibs::Borrowed(t) => t.data(),
-            PolyTibs::Owned(t) => t.data(),
+            PolyTibs::Borrowed(t) => t.as_bv(),
+            PolyTibs::Owned(t) => t.as_bv(),
         }
     }
 }
@@ -95,7 +95,7 @@ impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
 
-        let bits = self.data.as_bitslice();
+        let bits = self.as_bv().as_bitslice();
 
         let mut words = bits.chunks_exact(64);
         for chunk in words.by_ref() {
@@ -123,12 +123,12 @@ impl Hash for Tibs {
 
 impl Tibs {
     pub(crate) fn new_from_bv(bv: BV) -> Self {
-        Tibs { data: bv }
+        Tibs { _data: bv }
     }
 
     #[inline]
-    pub(crate) fn data_to_bv(&self) -> &BV {
-        &self.data
+    pub(crate) fn as_bv(&self) -> &BV {
+        &self._data
     }
 }
 
@@ -155,7 +155,7 @@ impl Tibs {
 #[derive(Clone)]
 #[pyclass(frozen, sequence, module = "tibs")]
 pub struct Tibs {
-    data: BV,
+    _data: BV,
 }
 
 /// Public Python-facing methods.
@@ -276,7 +276,7 @@ impl Tibs {
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         match tibs_from_any(other) {
-            Ok(b) => self.data == *b.data(),
+            Ok(b) => *self.as_bv() == *b.as_bv(),
             Err(_) => false,
         }
     }
@@ -612,7 +612,7 @@ impl Tibs {
         // Concatenate.
         let mut bv = BV::with_capacity(total_len);
         for bits in &parts {
-            bv.extend_from_bitslice(bits.data());
+            bv.extend_from_bitslice(bits.as_bv());
         }
         Ok(Tibs::new(bv))
     }
@@ -653,7 +653,7 @@ impl Tibs {
         }
         let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
 
-        Ok(find_bitvec(&self.data, b.data(), start, end, byte_aligned))
+        Ok(find_bitvec(self.as_bv(), b.as_bv(), start, end, byte_aligned))
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -701,7 +701,7 @@ impl Tibs {
             pos = pos / 8 * 8;
         }
         while pos >= start {
-            if self.data[pos..pos + b.len()] == *b.data() {
+            if self.as_bv()[pos..pos + b.len()] == *b.as_bv() {
                 return Ok(Some(pos));
             }
             if pos < step {
@@ -774,7 +774,7 @@ impl Tibs {
     ///
     #[inline]
     pub fn all(&self) -> bool {
-        self.data.all()
+        self.as_bv().all()
     }
 
     /// Return True if any bits are equal to 1, otherwise return False.
@@ -790,12 +790,12 @@ impl Tibs {
     ///
     #[inline]
     pub fn any(&self) -> bool {
-        self.data.any()
+        self.as_bv().any()
     }
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
-        Mutibs::new(self.data().clone())
+        Mutibs::new(self.as_bv().clone())
     }
 
     #[inline]
@@ -860,8 +860,8 @@ impl Tibs {
     pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
-        data.extend_from_bitslice(&self.data);
-        data.extend_from_bitslice(bs.data());
+        data.extend_from_bitslice(self.as_bv());
+        data.extend_from_bitslice(bs.as_bv());
         Ok(Tibs::new(data))
     }
 
@@ -869,8 +869,8 @@ impl Tibs {
     pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(bs.len() + self.len());
-        data.extend_from_bitslice(bs.data());
-        data.extend_from_bitslice(&self.data);
+        data.extend_from_bitslice(bs.as_bv());
+        data.extend_from_bitslice(self.as_bv());
         Ok(Tibs::new(data))
     }
 
@@ -941,10 +941,10 @@ impl Tibs {
     /// Raises ValueError if the Tibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
-        if self.data.is_empty() {
+        if self.as_bv().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
-        Ok(Tibs::new(self.data.clone().not()))
+        Ok(Tibs::new(self.as_bv().clone().not()))
     }
 
     /// Return the Tibs as a bytes object.

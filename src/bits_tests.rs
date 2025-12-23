@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn mutable_from_immutable() {
         let immutable = <Tibs as BitCollection>::from_binary("1010").unwrap();
-        let mutable = Mutibs::new(immutable.data().clone());
+        let mutable = Mutibs::new(immutable.as_bv().clone());
         assert_eq!(mutable.to_binary(), "1010");
     }
 
@@ -386,7 +386,7 @@ mod tests {
         let pattern1 = Mutibs::from_binary("1100").unwrap();
         let pattern2 = <Tibs as BitCollection>::from_binary("0011").unwrap();
 
-        let mut m = Mutibs::new(pattern1.data().clone());
+        let mut m = Mutibs::new(pattern1.as_bv().clone());
 
         m.set_slice(0, 2, &pattern2);
         assert_eq!(m.to_binary(), "001100");
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn conversion_round_trip() {
         let original = <Tibs as BitCollection>::from_binary("101010").unwrap();
-        let mut mutable = Mutibs::new(original.data().clone());
+        let mut mutable = Mutibs::new(original.as_bv().clone());
         mutable.set_index(false, 0).unwrap();
         mutable.set_index(true, 1).unwrap();
         let result = mutable.as_tibs();
