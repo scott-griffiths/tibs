@@ -44,8 +44,8 @@ fn compute_lps(pattern: &BS) -> Vec<usize> {
 }
 
 pub(crate) fn find_bitvec(
-    haystack: &BV,
-    needle: &BV,
+    haystack: &BS,
+    needle: &BS,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -61,8 +61,8 @@ pub(crate) fn find_bitvec(
 
 #[inline]
 fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
-    haystack: &BV,
-    needle: &BV,
+    haystack: &BS,
+    needle: &BS,
     start: usize,
     end: usize,
 ) -> Option<usize> {
