@@ -11,6 +11,7 @@ use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, Py
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
+use std::sync::Arc;
 
 fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
     // Is it of type Tibs?
@@ -123,7 +124,7 @@ impl Hash for Tibs {
 
 impl Tibs {
     pub(crate) fn new_from_bv(bv: BV) -> Self {
-        Tibs { _data: bv }
+        Tibs { _data: Arc::new(bv) }
     }
 
     #[inline]
@@ -155,7 +156,7 @@ impl Tibs {
 #[derive(Clone)]
 #[pyclass(frozen, sequence, module = "tibs")]
 pub struct Tibs {
-    _data: BV,
+    _data: Arc<BV>,
 }
 
 /// Public Python-facing methods.
