@@ -1,7 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{
-    BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice,
-};
+use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS};
 use crate::tibs_::{PolyTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -153,33 +151,33 @@ impl Mutibs {
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
-            self.as_mut_bv()[start..start + value.len()].copy_from_bitslice(value.as_bv());
+            self.as_mut_bv()[start..start + value.len()].copy_from_bitslice(value.as_bitslice());
         } else if start == end {
             // Not sure why but splice doesn't work for this case, so we do it explicitly
             let tail = self.as_mut_bv().split_off(start);
-            self.as_mut_bv().extend_from_bitslice(value.as_bv());
+            self.as_mut_bv().extend_from_bitslice(value.as_bitslice());
             self.as_mut_bv().extend_from_bitslice(&tail);
         } else {
             let tail = self.as_mut_bv().split_off(end);
             self.as_mut_bv().truncate(start);
-            self.as_mut_bv().extend_from_bitslice(value.as_bv());
+            self.as_mut_bv().extend_from_bitslice(value.as_bitslice());
             self.as_mut_bv().extend_from_bitslice(&tail);
         }
     }
 
-    pub(crate) fn ixor(&mut self, other: &BV) -> PyResult<()> {
+    pub(crate) fn ixor(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         *self.as_mut_bv() ^= other;
         Ok(())
     }
 
-    pub(crate) fn ior(&mut self, other: &BV) -> PyResult<()> {
+    pub(crate) fn ior(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         *self.as_mut_bv() |= other;
         Ok(())
     }
 
-    pub(crate) fn iand(&mut self, other: &BV) -> PyResult<()> {
+    pub(crate) fn iand(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
         *self.as_mut_bv() &= other;
         Ok(())
@@ -262,13 +260,13 @@ impl Mutibs {
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         if let Ok(b) = other.extract::<PyRef<Tibs>>() {
-            return *self.as_bv() == *b.as_bv();
+            return *self.as_bv() == *b.as_bitslice();
         }
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return *self.as_bv() == *b.as_bv();
         }
         match tibs_from_any(other) {
-            Ok(b) => *self.as_bv() == *b.as_bv(),
+            Ok(b) => *self.as_bv() == *b.as_bitslice(),
             Err(_) => false,
         }
     }
@@ -732,7 +730,7 @@ impl Mutibs {
 
             // Assign element-wise.
             for (k, &pos) in positions.iter().enumerate() {
-                let v = bs.as_bv()[k];
+                let v = bs.as_bitslice()[k];
                 slf.as_mut_bv().set(pos, v);
             }
 
@@ -856,7 +854,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
-        Ok(find_bitvec(self.as_bv(), b.as_bv(), start, end, byte_aligned))
+        Ok(find_bitvec(self.as_bv(), b.as_bitslice(), start, end, byte_aligned))
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -1328,7 +1326,7 @@ impl Mutibs {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bv());
-        data.extend_from_bitslice(bs.as_bv());
+        data.extend_from_bitslice(bs.as_bitslice());
         Ok(Mutibs::new(data))
     }
 
@@ -1336,7 +1334,7 @@ impl Mutibs {
     pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
-        data.extend_from_bitslice(bs.as_bv());
+        data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bv());
         Ok(Mutibs::new(data))
     }
@@ -1369,7 +1367,7 @@ impl Mutibs {
             slf.as_mut_bv().extend_from_bitslice(&bits_clone);
         } else {
             let bs = tibs_from_any(bs)?;
-            slf.as_mut_bv().extend_from_bitslice(bs.as_bv());
+            slf.as_mut_bv().extend_from_bitslice(bs.as_bitslice());
         }
         Ok(slf)
     }
@@ -1400,7 +1398,7 @@ impl Mutibs {
                 return Ok(slf);
             }
             let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
-            new_data.extend_from_bitslice(to_prepend.as_bv());
+            new_data.extend_from_bitslice(to_prepend.as_bitslice());
             new_data.extend_from_bitslice(&slf.as_bv());
             *slf.as_mut_bv() = new_data;
         }
@@ -1444,7 +1442,7 @@ impl Mutibs {
                 }
             }
             if let Some(found_pos) =
-                find_bitvec(slf.as_bv(), old.as_bv(), current_pos, end, byte_aligned)
+                find_bitvec(slf.as_bv(), old.as_bitslice(), current_pos, end, byte_aligned)
             {
                 starting_points.push(found_pos);
                 current_pos = found_pos + old.len();
@@ -1462,7 +1460,7 @@ impl Mutibs {
         let mut last_pos = 0;
         for &pos in &starting_points {
             result.extend_from_bitslice(&slf.as_bv()[last_pos..pos]);
-            result.extend_from_bitslice(new.as_bv());
+            result.extend_from_bitslice(new.as_bitslice());
             last_pos = pos + old.len();
         }
         result.extend_from_bitslice(&slf.as_bv()[last_pos..]);
@@ -1509,11 +1507,11 @@ impl Mutibs {
             pos = slf.len() as i64;
         }
         if bs.len() == 1 {
-            slf.as_mut_bv().insert(pos as usize, bs.as_bv()[0]);
+            slf.as_mut_bv().insert(pos as usize, bs.as_bitslice()[0]);
             return Ok(slf);
         }
         let tail = slf.as_mut_bv().split_off(pos as usize);
-        slf.as_mut_bv().extend_from_bitslice(bs.as_bv());
+        slf.as_mut_bv().extend_from_bitslice(bs.as_bitslice());
         slf.as_mut_bv().extend_from_bitslice(&tail);
         Ok(slf)
     }
@@ -1600,19 +1598,19 @@ impl Mutibs {
     /// In-place bit-wise 'and'.
     pub fn __iand__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.iand(other.as_bv())
+        slf.iand(other.as_bitslice())
     }
 
     /// In-place bit-wise 'or'.
     pub fn __ior__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.ior(other.as_bv())
+        slf.ior(other.as_bitslice())
     }
 
     /// In-place bit-wise 'xor'.
     pub fn __ixor__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         let other = tibs_from_any(bs)?;
-        slf.ixor(other.as_bv())
+        slf.ixor(other.as_bitslice())
     }
 
     /// In-place multiplication by a non-negative integer.
