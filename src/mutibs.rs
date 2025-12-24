@@ -55,14 +55,14 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     } else {
         let mut result = BV::with_capacity(total_bit_length);
         for bits in bits_array {
-            result.extend_from_bitslice(bits.as_bv());
+            result.extend_from_bitslice(bits.as_bitvec_ref());
         }
         Mutibs::new(result)
     };
     // Update cache with new result
     {
         let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.as_bv().clone());
+        cache.put(s, result.as_bitvec_ref().clone());
     }
     Ok(result)
 }
@@ -135,12 +135,12 @@ impl Mutibs {
     }
 
     #[inline]
-    pub(crate) fn as_bv(&self) -> &BV {
+    pub(crate) fn as_bitvec_ref(&self) -> &BV {
         &self._data
     }
 
     #[inline]
-    pub(crate) fn as_mut_bv(&mut self) -> &mut BV {
+    pub(crate) fn as_mut_bitvec_ref(&mut self) -> &mut BV {
         &mut self._data
     }
 
@@ -151,35 +151,35 @@ impl Mutibs {
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
-            self.as_mut_bv()[start..start + value.len()].copy_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value.as_bitslice());
         } else if start == end {
             // Not sure why but splice doesn't work for this case, so we do it explicitly
-            let tail = self.as_mut_bv().split_off(start);
-            self.as_mut_bv().extend_from_bitslice(value.as_bitslice());
-            self.as_mut_bv().extend_from_bitslice(&tail);
+            let tail = self.as_mut_bitvec_ref().split_off(start);
+            self.as_mut_bitvec_ref().extend_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         } else {
-            let tail = self.as_mut_bv().split_off(end);
-            self.as_mut_bv().truncate(start);
-            self.as_mut_bv().extend_from_bitslice(value.as_bitslice());
-            self.as_mut_bv().extend_from_bitslice(&tail);
+            let tail = self.as_mut_bitvec_ref().split_off(end);
+            self.as_mut_bitvec_ref().truncate(start);
+            self.as_mut_bitvec_ref().extend_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         }
     }
 
     pub(crate) fn ixor(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
-        *self.as_mut_bv() ^= other;
+        *self.as_mut_bitvec_ref() ^= other;
         Ok(())
     }
 
     pub(crate) fn ior(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
-        *self.as_mut_bv() |= other;
+        *self.as_mut_bitvec_ref() |= other;
         Ok(())
     }
 
     pub(crate) fn iand(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
-        *self.as_mut_bv() &= other;
+        *self.as_mut_bitvec_ref() &= other;
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl Mutibs {
             validated.push(validate_index(idx, self.len()).map_err(PyIndexError::new_err)?);
         }
         for idx in validated {
-            self.as_mut_bv().set(idx, value);
+            self.as_mut_bitvec_ref().set(idx, value);
         }
         Ok(())
     }
@@ -231,7 +231,7 @@ impl Mutibs {
 
         while index < stop {
             unsafe {
-                self.as_mut_bv().set_unchecked(index, value);
+                self.as_mut_bitvec_ref().set_unchecked(index, value);
             }
             index += positive_step;
         }
@@ -260,13 +260,13 @@ impl Mutibs {
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         if let Ok(b) = other.extract::<PyRef<Tibs>>() {
-            return *self.as_bv() == *b.as_bitslice();
+            return *self.as_bitvec_ref() == *b.as_bitslice();
         }
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
-            return *self.as_bv() == *b.as_bv();
+            return *self.as_bitvec_ref() == *b.as_bitvec_ref();
         }
         match tibs_from_any(other) {
-            Ok(b) => *self.as_bv() == *b.as_bitslice(),
+            Ok(b) => *self.as_bitvec_ref() == *b.as_bitslice(),
             Err(_) => false,
         }
     }
@@ -411,7 +411,7 @@ impl Mutibs {
     ///     assert t == []
     ///
     pub fn as_raw_data(&mut self) -> (Vec<u8>, usize, usize) {
-        let slice = self.as_bv().as_bitslice();
+        let slice = self.as_bitvec_ref().as_bitslice();
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
             bitvec::domain::Domain::Region {
@@ -420,7 +420,7 @@ impl Mutibs {
             _ => 0,
         };
         let len = self.len();
-        let bv = std::mem::take(&mut *self.as_mut_bv());
+        let bv = std::mem::take(&mut *self.as_mut_bitvec_ref());
         let raw_bytes = bv.into_vec();
         (raw_bytes, offset, len)
     }
@@ -674,7 +674,7 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                PolyTibs::Owned(Tibs::new(slf.as_bv().clone()))
+                PolyTibs::Owned(Tibs::new(slf.as_bitvec_ref().clone()))
             } else {
                 tibs_from_any(value)?
             };
@@ -731,7 +731,7 @@ impl Mutibs {
             // Assign element-wise.
             for (k, &pos) in positions.iter().enumerate() {
                 let v = bs.as_bitslice()[k];
-                slf.as_mut_bv().set(pos, v);
+                slf.as_mut_bitvec_ref().set(pos, v);
             }
 
             return Ok(());
@@ -750,7 +750,7 @@ impl Mutibs {
                     "Bit index {index} out of range for length {length}"
                 )));
             }
-            self.as_mut_bv().remove(index as usize);
+            self.as_mut_bitvec_ref().remove(index as usize);
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -760,7 +760,7 @@ impl Mutibs {
             let step: i64 = indices.step.try_into()?;
             if step == 1 {
                 if stop > start {
-                    self.as_mut_bv().drain(start as usize..stop as usize);
+                    self.as_mut_bitvec_ref().drain(start as usize..stop as usize);
                 }
             } else {
                 // Collect indices to remove, then remove from highest to lowest.
@@ -784,7 +784,7 @@ impl Mutibs {
 
                 to_remove.sort();
                 for i in to_remove.into_iter().rev() {
-                    self.as_mut_bv().remove(i);
+                    self.as_mut_bitvec_ref().remove(i);
                 }
             }
             return Ok(());
@@ -854,7 +854,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
-        Ok(find_bitvec(self.as_bv(), b.as_bitslice(), start, end, byte_aligned))
+        Ok(find_bitvec(self.as_bitvec_ref(), b.as_bitslice(), start, end, byte_aligned))
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -948,7 +948,7 @@ impl Mutibs {
 
         let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
         let n = (n % (end as i64 - start as i64)) as usize;
-        slf.as_mut_bv()[start..end].rotate_left(n);
+        slf.as_mut_bitvec_ref()[start..end].rotate_left(n);
         Ok(slf)
     }
 
@@ -983,7 +983,7 @@ impl Mutibs {
 
         let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
         let n = (n % (end as i64 - start as i64)) as usize;
-        slf.as_mut_bv()[start..end].rotate_right(n);
+        slf.as_mut_bitvec_ref()[start..end].rotate_right(n);
         Ok(slf)
     }
 
@@ -1056,7 +1056,7 @@ impl Mutibs {
     ///     False
     ///
     pub fn all(&self) -> bool {
-        self.as_bv().all()
+        self.as_bitvec_ref().all()
     }
 
     /// Return True if any bits are equal to 1, otherwise return False.
@@ -1071,7 +1071,7 @@ impl Mutibs {
     ///     True
     ///
     pub fn any(&self) -> bool {
-        self.as_bv().any()
+        self.as_bitvec_ref().any()
     }
 
     /// Find last occurrence of a bit sequence.
@@ -1092,7 +1092,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         // TODO: Completely redo how rfind works!
-        let t = Tibs::new(self.as_bv().clone());
+        let t = Tibs::new(self.as_bitvec_ref().clone());
         t.rfind(b, start, end, byte_aligned)
     }
 
@@ -1120,20 +1120,20 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         match pos {
             None => {
-                *slf.as_mut_bv()= std::mem::take(&mut *slf.as_mut_bv()).not();
+                *slf.as_mut_bitvec_ref()= std::mem::take(&mut *slf.as_mut_bitvec_ref()).not();
             }
             Some(p) => {
                 if let Ok(pos) = p.extract::<i64>() {
                     let pos: usize =
                         validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
-                    let value = slf.as_bv()[pos];
-                    slf.as_mut_bv().set(pos, !value);
+                    let value = slf.as_bitvec_ref()[pos];
+                    slf.as_mut_bitvec_ref().set(pos, !value);
                 } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
                     for pos in pos_list {
                         let pos: usize =
                             validate_index(pos, slf.len()).map_err(PyIndexError::new_err)?;
-                        let value = slf.as_bv()[pos];
-                        slf.as_mut_bv().set(pos, !value);
+                        let value = slf.as_bitvec_ref()[pos];
+                        slf.as_mut_bitvec_ref().set(pos, !value);
                     }
                 } else {
                     return Err(PyTypeError::new_err(
@@ -1156,7 +1156,7 @@ impl Mutibs {
     ///     Mutibs('0b1101')
     ///
     pub fn reverse(mut slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
-        slf.as_mut_bv().reverse();
+        slf.as_mut_bitvec_ref().reverse();
         slf
     }
 
@@ -1206,7 +1206,7 @@ impl Mutibs {
         for chunk in bytes.chunks_mut(byte_length) {
             chunk.reverse();
         }
-        *slf.as_mut_bv() = BV::from_vec(bytes);
+        *slf.as_mut_bitvec_ref() = BV::from_vec(bytes);
         Ok(slf)
     }
 
@@ -1215,10 +1215,10 @@ impl Mutibs {
     /// Raises ValueError if the Mutibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
-        if self.as_bv().is_empty() {
+        if self.as_bitvec_ref().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(Mutibs::new(self.as_bv().clone().not()))
+        Ok(Mutibs::new(self.as_bitvec_ref().clone().not()))
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -1241,7 +1241,7 @@ impl Mutibs {
 
     /// Return a new copy of the Mutibs for the copy module.
     pub fn __copy__(&self) -> Self {
-        Mutibs::new(self.as_bv().clone())
+        Mutibs::new(self.as_bitvec_ref().clone())
     }
 
     /// Create and return a Tibs instance from a copy of the Mutibs data.
@@ -1261,7 +1261,7 @@ impl Mutibs {
     ///     Tibs('0b1101')
     ///
     pub fn to_tibs(&self) -> Tibs {
-        Tibs::new(self.as_bv().clone())
+        Tibs::new(self.as_bitvec_ref().clone())
     }
 
     /// Create and return a Tibs instance by moving the Mutibs data.
@@ -1283,7 +1283,7 @@ impl Mutibs {
     ///     Tibs('0b1101')
     ///
     pub fn as_tibs(&mut self) -> Tibs {
-        let mut data = std::mem::take(&mut *self.as_mut_bv());
+        let mut data = std::mem::take(&mut *self.as_mut_bitvec_ref());
         data.shrink_to_fit();
         Tibs::new(data)
     }
@@ -1293,7 +1293,7 @@ impl Mutibs {
     /// This doesn't change the allocated capacity, so won't free up any memory.
     ///
     pub fn clear(&mut self) {
-        self.as_mut_bv().clear();
+        self.as_mut_bitvec_ref().clear();
     }
 
     /// Return the number of bits the Mutibs can hold without reallocating memory.
@@ -1306,7 +1306,7 @@ impl Mutibs {
     /// constructing a large Mutibs incrementally. See also :meth:`reserve`.
     ///
     pub fn capacity(&self) -> usize {
-        self.as_bv().capacity()
+        self.as_bitvec_ref().capacity()
     }
 
     /// Reserve memory for at least `additional` more bits to be appended to the Mutibs.
@@ -1318,14 +1318,14 @@ impl Mutibs {
     /// :param additional: The number of bits that can be appended without any further memory reallocations.
     ///
     pub fn reserve(&mut self, additional: usize) {
-        self.as_mut_bv().reserve(additional);
+        self.as_mut_bitvec_ref().reserve(additional);
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
     pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
-        data.extend_from_bitslice(self.as_bv());
+        data.extend_from_bitslice(self.as_bitvec_ref());
         data.extend_from_bitslice(bs.as_bitslice());
         Ok(Mutibs::new(data))
     }
@@ -1335,7 +1335,7 @@ impl Mutibs {
         let bs = tibs_from_any(bs)?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(bs.as_bitslice());
-        data.extend_from_bitslice(self.as_bv());
+        data.extend_from_bitslice(self.as_bitvec_ref());
         Ok(Mutibs::new(data))
     }
 
@@ -1363,11 +1363,11 @@ impl Mutibs {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
             // If bs is slf, clone inner bits first then append
-            let bits_clone = slf.as_bv().clone();
-            slf.as_mut_bv().extend_from_bitslice(&bits_clone);
+            let bits_clone = slf.as_bitvec_ref().clone();
+            slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
         } else {
             let bs = tibs_from_any(bs)?;
-            slf.as_mut_bv().extend_from_bitslice(bs.as_bitslice());
+            slf.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
         }
         Ok(slf)
     }
@@ -1389,9 +1389,9 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
-            let mut new_data = slf.as_bv().clone();
-            new_data.extend_from_bitslice(&slf.as_bv());
-            *slf.as_mut_bv() = new_data;
+            let mut new_data = slf.as_bitvec_ref().clone();
+            new_data.extend_from_bitslice(&slf.as_bitvec_ref());
+            *slf.as_mut_bitvec_ref() = new_data;
         } else {
             let to_prepend = tibs_from_any(bs)?;
             if to_prepend.is_empty() {
@@ -1399,8 +1399,8 @@ impl Mutibs {
             }
             let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
             new_data.extend_from_bitslice(to_prepend.as_bitslice());
-            new_data.extend_from_bitslice(&slf.as_bv());
-            *slf.as_mut_bv() = new_data;
+            new_data.extend_from_bitslice(&slf.as_bitvec_ref());
+            *slf.as_mut_bitvec_ref() = new_data;
         }
         Ok(slf)
     }
@@ -1442,7 +1442,7 @@ impl Mutibs {
                 }
             }
             if let Some(found_pos) =
-                find_bitvec(slf.as_bv(), old.as_bitslice(), current_pos, end, byte_aligned)
+                find_bitvec(slf.as_bitvec_ref(), old.as_bitslice(), current_pos, end, byte_aligned)
             {
                 starting_points.push(found_pos);
                 current_pos = found_pos + old.len();
@@ -1459,13 +1459,13 @@ impl Mutibs {
         let mut result = BV::new();
         let mut last_pos = 0;
         for &pos in &starting_points {
-            result.extend_from_bitslice(&slf.as_bv()[last_pos..pos]);
+            result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..pos]);
             result.extend_from_bitslice(new.as_bitslice());
             last_pos = pos + old.len();
         }
-        result.extend_from_bitslice(&slf.as_bv()[last_pos..]);
+        result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..]);
 
-        *slf.as_mut_bv() = result;
+        *slf.as_mut_bitvec_ref() = result;
         Ok(slf)
     }
 
@@ -1507,12 +1507,12 @@ impl Mutibs {
             pos = slf.len() as i64;
         }
         if bs.len() == 1 {
-            slf.as_mut_bv().insert(pos as usize, bs.as_bitslice()[0]);
+            slf.as_mut_bitvec_ref().insert(pos as usize, bs.as_bitslice()[0]);
             return Ok(slf);
         }
-        let tail = slf.as_mut_bv().split_off(pos as usize);
-        slf.as_mut_bv().extend_from_bitslice(bs.as_bitslice());
-        slf.as_mut_bv().extend_from_bitslice(&tail);
+        let tail = slf.as_mut_bitvec_ref().split_off(pos as usize);
+        slf.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
+        slf.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         Ok(slf)
     }
 
@@ -1532,7 +1532,7 @@ impl Mutibs {
     ///
     pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = validate_shift(&*slf, n).map_err(PyValueError::new_err)?;
-        slf.as_mut_bv().shift_left(shift);
+        slf.as_mut_bitvec_ref().shift_left(shift);
         Ok(())
     }
 
@@ -1552,7 +1552,7 @@ impl Mutibs {
     ///
     pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = validate_shift(&*slf, n).map_err(PyValueError::new_err)?;
-        slf.as_mut_bv().shift_right(shift);
+        slf.as_mut_bitvec_ref().shift_right(shift);
         Ok(())
     }
 
@@ -1626,18 +1626,18 @@ impl Mutibs {
             1 => Ok(()),
             i => {
                 let n = i as usize;
-                let orig_data = slf.as_bv().clone();
+                let orig_data = slf.as_bitvec_ref().clone();
                 let len = slf.len();
                 slf.reserve(len * (n - 1));
                 let mut mul = 1;
                 while mul * 2 <= n {
                     // Double the length
-                    let current = slf.as_bv().clone();
-                    slf.as_mut_bv().extend_from_bitslice(&current);
+                    let current = slf.as_bitvec_ref().clone();
+                    slf.as_mut_bitvec_ref().extend_from_bitslice(&current);
                     mul *= 2;
                 }
                 while mul < n {
-                    slf.as_mut_bv().extend_from_bitslice(&orig_data);
+                    slf.as_mut_bitvec_ref().extend_from_bitslice(&orig_data);
                     mul += 1;
                 }
                 Ok(())

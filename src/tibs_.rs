@@ -67,10 +67,17 @@ impl BitCollection for PolyTibs<'_> {
         PolyTibs::Owned(Tibs::new_from_bv(bv))
     }
 
-    fn as_bitvec(&self) -> &BV {
+    fn as_bitvec(&self) -> BV {
         match self {
             PolyTibs::Borrowed(t) => t.as_bitvec(),
             PolyTibs::Owned(t) => t.as_bitvec(),
+        }
+    }
+
+    fn as_bitvec_ref(&self) -> &BV {
+        match self {
+            PolyTibs::Borrowed(t) => t.as_bitvec_ref(),
+            PolyTibs::Owned(t) => t.as_bitvec_ref(),
         }
     }
 
@@ -129,16 +136,34 @@ impl Hash for Tibs {
 
 impl Tibs {
     pub(crate) fn new_from_bv(bv: BV) -> Self {
-        Tibs { _data: Arc::new(bv) }
+        let length = bv.len();
+        Tibs {
+            _data: Arc::new(bv),
+            _offset: 0,
+            _length: length,
+        }
+    }
+
+    pub(crate) fn new_from_slice(other: &Tibs, offset: usize, length: usize) -> Result<Self, String> {
+        Ok(Tibs {
+            _data: other._data.clone(),
+            _offset: other._offset + offset,
+            _length: length,
+        })
     }
 
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
-        &self._data
+        &self._data[self._offset..self._offset + self._length]
     }
 
     #[inline]
-    pub(crate) fn as_bitvec(&self) -> &BV {
+    pub(crate) fn as_bitvec(&self) -> BV {
+        self.as_bitslice().to_bitvec()
+    }
+
+    #[inline]
+    pub(crate) fn as_bitvec_ref(&self) -> &BV {
         &self._data
     }
 }
@@ -167,8 +192,8 @@ impl Tibs {
 #[pyclass(frozen, sequence, module = "tibs")]
 pub struct Tibs {
     _data: Arc<BV>,
-    // _offset: usize,
-    // _length: usize,
+    _offset: usize,
+    _length: usize,
 }
 
 /// Public Python-facing methods.
@@ -835,8 +860,7 @@ impl Tibs {
 
             let result = if step == 1 {
                 if start < stop {
-                    self.get_slice(start as usize, (stop - start) as usize)
-                        .map_err(PyIndexError::new_err)?
+                    Tibs::new_from_slice(self, start as usize, (stop - start) as usize).map_err(PyIndexError::new_err)?
                 } else {
                     Tibs::empty()
                 }
