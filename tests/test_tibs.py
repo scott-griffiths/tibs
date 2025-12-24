@@ -132,6 +132,7 @@ def test_raw_bytes_and_offset():
     b = a[4:20]
     raw_bytes, offset, length = b.to_raw_data()
     assert offset == 4
+    assert raw_bytes == b'\xff\x00\xff'
     assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == '0x0f00f0'
 
 def test_mutibs_raw_bytes_and_offset():

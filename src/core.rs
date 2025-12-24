@@ -8,7 +8,7 @@ use std::fmt;
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
     fn raw_data(&self) -> (&[u8], usize, usize) {
-        let raw_bytes = self.as_bitvec().as_raw_slice();
+        let raw_bytes = self.as_bitvec_ref().as_raw_slice();
         let slice = self.as_bitslice();
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
@@ -264,8 +264,9 @@ pub(crate) trait BitCollection: Sized {
 
     fn count(&self, count_ones: bool) -> usize {
         let len = self.len();
-
-        let (mut ones, raw) = (0usize, self.as_bitvec().as_raw_slice());
+        let r = self.as_bitvec_ref();
+        let s = r.as_raw_slice();
+        let (mut ones, raw) = (0usize, s);
         if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
             // Considerable speed increase by casting data to usize if possible.
             for word in words {
@@ -327,7 +328,8 @@ pub(crate) trait BitCollection: Sized {
         Self::new(result_data)
     }
 
-    fn as_bitvec(&self) -> &BV;
+    fn as_bitvec(&self) -> BV;
+    fn as_bitvec_ref(&self) -> &BV;
     fn as_bitslice(&self) -> &BS;
 
     #[inline]
@@ -382,6 +384,7 @@ pub(crate) trait BitCollection: Sized {
                 }
             }
         }
+        b.set_uninitialized(false);
         Ok(Self::new(b))
     }
 
@@ -635,8 +638,13 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn as_bitvec(&self) -> &BV {
-        self.as_bitvec()
+    fn as_bitvec(&self) -> BV {
+        self.as_bitslice().to_bitvec()
+    }
+
+    #[inline]
+    fn as_bitvec_ref(&self) -> &BV {
+        self.as_bitvec_ref()
     }
 
     #[inline]
@@ -651,14 +659,18 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn as_bitvec(&self) -> &BV {
-        self.as_bv()
+    fn as_bitvec(&self) -> BV {
+        self.as_bitvec_ref().to_bitvec()
     }
 
+    #[inline]
+    fn as_bitvec_ref(&self) -> &BV {
+        self.as_bitvec_ref()
+    }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        self.as_bv()
+        self.as_bitvec_ref()
     }
 }
 
@@ -695,20 +707,20 @@ impl PartialEq for Tibs {
 impl PartialEq<Mutibs> for Tibs {
     #[inline]
     fn eq(&self, other: &Mutibs) -> bool {
-        self.as_bitslice() == other.as_bv()
+        self.as_bitslice() == other.as_bitvec_ref()
     }
 }
 
 impl PartialEq for Mutibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_bv() == other.as_bv()
+        self.as_bitvec_ref() == other.as_bitvec_ref()
     }
 }
 
 impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
-        self.as_bv() == other.as_bitslice()
+        self.as_bitvec_ref() == other.as_bitslice()
     }
 }
