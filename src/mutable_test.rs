@@ -17,7 +17,7 @@ mod tests {
     fn test_set_slice() {
         let mut mb = <Mutibs as BitCollection>::from_zeros(6);
         let br = <Tibs as BitCollection>::from_ones(2);
-        mb.set_slice(2, 4, &br);
+        mb.set_slice(2, 4, &br.as_bitslice());
         assert_eq!(mb.to_binary(), "001100");
     }
 
@@ -25,7 +25,7 @@ mod tests {
     fn test_overwrite_slice() {
         let mut mb = <Mutibs as BitCollection>::from_zeros(6);
         let br = <Tibs as BitCollection>::from_ones(2);
-        mb.set_slice(2, 4, &br);
+        mb.set_slice(2, 4, &br.as_bitslice());
         assert_eq!(mb.to_binary(), "001100");
     }
 
@@ -33,7 +33,7 @@ mod tests {
     fn test_unusual_slice_setting() {
         let mut mb = Mutibs::from_hexadecimal("0x12345678").unwrap();
         let zeros = <Tibs as BitCollection>::from_zeros(8);
-        mb.set_slice(0, 8, &zeros);
+        mb.set_slice(0, 8, &zeros.as_bitslice());
         assert_eq!(mb.to_hexadecimal().unwrap(), "00345678");
     }
 }
