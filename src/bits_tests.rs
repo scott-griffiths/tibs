@@ -281,19 +281,19 @@ mod tests {
     #[test]
     fn test_getslice_withstep() {
         let bits = <Tibs as BitCollection>::from_binary("11001100").unwrap();
-        let slice = bits.getslice_with_step(0, 8, 2).unwrap();
+        let slice = bits.get_slice_with_step(0, 8, 2).unwrap();
         assert_eq!(slice.to_bin(), "1010");
-        let slice = bits.getslice_with_step(7, -1, -2).unwrap();
+        let slice = bits.get_slice_with_step(7, -1, -2).unwrap();
         assert_eq!(slice.to_bin(), "0101");
-        let slice = bits.getslice_with_step(0, 8, 1).unwrap();
+        let slice = bits.get_slice_with_step(0, 8, 1).unwrap();
         assert_eq!(slice.to_bin(), "11001100");
-        let slice = bits.getslice_with_step(7, -1, -1).unwrap();
+        let slice = bits.get_slice_with_step(7, -1, -1).unwrap();
         assert_eq!(slice.to_bin(), "00110011");
-        let slice = bits.getslice_with_step(0, 8, 8).unwrap();
+        let slice = bits.get_slice_with_step(0, 8, 8).unwrap();
         assert_eq!(slice.to_bin(), "1");
-        let slice = bits.getslice_with_step(0, 8, -8).unwrap();
+        let slice = bits.get_slice_with_step(0, 8, -8).unwrap();
         assert_eq!(slice.to_bin(), "");
-        let slice = bits.getslice_with_step(0, 8, 3).unwrap();
+        let slice = bits.get_slice_with_step(0, 8, 3).unwrap();
         assert_eq!(slice.to_bin(), "100");
     }
 

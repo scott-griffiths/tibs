@@ -87,6 +87,12 @@ impl BitCollection for PolyTibs<'_> {
             PolyTibs::Owned(t) => t.as_bitslice(),
         }
     }
+
+    #[inline]
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
+        Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+    }
+
 }
 
 pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<PolyTibs<'a>> {
@@ -144,12 +150,12 @@ impl Tibs {
         }
     }
 
-    pub(crate) fn new_from_slice(other: &Tibs, offset: usize, length: usize) -> Result<Self, String> {
-        Ok(Tibs {
-            _data: other._data.clone(),
-            _offset: other._offset + offset,
+    pub(crate) fn new_from_slice_unchecked(&self, offset: usize, length: usize) -> Self {
+        Tibs {
+            _data: self._data.clone(),
+            _offset: self._offset + offset,
             _length: length,
-        })
+        }
     }
 
     #[inline]
@@ -860,12 +866,12 @@ impl Tibs {
 
             let result = if step == 1 {
                 if start < stop {
-                    Tibs::new_from_slice(self, start as usize, (stop - start) as usize).map_err(PyIndexError::new_err)?
+                    self.get_slice_unchecked(start as usize, (stop - start) as usize)
                 } else {
                     Tibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step)
+                self.get_slice_with_step(start, stop, step)
                     .map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
