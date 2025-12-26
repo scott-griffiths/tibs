@@ -27,14 +27,15 @@ fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
 }
 
 pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
-    // Check cache first
+    // First remove whitespace
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    // Check if it's already in the cache
     {
         let mut cache = BITS_CACHE.lock().unwrap();
         if let Some(cached_data) = cache.get(&s) {
             return Ok(Mutibs::new(cached_data.clone()));
         }
     }
-    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     let tokens = s.split(',');
     let mut bits_array = Vec::<Mutibs>::new();
     let mut total_bit_length = 0;
