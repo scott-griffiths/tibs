@@ -7,6 +7,14 @@ use std::fmt;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
+
+    fn new(bv: BV) -> Self;
+    fn as_bitvec(&self) -> BV;
+    fn as_bitvec_ref(&self) -> &BV;
+    fn as_bitslice(&self) -> &BS;
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
+
+
     fn raw_data(&self) -> (&[u8], usize, usize) {
         let raw_bytes = self.as_bitvec_ref().as_raw_slice();
         let slice = self.as_bitslice();
@@ -188,8 +196,6 @@ pub(crate) trait BitCollection: Sized {
         }
     }
 
-    fn new(bv: BV) -> Self;
-
     /// Returns the bool value at a given bit index.
     #[inline]
     fn get_index(&self, bit_index: i64) -> Result<bool, String> {
@@ -245,8 +251,6 @@ pub(crate) trait BitCollection: Sized {
             ))
         }
     }
-
-    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
     fn count(&self, count_ones: bool) -> usize {
         let len = self.len();
@@ -313,10 +317,6 @@ pub(crate) trait BitCollection: Sized {
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
         Self::new(result_data)
     }
-
-    fn as_bitvec(&self) -> BV;
-    fn as_bitvec_ref(&self) -> &BV;
-    fn as_bitslice(&self) -> &BS;
 
     #[inline]
     fn from_binary(binary_string: &str) -> Result<Self, String> {
@@ -631,7 +631,7 @@ pub(crate) trait BitCollection: Sized {
 
 impl BitCollection for Tibs {
     fn new(bv: BV) -> Self {
-        Self::new_from_bv(bv)
+        Tibs::new_from_bv(bv)
     }
 
     #[inline]
@@ -641,39 +641,39 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn as_bitvec_ref(&self) -> &BV {
-        self.as_bitvec_ref()
+        Tibs::as_bitvec_ref(&self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        self.as_bitslice()
+        Tibs::as_bitslice(&self)
     }
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        self.new_from_slice_unchecked(start_bit, length)
+        Tibs::new_from_slice_unchecked(&self, start_bit, length)
     }
 
 }
 
 impl BitCollection for Mutibs {
     fn new(bv: BV) -> Self {
-        Self::new_from_bv(bv)
+        Mutibs::new_from_bv(bv)
     }
 
     #[inline]
     fn as_bitvec(&self) -> BV {
-        self.as_bitvec_ref().to_bitvec()
+        Mutibs::as_bitvec_ref(&self).to_bitvec()
     }
 
     #[inline]
     fn as_bitvec_ref(&self) -> &BV {
-        self.as_bitvec_ref()
+        Mutibs::as_bitvec_ref(&self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        self.as_bitvec_ref()
+        Mutibs::as_bitvec_ref(&self).as_bitslice()
     }
 
     #[inline]
