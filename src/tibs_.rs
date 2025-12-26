@@ -57,34 +57,34 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 }
 
 // Enum allows us to wrap and use a Tibs without copying it or owning it.
-pub(crate) enum PolyTibs<'a> {
+pub(crate) enum BorrowedOrOwnedTibs<'a> {
     Borrowed(PyRef<'a, Tibs>),
     Owned(Tibs),
 }
 
-impl BitCollection for PolyTibs<'_> {
+impl BitCollection for BorrowedOrOwnedTibs<'_> {
     fn new(bv: BV) -> Self {
-        PolyTibs::Owned(Tibs::new_from_bv(bv))
+        BorrowedOrOwnedTibs::Owned(Tibs::new_from_bv(bv))
     }
 
     fn as_bitvec(&self) -> BV {
         match self {
-            PolyTibs::Borrowed(t) => t.as_bitvec(),
-            PolyTibs::Owned(t) => t.as_bitvec(),
+            BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitvec(),
+            BorrowedOrOwnedTibs::Owned(t) => t.as_bitvec(),
         }
     }
 
     fn as_bitvec_ref(&self) -> &BV {
         match self {
-            PolyTibs::Borrowed(t) => t.as_bitvec_ref(),
-            PolyTibs::Owned(t) => t.as_bitvec_ref(),
+            BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitvec_ref(),
+            BorrowedOrOwnedTibs::Owned(t) => t.as_bitvec_ref(),
         }
     }
 
     fn as_bitslice(&self) -> &BS {
         match self {
-            PolyTibs::Borrowed(t) => t.as_bitslice(),
-            PolyTibs::Owned(t) => t.as_bitslice(),
+            BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitslice(),
+            BorrowedOrOwnedTibs::Owned(t) => t.as_bitslice(),
         }
     }
 
@@ -95,19 +95,19 @@ impl BitCollection for PolyTibs<'_> {
 
 }
 
-pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<PolyTibs<'a>> {
+pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedOrOwnedTibs<'a>> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(PolyTibs::Borrowed(tibs_ref));
+        return Ok(BorrowedOrOwnedTibs::Borrowed(tibs_ref));
     }
 
     // Is it of type Mutibs?
     if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(PolyTibs::Owned(mutibs_ref.to_tibs()));
+        return Ok(BorrowedOrOwnedTibs::Owned(mutibs_ref.to_tibs()));
     }
 
     let tibs = promote_to_tibs(any)?;
-    Ok(PolyTibs::Owned(tibs))
+    Ok(BorrowedOrOwnedTibs::Owned(tibs))
 }
 
 impl Hash for Tibs {
@@ -368,8 +368,8 @@ impl Tibs {
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let needle: Py<Tibs> = match b {
-            PolyTibs::Borrowed(t) => t.into(),
-            PolyTibs::Owned(t) => Py::new(py, t)?,
+            BorrowedOrOwnedTibs::Borrowed(t) => t.into(),
+            BorrowedOrOwnedTibs::Owned(t) => Py::new(py, t)?,
         };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
@@ -647,8 +647,8 @@ impl Tibs {
             let bits = tibs_from_any(&obj)?;
             total_len += bits.len();
             let owned_tibs = match bits {
-                PolyTibs::Borrowed(t) => t.clone(),
-                PolyTibs::Owned(t) => t,
+                BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
+                BorrowedOrOwnedTibs::Owned(t) => t,
             };
             parts.push(owned_tibs);
         }

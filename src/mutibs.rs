@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS};
-use crate::tibs_::{PolyTibs, Tibs, tibs_from_any};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
@@ -674,7 +674,7 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                PolyTibs::Owned(Tibs::new(slf.as_bitvec_ref().clone()))
+                BorrowedOrOwnedTibs::Owned(Tibs::new(slf.as_bitvec_ref().clone()))
             } else {
                 tibs_from_any(value)?
             };
@@ -688,8 +688,8 @@ impl Mutibs {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
                 let bs: Tibs = match bs {
-                    PolyTibs::Borrowed(t) => t.clone(),
-                    PolyTibs::Owned(t) => t,
+                    BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
+                    BorrowedOrOwnedTibs::Owned(t) => t,
                 };
 
                 slf.set_slice(start as usize, stop as usize, &bs);
@@ -1416,7 +1416,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<PyRefMut<'a, Self>> {
         let old = if old.as_ptr() == slf.as_ptr() {
-            PolyTibs::Owned(slf.to_tibs())
+            BorrowedOrOwnedTibs::Owned(slf.to_tibs())
         } else {
             tibs_from_any(old)?
         };
@@ -1425,7 +1425,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
         let new = if new.as_ptr() == slf.as_ptr() {
-            PolyTibs::Owned(slf.to_tibs())
+            BorrowedOrOwnedTibs::Owned(slf.to_tibs())
         } else {
             tibs_from_any(new)?
         };
@@ -1490,7 +1490,7 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
-            PolyTibs::Owned(slf.__copy__().as_tibs())
+            BorrowedOrOwnedTibs::Owned(slf.__copy__().as_tibs())
         } else {
             tibs_from_any(bs)?
         };
