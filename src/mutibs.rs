@@ -148,19 +148,19 @@ impl Mutibs {
         self.set_from_sequence(value, vec![index])
     }
 
-    pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
+    pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &BS) {
         if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
-            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value);
         } else if start == end {
             // Not sure why but splice doesn't work for this case, so we do it explicitly
             let tail = self.as_mut_bitvec_ref().split_off(start);
-            self.as_mut_bitvec_ref().extend_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref().extend_from_bitslice(value);
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         } else {
             let tail = self.as_mut_bitvec_ref().split_off(end);
             self.as_mut_bitvec_ref().truncate(start);
-            self.as_mut_bitvec_ref().extend_from_bitslice(value.as_bitslice());
+            self.as_mut_bitvec_ref().extend_from_bitslice(value);
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         }
     }
@@ -687,12 +687,7 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                let bs: Tibs = match bs {
-                    BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
-                    BorrowedOrOwnedTibs::Owned(t) => t,
-                };
-
-                slf.set_slice(start as usize, stop as usize, &bs);
+                slf.set_slice(start as usize, stop as usize, &bs.as_bitslice());
                 return Ok(());
             }
             if step == 0 {

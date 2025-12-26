@@ -139,7 +139,7 @@ mod tests {
     fn test_set_mutable_slice() {
         let mut a = Mutibs::from_hexadecimal("0011223344").unwrap();
         let b = Tibs::from_hexadecimal("ff").unwrap();
-        a.set_slice(8, 16, &b);
+        a.set_slice(8, 16, &b.as_bitslice());
         assert_eq!(a.to_hexadecimal().unwrap(), "00ff223344");
     }
 
@@ -388,7 +388,7 @@ mod tests {
 
         let mut m = Mutibs::new(pattern1.as_bitvec_ref().clone());
 
-        m.set_slice(0, 2, &pattern2);
+        m.set_slice(0, 2, &pattern2.as_bitslice());
         assert_eq!(m.to_binary(), "001100");
     }
 
@@ -423,13 +423,13 @@ mod tests {
         let mut m = Mutibs::from_binary("00000000").unwrap();
         let pattern = <Tibs as BitCollection>::from_binary("1111").unwrap();
 
-        m.set_slice(2, 6, &pattern);
+        m.set_slice(2, 6, &pattern.as_bitslice());
         assert_eq!(m.to_binary(), "00111100");
 
-        m.set_slice(0, 2, &pattern);
+        m.set_slice(0, 2, &pattern.as_bitslice());
         assert_eq!(m.to_binary(), "1111111100");
 
-        m.set_slice(6, 8, &pattern);
+        m.set_slice(6, 8, &pattern.as_bitslice());
         assert_eq!(m.to_binary(), "111111111100");
     }
 
