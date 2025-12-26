@@ -635,7 +635,7 @@ impl Mutibs {
                     Mutibs::empty()
                 }
             } else {
-                self.getslice_with_step(start, stop, step)
+                self.get_slice_with_step(start, stop, step)
                     .map_err(PyIndexError::new_err)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;

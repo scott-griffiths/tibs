@@ -197,7 +197,7 @@ pub(crate) trait BitCollection: Sized {
         Ok(self.as_bitslice()[index])
     }
 
-    fn getslice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> Result<Self, String> {
+    fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> Result<Self, String> {
         if step == 0 {
             return Err("Slice step cannot be zero.".to_string());
         }
@@ -246,21 +246,7 @@ pub(crate) trait BitCollection: Sized {
         }
     }
 
-    // Unchecked version
-    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
-    }
-
-    // Checked version
-    fn get_slice(&self, start_bit: usize, length: usize) -> Result<Self, String> {
-        if length == 0 {
-            return Ok(BitCollection::empty());
-        }
-        if start_bit + length > self.len() {
-            return Err("End bit of the slice goes past the end of the container.".to_string());
-        }
-        Ok(self.get_slice_unchecked(start_bit, length))
-    }
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
     fn count(&self, count_ones: bool) -> usize {
         let len = self.len();
@@ -630,6 +616,17 @@ pub(crate) trait BitCollection: Sized {
     fn len(&self) -> usize {
         self.as_bitslice().len()
     }
+
+    #[inline]
+    fn get_slice(&self, start_bit: usize, length: usize) -> Result<Self, String> {
+        if length == 0 {
+            return Ok(BitCollection::empty());
+        }
+        if start_bit + length > self.len() {
+            return Err("End bit of the slice goes past the end of the container.".to_string());
+        }
+        Ok(self.get_slice_unchecked(start_bit, length))
+    }
 }
 
 impl BitCollection for Tibs {
@@ -651,6 +648,12 @@ impl BitCollection for Tibs {
     fn as_bitslice(&self) -> &BS {
         self.as_bitslice()
     }
+
+    #[inline]
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
+        self.new_from_slice_unchecked(start_bit, length)
+    }
+
 }
 
 impl BitCollection for Mutibs {
@@ -672,6 +675,12 @@ impl BitCollection for Mutibs {
     fn as_bitslice(&self) -> &BS {
         self.as_bitvec_ref()
     }
+
+    #[inline]
+    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
+        Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+    }
+
 }
 
 impl fmt::Debug for Tibs {
