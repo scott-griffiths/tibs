@@ -154,15 +154,15 @@ def test_from_bytes_offsets():
     x = b'\xff\x00\xee\x11'
     a = Tibs.from_bytes(x)
     assert a == '0xff00ee11'
-    b = Tibs.from_bytes(x, 16)
+    b = Tibs.from_bytes(x, None,16)
     assert b == '0xff00'
     c = Tibs.from_bytes(x, offset=16)
     assert c == '0xee11'
-    d = Tibs.from_bytes(x, 12, 4)
+    d = Tibs.from_bytes(x, 4, 12)
     assert d == '0xf00'
-    e = Mutibs.from_bytes(x, offset=28, length=4)
+    e = Mutibs.from_bytes(x, length=4, offset=28)
     assert e == '0x1'
-    f = Mutibs.from_bytes(x, 32, 0)
+    f = Mutibs.from_bytes(x, 0, 32)
     assert f == a
     g = Mutibs.from_bytes(x, 0, 0)
     assert g == []
@@ -171,12 +171,36 @@ def test_from_bytes_offsets():
 def test_from_bytes_errors():
     x = b'\xff\x00\xee\x11'
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, 33)
+        _ = Tibs.from_bytes(x, length=33)
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, -1)
+        _ = Tibs.from_bytes(x, None, -1)
     with pytest.raises(ValueError):
         _ = Tibs.from_bytes(x, offset=-1)
     with pytest.raises(ValueError):
         _ = Tibs.from_bytes(x, length=-1)
     with pytest.raises(ValueError):
         _ = Tibs.from_bytes(x, offset=28, length=5)
+
+
+def test_bit_ops_alignments():
+    a = Tibs('0x00ff00')
+    b = a[4:20]
+    c = a[2:18]
+    assert b & c == '0b0000001111110000'
+
+    a = Mutibs('0x00ff00')
+    b = a[4:20]
+    c = a[2:18]
+    assert b & c == '0b0000001111110000'
+
+
+def test_raw_data_bug():
+    a = Mutibs.from_bytes(b'hello')
+    b = a[8:]
+    assert a.to_raw_data() == (b'hello', 0, 40)
+    assert b.to_raw_data() == (b'ello', 0, 32)
+
+    a = Tibs.from_bytes(b'hello')
+    b = a[8:]
+    assert a.to_raw_data() == (b'hello', 0, 40)
+    assert b.to_raw_data() == (b'ello', 0, 32)
