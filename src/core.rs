@@ -14,9 +14,10 @@ pub(crate) trait BitCollection: Sized {
     fn as_bitslice(&self) -> &BS;
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
+    fn get_raw_bytes(&self) -> Vec<u8>;
 
-    fn raw_data(&self) -> (&[u8], usize, usize) {
-        let raw_bytes = self.as_bitvec_ref().as_raw_slice();
+    fn raw_data(&self) -> (Vec<u8>, usize, usize) {
+        let raw_bytes = self.get_raw_bytes();
         let slice = self.as_bitslice();
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
@@ -650,6 +651,11 @@ impl BitCollection for Tibs {
         Tibs::new_from_slice_unchecked(&self, start_bit, length)
     }
 
+    #[inline]
+    fn get_raw_bytes(&self) -> Vec<u8> {
+        Tibs::raw_bytes(self)
+    }
+
 }
 
 impl BitCollection for Mutibs {
@@ -675,6 +681,11 @@ impl BitCollection for Mutibs {
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
         Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+    }
+
+    #[inline]
+    fn get_raw_bytes(&self) -> Vec<u8> {
+        self.raw_bytes()
     }
 
 }

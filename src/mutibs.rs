@@ -145,6 +145,11 @@ impl Mutibs {
         &mut self._data
     }
 
+    #[inline]
+    pub(crate) fn raw_bytes(&self) -> Vec<u8> {
+        self._data.as_raw_slice().to_vec()
+    }
+
     pub fn set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
         self.set_from_sequence(value, vec![index])
     }
@@ -388,7 +393,7 @@ impl Mutibs {
     ///     raw_bytes, offset, length = t.to_raw_data()
     ///     assert t == Mutibs.from_bytes(raw_bytes)[offset:offset + length]
     ///
-    pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
+    pub fn to_raw_data(&self) -> (Vec<u8>, usize, usize) {
         self.raw_data()
     }
 
