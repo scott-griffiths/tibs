@@ -93,6 +93,14 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
         Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
     }
 
+    #[inline]
+    fn get_raw_bytes(&self) -> Vec<u8> {
+        match self {
+            BorrowedOrOwnedTibs::Borrowed(t) => t.raw_bytes(),
+            BorrowedOrOwnedTibs::Owned(t) => t.raw_bytes(),
+        }
+    }
+
 }
 
 pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedOrOwnedTibs<'a>> {
@@ -172,6 +180,18 @@ impl Tibs {
     pub(crate) fn as_bitvec_ref(&self) -> &BV {
         &self._data
     }
+
+    #[inline]
+    pub(crate) fn raw_bytes(&self) -> Vec<u8> {
+        // Given the bit offset self._offset and the bit length self._length
+        // return the byte data from the bitvec self._data. The data should cover just
+        // enough bytes and should not realign them in any way.
+        let byte_offset = self._offset / 8;
+        let final_byte = (self._offset + self._length + 7) / 8;
+        let full_bytes = self._data.as_raw_slice();
+        full_bytes[byte_offset..final_byte].to_vec()
+    }
+
 }
 
 ///     An immutable container of binary data.
@@ -231,7 +251,7 @@ impl Tibs {
     ///     raw_bytes, offset, length = t.to_raw_data()
     ///     assert t == Tibs.from_bytes(raw_bytes)[offset:offset + length]
     ///
-    pub fn to_raw_data(&self) -> (&[u8], usize, usize) {
+    pub fn to_raw_data(&self) -> (Vec<u8>, usize, usize) {
         self.raw_data()
     }
 
