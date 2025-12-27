@@ -566,14 +566,14 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, length=None, offset=None), text_signature = "(cls, data, /, length=None, offset=None)")]
+    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
-        length: Option<i64>,
         offset: Option<i64>,
+        length: Option<i64>,
     ) -> PyResult<Self> {
-        BitCollection::from_bytes_slice(data, length, offset).map_err(PyValueError::new_err)
+        BitCollection::from_bytes_slice(data, offset, length).map_err(PyValueError::new_err)
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.

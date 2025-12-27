@@ -38,12 +38,8 @@ pub(crate) trait BitCollection: Sized {
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
-            let mut bv = BV::from_vec(data);
-            if lhs_offset > 0 {
-                bv.drain(..lhs_offset);
-            }
-            bv.truncate(self.len());
-            Self::new(bv)
+            let bv = BV::from_vec(data);
+            Self::new(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
             let mut result = self.as_bitvec().clone();
             result |= other.as_bitslice();
@@ -114,8 +110,8 @@ pub(crate) trait BitCollection: Sized {
     #[inline]
     fn from_bytes_slice(
         data: Vec<u8>,
-        length: Option<i64>,
         offset: Option<i64>,
+        length: Option<i64>,
     ) -> Result<Self, String> {
         if length.is_none() && offset.is_none() {
             return Ok(Self::new(BV::from_vec(data)));
@@ -392,7 +388,7 @@ pub(crate) trait BitCollection: Sized {
             Ok(d) => d,
             Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
         };
-        let t = <Self as BitCollection>::from_bytes_slice(data, Some(new_hex_length * 4), None)?;
+        let t = <Self as BitCollection>::from_bytes_slice(data, None, Some(new_hex_length * 4))?;
         Ok(t)
     }
 
