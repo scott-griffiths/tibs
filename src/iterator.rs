@@ -128,7 +128,7 @@ impl ChunksIterator {
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
             let slice = &bits.as_bitslice()[start..end];
-            Tibs::new(slice.to_bitvec())
+            Tibs::from_bv(slice.to_bitvec())
         };
 
         slf.current_pos = end;
