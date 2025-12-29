@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros};
+use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
@@ -448,7 +448,7 @@ impl Tibs {
                 length
             )));
         }
-        Ok(BitCollection::from_ones(length as usize))
+        Ok(Tibs::from_bv(bv_from_ones(length as usize)))
     }
 
     /// Create a new instance from a formatted string.
