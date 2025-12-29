@@ -1,4 +1,4 @@
-use crate::helpers::{BV, validate_index, BS};
+use crate::helpers::{BV, validate_index, BS, bv_from_zeros};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -130,15 +130,10 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_zeros(length: usize) -> Self {
-        Self::from_bv(BV::repeat(false, length))
-    }
-
-    #[inline]
     fn from_ones(length: usize) -> Self {
         Self::from_bv(BV::repeat(true, length))
     }
-    
+
     #[inline]
     fn from_bytes_slice(
         data: Vec<u8>,
@@ -325,7 +320,7 @@ pub(crate) trait BitCollection: Sized {
         }
         let len = self.len();
         if n >= len {
-            return BitCollection::from_zeros(len);
+            return Self::from_bv(bv_from_zeros(len));
         }
         let mut result_data = BV::with_capacity(len);
         result_data.extend_from_bitslice(&self.as_bitslice()[n..]);
@@ -339,7 +334,7 @@ pub(crate) trait BitCollection: Sized {
         }
         let len = self.len();
         if n >= len {
-            return BitCollection::from_zeros(len);
+            return Self::from_bv(bv_from_zeros(len));
         }
         let mut result_data = BV::repeat(false, n);
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
@@ -657,7 +652,7 @@ pub(crate) trait BitCollection: Sized {
 
 impl BitCollection for Tibs {
     fn from_bv(bv: BV) -> Self {
-        Tibs::new_from_bv(bv)
+        Tibs::from_bv(bv)
     }
 
     #[inline]
@@ -677,7 +672,7 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Tibs::new_from_slice_unchecked(&self, start_bit, length)
+        Tibs::from_slice_unchecked(&self, start_bit, length)
     }
 
     #[inline]
@@ -690,7 +685,7 @@ impl BitCollection for Tibs {
 
 impl BitCollection for Mutibs {
     fn from_bv(bv: BV) -> Self {
-        Mutibs::new_from_bv(bv)
+        Mutibs::from_bv(bv)
     }
 
     #[inline]

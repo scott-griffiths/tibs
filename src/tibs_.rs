@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS};
+use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
@@ -33,7 +33,7 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
         || any.is_instance_of::<PyMemoryView>()
     {
         if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(Tibs::new_from_bv(BV::from_vec(any_bytes)));
+            return Ok(Tibs::from_bv(BV::from_vec(any_bytes)));
         }
     }
 
@@ -64,7 +64,7 @@ pub(crate) enum BorrowedOrOwnedTibs<'a> {
 
 impl BitCollection for BorrowedOrOwnedTibs<'_> {
     fn from_bv(bv: BV) -> Self {
-        BorrowedOrOwnedTibs::Owned(Tibs::new_from_bv(bv))
+        BorrowedOrOwnedTibs::Owned(Tibs::from_bv(bv))
     }
 
     fn as_bitvec(&self) -> BV {
@@ -149,7 +149,7 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
-    pub(crate) fn new_from_bv(bv: BV) -> Self {
+    pub(crate) fn from_bv(bv: BV) -> Self {
         let length = bv.len();
         Tibs {
             _data: Arc::new(bv),
@@ -158,7 +158,7 @@ impl Tibs {
         }
     }
 
-    pub(crate) fn new_from_slice_unchecked(&self, offset: usize, length: usize) -> Self {
+    pub(crate) fn from_slice_unchecked(&self, offset: usize, length: usize) -> Self {
         Tibs {
             _data: self._data.clone(),
             _offset: self._offset + offset,
@@ -427,7 +427,7 @@ impl Tibs {
                 length
             )));
         }
-        Ok(BitCollection::from_zeros(length as usize))
+        Ok(Self::from_bv(bv_from_zeros(length as usize)))
     }
 
     /// Create a new instance with all bits set to '1'.

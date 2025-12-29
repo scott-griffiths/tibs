@@ -196,3 +196,7 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
     }
     Ok(bv)
 }
+
+pub(crate) fn bv_from_zeros(length: usize) -> BV {
+    BV::repeat(false, length)
+}
