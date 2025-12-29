@@ -130,11 +130,6 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_ones(length: usize) -> Self {
-        Self::from_bv(BV::repeat(true, length))
-    }
-
-    #[inline]
     fn from_bytes_slice(
         data: Vec<u8>,
         offset: Option<i64>,

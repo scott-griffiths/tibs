@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros};
+use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones};
 use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -524,7 +524,7 @@ impl Mutibs {
                 length
             )));
         }
-        Ok(BitCollection::from_ones(length as usize))
+        Ok(Mutibs::from_bv(bv_from_ones(length as usize)))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.

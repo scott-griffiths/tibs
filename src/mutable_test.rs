@@ -3,7 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::bv_from_zeros;
+    use crate::helpers::{bv_from_zeros, bv_from_ones};
 
     #[test]
     fn test_set_and_get_index() {
@@ -17,7 +17,7 @@ mod tests {
     #[test]
     fn test_set_slice() {
         let mut mb = Mutibs::from_bv(bv_from_zeros(6));
-        let br = <Tibs as BitCollection>::from_ones(2);
+        let br = Tibs::from_bv(bv_from_ones(2));
         mb.set_slice(2, 4, &br.as_bitslice());
         assert_eq!(mb.to_binary(), "001100");
     }
@@ -25,7 +25,7 @@ mod tests {
     #[test]
     fn test_overwrite_slice() {
         let mut mb = Mutibs::from_bv(bv_from_zeros(6));
-        let br = <Tibs as BitCollection>::from_ones(2);
+        let br = Tibs::from_bv(bv_from_ones(2));
         mb.set_slice(2, 4, &br.as_bitslice());
         assert_eq!(mb.to_binary(), "001100");
     }

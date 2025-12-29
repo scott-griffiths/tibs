@@ -3,7 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::bv_from_zeros;
+    use crate::helpers::{bv_from_zeros, bv_from_ones};
 
     // #[test]
     // fn from_bytes() {
@@ -56,16 +56,16 @@ mod tests {
 
     #[test]
     fn from_ones() {
-        let bits = <Tibs as BitCollection>::from_ones(8);
+        let bits = Tibs::from_bv(bv_from_ones(8));
         assert_eq!(*bits.to_bytes().unwrap(), vec![255]);
         assert_eq!(bits.len(), 8);
         assert_eq!(bits.to_hexadecimal().unwrap(), "ff");
-        let bits = <Tibs as BitCollection>::from_ones(9);
+        let bits = Tibs::from_bv(bv_from_ones(9));
         assert_eq!(bits.to_bin(), "111111111");
         assert_eq!((*bits.to_bytes().unwrap())[0], 0xff);
         assert_eq!((*bits.to_bytes().unwrap())[1] & 0x80, 0x80);
         assert_eq!(bits.len(), 9);
-        let bits = <Tibs as BitCollection>::from_ones(0);
+        let bits = Tibs::from_bv(bv_from_ones(0));
         assert_eq!(bits.len(), 0);
     }
 
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_to_bytes_from_slice() {
-        let a = <Tibs as BitCollection>::from_ones(16);
+        let a = Tibs::from_bv(bv_from_ones(16));
         assert_eq!(a.to_bytes().unwrap(), vec![255, 255]);
         let b = a.get_slice(7, a.len()).unwrap();
         assert_eq!(b.to_bin(), "111111111");
@@ -326,7 +326,7 @@ mod tests {
         let m1 = Mutibs::from_bv(bv_from_zeros(4));
         assert_eq!(m1.to_binary(), "0000");
 
-        let m2 = <Mutibs as BitCollection>::from_ones(4);
+        let m2 = Mutibs::from_bv(bv_from_ones(4));
         assert_eq!(m2.to_binary(), "1111");
 
         let m3 = Mutibs::from_binary("1010").unwrap();
