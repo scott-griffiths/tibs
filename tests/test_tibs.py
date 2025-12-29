@@ -204,3 +204,9 @@ def test_raw_data_bug():
     b = a[8:]
     assert a.to_raw_data() == (b'hello', 0, 40)
     assert b.to_raw_data() == (b'ello', 0, 32)
+
+def test_from_bools_generator():
+    bits = [1, 0, 0, 1, 0]
+    generator = (y for y in bits)
+    t = Tibs.from_bools(generator)
+    assert list(t) == bits
