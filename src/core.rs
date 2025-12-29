@@ -8,7 +8,7 @@ use std::fmt;
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
 
-    fn new(bv: BV) -> Self;
+    fn from_bv(bv: BV) -> Self;
     fn as_bitvec(&self) -> BV;
     fn as_bitvec_ref(&self) -> &BV;
     fn as_bitslice(&self) -> &BS;
@@ -40,11 +40,11 @@ pub(crate) trait BitCollection: Sized {
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
             let bv = BV::from_vec(data);
-            Self::new(bv).get_slice_unchecked(lhs_offset, self.len())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
             let mut result = self.as_bitvec().clone();
             result |= other.as_bitslice();
-            Self::new(result)
+            Self::from_bv(result)
         }
     }
 
@@ -58,11 +58,11 @@ pub(crate) trait BitCollection: Sized {
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a & b).collect();
             let bv = BV::from_vec(data);
-            Self::new(bv).get_slice_unchecked(lhs_offset, self.len())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
             let mut result = self.as_bitvec().clone();
             result &= other.as_bitslice();
-            Self::new(result)
+            Self::from_bv(result)
         }
     }
 
@@ -120,30 +120,25 @@ pub(crate) trait BitCollection: Sized {
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
             let bv = BV::from_vec(data);
-            Self::new(bv).get_slice_unchecked(lhs_offset, self.len())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
 
         } else {
             let mut result = self.as_bitvec().clone();
             result ^= other.as_bitslice();
-            Self::new(result)
+            Self::from_bv(result)
         }
     }
 
     #[inline]
     fn from_zeros(length: usize) -> Self {
-        Self::new(BV::repeat(false, length))
+        Self::from_bv(BV::repeat(false, length))
     }
 
     #[inline]
     fn from_ones(length: usize) -> Self {
-        Self::new(BV::repeat(true, length))
+        Self::from_bv(BV::repeat(true, length))
     }
-
-    #[inline]
-    fn from_bytes(data: Vec<u8>) -> Self {
-        Self::new(BV::from_vec(data))
-    }
-
+    
     #[inline]
     fn from_bytes_slice(
         data: Vec<u8>,
@@ -151,7 +146,7 @@ pub(crate) trait BitCollection: Sized {
         length: Option<i64>,
     ) -> Result<Self, String> {
         if length.is_none() && offset.is_none() {
-            return Ok(Self::new(BV::from_vec(data)));
+            return Ok(Self::from_bv(BV::from_vec(data)));
         }
         let start_bit = offset.unwrap_or(0);
         if start_bit < 0 {
@@ -179,7 +174,7 @@ pub(crate) trait BitCollection: Sized {
         let mut bv = BV::from_vec(data);
         bv.drain(..start_bit);
         bv.truncate(length);
-        Ok(Self::new(bv))
+        Ok(Self::from_bv(bv))
     }
 
     fn to_string(&self) -> String {
@@ -217,7 +212,7 @@ pub(crate) trait BitCollection: Sized {
 
     #[inline]
     fn empty() -> Self {
-        Self::new(BV::new())
+        Self::from_bv(BV::new())
     }
 
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
@@ -264,7 +259,7 @@ pub(crate) trait BitCollection: Sized {
             // ))
             let mut new_data = self.as_bitslice()[start_bit as usize..end_bit as usize].to_bitvec();
             new_data.retain(|idx, _| idx % step as usize == 0);
-            Ok(Self::new(new_data))
+            Ok(Self::from_bv(new_data))
         } else {
             if start_bit <= end_bit || start_bit == -1 {
                 return Ok(BitCollection::empty());
@@ -275,7 +270,7 @@ pub(crate) trait BitCollection: Sized {
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
             let adjusted_end_bit = (end_bit + 1) as usize;
-            Ok(Self::new(
+            Ok(Self::from_bv(
                 self.as_bitslice()[adjusted_end_bit..=start_bit as usize]
                     .iter()
                     .rev()
@@ -321,12 +316,12 @@ pub(crate) trait BitCollection: Sized {
         for _ in 1..n {
             bv.extend_from_bitslice(self.as_bitslice());
         }
-        Self::new(bv)
+        Self::from_bv(bv)
     }
 
     fn lshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::new(self.as_bitvec().clone());
+            return Self::from_bv(self.as_bitvec().clone());
         }
         let len = self.len();
         if n >= len {
@@ -335,12 +330,12 @@ pub(crate) trait BitCollection: Sized {
         let mut result_data = BV::with_capacity(len);
         result_data.extend_from_bitslice(&self.as_bitslice()[n..]);
         result_data.resize(len, false);
-        Self::new(result_data)
+        Self::from_bv(result_data)
     }
 
     fn rshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::new(self.as_bitvec().clone());
+            return Self::from_bv(self.as_bitvec().clone());
         }
         let len = self.len();
         if n >= len {
@@ -348,7 +343,7 @@ pub(crate) trait BitCollection: Sized {
         }
         let mut result_data = BV::repeat(false, n);
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
-        Self::new(result_data)
+        Self::from_bv(result_data)
     }
 
     #[inline]
@@ -373,7 +368,7 @@ pub(crate) trait BitCollection: Sized {
             }
         }
         b.set_uninitialized(false);
-        Ok(Self::new(b))
+        Ok(Self::from_bv(b))
     }
 
     #[inline]
@@ -404,7 +399,7 @@ pub(crate) trait BitCollection: Sized {
             }
         }
         b.set_uninitialized(false);
-        Ok(Self::new(b))
+        Ok(Self::from_bv(b))
     }
 
     #[inline]
@@ -441,7 +436,7 @@ pub(crate) trait BitCollection: Sized {
         }
         let mut bv = BV::repeat(false, length as usize);
         bv.store_be(value);
-        Ok(Self::new(bv))
+        Ok(Self::from_bv(bv))
     }
 
     #[inline]
@@ -461,7 +456,7 @@ pub(crate) trait BitCollection: Sized {
         let repeat_bit = value < 0;
         let mut bv = BV::repeat(repeat_bit, length as usize);
         bv.store_be(value);
-        Ok(Self::new(bv))
+        Ok(Self::from_bv(bv))
     }
 
     fn from_f64(value: f64, length: i64) -> Result<Self, String> {
@@ -489,7 +484,7 @@ pub(crate) trait BitCollection: Sized {
                 ));
             }
         };
-        Ok(Self::new(bv))
+        Ok(Self::from_bv(bv))
     }
 
     #[inline]
@@ -661,7 +656,7 @@ pub(crate) trait BitCollection: Sized {
 }
 
 impl BitCollection for Tibs {
-    fn new(bv: BV) -> Self {
+    fn from_bv(bv: BV) -> Self {
         Tibs::new_from_bv(bv)
     }
 
@@ -694,7 +689,7 @@ impl BitCollection for Tibs {
 }
 
 impl BitCollection for Mutibs {
-    fn new(bv: BV) -> Self {
+    fn from_bv(bv: BV) -> Self {
         Mutibs::new_from_bv(bv)
     }
 
@@ -715,7 +710,7 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+        Self::from_bv(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
     }
 
     #[inline]

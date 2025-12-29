@@ -33,7 +33,7 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
         || any.is_instance_of::<PyMemoryView>()
     {
         if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(<Tibs as BitCollection>::from_bytes(any_bytes));
+            return Ok(Tibs::new_from_bv(BV::from_vec(any_bytes)));
         }
     }
 
@@ -43,7 +43,7 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
         for item in iter {
             bv.push(item?.is_truthy()?);
         }
-        return Ok(Tibs::new(bv));
+        return Ok(Tibs::from_bv(bv));
     }
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
@@ -63,7 +63,7 @@ pub(crate) enum BorrowedOrOwnedTibs<'a> {
 }
 
 impl BitCollection for BorrowedOrOwnedTibs<'_> {
-    fn new(bv: BV) -> Self {
+    fn from_bv(bv: BV) -> Self {
         BorrowedOrOwnedTibs::Owned(Tibs::new_from_bv(bv))
     }
 
@@ -90,7 +90,7 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::new(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+        Self::from_bv(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
     }
 
     #[inline]
@@ -614,7 +614,7 @@ impl Tibs {
         for value in iterable.try_iter()? {
             bv.push(value?.is_truthy()?);
         }
-        Ok(Tibs::new(bv))
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Create a new instance with all bits randomly set.
@@ -641,7 +641,7 @@ impl Tibs {
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
         let bv = crate::helpers::bv_from_random(length, secure, &seed)?;
-        Ok(Tibs::new(bv))
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Create a new instance by concatenating a sequence of Tibs objects.
@@ -678,7 +678,7 @@ impl Tibs {
         for bits in &parts {
             bv.extend_from_bitslice(bits.as_bitslice());
         }
-        Ok(Tibs::new(bv))
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the Tibs as a bytes object.
@@ -859,7 +859,7 @@ impl Tibs {
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
-        Mutibs::new(self.as_bitvec().clone())
+        Mutibs::from_bv(self.as_bitvec().clone())
     }
 
     #[inline]
@@ -925,7 +925,7 @@ impl Tibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitslice());
         data.extend_from_bitslice(bs.as_bitslice());
-        Ok(Tibs::new(data))
+        Ok(Tibs::from_bv(data))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -934,7 +934,7 @@ impl Tibs {
         let mut data = BV::with_capacity(bs.len() + self.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitslice());
-        Ok(Tibs::new(data))
+        Ok(Tibs::from_bv(data))
     }
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -1007,7 +1007,7 @@ impl Tibs {
         if self.as_bitslice().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
-        Ok(Tibs::new(self.as_bitvec().clone().not()))
+        Ok(Tibs::from_bv(self.as_bitvec().clone().not()))
     }
 
     /// Return the Tibs as a bytes object.

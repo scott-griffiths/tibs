@@ -33,7 +33,7 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
     {
         let mut cache = BITS_CACHE.lock().unwrap();
         if let Some(cached_data) = cache.get(&s) {
-            return Ok(Mutibs::new(cached_data.clone()));
+            return Ok(Mutibs::from_bv(cached_data.clone()));
         }
     }
     let tokens = s.split(',');
@@ -58,7 +58,7 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
         for bits in bits_array {
             result.extend_from_bitslice(bits.as_bitvec_ref());
         }
-        Mutibs::new(result)
+        Mutibs::from_bv(result)
     };
     // Update cache with new result
     {
@@ -81,7 +81,7 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
         || any.is_instance_of::<PyMemoryView>()
     {
         if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(<Mutibs as BitCollection>::from_bytes(any_bytes));
+            return Ok(Mutibs::new_from_bv(BV::from_vec(any_bytes)));
         }
     }
 
@@ -91,7 +91,7 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
         for item in iter {
             bv.push(item?.is_truthy()?);
         }
-        return Ok(Mutibs::new(bv));
+        return Ok(Mutibs::from_bv(bv));
     }
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
@@ -565,7 +565,7 @@ impl Mutibs {
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
         let bv = crate::helpers::bv_from_random(length, secure, &seed)?;
-        Ok(Mutibs::new(bv))
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Create a new instance from a bytes object.
@@ -680,7 +680,7 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                BorrowedOrOwnedTibs::Owned(Tibs::new(slf.as_bitvec_ref().clone()))
+                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.as_bitvec_ref().clone()))
             } else {
                 tibs_from_any(value)?
             };
@@ -1093,7 +1093,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         // TODO: Completely redo how rfind works!
-        let t = Tibs::new(self.as_bitvec_ref().clone());
+        let t = Tibs::from_bv(self.as_bitvec_ref().clone());
         t.rfind(b, start, end, byte_aligned)
     }
 
@@ -1219,7 +1219,7 @@ impl Mutibs {
         if self.as_bitvec_ref().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(Mutibs::new(self.as_bitvec_ref().clone().not()))
+        Ok(Mutibs::from_bv(self.as_bitvec_ref().clone().not()))
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -1242,7 +1242,7 @@ impl Mutibs {
 
     /// Return a new copy of the Mutibs for the copy module.
     pub fn __copy__(&self) -> Self {
-        Mutibs::new(self.as_bitvec_ref().clone())
+        Mutibs::from_bv(self.as_bitvec_ref().clone())
     }
 
     /// Create and return a Tibs instance from a copy of the Mutibs data.
@@ -1262,7 +1262,7 @@ impl Mutibs {
     ///     Tibs('0b1101')
     ///
     pub fn to_tibs(&self) -> Tibs {
-        Tibs::new(self.as_bitvec_ref().clone())
+        Tibs::from_bv(self.as_bitvec_ref().clone())
     }
 
     /// Create and return a Tibs instance by moving the Mutibs data.
@@ -1286,7 +1286,7 @@ impl Mutibs {
     pub fn as_tibs(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut *self.as_mut_bitvec_ref());
         data.shrink_to_fit();
-        Tibs::new(data)
+        Tibs::from_bv(data)
     }
 
     /// Clear all bits, making the Mutibs empty.
@@ -1328,7 +1328,7 @@ impl Mutibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitvec_ref());
         data.extend_from_bitslice(bs.as_bitslice());
-        Ok(Mutibs::new(data))
+        Ok(Mutibs::from_bv(data))
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
@@ -1337,7 +1337,7 @@ impl Mutibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitvec_ref());
-        Ok(Mutibs::new(data))
+        Ok(Mutibs::from_bv(data))
     }
 
     /// Concatenate in-place.
