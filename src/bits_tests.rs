@@ -3,6 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
+    use crate::helpers::bv_from_zeros;
 
     // #[test]
     // fn from_bytes() {
@@ -42,11 +43,11 @@ mod tests {
 
     #[test]
     fn from_zeros() {
-        let bits = <Tibs as BitCollection>::from_zeros(8);
+        let bits = Tibs::from_bv(bv_from_zeros(8));
         assert_eq!(*bits.to_bytes().unwrap(), vec![0]);
         assert_eq!(bits.len(), 8);
         assert_eq!(bits.to_hexadecimal().unwrap(), "00");
-        let bits = <Tibs as BitCollection>::from_zeros(9);
+        let bits = Tibs::from_bv(bv_from_zeros(9));
         assert_eq!(*bits.to_bytes().unwrap(), vec![0, 0]);
         assert_eq!(bits.len(), 9);
         let bits = <Tibs as BitCollection>::empty();
@@ -170,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_set_index() {
-        let mut b = <Mutibs as BitCollection>::from_zeros(10);
+        let mut b = Mutibs::from_bv(bv_from_zeros(10));
         b.set_index(true, 0).unwrap();
         assert_eq!(b.to_binary(), "1000000000");
         b.set_index(true, -1).unwrap();
@@ -322,7 +323,7 @@ mod tests {
 
     #[test]
     fn mutable_constructors() {
-        let m1 = <Mutibs as BitCollection>::from_zeros(4);
+        let m1 = Mutibs::from_bv(bv_from_zeros(4));
         assert_eq!(m1.to_binary(), "0000");
 
         let m2 = <Mutibs as BitCollection>::from_ones(4);
@@ -368,7 +369,7 @@ mod tests {
 
     #[test]
     fn mutable_set_operations() {
-        let mut m = <Mutibs as BitCollection>::from_zeros(8);
+        let mut m = Mutibs::from_bv(bv_from_zeros(8));
 
         m.set_index(true, 0).unwrap();
         m.set_index(true, 7).unwrap();

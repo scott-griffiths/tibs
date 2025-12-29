@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS};
+use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros};
 use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -81,7 +81,7 @@ fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
         || any.is_instance_of::<PyMemoryView>()
     {
         if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(Mutibs::new_from_bv(BV::from_vec(any_bytes)));
+            return Ok(Mutibs::from_bv(BV::from_vec(any_bytes)));
         }
     }
 
@@ -131,7 +131,7 @@ pub struct Mutibs {
 
 // Internal methods, not exported to Python
 impl Mutibs {
-    pub(crate) fn new_from_bv(bv: BV) -> Self {
+    pub(crate) fn from_bv(bv: BV) -> Self {
         Mutibs { _data: bv }
     }
 
@@ -503,7 +503,7 @@ impl Mutibs {
                 length
             )));
         }
-        Ok(BitCollection::from_zeros(length as usize))
+        Ok(Self::from_bv(bv_from_zeros(length as usize)))
     }
 
     /// Create a new instance with all bits set to one.
