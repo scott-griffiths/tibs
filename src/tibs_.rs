@@ -608,7 +608,7 @@ impl Tibs {
     #[pyo3(signature = (iterable, /), text_signature = "(cls, values, /)")]
     pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
         // For sequences, we can pre-allocate the capacity.
-        let capacity = iterable.len().unwrap_or(0);
+        let capacity = iterable.len().ok().unwrap_or(64);
         let mut bv = BV::with_capacity(capacity);
 
         for value in iterable.try_iter()? {

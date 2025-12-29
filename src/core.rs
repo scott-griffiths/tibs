@@ -436,7 +436,7 @@ pub(crate) trait BitCollection: Sized {
                 "Bit length for unsigned int must be between 1 and 128. Received {length}."
             ));
         }
-        if length < 128 && value >= (1u128 << length) {
+        if value >= (1u128 << length) {
             return Err(format!("Value {value} does not fit in {length} bits."));
         }
         let mut bv = BV::repeat(false, length as usize);
@@ -451,14 +451,12 @@ pub(crate) trait BitCollection: Sized {
                 "Bit length for signed int must be between 1 and 128. Received {length}."
             ));
         }
-        if length < 128 {
-            let min_val = -(1i128 << (length - 1));
-            let max_val = (1i128 << (length - 1)) - 1;
-            if value < min_val || value > max_val {
-                return Err(format!(
-                    "Value {value} does not fit in {length} signed bits."
-                ));
-            }
+        let min_val = -(1i128 << (length - 1));
+        let max_val = (1i128 << (length - 1)) - 1;
+        if value < min_val || value > max_val {
+            return Err(format!(
+                "Value {value} does not fit in {length} signed bits."
+            ));
         }
         let repeat_bit = value < 0;
         let mut bv = BV::repeat(repeat_bit, length as usize);
