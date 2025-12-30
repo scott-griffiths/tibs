@@ -5,7 +5,7 @@ use crate::helpers::{
     validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::{str_to_mutibs, Mutibs};
+use crate::mutibs::{str_to_bv, Mutibs};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -28,7 +28,8 @@ fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
 
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
-        return Ok(str_to_mutibs(any_string)?.as_tibs());
+        let bv = str_to_bv(any_string)?;
+        return Ok(Tibs::from_bv(bv));
     }
 
     // Is it a bytes, bytearray or memoryview?
@@ -472,7 +473,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        Ok(str_to_mutibs(s)?.as_tibs())
+        let bv = str_to_bv(s)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Create a new instance from an unsigned integer.
