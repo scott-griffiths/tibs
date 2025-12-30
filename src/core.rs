@@ -1,4 +1,4 @@
-use crate::helpers::{BV, validate_index, BS, bv_from_zeros};
+use crate::helpers::{BV, validate_index, BS, bv_from_zeros, bv_from_bytes_slice};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -131,43 +131,6 @@ pub(crate) trait BitCollection: Sized {
         }
     }
 
-    #[inline]
-    fn from_bytes_slice(
-        data: Vec<u8>,
-        offset: Option<i64>,
-        length: Option<i64>,
-    ) -> PyResult<Self> {
-        if length.is_none() && offset.is_none() {
-            return Ok(Self::from_bv(BV::from_vec(data)));
-        }
-        let start_bit = offset.unwrap_or(0);
-        if start_bit < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Cannot create using a negative offset of {start_bit}."
-            )));
-        }
-        let start_bit = start_bit as usize;
-        let data_length = data.len() * 8;
-        if start_bit > data_length {
-            return Err(PyValueError::new_err(format!(
-                "Offset of {start_bit} is greater than the data length ({data_length} bits)."
-            )));
-        }
-        let length = length.unwrap_or(data_length as i64 - start_bit as i64);
-        if length < 0 {
-            return Err(PyValueError::new_err(format!("Negative length of {length} bits provided.")));
-        }
-        let length = length as usize;
-        if start_bit + length > data_length {
-            return Err(PyValueError::new_err(format!(
-                "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
-            )));
-        }
-        let mut bv = BV::from_vec(data);
-        bv.drain(..start_bit);
-        bv.truncate(length);
-        Ok(Self::from_bv(bv))
-    }
 
     fn to_string(&self) -> String {
         if self.is_empty() {
@@ -356,8 +319,8 @@ pub(crate) trait BitCollection: Sized {
             Ok(d) => d,
             Err(e) => return Err(PyValueError::new_err(format!("Cannot convert from hex '{hex}': {}", e))),
         };
-        let t = <Self as BitCollection>::from_bytes_slice(data, None, Some(new_hex_length * 4))?;
-        Ok(t)
+        let bv = bv_from_bytes_slice(data, None, Some(new_hex_length * 4))?;
+        Ok(Self::from_bv(bv))
     }
 
     #[inline]
