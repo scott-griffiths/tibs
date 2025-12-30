@@ -204,3 +204,28 @@ pub(crate) fn bv_from_zeros(length: usize) -> BV {
 pub(crate) fn bv_from_ones(length: usize) -> BV {
     BV::repeat(true, length)
 }
+
+#[inline]
+pub(crate) fn bv_from_bin(binary_string: &str) -> Result<BV, String> {
+    // Ignore any leading '0b' or '0B'
+    let s = binary_string
+        .strip_prefix("0b")
+        .or_else(|| binary_string.strip_prefix("0B"))
+        .unwrap_or(binary_string);
+    let mut bv: BV = BV::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '0' => bv.push(false),
+            '1' => bv.push(true),
+            '_' => continue,
+            c if c.is_whitespace() => continue,
+            _ => {
+                return Err(format!(
+                    "Cannot convert from bin '{binary_string}: Invalid character '{c}'."
+                ));
+            }
+        }
+    }
+    bv.set_uninitialized(false);
+    Ok(bv)
+}

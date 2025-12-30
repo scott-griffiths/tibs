@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones};
+use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones, bv_from_bin};
 use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -17,7 +17,9 @@ static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
 
 fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => Ok(BitCollection::from_binary(s).map_err(PyValueError::new_err)?),
+        Some("0b") => {
+            let bv = bv_from_bin(s).map_err(PyValueError::new_err)?;
+            Ok(Mutibs::from_bv(bv))},
         Some("0x") => Ok(BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)?),
         Some("0o") => Ok(BitCollection::from_octal(s).map_err(PyValueError::new_err)?),
         _ => Err(PyValueError::new_err(format!(
@@ -327,7 +329,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        BitCollection::from_binary(&s).map_err(PyValueError::new_err)
+        let bv = bv_from_bin(&s).map_err(PyValueError::new_err)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Return the binary representation of the Mutibs as a string.

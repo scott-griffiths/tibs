@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones};
+use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones, bv_from_bin};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
@@ -534,7 +534,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        BitCollection::from_binary(s).map_err(PyValueError::new_err)
+        let bv = bv_from_bin(s).map_err(PyValueError::new_err)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the binary representation of the Tibs as a string.
