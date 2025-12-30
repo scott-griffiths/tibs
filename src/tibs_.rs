@@ -1,7 +1,10 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_hex, bv_from_bin, bv_from_oct};
+use crate::helpers::{
+    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_oct, bv_from_ones, bv_from_zeros,
+    find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::{Mutibs, str_to_mutibs};
+use crate::mutibs::{str_to_mutibs, Mutibs};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -100,7 +103,6 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
             BorrowedOrOwnedTibs::Owned(t) => t.raw_bytes(),
         }
     }
-
 }
 
 pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedOrOwnedTibs<'a>> {
@@ -191,7 +193,6 @@ impl Tibs {
         let full_bytes = self._data.as_raw_slice();
         full_bytes[byte_offset..final_byte].to_vec()
     }
-
 }
 
 ///     An immutable container of binary data.
@@ -721,7 +722,13 @@ impl Tibs {
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
 
-        Ok(find_bitvec(self.as_bitslice(), b.as_bitslice(), start, end, byte_aligned))
+        Ok(find_bitvec(
+            self.as_bitslice(),
+            b.as_bitslice(),
+            start,
+            end,
+            byte_aligned,
+        ))
     }
 
     /// Return True if b is a sub-sequence of self.
