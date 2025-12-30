@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
+use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_hex, bv_from_bin, bv_from_oct};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
@@ -566,7 +566,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        BitCollection::from_hexadecimal(s)
+        let bv = bv_from_hex(&s)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the hexadecimal representation of the Tibs as a string.

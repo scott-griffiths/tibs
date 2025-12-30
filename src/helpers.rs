@@ -261,6 +261,28 @@ pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
     Ok(bv)
 }
 
+#[inline]
+pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
+    // Ignore any leading '0x' or '0X'
+    let mut new_hex = hex
+        .strip_prefix("0x")
+        .or_else(|| hex.strip_prefix("0X"))
+        .unwrap_or(hex)
+        .to_string();
+    // Remove any underscores or whitespace characters
+    new_hex.retain(|c| c != '_' && !c.is_whitespace());
+    let new_hex_length = new_hex.len() as i64;
+    if new_hex_length % 2 != 0 {
+        new_hex.push('0');
+    }
+    let data = match hex::decode(&new_hex) {
+        Ok(d) => d,
+        Err(e) => return Err(PyValueError::new_err(format!("Cannot convert from hex '{hex}': {}", e))),
+    };
+    let bv = bv_from_bytes_slice(data, None, Some(new_hex_length * 4))?;
+    Ok(bv)
+}
+
 pub(crate) fn bv_from_bytes_slice(
     data: Vec<u8>,
     offset: Option<i64>,

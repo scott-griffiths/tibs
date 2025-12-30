@@ -1,4 +1,4 @@
-use crate::helpers::{BV, validate_index, BS, bv_from_zeros, bv_from_bytes_slice};
+use crate::helpers::{BV, validate_index, BS, bv_from_zeros};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -299,28 +299,6 @@ pub(crate) trait BitCollection: Sized {
         let mut result_data = BV::repeat(false, n);
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
         Self::from_bv(result_data)
-    }
-
-    #[inline]
-    fn from_hexadecimal(hex: &str) -> PyResult<Self> {
-        // Ignore any leading '0x' or '0X'
-        let mut new_hex = hex
-            .strip_prefix("0x")
-            .or_else(|| hex.strip_prefix("0X"))
-            .unwrap_or(hex)
-            .to_string();
-        // Remove any underscores or whitespace characters
-        new_hex.retain(|c| c != '_' && !c.is_whitespace());
-        let new_hex_length = new_hex.len() as i64;
-        if new_hex_length % 2 != 0 {
-            new_hex.push('0');
-        }
-        let data = match hex::decode(&new_hex) {
-            Ok(d) => d,
-            Err(e) => return Err(PyValueError::new_err(format!("Cannot convert from hex '{hex}': {}", e))),
-        };
-        let bv = bv_from_bytes_slice(data, None, Some(new_hex_length * 4))?;
-        Ok(Self::from_bv(bv))
     }
 
     #[inline]

@@ -3,7 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::{bv_from_zeros, bv_from_ones};
+    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_hex};
 
     #[test]
     fn test_set_and_get_index() {
@@ -32,7 +32,7 @@ mod tests {
 
     #[test]
     fn test_unusual_slice_setting() {
-        let mut mb = Mutibs::from_hexadecimal("0x12345678").unwrap();
+        let mut mb = Mutibs::from_bv(bv_from_hex("0x12345678").unwrap());
         let zeros = Mutibs::from_bv(bv_from_zeros(8));
         mb.set_slice(0, 8, &zeros.as_bitslice());
         assert_eq!(mb.to_hexadecimal().unwrap(), "00345678");
