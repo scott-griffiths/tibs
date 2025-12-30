@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
-    bv_from_ones, bv_from_u128, bv_from_zeros, find_bitvec, validate_logical_op_lengths,
-    validate_shift, validate_slice, BS, BV,
+    bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
+    bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
+    validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{str_to_mutibs, Mutibs};
@@ -616,13 +616,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, values, /)")]
     pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // For sequences, we can pre-allocate the capacity.
-        let capacity = iterable.len().ok().unwrap_or(64);
-        let mut bv = BV::with_capacity(capacity);
-
-        for value in iterable.try_iter()? {
-            bv.push(value?.is_truthy()?);
-        }
+        let bv = bv_from_bools(iterable)?;
         Ok(Tibs::from_bv(bv))
     }
 
@@ -649,7 +643,7 @@ impl Tibs {
         secure: bool,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        let bv = crate::helpers::bv_from_random(length, secure, &seed)?;
+        let bv = bv_from_random(length, secure, &seed)?;
         Ok(Tibs::from_bv(bv))
     }
 
