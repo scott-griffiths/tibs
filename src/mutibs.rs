@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
+use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_hex, bv_from_bin, bv_from_oct};
 use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -21,7 +21,10 @@ fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
             let bv = bv_from_bin(s)?;
             Ok(Mutibs::from_bv(bv))
         },
-        Some("0x") => Ok(BitCollection::from_hexadecimal(s)?),
+        Some("0x") => {
+            let bv = bv_from_hex(s)?;
+            Ok(Mutibs::from_bv(bv))
+        },
         Some("0o") => {
             let bv = bv_from_oct(s)?;
             Ok(Mutibs::from_bv(bv))
@@ -365,7 +368,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        BitCollection::from_hexadecimal(&s).map_err(PyValueError::new_err)
+        let bv = bv_from_hex(&s)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Return the hexadecimal representation of the Mutibs as a string.

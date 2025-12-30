@@ -3,7 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
+    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct, bv_from_hex};
 
     // #[test]
     // fn from_bytes() {
@@ -15,14 +15,14 @@ mod tests {
 
     #[test]
     fn from_hex() {
-        let bits = Tibs::from_hexadecimal("0x0a_14  _1e").unwrap();
+        let bits = Tibs::from_bv(bv_from_hex("0x0a_14  _1e").unwrap());
         assert_eq!(*bits.to_bytes().unwrap(), vec![10, 20, 30]);
         assert_eq!(bits.len(), 24);
-        let bits = Tibs::from_hexadecimal("").unwrap();
+        let bits = Tibs::from_bv(bv_from_hex("").unwrap());
         assert_eq!(bits.len(), 0);
-        let bits = Tibs::from_hexadecimal("hello");
-        assert!(bits.is_err());
-        let bits = Tibs::from_hexadecimal("1").unwrap();
+        let bv = bv_from_hex("hello");
+        assert!(bv.is_err());
+        let bits = Tibs::from_bv(bv_from_hex("1").unwrap());
         assert_eq!(*bits.to_bytes().unwrap(), vec![16]);
         assert_eq!(bits.len(), 4);
     }
@@ -82,11 +82,11 @@ mod tests {
 
     #[test]
     fn hex_edge_cases() {
-        let b1 = Tibs::from_hexadecimal("0123456789abcdef").unwrap();
+        let b1 = Tibs::from_bv(bv_from_hex("0123456789abcdef").unwrap());
         let b2 = b1.get_slice(12, b1.len()).unwrap();
         assert_eq!(b2.to_hexadecimal().unwrap(), "3456789abcdef");
         assert_eq!(b2.len(), 52);
-        let t = Tibs::from_hexadecimal("123").unwrap();
+        let t = Tibs::from_bv(bv_from_hex("123").unwrap());
         assert_eq!(t.to_hexadecimal().unwrap(), "123");
     }
 
@@ -122,29 +122,29 @@ mod tests {
 
     // #[test]
     // fn test_and() {
-    //     let a1 = Tibs::from_hexadecimal("f0f").unwrap();
-    //     let a2 = Tibs::from_hexadecimal("123").unwrap();
+    //     let a1 = Tibs::from_bv(bv_from_hex("f0f").unwrap();
+    //     let a2 = Tibs::from_bv(bv_from_hex("123").unwrap();
     //     let a3 = a1.and(&a2).unwrap();
-    //     let b = Tibs::from_hexadecimal("103").unwrap();
+    //     let b = Tibs::from_bv(bv_from_hex("103").unwrap();
     //     assert_eq!(a3, b);
     //     let a4 = a1
     //         .get_slice_unchecked(4, 8)
     //         .and(&a2.get_slice_unchecked(4, 8))
     //         .unwrap();
-    //     assert_eq!(a4, Tibs::from_hexadecimal("03").unwrap());
+    //     assert_eq!(a4, Tibs::from_bv(bv_from_hex("03").unwrap());
     // }
 
     #[test]
     fn test_set_mutable_slice() {
-        let mut a = Mutibs::from_hexadecimal("0011223344").unwrap();
-        let b = Tibs::from_hexadecimal("ff").unwrap();
+        let mut a = Mutibs::from_bv(bv_from_hex("0011223344").unwrap());
+        let b = Tibs::from_bv(bv_from_hex("ff").unwrap());
         a.set_slice(8, 16, &b.as_bitslice());
         assert_eq!(a.to_hexadecimal().unwrap(), "00ff223344");
     }
 
     #[test]
     fn test_get_mutable_slice() {
-        let a = Tibs::from_hexadecimal("01ffff").unwrap();
+        let a = Tibs::from_bv(bv_from_hex("01ffff").unwrap());
         assert_eq!(a.len(), 24);
         let b = a.get_slice(1, a.len()).unwrap();
         assert_eq!(b.len(), 23);
@@ -330,7 +330,7 @@ mod tests {
         let m3 = Mutibs::from_bv(bv_from_bin("1010").unwrap());
         assert_eq!(m3.to_binary(), "1010");
 
-        let m4 = Mutibs::from_hexadecimal("a").unwrap();
+        let m4 = Mutibs::from_bv(bv_from_hex("a").unwrap());
         assert_eq!(m4.to_binary(), "1010");
 
         let m5 = Mutibs::from_bv(bv_from_oct("12").unwrap());
@@ -459,14 +459,15 @@ mod tests {
         let bin = Mutibs::from_bv(bv_from_bin("1010").unwrap());
         assert_eq!(bin.to_binary(), "1010");
 
-        let hex = Mutibs::from_hexadecimal("a").unwrap();
+        let hex = Mutibs::from_bv(bv_from_hex("a").unwrap());
         assert_eq!(hex.to_binary(), "1010");
 
         let oct = Mutibs::from_bv(bv_from_oct("12").unwrap());
         assert_eq!(oct.to_binary(), "001010");
 
         assert!(bv_from_bin("123").is_err());
-        assert!(Mutibs::from_hexadecimal("xy").is_err());
+        let bv = bv_from_hex("xy");
+        assert!(bv.is_err());
         let bv = bv_from_oct("89");
         assert!(bv.is_err());
     }
