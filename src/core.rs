@@ -337,31 +337,6 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_binary(binary_string: &str) -> Result<Self, String> {
-        // Ignore any leading '0b' or '0B'
-        let s = binary_string
-            .strip_prefix("0b")
-            .or_else(|| binary_string.strip_prefix("0B"))
-            .unwrap_or(binary_string);
-        let mut b: BV = BV::with_capacity(s.len());
-        for c in s.chars() {
-            match c {
-                '0' => b.push(false),
-                '1' => b.push(true),
-                '_' => continue,
-                c if c.is_whitespace() => continue,
-                _ => {
-                    return Err(format!(
-                        "Cannot convert from bin '{binary_string}: Invalid character '{c}'."
-                    ));
-                }
-            }
-        }
-        b.set_uninitialized(false);
-        Ok(Self::from_bv(b))
-    }
-
-    #[inline]
     fn from_octal(octal_string: &str) -> Result<Self, String> {
         // Ignore any leading '0o' or '0O'
         let s = octal_string
