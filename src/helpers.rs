@@ -147,7 +147,7 @@ pub(crate) fn validate_slice(
 pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
     match seed {
         None => {
-            let mut seed_arr = [0u8; 32]; //  TODO: from entropy?
+            let mut seed_arr = [0u8; 32];
             rand::rng().fill_bytes(&mut seed_arr);
             seed_arr
         }
@@ -222,6 +222,37 @@ pub(crate) fn bv_from_bin(binary_string: &str) -> PyResult<BV> {
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "Cannot convert from bin '{binary_string}: Invalid character '{c}'."
+                )));
+            }
+        }
+    }
+    bv.set_uninitialized(false);
+    Ok(bv)
+}
+
+#[inline]
+pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
+    // Ignore any leading '0o' or '0O'
+    let s = octal_string
+        .strip_prefix("0o")
+        .or_else(|| octal_string.strip_prefix("0O"))
+        .unwrap_or(octal_string);
+    let mut bv: BV = BV::with_capacity(s.len() * 3);
+    for c in s.chars() {
+        match c {
+            '0' => bv.extend_from_bitslice(bits![0, 0, 0]),
+            '1' => bv.extend_from_bitslice(bits![0, 0, 1]),
+            '2' => bv.extend_from_bitslice(bits![0, 1, 0]),
+            '3' => bv.extend_from_bitslice(bits![0, 1, 1]),
+            '4' => bv.extend_from_bitslice(bits![1, 0, 0]),
+            '5' => bv.extend_from_bitslice(bits![1, 0, 1]),
+            '6' => bv.extend_from_bitslice(bits![1, 1, 0]),
+            '7' => bv.extend_from_bitslice(bits![1, 1, 1]),
+            '_' => continue,
+            c if c.is_whitespace() => continue,
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "Cannot convert from oct '{octal_string}': Invalid character '{c}'."
                 )));
             }
         }

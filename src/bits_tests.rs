@@ -3,7 +3,7 @@ mod tests {
     use crate::core::BitCollection;
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_bin};
+    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
 
     // #[test]
     // fn from_bytes() {
@@ -163,7 +163,7 @@ mod tests {
     fn test_all_set() {
         let b = Tibs::from_bv(bv_from_bin("111").unwrap());
         assert!(b.all());
-        let c = <Tibs as BitCollection>::from_octal("7777777777").unwrap();
+        let c = Tibs::from_bv(bv_from_oct("7777777777").unwrap());
         assert!(c.all());
     }
 
@@ -189,22 +189,22 @@ mod tests {
 
     #[test]
     fn test_from_oct() {
-        let bits = <Tibs as BitCollection>::from_octal("123").unwrap();
+        let bits = Tibs::from_bv(bv_from_oct("123").unwrap());
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_octal("7").unwrap();
+        let bits = Tibs::from_bv(bv_from_oct("7").unwrap());
         assert_eq!(bits.to_bin(), "111");
     }
 
     #[test]
     fn test_from_oct_checked() {
-        let bits = Tibs::from_octal("123").unwrap();
+        let bits = Tibs::from_bv(bv_from_oct("123").unwrap());
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_octal("0o123").unwrap();
+        let bits = Tibs::from_bv(bv_from_oct("0o123").unwrap());
         assert_eq!(bits.to_bin(), "001010011");
-        let bits = Tibs::from_octal("7").unwrap();
+        let bits = Tibs::from_bv(bv_from_oct("7").unwrap());
         assert_eq!(bits.to_bin(), "111");
-        let bits = Tibs::from_octal("8");
-        assert!(bits.is_err());
+        let bv = bv_from_oct("8");
+        assert!(bv.is_err());
     }
 
     #[test]
@@ -333,7 +333,7 @@ mod tests {
         let m4 = Mutibs::from_hexadecimal("a").unwrap();
         assert_eq!(m4.to_binary(), "1010");
 
-        let m5 = Mutibs::from_octal("12").unwrap();
+        let m5 = Mutibs::from_bv(bv_from_oct("12").unwrap());
         assert_eq!(m5.to_binary(), "001010");
     }
 
@@ -462,12 +462,13 @@ mod tests {
         let hex = Mutibs::from_hexadecimal("a").unwrap();
         assert_eq!(hex.to_binary(), "1010");
 
-        let oct = Mutibs::from_octal("12").unwrap();
+        let oct = Mutibs::from_bv(bv_from_oct("12").unwrap());
         assert_eq!(oct.to_binary(), "001010");
 
         assert!(bv_from_bin("123").is_err());
         assert!(Mutibs::from_hexadecimal("xy").is_err());
-        assert!(Mutibs::from_octal("89").is_err());
+        let bv = bv_from_oct("89");
+        assert!(bv.is_err());
     }
 
     #[test]

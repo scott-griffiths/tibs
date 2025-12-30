@@ -339,37 +339,6 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_octal(octal_string: &str) -> PyResult<Self> {
-        // Ignore any leading '0o' or '0O'
-        let s = octal_string
-            .strip_prefix("0o")
-            .or_else(|| octal_string.strip_prefix("0O"))
-            .unwrap_or(octal_string);
-        let mut b: BV = BV::with_capacity(s.len() * 3);
-        for c in s.chars() {
-            match c {
-                '0' => b.extend_from_bitslice(bits![0, 0, 0]),
-                '1' => b.extend_from_bitslice(bits![0, 0, 1]),
-                '2' => b.extend_from_bitslice(bits![0, 1, 0]),
-                '3' => b.extend_from_bitslice(bits![0, 1, 1]),
-                '4' => b.extend_from_bitslice(bits![1, 0, 0]),
-                '5' => b.extend_from_bitslice(bits![1, 0, 1]),
-                '6' => b.extend_from_bitslice(bits![1, 1, 0]),
-                '7' => b.extend_from_bitslice(bits![1, 1, 1]),
-                '_' => continue,
-                c if c.is_whitespace() => continue,
-                _ => {
-                    return Err(PyValueError::new_err(format!(
-                        "Cannot convert from oct '{octal_string}': Invalid character '{c}'."
-                    )));
-                }
-            }
-        }
-        b.set_uninitialized(false);
-        Ok(Self::from_bv(b))
-    }
-
-    #[inline]
     fn from_hexadecimal(hex: &str) -> PyResult<Self> {
         // Ignore any leading '0x' or '0X'
         let mut new_hex = hex
