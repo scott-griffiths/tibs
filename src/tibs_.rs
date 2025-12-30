@@ -1,7 +1,8 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_oct, bv_from_ones, bv_from_zeros,
-    find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones,
+    bv_from_u128, bv_from_zeros, find_bitvec, validate_logical_op_lengths, validate_shift,
+    validate_slice, BS, BV,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{str_to_mutibs, Mutibs};
@@ -484,7 +485,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
-        BitCollection::from_u128(u, length)
+        let bv = bv_from_u128(u, length)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the unsigned integer representation of the Tibs.
@@ -502,7 +504,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
-        BitCollection::from_i128(i, length)
+        let bv = bv_from_i128(i, length)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the signed integer representation of the Tibs.

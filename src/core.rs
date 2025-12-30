@@ -3,7 +3,7 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
-use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::PyResult;
 use std::fmt;
 
@@ -307,43 +307,6 @@ pub(crate) trait BitCollection: Sized {
         let mut result_data = BV::repeat(false, n);
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
         Self::from_bv(result_data)
-    }
-
-    #[inline]
-    fn from_u128(value: u128, length: i64) -> PyResult<Self> {
-        if length <= 0 || length > 128 {
-            return Err(PyValueError::new_err(format!(
-                "Bit length for unsigned int must be between 1 and 128. Received {length}."
-            )));
-        }
-        if value >= (1u128 << length) {
-            return Err(PyOverflowError::new_err(format!(
-                "Value {value} does not fit in {length} bits."
-            )));
-        }
-        let mut bv = BV::repeat(false, length as usize);
-        bv.store_be(value);
-        Ok(Self::from_bv(bv))
-    }
-
-    #[inline]
-    fn from_i128(value: i128, length: i64) -> PyResult<Self> {
-        if length <= 0 || length > 128 {
-            return Err(PyValueError::new_err(format!(
-                "Bit length for signed int must be between 1 and 128. Received {length}."
-            )));
-        }
-        let min_val = -(1i128 << (length - 1));
-        let max_val = (1i128 << (length - 1)) - 1;
-        if value < min_val || value > max_val {
-            return Err(PyOverflowError::new_err(format!(
-                "Value {value} does not fit in {length} signed bits."
-            )));
-        }
-        let repeat_bit = value < 0;
-        let mut bv = BV::repeat(repeat_bit, length as usize);
-        bv.store_be(value);
-        Ok(Self::from_bv(bv))
     }
 
     fn from_f64(value: f64, length: i64) -> PyResult<Self> {
