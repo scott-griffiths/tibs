@@ -1,6 +1,10 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_hex, bv_from_bin, bv_from_oct};
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
+use crate::helpers::{
+    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_oct, bv_from_ones, bv_from_zeros,
+    find_bitvec, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS,
+    BV,
+};
+use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -20,15 +24,15 @@ fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
         Some("0b") => {
             let bv = bv_from_bin(s)?;
             Ok(Mutibs::from_bv(bv))
-        },
+        }
         Some("0x") => {
             let bv = bv_from_hex(s)?;
             Ok(Mutibs::from_bv(bv))
-        },
+        }
         Some("0o") => {
             let bv = bv_from_oct(s)?;
             Ok(Mutibs::from_bv(bv))
-        },
+        }
         _ => Err(PyValueError::new_err(format!(
             "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
         ))),
@@ -569,7 +573,8 @@ impl Mutibs {
     ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None), text_signature="(cls, length, /, secure=False, seed=None)")]
+    #[pyo3(signature = (length, /, secure=false, seed=None), text_signature="(cls, length, /, secure=False, seed=None)"
+    )]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
@@ -592,7 +597,8 @@ impl Mutibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
+    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)"
+    )]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
@@ -772,7 +778,8 @@ impl Mutibs {
             let step: i64 = indices.step.try_into()?;
             if step == 1 {
                 if stop > start {
-                    self.as_mut_bitvec_ref().drain(start as usize..stop as usize);
+                    self.as_mut_bitvec_ref()
+                        .drain(start as usize..stop as usize);
                 }
             } else {
                 // Collect indices to remove, then remove from highest to lowest.
@@ -866,7 +873,13 @@ impl Mutibs {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
-        Ok(find_bitvec(self.as_bitvec_ref(), b.as_bitslice(), start, end, byte_aligned))
+        Ok(find_bitvec(
+            self.as_bitvec_ref(),
+            b.as_bitslice(),
+            start,
+            end,
+            byte_aligned,
+        ))
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -1132,7 +1145,7 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         match pos {
             None => {
-                *slf.as_mut_bitvec_ref()= std::mem::take(&mut *slf.as_mut_bitvec_ref()).not();
+                *slf.as_mut_bitvec_ref() = std::mem::take(&mut *slf.as_mut_bitvec_ref()).not();
             }
             Some(p) => {
                 if let Ok(pos) = p.extract::<i64>() {
@@ -1379,7 +1392,8 @@ impl Mutibs {
             slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
         } else {
             let bs = tibs_from_any(bs)?;
-            slf.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
+            slf.as_mut_bitvec_ref()
+                .extend_from_bitslice(bs.as_bitslice());
         }
         Ok(slf)
     }
@@ -1453,9 +1467,13 @@ impl Mutibs {
                     break;
                 }
             }
-            if let Some(found_pos) =
-                find_bitvec(slf.as_bitvec_ref(), old.as_bitslice(), current_pos, end, byte_aligned)
-            {
+            if let Some(found_pos) = find_bitvec(
+                slf.as_bitvec_ref(),
+                old.as_bitslice(),
+                current_pos,
+                end,
+                byte_aligned,
+            ) {
                 starting_points.push(found_pos);
                 current_pos = found_pos + old.len();
             } else {
@@ -1519,11 +1537,13 @@ impl Mutibs {
             pos = slf.len() as i64;
         }
         if bs.len() == 1 {
-            slf.as_mut_bitvec_ref().insert(pos as usize, bs.as_bitslice()[0]);
+            slf.as_mut_bitvec_ref()
+                .insert(pos as usize, bs.as_bitslice()[0]);
             return Ok(slf);
         }
         let tail = slf.as_mut_bitvec_ref().split_off(pos as usize);
-        slf.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
+        slf.as_mut_bitvec_ref()
+            .extend_from_bitslice(bs.as_bitslice());
         slf.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         Ok(slf)
     }

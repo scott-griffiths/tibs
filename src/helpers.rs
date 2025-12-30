@@ -113,10 +113,14 @@ pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
 
 pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {
     if s.is_empty() {
-        return Err(PyValueError::new_err("Cannot use a bit shift on an empty container."));
+        return Err(PyValueError::new_err(
+            "Cannot use a bit shift on an empty container.",
+        ));
     }
     if n < 0 {
-        return Err(PyValueError::new_err("Cannot bit shift by a negative amount."));
+        return Err(PyValueError::new_err(
+            "Cannot bit shift by a negative amount.",
+        ));
     }
     Ok(n as usize)
 }
@@ -277,7 +281,12 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
     }
     let data = match hex::decode(&new_hex) {
         Ok(d) => d,
-        Err(e) => return Err(PyValueError::new_err(format!("Cannot convert from hex '{hex}': {}", e))),
+        Err(e) => {
+            return Err(PyValueError::new_err(format!(
+                "Cannot convert from hex '{hex}': {}",
+                e
+            )))
+        }
     };
     let bv = bv_from_bytes_slice(data, None, Some(new_hex_length * 4))?;
     Ok(bv)
@@ -306,7 +315,9 @@ pub(crate) fn bv_from_bytes_slice(
     }
     let length = length.unwrap_or(data_length as i64 - start_bit as i64);
     if length < 0 {
-        return Err(PyValueError::new_err(format!("Negative length of {length} bits provided.")));
+        return Err(PyValueError::new_err(format!(
+            "Negative length of {length} bits provided."
+        )));
     }
     let length = length as usize;
     if start_bit + length > data_length {

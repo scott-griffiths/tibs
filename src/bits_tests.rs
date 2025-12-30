@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::core::BitCollection;
+    use crate::helpers::{bv_from_bin, bv_from_hex, bv_from_oct, bv_from_ones, bv_from_zeros};
     use crate::mutibs::Mutibs;
     use crate::tibs_::Tibs;
-    use crate::helpers::{bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct, bv_from_hex};
 
     // #[test]
     // fn from_bytes() {

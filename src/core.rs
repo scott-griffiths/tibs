@@ -1,15 +1,14 @@
-use crate::helpers::{BV, validate_index, BS, bv_from_zeros};
+use crate::helpers::{bv_from_zeros, validate_index, BS, BV};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
-use std::fmt;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
 use pyo3::PyResult;
+use std::fmt;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
-
     fn from_bv(bv: BV) -> Self;
     fn as_bitvec(&self) -> BV;
     fn as_bitvec_ref(&self) -> &BV;
@@ -111,7 +110,6 @@ pub(crate) trait BitCollection: Sized {
     //
     // }
 
-
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
@@ -123,14 +121,12 @@ pub(crate) trait BitCollection: Sized {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
             let bv = BV::from_vec(data);
             Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
-
         } else {
             let mut result = self.as_bitvec().clone();
             result ^= other.as_bitslice();
             Self::from_bv(result)
         }
     }
-
 
     fn to_string(&self) -> String {
         if self.is_empty() {
@@ -188,7 +184,9 @@ pub(crate) trait BitCollection: Sized {
 
     fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         if step == 0 {
-            return Err(PyValueError::new_err("Slice step cannot be zero.".to_string()));
+            return Err(PyValueError::new_err(
+                "Slice step cannot be zero.".to_string(),
+            ));
         }
         // Note that a start_bit or end_bit of -1 means to stop at the beginning when using a negative step.
         // Otherwise they should both be positive indices.
@@ -196,14 +194,18 @@ pub(crate) trait BitCollection: Sized {
         debug_assert!(end_bit >= -1);
         debug_assert!(step != 0);
         if start_bit < -1 || end_bit < -1 {
-            return Err(PyValueError::new_err("Indices less than -1 are not valid values.".to_string()));
+            return Err(PyValueError::new_err(
+                "Indices less than -1 are not valid values.".to_string(),
+            ));
         }
         if step > 0 {
             if start_bit >= end_bit {
                 return Ok(BitCollection::empty());
             }
             if end_bit as usize > self.len() {
-                return Err(PyValueError::new_err("Slice end goes past the end of the container.".to_string()));
+                return Err(PyValueError::new_err(
+                    "Slice end goes past the end of the container.".to_string(),
+                ));
             }
             // TODO: This alternate method might be faster
             // Ok(Self::new(
@@ -220,7 +222,9 @@ pub(crate) trait BitCollection: Sized {
                 return Ok(BitCollection::empty());
             }
             if start_bit as usize > self.len() {
-                return Err(PyValueError::new_err("Slice start bit is past the end of the container.".to_string()));
+                return Err(PyValueError::new_err(
+                    "Slice start bit is past the end of the container.".to_string(),
+                ));
             }
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
@@ -257,7 +261,11 @@ pub(crate) trait BitCollection: Sized {
             ones = self.as_bitslice().count_ones();
         }
 
-        if count_ones { ones } else { len - ones }
+        if count_ones {
+            ones
+        } else {
+            len - ones
+        }
     }
 
     fn multiply(&self, n: usize) -> Self {
@@ -309,7 +317,9 @@ pub(crate) trait BitCollection: Sized {
             )));
         }
         if value >= (1u128 << length) {
-            return Err(PyOverflowError::new_err(format!("Value {value} does not fit in {length} bits.")));
+            return Err(PyOverflowError::new_err(format!(
+                "Value {value} does not fit in {length} bits."
+            )));
         }
         let mut bv = BV::repeat(false, length as usize);
         bv.store_be(value);
@@ -526,7 +536,9 @@ pub(crate) trait BitCollection: Sized {
             return Ok(BitCollection::empty());
         }
         if start_bit + length > self.len() {
-            return Err(PyIndexError::new_err("End bit of the slice goes past the end of the container.".to_string()));
+            return Err(PyIndexError::new_err(
+                "End bit of the slice goes past the end of the container.".to_string(),
+            ));
         }
         Ok(self.get_slice_unchecked(start_bit, length))
     }
@@ -561,8 +573,6 @@ impl BitCollection for Tibs {
     fn get_raw_bytes(&self) -> Vec<u8> {
         Tibs::raw_bytes(self)
     }
-
-
 }
 
 impl BitCollection for Mutibs {
