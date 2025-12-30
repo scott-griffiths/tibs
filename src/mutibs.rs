@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
-    bv_from_ones, bv_from_u128, bv_from_zeros, find_bitvec, validate_index,
-    validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+    bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
+    bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
+    validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
 };
 use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
 use lru::LruCache;
@@ -557,7 +557,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
     pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Tibs::from_bools(_cls, iterable)?.to_mutibs())
+        let bv = bv_from_bools(iterable)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Create a new instance with all bits randomly set.
@@ -584,7 +585,7 @@ impl Mutibs {
         secure: bool,
         seed: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        let bv = crate::helpers::bv_from_random(length, secure, &seed)?;
+        let bv = bv_from_random(length, secure, &seed)?;
         Ok(Mutibs::from_bv(bv))
     }
 

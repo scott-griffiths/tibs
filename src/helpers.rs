@@ -396,3 +396,14 @@ pub(crate) fn bv_from_f64(value: f64, length: i64) -> PyResult<BV> {
     };
     Ok(bv)
 }
+
+pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
+    // For sequences, we can pre-allocate the capacity.
+    let capacity = iterable.len().ok().unwrap_or(64);
+    let mut bv = BV::with_capacity(capacity);
+
+    for value in iterable.try_iter()? {
+        bv.push(value?.is_truthy()?);
+    }
+    Ok(bv)
+}
