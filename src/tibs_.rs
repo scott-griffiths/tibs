@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones,
-    bv_from_u128, bv_from_zeros, find_bitvec, validate_logical_op_lengths, validate_shift,
-    validate_slice, BS, BV,
+    bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
+    bv_from_ones, bv_from_u128, bv_from_zeros, find_bitvec, validate_logical_op_lengths,
+    validate_shift, validate_slice, BS, BV,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{str_to_mutibs, Mutibs};
@@ -517,7 +517,8 @@ impl Tibs {
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>()?;
-        BitCollection::from_f64(value, length)
+        let bv = bv_from_f64(value, length)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return the floating point representation of the Tibs.
