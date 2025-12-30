@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn mutable_from_immutable() {
         let immutable = Tibs::from_bv(bv_from_bin("1010").unwrap());
-        let mutable = Mutibs::from_bv(immutable.as_bitvec().clone());
+        let mutable = Mutibs::from_bv(immutable.to_bitvec());
         assert_eq!(mutable.to_binary(), "1010");
     }
 
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn conversion_round_trip() {
         let original = Tibs::from_bv(bv_from_bin("101010").unwrap());
-        let mut mutable = Mutibs::from_bv(original.as_bitvec().clone());
+        let mut mutable = Mutibs::from_bv(original.to_bitvec());
         mutable.set_index(false, 0).unwrap();
         mutable.set_index(true, 1).unwrap();
         let result = mutable.as_tibs();

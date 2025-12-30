@@ -26,10 +26,10 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
         BorrowedOrOwnedTibs::Owned(Tibs::from_bv(bv))
     }
 
-    fn as_bitvec(&self) -> BV {
+    fn to_bitvec(&self) -> BV {
         match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitvec(),
-            BorrowedOrOwnedTibs::Owned(t) => t.as_bitvec(),
+            BorrowedOrOwnedTibs::Borrowed(t) => t.to_bitvec(),
+            BorrowedOrOwnedTibs::Owned(t) => t.to_bitvec(),
         }
     }
 
@@ -131,7 +131,7 @@ impl Tibs {
     }
 
     #[inline]
-    pub(crate) fn as_bitvec(&self) -> BV {
+    pub(crate) fn to_bitvec(&self) -> BV {
         self.as_bitslice().to_bitvec()
     }
 
@@ -826,7 +826,7 @@ impl Tibs {
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
-        Mutibs::from_bv(self.as_bitvec().clone())
+        Mutibs::from_bv(self.to_bitvec())
     }
 
     #[inline]
@@ -973,7 +973,7 @@ impl Tibs {
         if self.as_bitslice().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
-        Ok(Tibs::from_bv(self.as_bitvec().clone().not()))
+        Ok(Tibs::from_bv(self.to_bitvec().not()))
     }
 
     /// Return the Tibs as a bytes object.

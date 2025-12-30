@@ -598,7 +598,7 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.as_bitvec_ref().clone()))
+                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.to_bitvec()))
             } else {
                 tibs_from_any(value)?
             };
@@ -1018,7 +1018,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         // TODO: Completely redo how rfind works!
-        let t = Tibs::from_bv(self.as_bitvec_ref().clone());
+        let t = Tibs::from_bv(self.to_bitvec());
         t.rfind(b, start, end, byte_aligned)
     }
 
@@ -1142,7 +1142,7 @@ impl Mutibs {
         if self.as_bitvec_ref().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(Mutibs::from_bv(self.as_bitvec_ref().clone().not()))
+        Ok(Mutibs::from_bv(self.to_bitvec().not()))
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -1165,7 +1165,7 @@ impl Mutibs {
 
     /// Return a new copy of the Mutibs for the copy module.
     pub fn __copy__(&self) -> Self {
-        Mutibs::from_bv(self.as_bitvec_ref().clone())
+        Mutibs::from_bv(self.to_bitvec())
     }
 
     /// Create and return a Tibs instance from a copy of the Mutibs data.
@@ -1185,7 +1185,7 @@ impl Mutibs {
     ///     Tibs('0b1101')
     ///
     pub fn to_tibs(&self) -> Tibs {
-        Tibs::from_bv(self.as_bitvec_ref().clone())
+        Tibs::from_bv(self.to_bitvec())
     }
 
     /// Create and return a Tibs instance by moving the Mutibs data.
@@ -1287,7 +1287,7 @@ impl Mutibs {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
             // If bs is slf, clone inner bits first then append
-            let bits_clone = slf.as_bitvec_ref().clone();
+            let bits_clone = slf.to_bitvec();
             slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
         } else {
             let bs = tibs_from_any(bs)?;
@@ -1314,7 +1314,7 @@ impl Mutibs {
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
-            let mut new_data = slf.as_bitvec_ref().clone();
+            let mut new_data = slf.to_bitvec();
             new_data.extend_from_bitslice(&slf.as_bitvec_ref());
             *slf.as_mut_bitvec_ref() = new_data;
         } else {
@@ -1557,13 +1557,13 @@ impl Mutibs {
             1 => Ok(()),
             i => {
                 let n = i as usize;
-                let orig_data = slf.as_bitvec_ref().clone();
+                let orig_data = slf.to_bitvec();
                 let len = slf.len();
                 slf.reserve(len * (n - 1));
                 let mut mul = 1;
                 while mul * 2 <= n {
                     // Double the length
-                    let current = slf.as_bitvec_ref().clone();
+                    let current = slf.to_bitvec();
                     slf.as_mut_bitvec_ref().extend_from_bitslice(&current);
                     mul *= 2;
                 }

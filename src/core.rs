@@ -10,7 +10,7 @@ use std::fmt;
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
     fn from_bv(bv: BV) -> Self;
-    fn as_bitvec(&self) -> BV;
+    fn to_bitvec(&self) -> BV;
     fn as_bitvec_ref(&self) -> &BV;
     fn as_bitslice(&self) -> &BS;
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
@@ -43,7 +43,7 @@ pub(crate) trait BitCollection: Sized {
             let bv = BV::from_vec(data);
             Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
-            let mut result = self.as_bitvec().clone();
+            let mut result = self.to_bitvec();
             result |= other.as_bitslice();
             Self::from_bv(result)
         }
@@ -61,7 +61,7 @@ pub(crate) trait BitCollection: Sized {
             let bv = BV::from_vec(data);
             Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
-            let mut result = self.as_bitvec().clone();
+            let mut result = self.to_bitvec();
             result &= other.as_bitslice();
             Self::from_bv(result)
         }
@@ -122,7 +122,7 @@ pub(crate) trait BitCollection: Sized {
             let bv = BV::from_vec(data);
             Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         } else {
-            let mut result = self.as_bitvec().clone();
+            let mut result = self.to_bitvec();
             result ^= other.as_bitslice();
             Self::from_bv(result)
         }
@@ -284,7 +284,7 @@ pub(crate) trait BitCollection: Sized {
 
     fn lshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::from_bv(self.as_bitvec().clone());
+            return Self::from_bv(self.to_bitvec());
         }
         let len = self.len();
         if n >= len {
@@ -298,7 +298,7 @@ pub(crate) trait BitCollection: Sized {
 
     fn rshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::from_bv(self.as_bitvec().clone());
+            return Self::from_bv(self.to_bitvec());
         }
         let len = self.len();
         if n >= len {
@@ -485,7 +485,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn as_bitvec(&self) -> BV {
+    fn to_bitvec(&self) -> BV {
         self.as_bitslice().to_bitvec()
     }
 
@@ -516,7 +516,7 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn as_bitvec(&self) -> BV {
+    fn to_bitvec(&self) -> BV {
         Mutibs::as_bitvec_ref(&self).to_bitvec()
     }
 
