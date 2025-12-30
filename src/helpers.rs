@@ -425,7 +425,7 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
 //     let mut total_len: usize = 0;
 //     for item in iter {
 //         let obj = item?;
-//         let bits = tibs_from_any(&obj)?;
+//         let bits = bv_from_any(&obj)?;
 //         total_len += bits.len();
 //         let owned_tibs = match bits {
 //             BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
