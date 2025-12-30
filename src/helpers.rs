@@ -1,14 +1,24 @@
 use crate::core::BitCollection;
 use bitvec::prelude::*;
 use half::f16;
-use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyValueError};
+use lru::LruCache;
+use once_cell::sync::Lazy;
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::{PyByteArray, PyBytes, PyInt, PyMemoryView};
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
 use sha2::{Digest, Sha256};
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
 
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;
+
+// Define a static LRU cache.
+const BITS_CACHE_SIZE: usize = 1024;
+static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {
@@ -430,3 +440,101 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
 //         bv.extend_from_bitslice(bits.as_bitslice());
 //     }
 // }
+
+fn string_literal_to_bv(s: &str) -> PyResult<BV> {
+    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
+        Some("0b") => {
+            let bv = bv_from_bin(s)?;
+            Ok(bv)
+        }
+        Some("0x") => {
+            let bv = bv_from_hex(s)?;
+            Ok(bv)
+        }
+        Some("0o") => {
+            let bv = bv_from_oct(s)?;
+            Ok(bv)
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
+        ))),
+    }
+}
+
+pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
+    // First remove whitespace
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    // Check if it's already in the cache
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        if let Some(cached_data) = cache.get(&s) {
+            return Ok(cached_data.clone());
+        }
+    }
+    let tokens = s.split(',');
+    let mut bv_array = Vec::<BV>::new();
+    let mut total_bit_length = 0;
+    for token in tokens {
+        if token.is_empty() {
+            continue;
+        }
+        let x = string_literal_to_bv(token)?;
+        total_bit_length += x.len();
+        bv_array.push(x);
+    }
+    if bv_array.is_empty() {
+        return Ok(BV::new());
+    }
+    // Combine all bits
+    let result = if bv_array.len() == 1 {
+        bv_array.pop().unwrap()
+    } else {
+        let mut result = BV::with_capacity(total_bit_length);
+        for bv in bv_array {
+            result.extend_from_bitslice(&bv);
+        }
+        result
+    };
+    // Update cache with new result
+    {
+        let mut cache = BITS_CACHE.lock().unwrap();
+        cache.put(s, result.clone());
+    }
+    Ok(result)
+}
+
+pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
+    // Is it a string?
+    if let Ok(any_string) = any.extract::<String>() {
+        let bv = str_to_bv(any_string)?;
+        return Ok(bv);
+    }
+
+    // Is it a bytes, bytearray or memoryview?
+    if any.is_instance_of::<PyBytes>()
+        || any.is_instance_of::<PyByteArray>()
+        || any.is_instance_of::<PyMemoryView>()
+    {
+        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
+            return Ok(BV::from_vec(any_bytes));
+        }
+    }
+
+    // Is it an iterable that we can convert each element to a bool?
+    if let Ok(iter) = any.try_iter() {
+        let mut bv = BV::new();
+        for item in iter {
+            bv.push(item?.is_truthy()?);
+        }
+        return Ok(bv);
+    }
+    let type_name = match any.get_type().name() {
+        Ok(name) => name.to_string(),
+        Err(_) => "<unknown>".to_string(),
+    };
+    let mut err = format!("Cannot promote object of type {type_name} to a Mutibs object. ");
+    if any.is_instance_of::<PyInt>() {
+        err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
+    };
+    Err(PyTypeError::new_err(err))
+}

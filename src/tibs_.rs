@@ -2,64 +2,18 @@ use crate::core::BitCollection;
 use crate::helpers::{
     bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
     bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
-    validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+    promote_to_bv, str_to_bv, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
-use crate::mutibs::{str_to_bv, Mutibs};
+use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
+use pyo3::types::{PyBool, PyFloat, PySlice, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
-
-fn promote_to_tibs(any: &Bound<'_, PyAny>) -> PyResult<Tibs> {
-    // Is it of type Tibs?
-    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(tibs_ref.clone());
-    }
-
-    // Is it of type Mutibs? Try an immutable borrow first.
-    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(mutibs_ref.to_tibs());
-    }
-
-    // Is it a string?
-    if let Ok(any_string) = any.extract::<String>() {
-        let bv = str_to_bv(any_string)?;
-        return Ok(Tibs::from_bv(bv));
-    }
-
-    // Is it a bytes, bytearray or memoryview?
-    if any.is_instance_of::<PyBytes>()
-        || any.is_instance_of::<PyByteArray>()
-        || any.is_instance_of::<PyMemoryView>()
-    {
-        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(Tibs::from_bv(BV::from_vec(any_bytes)));
-        }
-    }
-
-    // Is it an iterable that we can convert each element to a bool?
-    if let Ok(iter) = any.try_iter() {
-        let mut bv = BV::new();
-        for item in iter {
-            bv.push(item?.is_truthy()?);
-        }
-        return Ok(Tibs::from_bv(bv));
-    }
-    let type_name = match any.get_type().name() {
-        Ok(name) => name.to_string(),
-        Err(_) => "<unknown>".to_string(),
-    };
-    let mut err = format!("Cannot promote object of type {type_name} to a Tibs object. ");
-    if any.is_instance_of::<PyInt>() {
-        err.push_str("Perhaps you want to use 'Tibs.from_zeros()', 'Tibs.from_ones()' or 'Tibs.from_random()'?");
-    };
-    Err(PyTypeError::new_err(err))
-}
 
 // Enum allows us to wrap and use a Tibs without copying it or owning it.
 pub(crate) enum BorrowedOrOwnedTibs<'a> {
@@ -117,8 +71,9 @@ pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedO
     if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
         return Ok(BorrowedOrOwnedTibs::Owned(mutibs_ref.to_tibs()));
     }
+    let bv = promote_to_bv(any)?;
 
-    let tibs = promote_to_tibs(any)?;
+    let tibs = Tibs::from_bv(bv);
     Ok(BorrowedOrOwnedTibs::Owned(tibs))
 }
 
@@ -234,7 +189,8 @@ impl Tibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        promote_to_tibs(auto)
+        let bv = promote_to_bv(auto)?;
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Return a copy of the raw byte information.

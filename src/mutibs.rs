@@ -2,120 +2,15 @@ use crate::core::BitCollection;
 use crate::helpers::{
     bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
     bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
-    validate_index, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+    promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths, validate_shift,
+    validate_slice, BS, BV,
 };
 use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
-use lru::LruCache;
-use once_cell::sync::Lazy;
+
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
-use std::num::NonZeroUsize;
+use pyo3::types::{PyBool, PyFloat, PySlice, PyType};
 use std::ops::Not;
-use std::sync::Mutex;
-
-// Define a static LRU cache.
-const BITS_CACHE_SIZE: usize = 1024;
-static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
-    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
-
-fn string_literal_to_bv(s: &str) -> PyResult<BV> {
-    match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
-        Some("0b") => {
-            let bv = bv_from_bin(s)?;
-            Ok(bv)
-        }
-        Some("0x") => {
-            let bv = bv_from_hex(s)?;
-            Ok(bv)
-        }
-        Some("0o") => {
-            let bv = bv_from_oct(s)?;
-            Ok(bv)
-        }
-        _ => Err(PyValueError::new_err(format!(
-            "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
-        ))),
-    }
-}
-
-pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
-    // First remove whitespace
-    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    // Check if it's already in the cache
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        if let Some(cached_data) = cache.get(&s) {
-            return Ok(cached_data.clone());
-        }
-    }
-    let tokens = s.split(',');
-    let mut bv_array = Vec::<BV>::new();
-    let mut total_bit_length = 0;
-    for token in tokens {
-        if token.is_empty() {
-            continue;
-        }
-        let x = string_literal_to_bv(token)?;
-        total_bit_length += x.len();
-        bv_array.push(x);
-    }
-    if bv_array.is_empty() {
-        return Ok(BV::new());
-    }
-    // Combine all bits
-    let result = if bv_array.len() == 1 {
-        bv_array.pop().unwrap()
-    } else {
-        let mut result = BV::with_capacity(total_bit_length);
-        for bv in bv_array {
-            result.extend_from_bitslice(&bv);
-        }
-        result
-    };
-    // Update cache with new result
-    {
-        let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.clone());
-    }
-    Ok(result)
-}
-
-fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
-    // Is it a string?
-    if let Ok(any_string) = any.extract::<String>() {
-        let bv = str_to_bv(any_string)?;
-        return Ok(Mutibs::from_bv(bv));
-    }
-
-    // Is it a bytes, bytearray or memoryview?
-    if any.is_instance_of::<PyBytes>()
-        || any.is_instance_of::<PyByteArray>()
-        || any.is_instance_of::<PyMemoryView>()
-    {
-        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(Mutibs::from_bv(BV::from_vec(any_bytes)));
-        }
-    }
-
-    // Is it an iterable that we can convert each element to a bool?
-    if let Ok(iter) = any.try_iter() {
-        let mut bv = BV::new();
-        for item in iter {
-            bv.push(item?.is_truthy()?);
-        }
-        return Ok(Mutibs::from_bv(bv));
-    }
-    let type_name = match any.get_type().name() {
-        Ok(name) => name.to_string(),
-        Err(_) => "<unknown>".to_string(),
-    };
-    let mut err = format!("Cannot promote object of type {type_name} to a Mutibs object. ");
-    if any.is_instance_of::<PyInt>() {
-        err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
-    };
-    Err(PyTypeError::new_err(err))
-}
 
 ///     A mutable container of binary data.
 ///
@@ -267,7 +162,8 @@ impl Mutibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        promote_to_mutibs(auto)
+        let bv = promote_to_bv(auto)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Return True if two Mutibs have the same binary representation.
