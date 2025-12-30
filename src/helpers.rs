@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
@@ -328,5 +328,42 @@ pub(crate) fn bv_from_bytes_slice(
     let mut bv = BV::from_vec(data);
     bv.drain(..start_bit);
     bv.truncate(length);
+    Ok(bv)
+}
+
+#[inline]
+pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
+    if length <= 0 || length > 128 {
+        return Err(PyValueError::new_err(format!(
+            "Bit length for unsigned int must be between 1 and 128. Received {length}."
+        )));
+    }
+    if value >= (1u128 << length) {
+        return Err(PyOverflowError::new_err(format!(
+            "Value {value} does not fit in {length} bits."
+        )));
+    }
+    let mut bv = BV::repeat(false, length as usize);
+    bv.store_be(value);
+    Ok(bv)
+}
+
+#[inline]
+pub(crate) fn bv_from_i128(value: i128, length: i64) -> PyResult<BV> {
+    if length <= 0 || length > 128 {
+        return Err(PyValueError::new_err(format!(
+            "Bit length for signed int must be between 1 and 128. Received {length}."
+        )));
+    }
+    let min_val = -(1i128 << (length - 1));
+    let max_val = (1i128 << (length - 1)) - 1;
+    if value < min_val || value > max_val {
+        return Err(PyOverflowError::new_err(format!(
+            "Value {value} does not fit in {length} signed bits."
+        )));
+    }
+    let repeat_bit = value < 0;
+    let mut bv = BV::repeat(repeat_bit, length as usize);
+    bv.store_be(value);
     Ok(bv)
 }
