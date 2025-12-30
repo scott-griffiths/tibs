@@ -3,7 +3,7 @@ use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shif
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyIndexError, PyOverflowError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyFloat, PyInt, PyMemoryView, PySlice, PyType};
 use std::collections::hash_map::DefaultHasher;
@@ -384,7 +384,7 @@ impl Tibs {
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         let b = tibs_from_any(b)?;
-        let (start, end) = validate_slice(slf.len(), start, end).map_err(PyValueError::new_err)?;
+        let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let needle: Py<Tibs> = match b {
@@ -483,12 +483,12 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
     pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
-        BitCollection::from_u128(u, length).map_err(PyOverflowError::new_err)
+        BitCollection::from_u128(u, length)
     }
 
     /// Return the unsigned integer representation of the Tibs.
     pub fn to_u(&self) -> PyResult<u128> {
-        BitCollection::to_u128(self).map_err(PyValueError::new_err)
+        BitCollection::to_u128(self)
     }
 
     /// Create a new instance from a signed integer.
@@ -501,26 +501,26 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
     pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
-        BitCollection::from_i128(i, length).map_err(PyOverflowError::new_err)
+        BitCollection::from_i128(i, length)
     }
 
     /// Return the signed integer representation of the Tibs.
     pub fn to_i(&self) -> PyResult<i128> {
-        BitCollection::to_i128(self).map_err(PyValueError::new_err)
+        BitCollection::to_i128(self)
     }
 
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
-        let value = f.extract::<f64>().map_err(PyValueError::new_err)?;
-        BitCollection::from_f64(value, length).map_err(PyValueError::new_err)
+        let value = f.extract::<f64>()?;
+        BitCollection::from_f64(value, length)
     }
 
     /// Return the floating point representation of the Tibs.
     ///
     /// The length must be 16, 32 or 64.
     pub fn to_f(&self) -> PyResult<f64> {
-        BitCollection::to_f64(self).map_err(PyValueError::new_err)
+        BitCollection::to_f64(self)
     }
 
     /// Create a new instance from a binary string.
@@ -534,7 +534,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        let bv = bv_from_bin(s).map_err(PyValueError::new_err)?;
+        let bv = bv_from_bin(s)?;
         Ok(Tibs::from_bv(bv))
     }
 
@@ -549,14 +549,14 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        BitCollection::from_octal(s).map_err(PyValueError::new_err)
+        BitCollection::from_octal(s)
     }
 
     /// Return the octal representation of the Tibs as a string.
     ///
     /// Raises ValueError if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
-        BitCollection::to_octal(self).map_err(PyValueError::new_err)
+        BitCollection::to_octal(self)
     }
 
     /// Create a new instance from a hexadecimal string.
@@ -565,14 +565,14 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        BitCollection::from_hexadecimal(s).map_err(PyValueError::new_err)
+        BitCollection::from_hexadecimal(s)
     }
 
     /// Return the hexadecimal representation of the Tibs as a string.
     ///
     /// Raises ValueError if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
-        BitCollection::to_hexadecimal(self).map_err(PyValueError::new_err)
+        BitCollection::to_hexadecimal(self)
     }
 
     /// Create a new instance from a bytes object.
@@ -594,7 +594,7 @@ impl Tibs {
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
-        BitCollection::from_bytes_slice(data, offset, length).map_err(PyValueError::new_err)
+        BitCollection::from_bytes_slice(data, offset, length)
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -686,7 +686,7 @@ impl Tibs {
     ///
     /// Raises ValueError if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self).map_err(PyValueError::new_err)
+        BitCollection::to_byte_data(self)
     }
 
     /// Find first occurrence of a bit sequence.
@@ -716,7 +716,7 @@ impl Tibs {
         if b.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
-        let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
+        let (start, end) = validate_slice(self.len(), start, end)?;
 
         Ok(find_bitvec(self.as_bitslice(), b.as_bitslice(), start, end, byte_aligned))
     }
@@ -756,7 +756,7 @@ impl Tibs {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
 
-        let (start, end) = validate_slice(self.len(), start, end).map_err(PyValueError::new_err)?;
+        let (start, end) = validate_slice(self.len(), start, end)?;
         if b.len() + start > end {
             return Ok(None);
         }
@@ -873,7 +873,7 @@ impl Tibs {
         let py = key.py();
         // Handle integer indexing
         if let Ok(index) = key.extract::<i64>() {
-            let value: bool = self.get_index(index).map_err(PyIndexError::new_err)?;
+            let value: bool = self.get_index(index)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }
@@ -892,8 +892,7 @@ impl Tibs {
                     Tibs::empty()
                 }
             } else {
-                self.get_slice_with_step(start, stop, step)
-                    .map_err(PyIndexError::new_err)?
+                self.get_slice_with_step(start, stop, step)?
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
@@ -907,7 +906,7 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
+        let shift = validate_shift(self, n)?;
         Ok(self.lshift(shift))
     }
 
@@ -916,7 +915,7 @@ impl Tibs {
     /// n -- the number of bits to shift. Must be >= 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
-        let shift = validate_shift(self, n).map_err(PyValueError::new_err)?;
+        let shift = validate_shift(self, n)?;
         Ok(self.rshift(shift))
     }
 
@@ -945,7 +944,7 @@ impl Tibs {
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
+        validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_and(self, &other))
     }
 
@@ -956,7 +955,7 @@ impl Tibs {
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
+        validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_or(self, &other))
     }
 
@@ -966,7 +965,7 @@ impl Tibs {
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len()).map_err(PyValueError::new_err)?;
+        validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_xor(self, &other))
     }
 

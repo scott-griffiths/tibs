@@ -4,6 +4,8 @@ use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
 use std::fmt;
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
+use pyo3::PyResult;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized {
@@ -134,32 +136,32 @@ pub(crate) trait BitCollection: Sized {
         data: Vec<u8>,
         offset: Option<i64>,
         length: Option<i64>,
-    ) -> Result<Self, String> {
+    ) -> PyResult<Self> {
         if length.is_none() && offset.is_none() {
             return Ok(Self::from_bv(BV::from_vec(data)));
         }
         let start_bit = offset.unwrap_or(0);
         if start_bit < 0 {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Cannot create using a negative offset of {start_bit}."
-            ));
+            )));
         }
         let start_bit = start_bit as usize;
         let data_length = data.len() * 8;
         if start_bit > data_length {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Offset of {start_bit} is greater than the data length ({data_length} bits)."
-            ));
+            )));
         }
         let length = length.unwrap_or(data_length as i64 - start_bit as i64);
         if length < 0 {
-            return Err(format!("Negative length of {length} bits provided."));
+            return Err(PyValueError::new_err(format!("Negative length of {length} bits provided.")));
         }
         let length = length as usize;
         if start_bit + length > data_length {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
-            ));
+            )));
         }
         let mut bv = BV::from_vec(data);
         bv.drain(..start_bit);
@@ -216,14 +218,14 @@ pub(crate) trait BitCollection: Sized {
 
     /// Returns the bool value at a given bit index.
     #[inline]
-    fn get_index(&self, bit_index: i64) -> Result<bool, String> {
+    fn get_index(&self, bit_index: i64) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len())?;
         Ok(self.as_bitslice()[index])
     }
 
-    fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> Result<Self, String> {
+    fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
         if step == 0 {
-            return Err("Slice step cannot be zero.".to_string());
+            return Err(PyValueError::new_err("Slice step cannot be zero.".to_string()));
         }
         // Note that a start_bit or end_bit of -1 means to stop at the beginning when using a negative step.
         // Otherwise they should both be positive indices.
@@ -231,14 +233,14 @@ pub(crate) trait BitCollection: Sized {
         debug_assert!(end_bit >= -1);
         debug_assert!(step != 0);
         if start_bit < -1 || end_bit < -1 {
-            return Err("Indices less than -1 are not valid values.".to_string());
+            return Err(PyValueError::new_err("Indices less than -1 are not valid values.".to_string()));
         }
         if step > 0 {
             if start_bit >= end_bit {
                 return Ok(BitCollection::empty());
             }
             if end_bit as usize > self.len() {
-                return Err("Slice end goes past the end of the container.".to_string());
+                return Err(PyValueError::new_err("Slice end goes past the end of the container.".to_string()));
             }
             // TODO: This alternate method might be faster
             // Ok(Self::new(
@@ -255,7 +257,7 @@ pub(crate) trait BitCollection: Sized {
                 return Ok(BitCollection::empty());
             }
             if start_bit as usize > self.len() {
-                return Err("Slice start bit is past the end of the container.".to_string());
+                return Err(PyValueError::new_err("Slice start bit is past the end of the container.".to_string()));
             }
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
@@ -337,7 +339,7 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_octal(octal_string: &str) -> Result<Self, String> {
+    fn from_octal(octal_string: &str) -> PyResult<Self> {
         // Ignore any leading '0o' or '0O'
         let s = octal_string
             .strip_prefix("0o")
@@ -357,9 +359,9 @@ pub(crate) trait BitCollection: Sized {
                 '_' => continue,
                 c if c.is_whitespace() => continue,
                 _ => {
-                    return Err(format!(
+                    return Err(PyValueError::new_err(format!(
                         "Cannot convert from oct '{octal_string}': Invalid character '{c}'."
-                    ));
+                    )));
                 }
             }
         }
@@ -368,7 +370,7 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_hexadecimal(hex: &str) -> Result<Self, String> {
+    fn from_hexadecimal(hex: &str) -> PyResult<Self> {
         // Ignore any leading '0x' or '0X'
         let mut new_hex = hex
             .strip_prefix("0x")
@@ -383,21 +385,21 @@ pub(crate) trait BitCollection: Sized {
         }
         let data = match hex::decode(&new_hex) {
             Ok(d) => d,
-            Err(e) => return Err(format!("Cannot convert from hex '{hex}': {}", e)),
+            Err(e) => return Err(PyValueError::new_err(format!("Cannot convert from hex '{hex}': {}", e))),
         };
         let t = <Self as BitCollection>::from_bytes_slice(data, None, Some(new_hex_length * 4))?;
         Ok(t)
     }
 
     #[inline]
-    fn from_u128(value: u128, length: i64) -> Result<Self, String> {
+    fn from_u128(value: u128, length: i64) -> PyResult<Self> {
         if length <= 0 || length > 128 {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Bit length for unsigned int must be between 1 and 128. Received {length}."
-            ));
+            )));
         }
         if value >= (1u128 << length) {
-            return Err(format!("Value {value} does not fit in {length} bits."));
+            return Err(PyOverflowError::new_err(format!("Value {value} does not fit in {length} bits.")));
         }
         let mut bv = BV::repeat(false, length as usize);
         bv.store_be(value);
@@ -405,18 +407,18 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn from_i128(value: i128, length: i64) -> Result<Self, String> {
+    fn from_i128(value: i128, length: i64) -> PyResult<Self> {
         if length <= 0 || length > 128 {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Bit length for signed int must be between 1 and 128. Received {length}."
-            ));
+            )));
         }
         let min_val = -(1i128 << (length - 1));
         let max_val = (1i128 << (length - 1)) - 1;
         if value < min_val || value > max_val {
-            return Err(format!(
+            return Err(PyOverflowError::new_err(format!(
                 "Value {value} does not fit in {length} signed bits."
-            ));
+            )));
         }
         let repeat_bit = value < 0;
         let mut bv = BV::repeat(repeat_bit, length as usize);
@@ -424,7 +426,7 @@ pub(crate) trait BitCollection: Sized {
         Ok(Self::from_bv(bv))
     }
 
-    fn from_f64(value: f64, length: i64) -> Result<Self, String> {
+    fn from_f64(value: f64, length: i64) -> PyResult<Self> {
         let bv = match length {
             64 => {
                 let mut bv = BV::repeat(false, 64);
@@ -444,9 +446,9 @@ pub(crate) trait BitCollection: Sized {
                 bv
             }
             _ => {
-                return Err(format!(
+                return Err(PyValueError::new_err(format!(
                     "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
-                ));
+                )));
             }
         };
         Ok(Self::from_bv(bv))
@@ -462,25 +464,25 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn to_octal(&self) -> Result<String, String> {
+    fn to_octal(&self) -> PyResult<String> {
         let len = self.len();
         if !len.is_multiple_of(3) {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Cannot interpret as octal - length of {} is not a multiple of 3 bits.",
                 len
-            ));
+            )));
         }
         Ok(self.build_oct_string())
     }
 
     #[inline]
-    fn to_hexadecimal(&self) -> Result<String, String> {
+    fn to_hexadecimal(&self) -> PyResult<String> {
         let len = self.len();
         if !len.is_multiple_of(4) {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Cannot interpret as hex - length of {} is not a multiple of 4 bits.",
                 len
-            ));
+            )));
         }
         Ok(self.build_hex_string())
     }
@@ -510,15 +512,15 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn to_byte_data(&self) -> Result<Vec<u8>, String> {
+    fn to_byte_data(&self) -> PyResult<Vec<u8>> {
         if self.is_empty() {
             return Ok(Vec::new());
         }
         let len_bits = self.len();
         if !len_bits.is_multiple_of(8) {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
-            ));
+            )));
         }
         match self.as_bitslice().domain() {
             // Fast path: element-aligned and length is a multiple of 8
@@ -542,12 +544,12 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn to_u128(&self) -> Result<u128, String> {
+    fn to_u128(&self) -> PyResult<u128> {
         let length = self.len();
         if length > 128 {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
-            ));
+            )));
         }
         let mut padded_bv = BV::new();
         let padding = 128 - length;
@@ -557,12 +559,12 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn to_i128(&self) -> Result<i128, String> {
+    fn to_i128(&self) -> PyResult<i128> {
         let length = self.len();
         if length > 128 {
-            return Err(format!(
+            return Err(PyValueError::new_err(format!(
                 "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
-            ));
+            )));
         }
         let mut padded_bv = BV::new();
         let padding = 128 - length;
@@ -572,7 +574,7 @@ pub(crate) trait BitCollection: Sized {
         Ok(padded_bv.load_be::<i128>())
     }
 
-    fn to_f64(&self) -> Result<f64, String> {
+    fn to_f64(&self) -> PyResult<f64> {
         let length = self.len();
         match length {
             64 => {
@@ -587,9 +589,9 @@ pub(crate) trait BitCollection: Sized {
                 let bits = self.as_bitslice().load_be::<u16>();
                 Ok(f16::from_bits(bits).to_f64())
             }
-            _ => Err(format!(
+            _ => Err(PyValueError::new_err(format!(
                 "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
-            )),
+            ))),
         }
     }
 
@@ -609,12 +611,12 @@ pub(crate) trait BitCollection: Sized {
     }
 
     #[inline]
-    fn get_slice(&self, start_bit: usize, length: usize) -> Result<Self, String> {
+    fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         if length == 0 {
             return Ok(BitCollection::empty());
         }
         if start_bit + length > self.len() {
-            return Err("End bit of the slice goes past the end of the container.".to_string());
+            return Err(PyIndexError::new_err("End bit of the slice goes past the end of the container.".to_string()));
         }
         Ok(self.get_slice_unchecked(start_bit, length))
     }
