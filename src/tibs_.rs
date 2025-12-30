@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
+use crate::helpers::{BV, find_bitvec, validate_logical_op_lengths, validate_shift, validate_slice, BS, bv_from_bytes_slice, bv_from_zeros, bv_from_ones, bv_from_bin, bv_from_oct};
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::{Mutibs, str_to_mutibs};
 use bitvec::prelude::*;
@@ -595,7 +595,8 @@ impl Tibs {
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
-        BitCollection::from_bytes_slice(data, offset, length)
+        let bv = bv_from_bytes_slice(data, offset, length)?;
+        Ok(Self::from_bv(bv))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.

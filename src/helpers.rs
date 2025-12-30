@@ -260,3 +260,40 @@ pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
     bv.set_uninitialized(false);
     Ok(bv)
 }
+
+pub(crate) fn bv_from_bytes_slice(
+    data: Vec<u8>,
+    offset: Option<i64>,
+    length: Option<i64>,
+) -> PyResult<BV> {
+    if length.is_none() && offset.is_none() {
+        return Ok(BV::from_vec(data));
+    }
+    let start_bit = offset.unwrap_or(0);
+    if start_bit < 0 {
+        return Err(PyValueError::new_err(format!(
+            "Cannot create using a negative offset of {start_bit}."
+        )));
+    }
+    let start_bit = start_bit as usize;
+    let data_length = data.len() * 8;
+    if start_bit > data_length {
+        return Err(PyValueError::new_err(format!(
+            "Offset of {start_bit} is greater than the data length ({data_length} bits)."
+        )));
+    }
+    let length = length.unwrap_or(data_length as i64 - start_bit as i64);
+    if length < 0 {
+        return Err(PyValueError::new_err(format!("Negative length of {length} bits provided.")));
+    }
+    let length = length as usize;
+    if start_bit + length > data_length {
+        return Err(PyValueError::new_err(format!(
+            "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
+        )));
+    }
+    let mut bv = BV::from_vec(data);
+    bv.drain(..start_bit);
+    bv.truncate(length);
+    Ok(bv)
+}
