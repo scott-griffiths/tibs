@@ -1,5 +1,6 @@
 use crate::core::BitCollection;
 use bitvec::prelude::*;
+use half::f16;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
@@ -365,5 +366,33 @@ pub(crate) fn bv_from_i128(value: i128, length: i64) -> PyResult<BV> {
     let repeat_bit = value < 0;
     let mut bv = BV::repeat(repeat_bit, length as usize);
     bv.store_be(value);
+    Ok(bv)
+}
+
+pub(crate) fn bv_from_f64(value: f64, length: i64) -> PyResult<BV> {
+    let bv = match length {
+        64 => {
+            let mut bv = BV::repeat(false, 64);
+            bv.store_be(value.to_bits());
+            bv
+        }
+        32 => {
+            let value_f32 = value as f32;
+            let mut bv = BV::repeat(false, 32);
+            bv.store_be(value_f32.to_bits());
+            bv
+        }
+        16 => {
+            let value_f16 = f16::from_f64(value);
+            let mut bv = BV::repeat(false, 16);
+            bv.store_be(value_f16.to_bits());
+            bv
+        }
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
+            )));
+        }
+    };
     Ok(bv)
 }

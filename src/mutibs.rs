@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bytes_slice, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones,
-    bv_from_u128, bv_from_zeros, find_bitvec, validate_index, validate_logical_op_lengths,
-    validate_shift, validate_slice, BS, BV,
+    bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
+    bv_from_ones, bv_from_u128, bv_from_zeros, find_bitvec, validate_index,
+    validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
 };
 use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
 use lru::LruCache;
@@ -493,7 +493,8 @@ impl Mutibs {
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
         let value = f.extract::<f64>()?;
-        BitCollection::from_f64(value, length)
+        let bv = bv_from_f64(value, length)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Return the floating point representation of the Mutibs.
