@@ -19,19 +19,19 @@ const BITS_CACHE_SIZE: usize = 1024;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
-fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
+fn string_literal_to_bv(s: &str) -> PyResult<BV> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
         Some("0b") => {
             let bv = bv_from_bin(s)?;
-            Ok(Mutibs::from_bv(bv))
+            Ok(bv)
         }
         Some("0x") => {
             let bv = bv_from_hex(s)?;
-            Ok(Mutibs::from_bv(bv))
+            Ok(bv)
         }
         Some("0o") => {
             let bv = bv_from_oct(s)?;
-            Ok(Mutibs::from_bv(bv))
+            Ok(bv)
         }
         _ => Err(PyValueError::new_err(format!(
             "Can't parse token '{s}'. Did you mean to prefix with '0x', '0b' or '0o'?"
@@ -39,44 +39,44 @@ fn string_literal_to_mutibs(s: &str) -> PyResult<Mutibs> {
     }
 }
 
-pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
+pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     // First remove whitespace
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     // Check if it's already in the cache
     {
         let mut cache = BITS_CACHE.lock().unwrap();
         if let Some(cached_data) = cache.get(&s) {
-            return Ok(Mutibs::from_bv(cached_data.clone()));
+            return Ok(cached_data.clone());
         }
     }
     let tokens = s.split(',');
-    let mut bits_array = Vec::<Mutibs>::new();
+    let mut bv_array = Vec::<BV>::new();
     let mut total_bit_length = 0;
     for token in tokens {
         if token.is_empty() {
             continue;
         }
-        let x = string_literal_to_mutibs(token)?;
+        let x = string_literal_to_bv(token)?;
         total_bit_length += x.len();
-        bits_array.push(x);
+        bv_array.push(x);
     }
-    if bits_array.is_empty() {
-        return Ok(BitCollection::empty());
+    if bv_array.is_empty() {
+        return Ok(BV::new());
     }
     // Combine all bits
-    let result = if bits_array.len() == 1 {
-        bits_array.pop().unwrap()
+    let result = if bv_array.len() == 1 {
+        bv_array.pop().unwrap()
     } else {
         let mut result = BV::with_capacity(total_bit_length);
-        for bits in bits_array {
-            result.extend_from_bitslice(bits.as_bitvec_ref());
+        for bv in bv_array {
+            result.extend_from_bitslice(&bv);
         }
-        Mutibs::from_bv(result)
+        result
     };
     // Update cache with new result
     {
         let mut cache = BITS_CACHE.lock().unwrap();
-        cache.put(s, result.as_bitvec_ref().clone());
+        cache.put(s, result.clone());
     }
     Ok(result)
 }
@@ -84,8 +84,8 @@ pub(crate) fn str_to_mutibs(s: String) -> PyResult<Mutibs> {
 fn promote_to_mutibs(any: &Bound<'_, PyAny>) -> PyResult<Mutibs> {
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
-        let bits = str_to_mutibs(any_string)?;
-        return Ok(bits);
+        let bv = str_to_bv(any_string)?;
+        return Ok(Mutibs::from_bv(bv));
     }
 
     // Is it a bytes, bytearray or memoryview?
@@ -326,7 +326,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        str_to_mutibs(s)
+        let bv = str_to_bv(s)?;
+        Ok(Mutibs::from_bv(bv))
     }
 
     /// Create a new instance from a binary string.
