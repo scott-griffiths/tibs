@@ -1,7 +1,6 @@
 use crate::core::BitCollection;
 use crate::helpers;
 use crate::tibs_::Tibs;
-use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -22,7 +21,7 @@ impl BoolIterator {
             let bits = self.bits.borrow(py);
             let result = bits.get_index(self.index as i64);
             self.index += 1;
-            result.map_err(PyIndexError::new_err).map(Some)
+            result.map(Some)
         } else {
             Ok(None)
         }

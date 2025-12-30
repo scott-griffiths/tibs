@@ -68,9 +68,9 @@ def test_from_u():
 
 
 def test_from_u_errors():
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         _ = Tibs.from_u(0, -1)
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         _ = Tibs.from_u(0, 0)
     with pytest.raises(OverflowError):
         _ = Tibs.from_u(-1, 5)
@@ -91,11 +91,11 @@ def test_from_i_errors():
 
 
 def test_from_large_ints():
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         _ = Tibs.from_i(-1, 1000)
     a = Tibs.from_i(-1, 128)
     assert a.all()
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         _ = Mutibs.from_i(-1, 1000)
     b = Mutibs.from_u(0, 128)
     assert not b.any()

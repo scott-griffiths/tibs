@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use bitvec::prelude::*;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
@@ -9,11 +9,11 @@ use sha2::{Digest, Sha256};
 pub type BV = BitVec<u8, Msb0>;
 pub type BS = BitSlice<u8, Msb0>;
 
-pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> Result<(), String> {
+pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {
-        Err(format!(
+        Err(PyValueError::new_err(format!(
             "For logical operations the lengths of both objects must match. Received lengths of {a} and {b} bits."
-        ))
+        )))
     } else {
         Ok(())
     }
@@ -97,26 +97,26 @@ fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
     None
 }
 
-pub(crate) fn validate_index(index: i64, length: usize) -> Result<usize, String> {
+pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
     let index_p = if index < 0 {
         length as i64 + index
     } else {
         index
     };
     if index_p >= length as i64 || index_p < 0 {
-        return Err(format!(
+        return Err(PyIndexError::new_err(format!(
             "Index of {index} is out of range for length of {length}"
-        ));
+        )));
     }
     Ok(index_p as usize)
 }
 
-pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> Result<usize, String> {
+pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {
     if s.is_empty() {
-        return Err("Cannot use a bit shift on an empty container.".to_string());
+        return Err(PyValueError::new_err("Cannot use a bit shift on an empty container."));
     }
     if n < 0 {
-        return Err("Cannot bit shift by a negative amount.".to_string());
+        return Err(PyValueError::new_err("Cannot bit shift by a negative amount."));
     }
     Ok(n as usize)
 }
@@ -126,7 +126,7 @@ pub(crate) fn validate_slice(
     length: usize,
     start: Option<i64>,
     end: Option<i64>,
-) -> Result<(usize, usize), String> {
+) -> PyResult<(usize, usize)> {
     let mut start = start.unwrap_or(0);
     let mut end = end.unwrap_or(length as i64);
     if start < 0 {
@@ -137,9 +137,9 @@ pub(crate) fn validate_slice(
     }
 
     if !(0 <= start && start <= end && end <= length as i64) {
-        return Err(format!(
+        return Err(PyValueError::new_err(format!(
             "Invalid slice positions for length of {length}: start={start}, end={end}."
-        ));
+        )));
     }
     Ok((start as usize, end as usize))
 }
@@ -206,7 +206,7 @@ pub(crate) fn bv_from_ones(length: usize) -> BV {
 }
 
 #[inline]
-pub(crate) fn bv_from_bin(binary_string: &str) -> Result<BV, String> {
+pub(crate) fn bv_from_bin(binary_string: &str) -> PyResult<BV> {
     // Ignore any leading '0b' or '0B'
     let s = binary_string
         .strip_prefix("0b")
@@ -220,9 +220,9 @@ pub(crate) fn bv_from_bin(binary_string: &str) -> Result<BV, String> {
             '_' => continue,
             c if c.is_whitespace() => continue,
             _ => {
-                return Err(format!(
+                return Err(PyValueError::new_err(format!(
                     "Cannot convert from bin '{binary_string}: Invalid character '{c}'."
-                ));
+                )));
             }
         }
     }
