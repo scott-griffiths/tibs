@@ -177,7 +177,6 @@ pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
     }
 }
 
-// TODO: Similar helper methods for from_joined, from_bools etc.
 pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
     if length < 0 {
         return Err(PyValueError::new_err(format!(
@@ -336,10 +335,8 @@ pub(crate) fn bv_from_bytes_slice(
             "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
         )));
     }
-    let mut bv = BV::from_vec(data);
-    bv.drain(..start_bit);
-    bv.truncate(length);
-    Ok(bv)
+    let bs = BS::from_slice(&data);
+    Ok(bs[start_bit..start_bit + length].to_bitvec())
 }
 
 #[inline]
