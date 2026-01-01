@@ -123,11 +123,10 @@ impl ChunksIterator {
         };
         let end = start + take;
 
-        // Borrow only long enough to copy out the bits slice
+        // Create a cheap slice without copying the underlying data.
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
-            let slice = &bits.as_bitslice()[start..end];
-            Tibs::from_bv(slice.to_bitvec())
+            bits.from_slice_unchecked(start, take)
         };
 
         slf.current_pos = end;
