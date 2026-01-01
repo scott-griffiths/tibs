@@ -60,7 +60,7 @@ def test_bitops_bitarray():
 def test_construction_bitarray():
     b = bitarray()
     x = bitarray('10101')
-    for _ in range(1000000):
+    for _ in range(1_000_000):
         b.extend(x)
     assert len(b) == 5 * 1000000
 
@@ -121,10 +121,12 @@ def test_reverse_find_bitarray():
     l = len(list(b.search(pattern, right=True)))
     assert l == 8
 
+
 def test_reverse_find_tibs():
     t = Tibs.from_bytes(some_bytes)
     l = len(list(t.find_all('0xdeade')))
     assert l == 8
+
 
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):

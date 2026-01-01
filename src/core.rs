@@ -8,7 +8,7 @@ use pyo3::PyResult;
 use std::fmt;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
-pub(crate) trait BitCollection: Sized {
+pub(crate) trait BitCollection: Sized + Clone {
     fn from_bv(bv: BV) -> Self;
     fn to_bitvec(&self) -> BV;
     fn as_bitvec_ref(&self) -> &BV;
@@ -79,35 +79,35 @@ pub(crate) trait BitCollection: Sized {
     //     debug_assert_eq!(lhs.len(), (lhs_offset + self.len() + 7) / 8);
     //     debug_assert_eq!(rhs.len(), (rhs_offset + other.len() + 7) / 8);
     //
-    //     let (lhs_byte_data, rhs_byte_data, new_offset) =
-    //         match lhs_offset.cmp(&rhs_offset) {
-    //             Ordering::Equal => {
-    //                 (lhs, rhs, lhs_offset)
-    //             },
-    //             Ordering::Less => {
-    //                 // Shift rhs to the left
-    //                 let mut bv = BV::from_vec(rhs);
-    //                 bv.shift_left(rhs_offset - lhs_offset);
-    //                 bv.set_uninitialized(false);
-    //                 (lhs, bv.into_vec(), lhs_offset)
-    //             },
-    //             Ordering::Greater => {
-    //                 let mut bv = BV::from_vec(lhs);
-    //                 bv.shift_left(lhs_offset - rhs_offset);
-    //                 bv.set_uninitialized(false);
-    //                 (bv.into_vec(), rhs, rhs_offset)
-    //             }
-    //         };
+    //     let (lhs_byte_data, rhs_byte_data, new_offset) = match lhs_offset.cmp(&rhs_offset) {
+    //         Ordering::Equal => (lhs, rhs, lhs_offset),
+    //         Ordering::Less => {
+    //             // Shift rhs to the left
+    //             let mut bv = BV::from_vec(rhs);
+    //             bv.shift_left(rhs_offset - lhs_offset);
+    //             bv.set_uninitialized(false);
+    //             (lhs, bv.into_vec(), lhs_offset)
+    //         }
+    //         Ordering::Greater => {
+    //             let mut bv = BV::from_vec(lhs);
+    //             bv.shift_left(lhs_offset - rhs_offset);
+    //             bv.set_uninitialized(false);
+    //             (bv.into_vec(), rhs, rhs_offset)
+    //         }
+    //     };
     //
-    //     let data: Vec<u8> = lhs_byte_data.iter().zip(rhs_byte_data.iter()).map(|(&a, &b)| a & b).collect();
+    //     let data: Vec<u8> = lhs_byte_data
+    //         .iter()
+    //         .zip(rhs_byte_data.iter())
+    //         .map(|(&a, &b)| a & b)
+    //         .collect();
     //     debug_assert!(new_offset < 8);
     //     let data_length = data.len();
     //     debug_assert_eq!((self.len() + new_offset + 7) / 8, data.len());
     //     debug_assert!(data_length * 8 >= self.len());
     //     let bv = BV::from_vec(data);
     //     debug_assert!(bv.len() == data_length * 8);
-    //     Self::new(bv).get_slice_unchecked(new_offset, self.len())
-    //
+    //     Self::from_bv(bv).get_slice_unchecked(new_offset, self.len())
     // }
 
     #[inline]
@@ -284,7 +284,7 @@ pub(crate) trait BitCollection: Sized {
 
     fn lshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::from_bv(self.to_bitvec());
+            return self.clone();
         }
         let len = self.len();
         if n >= len {
@@ -298,7 +298,7 @@ pub(crate) trait BitCollection: Sized {
 
     fn rshift(&self, n: usize) -> Self {
         if n == 0 {
-            return Self::from_bv(self.to_bitvec());
+            return self.clone();
         }
         let len = self.len();
         if n >= len {

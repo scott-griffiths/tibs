@@ -61,6 +61,15 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
     }
 }
 
+impl<'a> Clone for BorrowedOrOwnedTibs<'a> {
+    fn clone(&self) -> Self {
+        match self {
+            BorrowedOrOwnedTibs::Borrowed(t) => BorrowedOrOwnedTibs::Owned((**t).clone()),
+            BorrowedOrOwnedTibs::Owned(t) => BorrowedOrOwnedTibs::Owned(t.clone()),
+        }
+    }
+}
+
 pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedOrOwnedTibs<'a>> {
     // Is it of type Tibs?
     if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
