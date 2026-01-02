@@ -128,6 +128,27 @@ def test_reverse_find_tibs():
     assert l == 8
 
 
+def test_chunks_bitarray():
+    b = bitarray()
+    b.frombytes(some_bytes)
+    f = bitarray('11111')
+    count = 0
+    for i in range(0, len(b), 5):
+        if b[i: i + 5] == f:
+            count += 1
+    print(count)
+
+
+def test_chunks_tibs():
+    t = Tibs.from_bytes(some_bytes)
+    f = Tibs('0b11111')
+    count = 0
+    for chunk in t.chunks(5):
+        if chunk == f:
+            count += 1
+    print(count)
+
+
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):
         self.name = name
@@ -174,6 +195,7 @@ def main():
         FunctionPairs("Find all", test_findall_bitarray, test_findall_tibs),
         FunctionPairs("Find all reversed", test_reverse_find_bitarray, test_reverse_find_tibs),
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
+        FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),
     ]
     ts = TestSuite(fn_pairs)
     ts.run()
