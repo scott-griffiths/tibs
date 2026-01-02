@@ -1269,6 +1269,22 @@ impl Mutibs {
         Ok(())
     }
 
+    /// Append a single bit to the current Mutibs in-place.
+    ///
+    /// :param bit: Either `True` or `False` to append.
+    /// :return: self
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Mutibs()
+    ///     >>> a.append(True)
+    ///     Mutibs('0b1')
+    ///
+    pub fn append<'a>(mut slf: PyRefMut<'a, Self>, bs: bool) -> PyResult<PyRefMut<'a, Self>> {
+        slf.as_mut_bitvec_ref().push(bs);
+        Ok(slf)
+    }
+
     /// Extend the current Mutibs in-place.
     ///
     /// :param bs: The bits to extend with.

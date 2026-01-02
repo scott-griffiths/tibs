@@ -1186,3 +1186,22 @@ def test_partial_update():
     except IndexError:
         pass
     assert a == '0b1111111111'
+
+
+def test_append():
+    a = Mutibs()
+    a.append(True)
+    a.append(False)
+    a.append(True)
+    a.append(False)
+    assert a == '0b1010'
+    with pytest.raises(TypeError):
+        a.append(0)
+    with pytest.raises(TypeError):
+        a.append(0.5)
+    with pytest.raises(TypeError):
+        a.append("1")
+    with pytest.raises(TypeError):
+        a.append(2)
+    with pytest.raises(TypeError):
+        a.append(-1)
