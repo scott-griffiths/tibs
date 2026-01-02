@@ -1265,28 +1265,28 @@ impl Mutibs {
 
     /// Concatenate in-place.
     pub fn __iadd__(slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        Self::append(slf, bs)?;
+        Self::extend(slf, bs)?;
         Ok(())
     }
 
-    /// Append bits to the end of the current Mutibs in-place.
+    /// Extend the current Mutibs in-place.
     ///
-    /// :param bs: The bits to append.
+    /// :param bs: The bits to extend with.
     /// :return: self
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x0f')
-    ///     >>> a.append('0x0a')
+    ///     >>> a.extend('0x0a')
     ///     Mutibs('0x0f0a')
     ///
-    pub fn append<'a>(
+    pub fn extend<'a>(
         mut slf: PyRefMut<'a, Self>,
         bs: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
-            // If bs is slf, clone inner bits first then append
+            // If bs is slf, clone inner bits first then extend
             let bits_clone = slf.to_bitvec();
             slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
         } else {

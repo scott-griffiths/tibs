@@ -12,28 +12,28 @@ def test_creation():
         assert isinstance(x, Mutibs)
 
 
-def test_append():
-    # Basic append functionality
+def test_extend():
+    # Basic extend functionality
     a = Mutibs('0x0f')
-    a.append('0x0a')
+    a.extend('0x0a')
     assert a == '0x0f0a'
 
     # Verify method chaining
     a = Mutibs('0x01')
-    result = a.append('0x02').append('0x03')
+    result = a.extend('0x02').extend('0x03')
     assert a == '0x010203'
     assert result is a  # Should return self
 
     # Different input types
     a = Mutibs('0b1010')
-    a.append(Tibs('0b1111'))  # Tibs object
+    a.extend(Tibs('0b1111'))  # Tibs object
     assert a == '0b10101111'
-    a.append(Tibs.from_bools([True, False, True]))
+    a.extend(Tibs.from_bools([True, False, True]))
     assert a == '0b10101111101'
 
-    # Empty append
+    # Empty extend
     a = Mutibs('0x42')
-    a.append(Tibs())
+    a.extend(Tibs())
     assert a == '0x42'
 
 
@@ -62,10 +62,10 @@ def test_prepend():
     assert a == '0x42'
 
 
-def test_append_prepend_together():
+def test_extend_prepend_together():
     # Test combining both operations
     a = Mutibs('0xAA')
-    a.append('0xBB').prepend('0xCC')
+    a.extend('0xBB').prepend('0xCC')
     assert a == '0xCCAABB'
 
 
@@ -288,10 +288,11 @@ def test_constructors():
     b.prepend(b)
     assert b == Mutibs.from_bytes(b'123123')
 
-    c.append(d)
+    c.extend(d)
     assert c == '0o47654'
-    d.append(d)
+    d.extend(d)
     assert d == '0o76547654'
+
 
 def test_invert():
     a = Mutibs('0b1110')
@@ -354,7 +355,7 @@ def test_insert_beyond_length():
     # Position beyond length
     a = Mutibs('0b1010')
     a.insert(5, '0b11')  # Position beyond length
-    assert a == '0b101011'  # Just appends - standard Python behaviour
+    assert a == '0b101011'  # Just extends - standard Python behaviour
 
 
 def test_set_single_bit_to_one():
@@ -517,12 +518,12 @@ def test_invert_empty_bits():
     assert a == ''
 
 
-
 def test_replace_basic():
     # Basic replace functionality
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b111')
     assert a == '0b111111111111'
+
 
 def test_replace_same_length():
     # Replace with same length pattern
@@ -530,11 +531,13 @@ def test_replace_same_length():
     a.replace('0b10', '0b00')
     assert a == '0b00000000'
 
+
 def test_replace_with_empty():
     # Replace with empty bits (should effectively delete)
     a = Mutibs('0b10101010')
     a.replace('0b10', '')
     assert a == ''
+
 
 def test_replace_with_count():
     # Replace only first occurrences with count parameter
@@ -542,11 +545,13 @@ def test_replace_with_count():
     a.replace('0b10', '0b00', count=2)
     assert a == '0b00001010'
 
+
 def test_replace_with_start():
     # Replace with start parameter
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', start=2)
     assert a == '0b10111111'
+
 
 def test_replace_with_end():
     # Replace with end parameter
@@ -554,17 +559,20 @@ def test_replace_with_end():
     a.replace('0b10', '0b11', end=4)
     assert a == '0b11111010'
 
+
 def test_replace_with_start_end():
     # Replace with both start and end parameters
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', start=2, end=6)
     assert a == '0b10111110'
 
+
 def test_replace_byte_aligned():
     # Replace with byte_aligned=True
     a = Mutibs('0b10101010')
     a.replace('0b1010', '0b1111', byte_aligned=True)
     assert a == '0b11111010'
+
 
 def test_replace_method_chaining():
     # Method chaining
@@ -573,11 +581,13 @@ def test_replace_method_chaining():
     assert a == '0b00000000'
     assert result is a
 
+
 def test_replace_different_types():
     # Replace with different types
     a = Mutibs('0b10101010')
     a.replace(Tibs('0b10'), Mutibs('0b11'))
     assert a == '0b11111111'
+
 
 def test_replace_empty_pattern():
     # Empty pattern (should raise error)
@@ -585,17 +595,20 @@ def test_replace_empty_pattern():
         a = Mutibs('0b1010')
         a.replace('', '0b11')
 
+
 def test_replace_pattern_not_found():
     # Pattern not found
     a = Mutibs('0b1010')
     a.replace('0b11', '0b00')
     assert a == '0b1010'  # Should remain unchanged
 
+
 def test_replace_with_count_zero():
     # Count=0 (should not replace anything)
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', count=0)
     assert a == '0b10101010'
+
 
 def test_reverse_basic():
     # Basic reverse functionality
@@ -1009,7 +1022,7 @@ def test_interleaved_operations():
 
     # Chain multiple operations
     a = Mutibs('0b101')
-    result = a.append('0b010').invert().reverse()
+    result = a.extend('0b010').invert().reverse()
     assert result == a  # Verify chaining returns self
     assert a == '0b101010'  # 101 + 010 -> 101010 -> 010101 (invert) -> 010010 (reverse)
 
