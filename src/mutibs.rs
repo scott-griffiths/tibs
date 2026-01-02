@@ -9,7 +9,7 @@ use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
 
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyFloat, PySlice, PyType};
+use pyo3::types::{PyBool, PySlice, PyType};
 use std::ops::Not;
 
 ///     A mutable container of binary data.
@@ -389,9 +389,8 @@ impl Mutibs {
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
-    pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
-        let value = f.extract::<f64>()?;
-        let bv = bv_from_f64(value, length)?;
+    pub fn from_f(_cls: &Bound<'_, PyType>, f: f64, length: i64) -> PyResult<Self> {
+        let bv = bv_from_f64(f, length)?;
         Ok(Mutibs::from_bv(bv))
     }
 

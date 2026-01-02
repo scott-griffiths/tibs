@@ -415,29 +415,6 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     Ok(bv)
 }
 
-// pub(crate) fn bv_from_joined(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
-//     // Convert each item to Tibs, store, and sum total length for a single allocation.
-//     let iter = iterable.try_iter()?;
-//     let mut parts: Vec<BV> = Vec::new();
-//     let mut total_len: usize = 0;
-//     for item in iter {
-//         let obj = item?;
-//         let bits = bv_from_any(&obj)?;
-//         total_len += bits.len();
-//         let owned_tibs = match bits {
-//             BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
-//             BorrowedOrOwnedTibs::Owned(t) => t,
-//         };
-//         parts.push(owned_tibs);
-//     }
-//
-//     // Concatenate.
-//     let mut bv = BV::with_capacity(total_len);
-//     for bits in &parts {
-//         bv.extend_from_bitslice(bits.as_bitslice());
-//     }
-// }
-
 fn string_literal_to_bv(s: &str) -> PyResult<BV> {
     match s.get(0..2).map(|p| p.to_ascii_lowercase()).as_deref() {
         Some("0b") => {

@@ -9,7 +9,7 @@ use crate::mutibs::Mutibs;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyFloat, PySlice, PyType};
+use pyo3::types::{PyBool, PySlice, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -482,9 +482,8 @@ impl Tibs {
 
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
-    pub fn from_f(_cls: &Bound<'_, PyType>, f: &Bound<'_, PyFloat>, length: i64) -> PyResult<Self> {
-        let value = f.extract::<f64>()?;
-        let bv = bv_from_f64(value, length)?;
+    pub fn from_f(_cls: &Bound<'_, PyType>, f: f64, length: i64) -> PyResult<Self> {
+        let bv = bv_from_f64(f, length)?;
         Ok(Tibs::from_bv(bv))
     }
 
@@ -628,9 +627,9 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
     pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Convert each item to Tibs, store, and sum total length for a single allocation.
+        // Convert each item to BV, store, and sum total length for a single allocation.
         let iter = iterable.try_iter()?;
-        let mut parts: Vec<Tibs> = Vec::new();
+        let mut bv_parts: Vec<BV> = Vec::new();
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
@@ -640,13 +639,13 @@ impl Tibs {
                 BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
                 BorrowedOrOwnedTibs::Owned(t) => t,
             };
-            parts.push(owned_tibs);
+            bv_parts.push(owned_tibs.to_bitvec());
         }
 
         // Concatenate.
         let mut bv = BV::with_capacity(total_len);
-        for bits in &parts {
-            bv.extend_from_bitslice(bits.as_bitslice());
+        for b in bv_parts {
+            bv.extend_from_bitslice(&b);
         }
         Ok(Tibs::from_bv(bv))
     }
