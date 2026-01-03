@@ -491,17 +491,17 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn as_bitvec_ref(&self) -> &BV {
-        Tibs::as_bitvec_ref(&self)
+        Tibs::as_bitvec_ref(self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        Tibs::as_bitslice(&self)
+        Tibs::as_bitslice(self)
     }
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Tibs::from_slice_unchecked(&self, start_bit, length)
+        Tibs::from_slice_unchecked(self, start_bit, length)
     }
 
     #[inline]
@@ -517,17 +517,17 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn to_bitvec(&self) -> BV {
-        Mutibs::as_bitvec_ref(&self).to_bitvec()
+        Mutibs::as_bitvec_ref(self).to_bitvec()
     }
 
     #[inline]
     fn as_bitvec_ref(&self) -> &BV {
-        Mutibs::as_bitvec_ref(&self)
+        Mutibs::as_bitvec_ref(self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        Mutibs::as_bitvec_ref(&self).as_bitslice()
+        Mutibs::as_bitvec_ref(self).as_bitslice()
     }
 
     #[inline]

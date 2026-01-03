@@ -156,7 +156,7 @@ impl Tibs {
         // return the byte data from the bitvec self._data. The data should cover just
         // enough bytes and should not realign them in any way.
         let byte_offset = self._offset / 8;
-        let final_byte = (self._offset + self._length + 7) / 8;
+        let final_byte = (self._offset + self._length).div_ceil(8);
         let full_bytes = self._data.as_raw_slice();
         full_bytes[byte_offset..final_byte].to_vec()
     }
@@ -538,7 +538,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        let bv = bv_from_hex(&s)?;
+        let bv = bv_from_hex(s)?;
         Ok(Tibs::from_bv(bv))
     }
 
