@@ -1,8 +1,9 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
-    bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
-    promote_to_bv, str_to_bv, validate_logical_op_lengths, validate_shift, validate_slice, BS, BV,
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
+    find_bitvec, promote_to_bv, str_to_bv, validate_logical_op_lengths, validate_shift,
+    validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -621,8 +622,7 @@ impl Tibs {
     ///
     /// .. code-block:: python
     ///
-    ///     a = Tibs.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
+    ///     a = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]

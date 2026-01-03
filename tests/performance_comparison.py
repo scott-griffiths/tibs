@@ -24,6 +24,9 @@ tibs_rand = Tibs.from_random(1_000_000_000)
 some_bytes = Tibs.from_random(10_000_000, seed=b'a').to_bytes()
 other_bytes = Tibs.from_random(10_000_000, seed=b'b').to_bytes()
 
+t = Tibs.from_bytes(some_bytes)
+bit_list = list(t[:10_000_000])
+
 
 def test_findall_tibs():
     t = Tibs.from_bytes(some_bytes)
@@ -59,17 +62,17 @@ def test_bitops_bitarray():
 
 def test_construction_bitarray():
     b = bitarray()
-    x = bitarray('10101')
-    for _ in range(1_000_000):
-        b.extend(x)
+    _ = [Tibs('0b10101')] * 1_000_000
+    x = [bitarray('10101')] * 1_000_000
+    for y in x:
+        b.extend(y)
     assert len(b) == 5 * 1000000
 
 
 def test_construction_tibs():
-    t = Mutibs()
-    x = Tibs('0b10101')
-    for _ in range(1000000):
-        t += x
+    _ = [bitarray('10101')] * 1_000_000
+    x = [Tibs('0b10101')] * 1_000_000
+    t = Tibs.from_joined(x)
     assert len(t) == 5 * 1000000
 
 
@@ -149,6 +152,16 @@ def test_chunks_tibs():
     print(count)
 
 
+def test_extending_bits_tibs():
+    m = Mutibs()
+    m.extend(bit_list)
+
+
+def test_extending_bits_bitarray():
+    m = bitarray()
+    m.extend(bit_list)
+
+
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):
         self.name = name
@@ -196,6 +209,7 @@ def main():
         FunctionPairs("Find all reversed", test_reverse_find_bitarray, test_reverse_find_tibs),
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
         FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),
+        FunctionPairs("Extend", test_extending_bits_bitarray, test_extending_bits_tibs),
     ]
     ts = TestSuite(fn_pairs)
     ts.run()

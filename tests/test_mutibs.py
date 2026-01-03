@@ -37,35 +37,35 @@ def test_extend():
     assert a == '0x42'
 
 
-def test_prepend():
+def test_extend_left():
     # Basic prepend functionality
     a = Mutibs('0x0f')
-    a.prepend('0x0a')
+    a.extend_left('0x0a')
     assert a == '0x0a0f'
 
     # Verify method chaining
     a = Mutibs('0x03')
-    result = a.prepend('0x02').prepend('0x01')
+    result = a.extend_left('0x02').extend_left('0x01')
     assert a == '0x010203'
     assert result is a  # Should return self
 
     # Different input types
     a = Mutibs('0b1010')
-    a.prepend(Tibs('0b1111'))  # Tibs object
+    a.extend_left(Tibs('0b1111'))  # Tibs object
     assert a == '0b11111010'
-    a.prepend(Tibs.from_bools([True, False, True]))  # Boolean list
+    a.extend_left(Tibs.from_bools([True, False, True]))  # Boolean list
     assert a == '0b10111111010'
 
     # Empty prepend
     a = Mutibs('0x42')
-    a.prepend(Tibs())
+    a.extend_left(Tibs())
     assert a == '0x42'
 
 
 def test_extend_prepend_together():
     # Test combining both operations
     a = Mutibs('0xAA')
-    a.extend('0xBB').prepend('0xCC')
+    a.extend('0xBB').extend_left('0xCC')
     assert a == '0xCCAABB'
 
 
@@ -285,7 +285,7 @@ def test_constructors():
     c = Mutibs.from_bin('100')
     d = Mutibs.from_oct('7654')
 
-    b.prepend(b)
+    b.extend_left(b)
     assert b == Mutibs.from_bytes(b'123123')
 
     c.extend(d)
@@ -1194,14 +1194,14 @@ def test_append():
     a.append(False)
     a.append(True)
     a.append(False)
-    assert a == '0b1010'
-    with pytest.raises(TypeError):
-        a.append(0)
+    a.append(0)
+    a.append(1)
+    assert a == '0b101001'
     with pytest.raises(TypeError):
         a.append(0.5)
     with pytest.raises(TypeError):
         a.append("1")
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         a.append(2)
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         a.append(-1)

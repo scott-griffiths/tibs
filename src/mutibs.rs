@@ -1,11 +1,11 @@
 use crate::core::BitCollection;
 use crate::helpers::{
-    bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128,
-    bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec,
-    promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths, validate_shift,
-    validate_slice, BS, BV,
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
+    find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
-use crate::tibs_::{tibs_from_any, BorrowedOrOwnedTibs, Tibs};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -1280,8 +1280,28 @@ impl Mutibs {
     ///     >>> a.append(True)
     ///     Mutibs('0b1')
     ///
-    pub fn append<'a>(mut slf: PyRefMut<'a, Self>, bs: bool) -> PyResult<PyRefMut<'a, Self>> {
-        slf.as_mut_bitvec_ref().push(bs);
+    pub fn append<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        bs: &Bound<'_, PyAny>,
+    ) -> PyResult<PyRefMut<'a, Self>> {
+        let bit = if let Ok(b) = bs.cast::<PyBool>() {
+            b.is_true()
+        } else if let Ok(val) = bs.extract::<i64>() {
+            match val {
+                0 => false,
+                1 => true,
+                _ => {
+                    return Err(PyValueError::new_err(
+                        "Only True, False, 0 or 1 can be appended.",
+                    ));
+                }
+            }
+        } else {
+            return Err(PyTypeError::new_err(
+                "Can only append a bool or an integer (0 or 1).",
+            ));
+        };
+        slf.as_mut_bitvec_ref().push(bit);
         Ok(slf)
     }
 
@@ -1313,18 +1333,22 @@ impl Mutibs {
         Ok(slf)
     }
 
-    ///Prepend bits to the beginning of the current Mutibs in-place.
+    /// Extend the current Mutibs in-place from the start.
     ///
-    /// :param bs: The bits to prepend.
+    /// This is broadly equivalent to `current = new + current`.
+    /// Note that this method is inherently slower than :meth:`extend` and
+    /// should be avoided in performance critical code. See also :meth:`from_joined`.
+    ///
+    /// :param bs: The bits to prepend to the current Mutibs.
     /// :return: self
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x0f')
-    ///     >>> a.prepend('0x0a')
+    ///     >>> a.extend_left('0x0a')
     ///     Mutibs('0x0a0f')
     ///
-    pub fn prepend<'a>(
+    pub fn extend_left<'a>(
         mut slf: PyRefMut<'a, Self>,
         bs: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
