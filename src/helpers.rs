@@ -194,7 +194,7 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
         return Ok(BV::new());
     }
     let seed_arr = process_seed(seed);
-    let num_bytes = (length + 7) / 8;
+    let num_bytes = length.div_ceil(8);
     let mut data = vec![0u8; num_bytes];
     if secure {
         OsRng
@@ -485,14 +485,12 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     }
 
     // Is it a bytes, bytearray or memoryview?
-    if any.is_instance_of::<PyBytes>()
+    if (any.is_instance_of::<PyBytes>()
         || any.is_instance_of::<PyByteArray>()
-        || any.is_instance_of::<PyMemoryView>()
-    {
-        if let Ok(any_bytes) = any.extract::<Vec<u8>>() {
+        || any.is_instance_of::<PyMemoryView>())
+        && let Ok(any_bytes) = any.extract::<Vec<u8>>() {
             return Ok(BV::from_vec(any_bytes));
         }
-    }
 
     // Is it an iterable that we can convert each element to a bool?
     if let Ok(iter) = any.try_iter() {

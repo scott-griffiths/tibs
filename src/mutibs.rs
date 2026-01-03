@@ -611,7 +611,7 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                slf.set_slice(start as usize, stop as usize, &bs.as_bitslice());
+                slf.set_slice(start as usize, stop as usize, bs.as_bitslice());
                 return Ok(());
             }
             if step == 0 {
@@ -1355,7 +1355,7 @@ impl Mutibs {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
             let mut new_data = slf.to_bitvec();
-            new_data.extend_from_bitslice(&slf.as_bitvec_ref());
+            new_data.extend_from_bitslice(slf.as_bitvec_ref());
             *slf.as_mut_bitvec_ref() = new_data;
         } else {
             let to_prepend = tibs_from_any(bs)?;
@@ -1364,7 +1364,7 @@ impl Mutibs {
             }
             let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
             new_data.extend_from_bitslice(to_prepend.as_bitslice());
-            new_data.extend_from_bitslice(&slf.as_bitvec_ref());
+            new_data.extend_from_bitslice(slf.as_bitvec_ref());
             *slf.as_mut_bitvec_ref() = new_data;
         }
         Ok(slf)
@@ -1401,11 +1401,10 @@ impl Mutibs {
         let mut starting_points: Vec<usize> = Vec::new();
         let mut current_pos = start;
         while current_pos < end {
-            if let Some(count) = count {
-                if starting_points.len() >= count as usize {
+            if let Some(count) = count
+                && starting_points.len() >= count as usize {
                     break;
                 }
-            }
             if let Some(found_pos) = find_bitvec(
                 slf.as_bitvec_ref(),
                 old.as_bitslice(),
