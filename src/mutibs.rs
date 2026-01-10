@@ -1271,7 +1271,7 @@ impl Mutibs {
 
     /// Append a single bit to the current Mutibs in-place.
     ///
-    /// :param bit: Either `True` or `False` to append.
+    /// :param bit: Either `0`, `1`, `True` or `False` to append.
     /// :return: self
     ///
     /// .. code-block:: pycon
@@ -1402,9 +1402,10 @@ impl Mutibs {
         let mut current_pos = start;
         while current_pos < end {
             if let Some(count) = count
-                && starting_points.len() >= count as usize {
-                    break;
-                }
+                && starting_points.len() >= count as usize
+            {
+                break;
+            }
             if let Some(found_pos) = find_bitvec(
                 slf.as_bitvec_ref(),
                 old.as_bitslice(),

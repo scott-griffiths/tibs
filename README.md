@@ -133,13 +133,13 @@ It also has several extra methods that will mutate the value in-place.
 
 ```python
 >>> m = Mutibs()
->>> m.append('0xabde')
+>>> m.extend('0xabde')
 Mutibs('0xabde')
 >>> m.replace([1], [0, 1, 0])
 Mutibs('0b01000100010001001001001000100100100100')
 ```
 
-Note that mutating methods like `append` and `replace` also return the modified `Mutibs` instance.
+Note that mutating methods like `extend` and `replace` also return the modified `Mutibs` instance.
 This perhaps isn't the most Pythonic of interfaces, but it allows methods to be chained:
 
 ```python
