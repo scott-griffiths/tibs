@@ -98,13 +98,13 @@ This can do almost everything that ``Tibs`` can do, except that it's not hashabl
 It also has several extra methods that will mutate the value in-place. ::
 
     >>> m = Mutibs()
-    >>> m.append('0xabde')
+    >>> m.extend('0xabde')
     Mutibs('0xabde')
     >>> m.replace([1], [0, 1, 0])
     Mutibs('0b01000100010001001001001000100100100100')
 
 
-Note that mutating methods like :meth:`~Mutibs.append` and :meth:`~Mutibs.replace` also return the modified ``Mutibs`` instance.
+Note that mutating methods like :meth:`~Mutibs.extend` and :meth:`~Mutibs.replace` also return the modified ``Mutibs`` instance.
 This perhaps isn't the most Pythonic of interfaces, but it allows methods to be chained::
 
     >>> m[:32].byte_swap().reverse().to_f()
