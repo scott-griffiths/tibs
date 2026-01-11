@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 hex = "~0.4"
-pyo3 = "~0.27"
+pyo3 = { version = "~0.27", features = ["extension-module", "abi3-py38"] }
 bitvec = "~1.0"
 bytemuck = "~1.24"
 lru = "~0.16"
