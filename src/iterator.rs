@@ -18,6 +18,8 @@ impl BoolIterator {
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<bool>> {
         if self.index < self.length {
+            // It's probably pretty inefficient borrowing on each iterator.
+            // It may make more sense to buffer some values in advance.
             let bits = self.bits.borrow(py);
             let result = bits.get_index(self.index as i64);
             self.index += 1;
@@ -112,24 +114,13 @@ impl ChunksIterator {
         if slf.chunks_generated >= slf.max_chunks || slf.current_pos >= slf.bits_len {
             return Ok(None);
         }
-
-        let chunk_size = slf.chunk_size;
-        let start = slf.current_pos;
-        let remaining = slf.bits_len - start;
-        let take = if remaining > chunk_size {
-            chunk_size
-        } else {
-            remaining
-        };
-        let end = start + take;
-
+        let take = std::cmp::min(slf.chunk_size, slf.bits_len - slf.current_pos);
         // Create a cheap slice without copying the underlying data.
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
-            bits.from_slice_unchecked(start, take)
+            bits.from_slice_unchecked(slf.current_pos, take)
         };
-
-        slf.current_pos = end;
+        slf.current_pos = slf.current_pos + take;
         slf.chunks_generated += 1;
 
         Ok(Some(chunk_bits))
