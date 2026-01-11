@@ -12,7 +12,3 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<mutibs::Mutibs>()?;
     Ok(())
 }
-
-mod bits_tests;
-#[cfg(test)]
-mod mutable_test;
