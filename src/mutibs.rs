@@ -1282,11 +1282,11 @@ impl Mutibs {
     ///
     pub fn append<'a>(
         mut slf: PyRefMut<'a, Self>,
-        bs: &Bound<'_, PyAny>,
+        bit: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
-        let bit = if let Ok(b) = bs.cast::<PyBool>() {
+        let bit = if let Ok(b) = bit.cast::<PyBool>() {
             b.is_true()
-        } else if let Ok(val) = bs.extract::<i64>() {
+        } else if let Ok(val) = bit.extract::<i64>() {
             match val {
                 0 => false,
                 1 => true,
