@@ -13,7 +13,7 @@ A sleek Python library for your binary data
 ----
 
 > [!NOTE]
-> This library is currently pre-alpha. This documentation is mostly reality but still part planning.
+> The project is currently in alpha. This documentation is incomplete.
 
 
 # Documentation

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tibs"
-description = "A Python bit manipulation library written in Rust."
+description = "A sleek Python library for binary data."
 dynamic = ["version"]
 readme = "README.md"
 authors = [
@@ -26,7 +26,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "License :: OSI Approved :: MIT License",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: File Formats",
     "Typing :: Typed"
 ]
 
