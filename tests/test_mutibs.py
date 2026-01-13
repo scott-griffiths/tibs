@@ -1205,3 +1205,21 @@ def test_append():
         a.append(2)
     with pytest.raises(ValueError):
         a.append(-1)
+
+
+def test_pop():
+    m = Mutibs()
+    with pytest.raises(IndexError):
+        _ = m.pop()
+    m.append(1)
+    x = m.pop()
+    assert x is True
+    assert not m
+    m.extend('0b10100')
+    assert m.pop() is False
+    assert m.pop() is False
+    assert m.pop() is True
+    assert m.pop() is False
+    assert m.pop() is True
+    with pytest.raises(IndexError):
+        _ = m.pop()

@@ -1305,6 +1305,18 @@ impl Mutibs {
         Ok(slf)
     }
 
+    /// Remove and return the final bit.
+    ///
+    /// :return: bool
+    /// :raises IndexError: if the Mutibs is empty.
+    ///
+    pub fn pop<'a>(mut slf: PyRefMut<'a, Self>) -> PyResult<bool> {
+        match slf.as_mut_bitvec_ref().pop() {
+            Some(bit) => Ok(bit),
+            None => Err(PyIndexError::new_err("pop from empty Mutibs.")),
+        }
+    }
+
     /// Extend the current Mutibs in-place.
     ///
     /// :param bs: The bits to extend with.

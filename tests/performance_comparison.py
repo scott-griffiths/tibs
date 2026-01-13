@@ -162,6 +162,18 @@ def test_extending_bits_bitarray():
     m.extend(bit_list)
 
 
+def test_pop_bitarray():
+    b = bitarray()
+    b.frombytes(some_bytes)
+    while(b):
+        _ = b.pop()
+
+def test_pop_tibs():
+    t = Mutibs.from_bytes(some_bytes)
+    while(t):
+        _ = t.pop()
+
+
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):
         self.name = name
@@ -210,6 +222,7 @@ def main():
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
         FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),
         FunctionPairs("Extend", test_extending_bits_bitarray, test_extending_bits_tibs),
+        FunctionPairs("Pop", test_pop_bitarray, test_pop_tibs),
     ]
     ts = TestSuite(fn_pairs)
     ts.run()
