@@ -15,6 +15,8 @@ A sleek Python library for your binary data
 > [!NOTE]
 > The project is currently in alpha. This documentation is incomplete.
 
+``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
+It is 100% written in Rust to give it excellent performance, and is from the same author as the [bitstring](https://github.com/scott-griffiths/bitstring) library.
 
 # Documentation
 
@@ -40,10 +42,7 @@ classes, and experiment with some of the example code in the rest of this docume
 
 ## A quick tour
 
-``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
-It is 100% written in Rust, and from the same author as the bitstring library.
-
-The two main classes are:
+There are two classes:
 
 * `Tibs`: An immutable sequence of bits.
 * `Mutibs`: A mutable sequence of bits (pronounced 'mew-tibs').
@@ -127,7 +126,7 @@ for t in [a, b, c, d, e, f, g, h]:
 
 is an anti-pattern to avoid as it will create a new instance every time it appends. Use `from_joined` instead.
 
-For the times when you do need to a mutable container use `Mutibs`.
+For the times when you do need a mutable container use `Mutibs`.
 This can do everything that `Tibs` can do, except that it's not hashable, so can't be used as a dictionary key, in sets etc.
 It also has several extra methods that will mutate the value in-place.
 
@@ -149,9 +148,9 @@ This perhaps isn't the most Pythonic of interfaces, but it allows methods to be 
 
 You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding, replacing, setting, reversing etc.
 
-
+For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
 
 ## But why is it called tibs?
 
-Because Tibs is Bits backwards (almost), it's distinctive, and the name was available on PyPI.
+Because 'tibs' is (almost) 'bits' backwards, it's distinctive, and the name was available on PyPI.
 It's got nothing to do with Ethiopian stew.
