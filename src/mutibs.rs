@@ -11,6 +11,7 @@ use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
 use std::ops::Not;
+use crate::helpers;
 
 ///     A mutable container of binary data.
 ///
@@ -955,19 +956,33 @@ impl Mutibs {
         Ok(slf)
     }
 
-    /// Count of total number of either zero or one bits.
+    /// Counts the total number of occurences of a bit pattern.
     ///
-    /// :param value: If `bool(value)` is True, bits set to 1 are counted; otherwise, bits set to 0 are counted.
-    /// :return: The count of bits set to 1 or 0.
+    /// :param value: Either something that can be converted to a ``Tibs``,
+    /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    ///
+    /// :return: The number of times the bit pattern is found.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Mutibs('0xef').count(1)
     ///     7
+    ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
+    ///     12
     ///
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
-        let count_ones = value.is_truthy()?;
-        Ok(<Mutibs as BitCollection>::count(self, count_ones))
+        match tibs_from_any(value) {
+            Ok(v) => {
+                Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
+            },
+            Err(_) => {
+                let count_ones = helpers::convert_to_bool(value);
+                match count_ones {
+                    Some(b) => Ok(<Mutibs as BitCollection>::count(self, b)),
+                    None => Err(PyValueError::new_err("Cannot convert value to a 0, 1 or a Tibs")),
+                }
+            }
+        }
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.
@@ -1284,25 +1299,15 @@ impl Mutibs {
         mut slf: PyRefMut<'a, Self>,
         bit: &Bound<'_, PyAny>,
     ) -> PyResult<PyRefMut<'a, Self>> {
-        let bit = if let Ok(b) = bit.cast::<PyBool>() {
-            b.is_true()
-        } else if let Ok(val) = bit.extract::<i64>() {
-            match val {
-                0 => false,
-                1 => true,
-                _ => {
-                    return Err(PyValueError::new_err(
-                        "Only True, False, 0 or 1 can be appended.",
-                    ));
-                }
-            }
-        } else {
-            return Err(PyTypeError::new_err(
-                "Can only append a bool or an integer (0 or 1).",
-            ));
-        };
-        slf.as_mut_bitvec_ref().push(bit);
-        Ok(slf)
+        match helpers::convert_to_bool(bit) {
+            Some(b) => {
+                slf.as_mut_bitvec_ref().push(b);
+                Ok(slf)
+            },
+            None => Err(PyTypeError::new_err(
+                "Only True, False, 0 or 1 can be appended.",
+            )),
+        }
     }
 
     /// Remove and return the final bit.

@@ -1201,9 +1201,9 @@ def test_append():
         a.append(0.5)
     with pytest.raises(TypeError):
         a.append("1")
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         a.append(2)
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         a.append(-1)
 
 
@@ -1223,3 +1223,15 @@ def test_pop():
     assert m.pop() is True
     with pytest.raises(IndexError):
         _ = m.pop()
+
+
+def test_count_edge_cases():
+    m = Mutibs.from_bin('0000_1111_0000')
+    assert m.count(1) == 4
+    assert m.count(True) == 4
+    assert m.count(0) == 8
+    assert m.count([1, 1, 1, 1]) == 1
+    assert m.count(m) == 1
+    assert m.count(m + [0]) == 0
+    with pytest.raises(ValueError):
+        _ = m.count(2)

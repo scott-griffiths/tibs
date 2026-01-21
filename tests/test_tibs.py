@@ -210,3 +210,12 @@ def test_from_bools_generator():
     generator = (y for y in bits)
     t = Tibs.from_bools(generator)
     assert list(t) == bits
+
+def test_count_expanded():
+    a = Tibs('0xaaaa')
+    b = a.count([1, 0, 1])
+    assert b == 7
+    b = a.count([1])
+    assert b == 8
+    b = a.count([1, 1])
+    assert b == 0
