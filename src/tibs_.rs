@@ -15,6 +15,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
+use crate::helpers;
 
 // Enum allows us to wrap and use a Tibs without copying it or owning it.
 pub(crate) enum BorrowedOrOwnedTibs<'a> {
@@ -785,19 +786,33 @@ impl Tibs {
         Ok(<Tibs as BitCollection>::ends_with(self, suffix))
     }
 
-    /// Return count of total number of either zero or one bits.
+    /// Counts the total number of occurences of a bit pattern.
     ///
-    ///     :param value: If `bool(value)` is True, bits set to 1 are counted; otherwise, bits set to 0 are counted.
-    ///     :return: The count of bits set to 1 or 0.
+    /// :param value: Either something that can be converted to a ``Tibs``,
+    /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    ///
+    /// :return: The number of times the bit pattern is found.
     ///
     ///     .. code-block:: pycon
     ///
     ///         >>> Tibs('0xef').count(1)
     ///         7
+    ///         >>> Tibs.from_bin('0011010101100').count('0b01')
+    ///         4
     ///
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
-        let count_ones = value.is_truthy()?;
-        Ok(<Tibs as BitCollection>::count(self, count_ones))
+        match tibs_from_any(value) {
+            Ok(v) => {
+                Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
+            },
+            Err(_) => {
+                let count_ones = helpers::convert_to_bool(value);
+                match count_ones {
+                    Some(b) => Ok(<Tibs as BitCollection>::count(self, b)),
+                    None => Err(PyValueError::new_err("Cannot convert value to a 0, 1 or a Tibs")),
+                }
+            }
+        }
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.

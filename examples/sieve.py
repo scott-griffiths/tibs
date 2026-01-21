@@ -18,5 +18,5 @@ primes_count = is_prime.count(1)
 assert primes_count == 50_847_534
 
 # Let's also see how many twin primes there are (primes that differ by 2).
-twin_primes = len(list(is_prime.as_tibs().find_all('0b101')))
+twin_primes = is_prime.count([1, 0, 1])
 assert twin_primes == 239_101

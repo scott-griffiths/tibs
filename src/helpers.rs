@@ -5,7 +5,7 @@ use lru::LruCache;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyByteArray, PyBytes, PyInt, PyMemoryView};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView};
 use rand::rngs::{OsRng, StdRng};
 use rand::{RngCore, SeedableRng, TryRngCore};
 use sha2::{Digest, Sha256};
@@ -27,6 +27,20 @@ pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
         )))
     } else {
         Ok(())
+    }
+}
+
+pub(crate) fn convert_to_bool(bit: &Bound<'_, PyAny>) -> Option<bool> {
+    if let Ok(b) = bit.cast::<PyBool>() {
+        Some(b.is_true())
+    } else if let Ok(val) = bit.extract::<i64>() {
+        match val {
+            0 => Some(false),
+            1 => Some(true),
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 
@@ -106,6 +120,36 @@ fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
         }
     }
     None
+}
+
+/// Count the number of occurences of needle in haystack.
+pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return 0;
+    }
+    let lps = compute_lps(needle);
+    let needle_len = needle.len();
+    let mut i = 0; // The start
+    let mut j = 0;
+    let end = haystack.len();
+    let mut count = 0;
+    while i < end {
+        if needle[j] == haystack[i] {
+            i += 1;
+            j += 1;
+
+            if j == needle_len {
+                count += 1;
+                // Continue searching
+                j = lps[j - 1];
+            }
+        } else if j != 0 {
+            j = lps[j - 1];
+        } else {
+            i += 1;
+        }
+    }
+    count
 }
 
 pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
