@@ -803,13 +803,17 @@ impl Tibs {
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
         match tibs_from_any(value) {
             Ok(v) => {
-                Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
+                if v.len() == 1 {
+                    Ok(<Tibs as BitCollection>::count(self, v.get_index(0).unwrap()))
+                } else {
+                    Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
+                }
             },
             Err(_) => {
                 let count_ones = helpers::convert_to_bool(value);
                 match count_ones {
                     Some(b) => Ok(<Tibs as BitCollection>::count(self, b)),
-                    None => Err(PyValueError::new_err("Cannot convert value to a 0, 1 or a Tibs")),
+                    None => Err(PyValueError::new_err("Cannot convert value to 0, 1 or a Tibs")),
                 }
             }
         }
