@@ -482,6 +482,10 @@ impl Tibs {
         BitCollection::to_i128(self)
     }
 
+    /// Create a new instance from a floating point number.
+    ///
+    /// :param f: A float.
+    /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
     pub fn from_f(_cls: &Bound<'_, PyType>, f: f64, length: i64) -> PyResult<Self> {
