@@ -501,7 +501,7 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Tibs::from_slice_unchecked(self, start_bit, length)
+        Tibs::get_slice_unchecked(self, start_bit, length)
     }
 
     #[inline]

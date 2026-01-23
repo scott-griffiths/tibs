@@ -128,7 +128,7 @@ impl Tibs {
         }
     }
 
-    pub(crate) fn from_slice_unchecked(&self, offset: usize, length: usize) -> Self {
+    pub(crate) fn get_slice_unchecked(&self, offset: usize, length: usize) -> Self {
         Tibs {
             _data: self._data.clone(),
             _offset: self._offset + offset,
@@ -790,7 +790,7 @@ impl Tibs {
         Ok(<Tibs as BitCollection>::ends_with(self, suffix))
     }
 
-    /// Counts the total number of occurences of a bit pattern.
+    /// Counts the total number of occurrences of a bit pattern.
     ///
     /// :param value: Either something that can be converted to a ``Tibs``,
     /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
@@ -808,7 +808,7 @@ impl Tibs {
         match tibs_from_any(value) {
             Ok(v) => {
                 if v.len() == 1 {
-                    Ok(<Tibs as BitCollection>::count(self, v.get_index(0).unwrap()))
+                    Ok(<Tibs as BitCollection>::count(self, v.get_index(0)?))
                 } else {
                     Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
                 }

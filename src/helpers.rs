@@ -122,7 +122,7 @@ fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
     None
 }
 
-/// Count the number of occurences of needle in haystack.
+/// Count the number of occurrences of needle in haystack.
 pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
     if needle.is_empty() || needle.len() > haystack.len() {
         return 0;
