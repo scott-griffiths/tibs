@@ -956,7 +956,7 @@ impl Mutibs {
         Ok(slf)
     }
 
-    /// Counts the total number of occurences of a bit pattern.
+    /// Counts the total number of occurrences of a bit pattern.
     ///
     /// :param value: Either something that can be converted to a ``Tibs``,
     /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
@@ -974,7 +974,7 @@ impl Mutibs {
         match tibs_from_any(value) {
             Ok(v) => {
                 if v.len() == 1 {
-                    Ok(<Mutibs as BitCollection>::count(self, v.get_index(0).unwrap()))
+                    Ok(<Mutibs as BitCollection>::count(self, v.get_index(0)?))
                 } else {
                     Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
                 }

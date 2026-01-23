@@ -118,7 +118,7 @@ impl ChunksIterator {
         // Create a cheap slice without copying the underlying data.
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
-            bits.from_slice_unchecked(slf.current_pos, take)
+            bits.get_slice_unchecked(slf.current_pos, take)
         };
         slf.current_pos = slf.current_pos + take;
         slf.chunks_generated += 1;
