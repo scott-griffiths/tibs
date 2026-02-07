@@ -328,7 +328,6 @@ impl Tibs {
     /// :param b: The Tibs to find.
     /// :param start: The starting bit position of the slice to search. Defaults to 0.
     /// :param end: The end bit position of the slice to search. Defaults to len(self).
-    /// :param count: The maximum number of occurrences to find.
     /// :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
     /// :return: A generator yielding bit positions.
     ///
@@ -423,13 +422,13 @@ impl Tibs {
 
     /// Create a new instance from a formatted string.
     ///
-    /// :param s: The formatted string to convert.
+    /// :param s: The formatted string to convert. This can begin with '0b', '0o' or '0x' to indicate binary, octal or hexadecimal, and commas can be used to separate items.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_string("0xff01")
-    ///     b = Tibs.from_string("0b1")
+    ///     b = Tibs.from_string("0o775, 0b1")
     ///
     /// The ``__init__`` method can also redirect to ``from_string`` method:
     ///
@@ -484,7 +483,7 @@ impl Tibs {
 
     /// Create a new instance from a floating point number.
     ///
-    /// :param f: A float.
+    /// :param f: A floating point value.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
     #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
@@ -502,7 +501,7 @@ impl Tibs {
 
     /// Create a new instance from a binary string.
     ///
-    /// :param s: A string of '0' and '1's, optionally preceded with '0b'.
+    /// :param s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
     ///
     /// .. code-block:: python
     ///
@@ -522,7 +521,7 @@ impl Tibs {
 
     /// Create a new instance from an octal string.
     ///
-    /// :param s: A string of octal digits, optionally preceded with '0o'.
+    /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
@@ -539,7 +538,7 @@ impl Tibs {
 
     /// Create a new instance from a hexadecimal string.
     ///
-    /// :param s: A string of hexadecimal digits, optionally preceded with '0x'.
+    /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
@@ -557,8 +556,8 @@ impl Tibs {
     /// Create a new instance from a bytes object.
     ///
     /// :param data: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
-    /// :param length: The bit length to use. Defaults to the whole of the data.
     /// :param offset: The bit offset from the start. Defaults to zero.
+    /// :param length: The bit length to use. Defaults to the whole of the data.
     ///
     /// .. code-block:: python
     ///
@@ -623,7 +622,7 @@ impl Tibs {
     ///
     /// This method concatenates a sequence of Tibs objects into a single Tibs object.
     ///
-    /// :param iterable: An iterable to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
+    /// :param iterable: An iterable to concatenate. Items can be anything that can be promoted to a Tibs.
     ///
     /// .. code-block:: python
     ///
@@ -792,8 +791,7 @@ impl Tibs {
 
     /// Counts the total number of occurrences of a bit pattern.
     ///
-    /// :param value: Either something that can be converted to a ``Tibs``,
-    /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    /// :param value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
     ///
     /// :return: The number of times the bit pattern is found.
     ///
