@@ -207,7 +207,7 @@ impl Mutibs {
     ///
     /// This method initializes a new instance of :class:`Mutibs` using a formatted string.
     ///
-    /// :param s: The formatted string to convert.
+    /// :param s: The formatted string to convert. This can begin with '0b', '0o' or '0x' to indicate binary, octal or hexadecimal, and commas can be used to separate items.
     /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
@@ -230,7 +230,7 @@ impl Mutibs {
 
     /// Create a new instance from a binary string.
     ///
-    /// :param s: A string of '0' and '1's, optionally preceded with '0b'.
+    /// :param s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
     ///
     /// .. code-block:: python
     ///
@@ -250,7 +250,7 @@ impl Mutibs {
 
     /// Create a new instance from an octal string.
     ///
-    /// :param s: A string of octal digits, optionally preceded with '0o'.
+    /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
@@ -267,7 +267,7 @@ impl Mutibs {
 
     /// Create a new instance from a hexadecimal string.
     ///
-    /// :param s: A string of hexadecimal digits, optionally preceded with '0x'.
+    /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
     pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
@@ -515,12 +515,11 @@ impl Mutibs {
     ///
     /// This method concatenates a sequence of Tibs objects into a single Mutibs object.
     ///
-    /// :param iterable: An iterable to concatenate. Items can either be a Tibs object, or a string or bytes-like object that could create one via the :meth:`from_string` or :meth:`from_bytes` methods.
+    /// :param iterable: An iterable to concatenate. Items can be anything that can be promoted to a Mutibs.
     ///
     /// .. code-block:: python
     ///
-    ///     a = Mutibs.from_joined([f'u6={x}' for x in range(64)])
-    ///     b = Mutibs.from_joined(['0x01', [1, 0], b'some_bytes'])
+    ///     a = Mutibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
@@ -958,8 +957,7 @@ impl Mutibs {
 
     /// Counts the total number of occurrences of a bit pattern.
     ///
-    /// :param value: Either something that can be converted to a ``Tibs``,
-    /// or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    /// :param value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
     ///
     /// :return: The number of times the bit pattern is found.
     ///
@@ -1023,10 +1021,10 @@ impl Mutibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The Tibs to find.
+    /// :param b: The bits to find.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
-    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :param byte_aligned: If ``True``, the bits will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
@@ -1356,7 +1354,7 @@ impl Mutibs {
 
     /// Extend the current Mutibs in-place from the start.
     ///
-    /// This is broadly equivalent to `current = new + current`.
+    /// This is broadly equivalent to ``self = bs + self``.
     /// Note that this method is inherently slower than :meth:`extend` and
     /// should be avoided in performance critical code. See also :meth:`from_joined`.
     ///
@@ -1391,6 +1389,26 @@ impl Mutibs {
         Ok(slf)
     }
 
+    /// Search and replace in-place.
+    ///
+    /// This is broadly equivalent to ``self = bs + self``.
+    /// Note that this method is inherently slower than :meth:`extend` and
+    /// should be avoided in performance critical code. See also :meth:`from_joined`.
+    ///
+    /// :param old: The bits to search for.
+    /// :param new: The bits to replace with.
+    /// :param start: The starting bit position. Defaults to 0.
+    /// :param end: The end position. Defaults to len(self).
+    /// :param count: If present, the maximum number of replacements to make.
+    /// :param byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :return: self
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b00010010')
+    ///     >>> m.replace([0, 1], [1, 1, 1])
+    ///     Mutibs('0b0011101110')
+    ///
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false))]
     pub fn replace<'a>(
         mut slf: PyRefMut<'a, Self>,
