@@ -587,7 +587,7 @@ impl Tibs {
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /), text_signature = "(cls, values, /)")]
+    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
     pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bv = bv_from_bools(iterable)?;
         Ok(Tibs::from_bv(bv))
@@ -667,11 +667,13 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The Tibs to find.
+    /// :param b: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
     /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
+    ///
+    /// :raises ValueError: if ``b`` is empty, or if the slice parameters are invalid.
     ///
     /// .. code-block:: pycon
     ///
@@ -718,11 +720,13 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The Tibs to find.
+    /// :param b: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
     /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
+    ///
+    /// :raises ValueError: if ``b`` is empty, or if the slice parameters are invalid.
     #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,

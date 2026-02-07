@@ -490,8 +490,8 @@ impl Mutibs {
     /// Create a new instance from a bytes object.
     ///
     /// :param data: The bytes, bytearray or memoryview object to convert to a :class:`Mutibs`.
-    /// :param length: The bit length to use. Defaults to the whole of the data.
     /// :param offset: The bit offset from the start. Defaults to zero.
+    /// :param length: The bit length to use. Defaults to the whole of the data.
     ///
     /// .. code-block:: python
     ///
@@ -511,11 +511,11 @@ impl Mutibs {
         Ok(Self::from_bv(bv))
     }
 
-    /// Create a new instance by concatenating a sequence of Tibs objects.
+    /// Create a new instance by concatenating a sequence of bit sequences.
     ///
-    /// This method concatenates a sequence of Tibs objects into a single Mutibs object.
+    /// This method concatenates a sequence of bit sequences into a single Mutibs object.
     ///
-    /// :param iterable: An iterable to concatenate. Items can be anything that can be promoted to a Mutibs.
+    /// :param iterable: An iterable to concatenate. Items can be anything that can be promoted to a :class:`Mutibs`.
     ///
     /// .. code-block:: python
     ///
@@ -573,16 +573,24 @@ impl Mutibs {
     ///
     /// :param key: The index or slice to set.
     /// :param value: For a single index, a boolean value. For a slice, anything that can be converted to Tibs.
-    /// :raises ValueError: If the slice has a step other than 1, or if the length of the value doesn't match the slice.
+    ///
+    /// Slice assignment follows standard Python semantics:
+    ///
+    /// - For a simple slice with a step of 1 (e.g. ``m[2:5]``), the slice is replaced and the length of the Mutibs
+    ///   may change.
+    /// - For an extended slice (step != 1), the slice length is fixed and the assigned value must have exactly the
+    ///   same number of bits as the number of targeted indices.
+    ///
+    /// :raises ValueError: If the slice step is 0, or if the length of the value doesn't match an extended slice.
     /// :raises IndexError: If the index is out of range.
     ///
     /// Examples:
     ///     >>> b = Mutibs('0b0000')
     ///     >>> b[1] = True
-    ///     >>> b.bin
+    ///     >>> b.to_bin()
     ///     '0100'
     ///     >>> b[1:3] = '0b11111'
-    ///     >>> b.bin
+    ///     >>> b.to_bin()
     ///     '0111110'
     ///
     pub fn __setitem__(
@@ -658,6 +666,16 @@ impl Mutibs {
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
+    /// Delete a bit or a slice of bits.
+    ///
+    /// :param key: The index or slice to delete.
+    ///
+    /// For a single index, one bit is removed.
+    /// For a slice, all targeted indices are removed (for an extended slice, indices are removed in a way that
+    /// matches Python's behavior).
+    ///
+    /// :raises IndexError: If the index is out of range.
+    /// :raises TypeError: If the key is not an int or slice.
     pub fn __delitem__(&mut self, key: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
         if let Ok(mut index) = key.extract::<i64>() {
@@ -1199,7 +1217,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b1011')
     ///     >>> b
-    ///     Tibs('0b1101')
+    ///     Tibs('0b1011')
     ///
     pub fn to_tibs(&self) -> Tibs {
         Tibs::from_bv(self.to_bitvec())
@@ -1221,7 +1239,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs()
     ///     >>> b
-    ///     Tibs('0b1101')
+    ///     Tibs('0b1011')
     ///
     pub fn as_tibs(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut *self.as_mut_bitvec_ref());
