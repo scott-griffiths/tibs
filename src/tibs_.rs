@@ -184,7 +184,7 @@ impl Tibs {
 ///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[derive(Clone)]
-#[pyclass(frozen, sequence, module = "tibs")]
+#[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
 pub struct Tibs {
     _data: Arc<BV>,
     _offset: usize,
