@@ -260,7 +260,7 @@ impl Mutibs {
 
     /// Return the octal representation of the Mutibs as a string.
     ///
-    /// Raises ValueError if the length is not a multiple of 3.
+    /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
     }
@@ -277,14 +277,14 @@ impl Mutibs {
 
     /// Return the hexadecimal representation of the Mutibs as a string.
     ///
-    /// Raises ValueError if the length is not a multiple of 4.
+    /// :raises ValueError: if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
     }
 
     /// Return the Mutibs as a bytes object.
     ///
-    /// Raises ValueError if the length is not a multiple of 8.
+    /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
     }
@@ -351,7 +351,7 @@ impl Mutibs {
     /// :param u: An unsigned integer.
     /// :param length: The bit length to create. Can be up to 128.
     ///
-    /// Raises ValueError if the integer doesn't fit in the length given.
+    /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
@@ -370,7 +370,7 @@ impl Mutibs {
     /// :param i: A signed integer.
     /// :param length: The bit length to create. Can be up to 128.
     ///
-    /// Raises ValueError if the integer doesn't fit in the length given.
+    /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
@@ -785,7 +785,7 @@ impl Mutibs {
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
@@ -795,7 +795,7 @@ impl Mutibs {
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
@@ -805,7 +805,7 @@ impl Mutibs {
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
@@ -817,7 +817,7 @@ impl Mutibs {
     ///
     /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__and__(bs)
@@ -827,7 +827,7 @@ impl Mutibs {
     ///
     /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__or__(bs)
@@ -837,7 +837,7 @@ impl Mutibs {
     ///
     /// This method is used when the RHS is a Mutibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Mutibs have differing lengths.
+    /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__xor__(bs)
@@ -850,7 +850,7 @@ impl Mutibs {
     /// :param end: End of slice to rotate. Defaults to len(self).
     /// :return: self
     ///
-    /// Raises ValueError if n < 0.
+    /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
@@ -885,7 +885,7 @@ impl Mutibs {
     /// :param end: End of slice to rotate. Defaults to len(self).
     /// :return: self
     ///
-    /// Raises ValueError if n < 0.
+    /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
@@ -1044,7 +1044,7 @@ impl Mutibs {
     /// :param pos: Either a single bit position or an iterable of bit positions.
     /// :return: self
     ///
-    /// Raises IndexError if pos < -len(self) or pos >= len(self).
+    /// :raises IndexError: if pos < -len(self) or pos >= len(self).
     ///
     /// .. code-block:: pycon
     ///
@@ -1153,7 +1153,7 @@ impl Mutibs {
 
     /// Return the instance with every bit inverted.
     ///
-    /// Raises ValueError if the Mutibs is empty.
+    /// :raises ValueError: if the Mutibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
         if self.as_bitvec_ref().is_empty() {
@@ -1391,10 +1391,6 @@ impl Mutibs {
 
     /// Search and replace in-place.
     ///
-    /// This is broadly equivalent to ``self = bs + self``.
-    /// Note that this method is inherently slower than :meth:`extend` and
-    /// should be avoided in performance critical code. See also :meth:`from_joined`.
-    ///
     /// :param old: The bits to search for.
     /// :param new: The bits to replace with.
     /// :param start: The starting bit position. Defaults to 0.
@@ -1483,7 +1479,7 @@ impl Mutibs {
     /// :param bs: The bits to insert.
     /// :return: self
     ///
-    /// Raises ValueError if pos < 0 or pos > len(self).
+    /// :raises ValueError: if pos < 0 or pos > len(self).
     ///
     /// .. code-block:: pycon
     ///
@@ -1531,7 +1527,7 @@ impl Mutibs {
     /// :param n: The number of bits to shift. Must be >= 0.
     /// :return: self
     ///
-    /// Raises ValueError if n < 0.
+    /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
@@ -1551,7 +1547,7 @@ impl Mutibs {
     /// :param n: The number of bits to shift. Must be >= 0.
     /// :return: self
     ///
-    /// Raises ValueError if n < 0.
+    /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
@@ -1568,7 +1564,7 @@ impl Mutibs {
 
     /// Return the Mutibs as a bytes object.
     ///
-    /// Raises ValueError if the length is not a multiple of 8.
+    /// :raises ValueError: if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
     }

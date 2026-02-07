@@ -327,12 +327,14 @@ impl Tibs {
     ///
     /// :param b: The Tibs to find.
     /// :param start: The starting bit position of the slice to search. Defaults to 0.
+    /// :type start: int | None
     /// :param end: The end bit position of the slice to search. Defaults to len(self).
-    /// :param byte_aligned: If True, the Tibs will only be found on byte boundaries.
+    /// :type end: int | None
+    /// :param byte_aligned: If True, the Tibs will only be found on byte boundaries. Defaults to False.
+    /// :type byte_aligned: bool
     /// :return: A generator yielding bit positions.
     ///
-    /// Raises ValueError if b is empty, if start < 0, if end > len(self) or
-    /// if end < start.
+    /// :raises ValueError: if b is empty, if start < 0, if end > len(self) or if end < start.
     ///
     /// All occurrences of b are found, even if they overlap.
     ///
@@ -448,7 +450,7 @@ impl Tibs {
     /// :param u: An unsigned integer.
     /// :param length: The bit length to create. Can be up to 128.
     ///
-    /// Raises ValueError if the integer doesn't fit in the length given.
+    /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
     #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
@@ -467,7 +469,7 @@ impl Tibs {
     /// :param i: A signed integer.
     /// :param length: The bit length to create. Can be up to 128.
     ///
-    /// Raises ValueError if the integer doesn't fit in the length given.
+    /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
     #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
@@ -531,7 +533,7 @@ impl Tibs {
 
     /// Return the octal representation of the Tibs as a string.
     ///
-    /// Raises ValueError if the length is not a multiple of 3.
+    /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
     }
@@ -548,7 +550,7 @@ impl Tibs {
 
     /// Return the hexadecimal representation of the Tibs as a string.
     ///
-    /// Raises ValueError if the length is not a multiple of 4.
+    /// :raises ValueError: if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
     }
@@ -656,7 +658,7 @@ impl Tibs {
 
     /// Return the Tibs as a bytes object.
     ///
-    /// Raises ValueError if the length is not a multiple of 8.
+    /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
     }
@@ -934,7 +936,7 @@ impl Tibs {
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
@@ -945,7 +947,7 @@ impl Tibs {
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
@@ -956,7 +958,7 @@ impl Tibs {
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = tibs_from_any(bs)?;
@@ -968,7 +970,7 @@ impl Tibs {
     ///
     /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__and__(bs)
@@ -978,7 +980,7 @@ impl Tibs {
     ///
     /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__or__(bs)
@@ -988,7 +990,7 @@ impl Tibs {
     ///
     /// This method is used when the RHS is a Tibs and the LHS is not, but can be converted to one.
     ///
-    /// Raises ValueError if the two Tibs have differing lengths.
+    /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__xor__(bs)
@@ -996,7 +998,7 @@ impl Tibs {
 
     /// Return the instance with every bit inverted.
     ///
-    /// Raises ValueError if the Tibs is empty.
+    /// :raises ValueError: if the Tibs is empty.
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
         if self.as_bitslice().is_empty() {
@@ -1007,7 +1009,7 @@ impl Tibs {
 
     /// Return the Tibs as a bytes object.
     ///
-    /// Raises ValueError if the length is not a multiple of 8.
+    /// :raises ValueError: if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
     }
