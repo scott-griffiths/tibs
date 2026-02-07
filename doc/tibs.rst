@@ -9,7 +9,7 @@ the special methods. These can be seen using the ``help()`` function in Python, 
 
 * ``[]`` : Slicing, e.g. ``s = t[4:16]``
 * ``+``: Concatenation, e.g. ``s = t + '0b1'``
-* ``*``: Concatenation of self, e.g. ``s = t * 100``
+* ``*``: Concatenation of self, e.g. ``s = t * 6``
 * ``<<``: Left bit shift, e.g. ``s = t << 3``
 * ``>>``: Right bit shift, e.g. ``s = t >> 3``
 * ``&``: Bit-wise AND

@@ -548,9 +548,9 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
         Ok(name) => name.to_string(),
         Err(_) => "<unknown>".to_string(),
     };
-    let mut err = format!("Cannot promote object of type {type_name} to a Mutibs object. ");
+    let mut err = format!("Cannot promote object of type {type_name} to a Tibs/Mutibs object. ");
     if any.is_instance_of::<PyInt>() {
-        err.push_str("Perhaps you want to use 'Mutibs.from_zeros()', 'Mutibs.from_ones()' or 'Mutibs.from_random()'?");
+        err.push_str("Perhaps you want to use the class methods 'from_zeros()', 'from_ones()' or 'from_random()'?");
     };
     Err(PyTypeError::new_err(err))
 }

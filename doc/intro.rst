@@ -1,16 +1,7 @@
 .. currentmodule:: tibs
 
-
-Getting started
----------------
-
-To install use ::
-
-    pip install tibs
-
-
-There are pre-built wheels for most configurations - if there are issues then please let me know.
-Tibs works with Python 3.8 and later.
+First Steps
+-----------
 
 One way to get to know the library is to start a Python interactive session, import the two main
 classes, and experiment with some of the example code in the rest of this document. ::
@@ -18,8 +9,7 @@ classes, and experiment with some of the example code in the rest of this docume
     >>> from tibs import Tibs, Mutibs
 
 
-A quick tour
-------------
+
 
 The two main classes are:
 
