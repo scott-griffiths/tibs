@@ -33,7 +33,7 @@ use crate::helpers;
 ///
 ///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
-#[pyclass(freelist = 8, module = "tibs")]
+#[pyclass(freelist = 8, sequence, skip_from_py_object, module = "tibs")]
 #[derive(Clone)]
 pub struct Mutibs {
     _data: BV,
