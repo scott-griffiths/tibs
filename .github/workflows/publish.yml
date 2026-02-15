@@ -15,7 +15,7 @@ jobs:
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
     steps:
       - name: Download source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -24,21 +24,25 @@ jobs:
 
       - name: Get tag information
         id: tag
+        shell: bash
         run: |
-          TAG=$(git tag --points-at ${{ github.event.workflow_run.head_sha }})
+          set -euo pipefail
+
+          sha="${{ github.event.workflow_run.head_sha }}"
+          TAG="$(git tag --points-at "$sha")"
           echo "Found tag: $TAG"
 
-          if [[ $TAG == v* ]]; then
-            echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+          if [[ "$TAG" == v* ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
 
-            if [[ $TAG == *-alpha* || $TAG == *-beta* ]]; then
-              echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            if [[ "$TAG" == *-alpha* || "$TAG" == *-beta* ]]; then
+              echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             else
-              echo "is_prerelease=false" >> $GITHUB_OUTPUT
+              echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
           fi
 
   publish:
@@ -48,20 +52,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           workflow: build.yml
           workflow_conclusion: success
           path: artifacts
 
       - name: Prepare distribution files
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
           find artifacts -type f \( -name "*.whl" -o -name "*.tar.gz" \) -exec mv {} dist/ \;
           ls -l dist/

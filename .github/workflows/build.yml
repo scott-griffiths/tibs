@@ -10,12 +10,20 @@ on:
 jobs:
   build:
     if: startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[full-build]')
-    name: Build wheels on ${{ matrix.os }}
+    name: Build wheels on ${{ matrix.os }}${{ matrix.macos-arch && format(' ({0})', matrix.macos-arch) || '' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15, macos-14 ]
+        # macOS is split by arch so we *always* get Intel + Apple Silicon wheels.
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+          - os: windows-latest
+          - os: macos-14
+            macos-arch: x86_64
+          - os: macos-15
+            macos-arch: arm64
 
     steps:
       - uses: actions/checkout@v5
@@ -73,7 +81,8 @@ jobs:
           CIBW_BUILD_VERBOSITY: 3
           CIBW_BUILD: "cp38-*"  # If we use the stable ABI we only need one wheel per arch.
           CIBW_ARCHS_LINUX: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'x86_64 aarch64 ppc64le i686' }}
-          CIBW_ARCHS_MACOS: 'auto'
+          # Critical: pin the macOS architecture per job so we actually upload both.
+          CIBW_ARCHS_MACOS: ${{ matrix.macos-arch || 'auto' }}
           CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$PATH"'
           CIBW_BEFORE_ALL_LINUX: >
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
@@ -99,8 +108,56 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.os }}
+          # include macOS arch in the artifact name so downstream can fetch both
+          name: packages-${{ matrix.os }}${{ matrix.macos-arch && format('-{0}', matrix.macos-arch) || '' }}
           path: |
             ./wheelhouse/*.whl
             ./dist/*.tar.gz
           if-no-files-found: error
+
+  verify-coverage:
+    name: Verify wheel coverage
+    needs: build
+    if: always() && (startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[full-build]'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Coverage report + required wheel checks
+        run: |
+          set -euo pipefail
+          echo "== Artifacts =="
+          find artifacts -type f \( -name "*.whl" -o -name "*.tar.gz" \) -maxdepth 4 | sort
+          echo ""
+
+          echo "== Wheel file names =="
+          find artifacts -type f -name "*.whl" -maxdepth 4 -print0 | xargs -0 -n1 basename | sort || true
+          echo ""
+
+          need() {
+            local pattern="$1"
+            local label="$2"
+            local count
+            count=$(find artifacts -type f -name "*.whl" -maxdepth 4 | grep -E -c "$pattern" || true)
+            if [[ "$count" -lt 1 ]]; then
+              echo "Missing required wheel: $label (pattern: $pattern)" >&2
+              return 1
+            fi
+            echo "OK: $label"
+          }
+
+          # Must-have coverage checks
+          need "macosx_10_12_x86_64|macosx_10_1[3-9]_x86_64" "macOS Intel (x86_64)"
+          need "macosx_11_0_arm64|macosx_11_0_universal2|macosx_1[2-9]_0_arm64" "macOS Apple Silicon (arm64/universal2)"
+          need "manylinux.*x86_64" "Linux manylinux x86_64"
+          need "manylinux.*aarch64" "Linux manylinux aarch64"
+          need "manylinux.*ppc64le" "Linux manylinux ppc64le"
+          need "win_amd64" "Windows x86_64"
+          # Optional, but nice:
+          # need "win32" "Windows i686"
+
+          echo ""
+          echo "Coverage checks passed."
