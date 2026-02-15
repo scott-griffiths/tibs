@@ -2,6 +2,10 @@ name: Setup
 on:
   workflow_call:
     inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
       python-version:
         required: true
         type: string
