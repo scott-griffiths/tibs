@@ -63,7 +63,6 @@ dev = [
 ]
 
 [tool.maturin]
-python-source = "."
 module-name = "tibs"
 features = ["pyo3/extension-module", "pyo3/abi3-py38"]
 
