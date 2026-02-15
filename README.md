@@ -12,9 +12,6 @@ A sleek Python library for your binary data
 
 ----
 
-> [!NOTE]
-> The project is currently in alpha. This documentation is incomplete.
-
 ``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
 It is 100% written in Rust to give it excellent performance, and is from the same author as the [bitstring](https://github.com/scott-griffiths/bitstring) library.
 
