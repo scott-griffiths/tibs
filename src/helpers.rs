@@ -6,8 +6,8 @@ use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView};
-use rand::rngs::{OsRng, StdRng};
-use rand::{RngCore, SeedableRng, TryRngCore};
+use rand::rngs::{SysRng, StdRng};
+use rand::{Rng, SeedableRng, TryRng};
 use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -241,7 +241,7 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
     let num_bytes = length.div_ceil(8);
     let mut data = vec![0u8; num_bytes];
     if secure {
-        OsRng
+        SysRng
             .try_fill_bytes(&mut data)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     } else {

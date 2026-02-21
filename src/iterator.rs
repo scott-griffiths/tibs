@@ -120,7 +120,7 @@ impl ChunksIterator {
             let bits = slf.bits_object.borrow(slf.py());
             bits.get_slice_unchecked(slf.current_pos, take)
         };
-        slf.current_pos = slf.current_pos + take;
+        slf.current_pos += take;
         slf.chunks_generated += 1;
 
         Ok(Some(chunk_bits))
