@@ -1,9 +1,10 @@
 use crate::core::BitCollection;
+use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, promote_to_bv, str_to_bv, validate_logical_op_lengths, validate_shift,
-    validate_slice,
+    find_bitvec, promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -15,7 +16,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
-use crate::helpers;
 
 // Enum allows us to wrap and use a Tibs without copying it or owning it.
 pub(crate) enum BorrowedOrOwnedTibs<'a> {
@@ -741,24 +741,14 @@ impl Tibs {
         }
 
         let (start, end) = validate_slice(self.len(), start, end)?;
-        if b.len() + start > end {
-            return Ok(None);
-        }
-        let step = if byte_aligned { 8 } else { 1 };
-        let mut pos = end - b.len();
-        if byte_aligned {
-            pos = pos / 8 * 8;
-        }
-        while pos >= start {
-            if self.as_bitslice()[pos..pos + b.len()] == *b.as_bitslice() {
-                return Ok(Some(pos));
-            }
-            if pos < step {
-                break;
-            }
-            pos -= step;
-        }
-        Ok(None)
+
+        Ok(rfind_bitvec(
+            self.as_bitslice(),
+            b.as_bitslice(),
+            start,
+            end,
+            byte_aligned,
+        ))
     }
 
     /// Return whether the current Tibs starts with prefix.
@@ -816,12 +806,14 @@ impl Tibs {
                 } else {
                     Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
                 }
-            },
+            }
             Err(_) => {
                 let count_ones = helpers::convert_to_bool(value);
                 match count_ones {
                     Some(b) => Ok(<Tibs as BitCollection>::count(self, b)),
-                    None => Err(PyValueError::new_err("Cannot convert value to 0, 1 or a Tibs")),
+                    None => Err(PyValueError::new_err(
+                        "Cannot convert value to 0, 1 or a Tibs",
+                    )),
                 }
             }
         }
