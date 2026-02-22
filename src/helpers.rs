@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView};
-use rand::rngs::{SysRng, StdRng};
+use rand::rngs::{StdRng, SysRng};
 use rand::{Rng, SeedableRng, TryRng};
 use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
@@ -84,14 +84,93 @@ pub(crate) fn find_bitvec(
     }
 }
 
-#[inline]
+pub(crate) fn rfind_bitvec(
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    if byte_aligned {
+        rfind_bitvec_impl::<true>(haystack, needle, start, end)
+    } else {
+        rfind_bitvec_impl::<false>(haystack, needle, start, end)
+    }
+}
+
+fn rfind_bitvec_impl<const BYTE_ALIGNED: bool>(
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+) -> Option<usize> {
+    let needle_len = needle.len();
+    if needle.is_empty() || needle_len > end - start {
+        return None;
+    }
+
+    // TODO: this should be hoisted out as it shouldn't be recalculated for a rfind_all.
+    // We treat needle as if it were reversed: needle_rev[i] == needle[len - 1 - i]
+    // The lps_rev array matches the indices of the conceptual reversed needle.
+    let mut lps_rev = vec![0; needle_len];
+    let mut len_prev = 0;
+    let mut i = 1;
+    while i < needle_len {
+        if needle[needle_len - 1 - i] == needle[needle_len - 1 - len_prev] {
+            len_prev += 1;
+            lps_rev[i] = len_prev;
+            i += 1;
+        } else if len_prev != 0 {
+            len_prev = lps_rev[len_prev - 1];
+        } else {
+            lps_rev[i] = 0;
+            i += 1;
+        }
+    }
+
+    // 2. Search backwards in haystack
+    // i is the current index in haystack (moving backwards)
+    // j is the length of the current match (matched from right to left)
+    // The visual index in haystack for comparison is (i - j).
+    let mut i = end;
+    let mut j = 0;
+
+    while i > start {
+        // We compare haystack[i - 1] (char to left of cursor)
+        // with needle[needle_len - 1 - j] (char to left of match-cursor in needle)
+        if haystack[i - 1] == needle[needle_len - 1 - j] {
+            i -= 1;
+            j += 1;
+
+            if j == needle_len {
+                // Found a match starting at i
+                if !BYTE_ALIGNED || (i & 7) == 0 {
+                    return Some(i);
+                }
+                // Mismatch due to alignment, slide using the table
+                j = lps_rev[j - 1];
+            }
+        } else if j != 0 {
+            // Mismatch, but we have some progress `j`.
+            // Jump to the longest suffix that is also a prefix (in reverse logic)
+            j = lps_rev[j - 1];
+        } else {
+            i -= 1;
+        }
+    }
+
+    None
+}
+
 fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
     haystack: &BS,
     needle: &BS,
     start: usize,
     end: usize,
 ) -> Option<usize> {
-    if needle.is_empty() || needle.len() > haystack.len() - start {
+    if needle.is_empty() || needle.len() > end - start {
         return None;
     }
 
@@ -339,7 +418,7 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
             return Err(PyValueError::new_err(format!(
                 "Cannot convert from hex '{hex}': {}",
                 e
-            )))
+            )));
         }
     };
     let bv = bv_from_bytes_slice(data, None, Some(new_hex_length * 4))?;
@@ -532,9 +611,10 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     if (any.is_instance_of::<PyBytes>()
         || any.is_instance_of::<PyByteArray>()
         || any.is_instance_of::<PyMemoryView>())
-        && let Ok(any_bytes) = any.extract::<Vec<u8>>() {
-            return Ok(BV::from_vec(any_bytes));
-        }
+        && let Ok(any_bytes) = any.extract::<Vec<u8>>()
+    {
+        return Ok(BV::from_vec(any_bytes));
+    }
 
     // Is it an iterable that we can convert each element to a bool?
     if let Ok(iter) = any.try_iter() {
