@@ -3,7 +3,7 @@ use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths,
+    compute_lps, find_bitvec, promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
@@ -200,8 +200,14 @@ impl Tibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        let bv = promote_to_bv(auto)?;
-        Ok(Tibs::from_bv(bv))
+        if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
+            return Ok(tibs_ref.clone());
+        }
+        if let Ok(mutibs_ref) = auto.extract::<PyRef<Mutibs>>() {
+            return Ok(mutibs_ref.to_tibs());
+        }
+
+        Ok(Tibs::from_bv(promote_to_bv(auto)?))
     }
 
     /// Return a copy of the raw byte information.
@@ -362,9 +368,14 @@ impl Tibs {
             BorrowedOrOwnedTibs::Borrowed(t) => t.into(),
             BorrowedOrOwnedTibs::Owned(t) => Py::new(py, t)?,
         };
+        let lps = {
+            let needle_ref = needle.borrow(py);
+            compute_lps(needle_ref.as_bitslice())
+        };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             needle,
+            lps,
             start,
             end,
             byte_aligned,
