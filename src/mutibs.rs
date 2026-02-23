@@ -7,11 +7,11 @@ use crate::helpers::{
 };
 use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 
+use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
 use std::ops::Not;
-use crate::helpers;
 
 ///     A mutable container of binary data.
 ///
@@ -164,8 +164,14 @@ impl Mutibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
         };
-        let bv = promote_to_bv(auto)?;
-        Ok(Mutibs::from_bv(bv))
+        if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
+            return Ok(tibs_ref.to_mutibs());
+        }
+        if let Ok(mutibs_ref) = auto.extract::<PyRef<Mutibs>>() {
+            return Ok(mutibs_ref.clone());
+        }
+
+        Ok(Mutibs::from_bv(promote_to_bv(auto)?))
     }
 
     /// Return True if two Mutibs have the same binary representation.
@@ -994,12 +1000,14 @@ impl Mutibs {
                 } else {
                     Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
                 }
-            },
+            }
             Err(_) => {
                 let count_ones = helpers::convert_to_bool(value);
                 match count_ones {
                     Some(b) => Ok(<Mutibs as BitCollection>::count(self, b)),
-                    None => Err(PyValueError::new_err("Cannot convert value to 0, 1 or a Tibs")),
+                    None => Err(PyValueError::new_err(
+                        "Cannot convert value to 0, 1 or a Tibs",
+                    )),
                 }
             }
         }
@@ -1323,7 +1331,7 @@ impl Mutibs {
             Some(b) => {
                 slf.as_mut_bitvec_ref().push(b);
                 Ok(slf)
-            },
+            }
             None => Err(PyTypeError::new_err(
                 "Only True, False, 0 or 1 can be appended.",
             )),

@@ -45,7 +45,7 @@ pub(crate) fn convert_to_bool(bit: &Bound<'_, PyAny>) -> Option<bool> {
 }
 
 // An implementation of the KMP algorithm for bit slices.
-fn compute_lps(pattern: &BS) -> Vec<usize> {
+pub(crate) fn compute_lps(pattern: &BS) -> Vec<usize> {
     let len = pattern.len();
     let mut lps = vec![0; len];
     let mut i = 1;
@@ -77,10 +77,28 @@ pub(crate) fn find_bitvec(
 ) -> Option<usize> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
+    let lps = compute_lps(needle);
     if byte_aligned {
-        find_bitvec_impl::<true>(haystack, needle, start, end)
+        find_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
     } else {
-        find_bitvec_impl::<false>(haystack, needle, start, end)
+        find_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
+    }
+}
+
+pub(crate) fn find_bitvec_with_lps(
+    haystack: &BS,
+    needle: &BS,
+    lps: &[usize],
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    if byte_aligned {
+        find_bitvec_impl_with_lps::<true>(haystack, needle, &lps, start, end)
+    } else {
+        find_bitvec_impl_with_lps::<false>(haystack, needle, &lps, start, end)
     }
 }
 
@@ -164,17 +182,16 @@ fn rfind_bitvec_impl<const BYTE_ALIGNED: bool>(
     None
 }
 
-fn find_bitvec_impl<const BYTE_ALIGNED: bool>(
+fn find_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
     haystack: &BS,
     needle: &BS,
+    lps: &[usize],
     start: usize,
     end: usize,
 ) -> Option<usize> {
     if needle.is_empty() || needle.len() > end - start {
         return None;
     }
-
-    let lps = compute_lps(needle);
     let needle_len = needle.len();
     let mut i = start;
     let mut j = 0;

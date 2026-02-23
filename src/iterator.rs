@@ -39,6 +39,7 @@ pub struct FindAllIterator {
     pub byte_aligned: bool,
     pub step: usize,
     pub current_pos: usize,
+    pub lps: Vec<usize>,
 }
 
 #[pymethods]
@@ -62,6 +63,7 @@ impl FindAllIterator {
         let find_result = {
             let haystack_rs = slf.haystack.borrow(py);
             let needle_rs = slf.needle.borrow(py);
+            let lps = &slf.lps;
 
             let needle_len = needle_rs.len();
             if needle_len == 0 {
@@ -74,9 +76,10 @@ impl FindAllIterator {
             {
                 return Ok(None); // No space left for the needle or already past the end
             }
-            helpers::find_bitvec(
+            helpers::find_bitvec_with_lps(
                 haystack_rs.as_bitslice(),
                 needle_rs.as_bitslice(),
+                lps,
                 current_pos,
                 slf.end,
                 byte_aligned,

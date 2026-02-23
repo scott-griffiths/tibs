@@ -242,3 +242,16 @@ def test_joined_from_iterable():
     i = iter(v)
     b = Tibs.from_joined(v)
     assert b == '0b011'
+
+
+def test_promotion_from_mutibs():
+    m = Mutibs('0x123')
+    t = Tibs(m)
+    assert isinstance(t, Tibs)
+    assert m == t
+    m2 = Mutibs(t)
+    assert isinstance(m2, Mutibs)
+    assert m2 == t
+    m3 = Mutibs(m)
+    assert isinstance(m3, Mutibs)
+    assert m3 == t

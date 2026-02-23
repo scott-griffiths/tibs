@@ -46,7 +46,6 @@ def test_bitops_tibs():
     for _ in range(100):
         t3 = t1 | t2
         t4 = t3[10:1_000_000] & t2[9:999_999]
-    print(t4.count(1))
 
 
 def test_bitops_bitarray():
@@ -57,7 +56,6 @@ def test_bitops_bitarray():
     for _ in range(100):
         b3 = b1 | b2
         b4 = b3[10:1_000_000] & b2[9:999_999]
-    print(b4.count())
 
 
 def test_construction_bitarray():
@@ -77,12 +75,12 @@ def test_construction_tibs():
 
 
 def test_counting_bitarray():
-    for _ in range(100):
+    for _ in range(20):
         _ = ba_rand.count(1)
 
 
 def test_counting_tibs():
-    for _ in range(100):
+    for _ in range(20):
         _ = tibs_rand.count(1)
 
 
@@ -139,7 +137,6 @@ def test_chunks_bitarray():
     for i in range(0, len(b), 5):
         if b[i: i + 5] == f:
             count += 1
-    print(count)
 
 
 def test_chunks_tibs():
@@ -149,7 +146,6 @@ def test_chunks_tibs():
     for chunk in t.chunks(5):
         if chunk == f:
             count += 1
-    print(count)
 
 
 def test_extending_bits_tibs():
