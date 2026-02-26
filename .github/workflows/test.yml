@@ -24,7 +24,7 @@ jobs:
           - name: macOS
             emoji: ":apple:"
             runs-on: macos-14
-            artifact: packages-macos-14
+            artifact: packages-macos-15
           - name: Windows
             emoji: ":window:"
             runs-on: windows-latest
