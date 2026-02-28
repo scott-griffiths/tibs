@@ -165,7 +165,14 @@ impl Tibs {
 
 ///     An immutable container of binary data.
 ///
-///     To construct, use a builder 'from' method:
+///     The constructor is a convenient way to delegate to the ``from_string``,
+///     ``from_bytes`` or ``from_bools`` builder methods, depending on the type of ``auto``.
+///
+///     * ``Tibs('0x13')`` - Equivalent to ``Tibs.from_string('0x13')``.
+///     * ``Tibs([1, 0])`` - Equivalent to ``Tibs.from_bools([1, 0])``.
+///     * ``Tibs(b'hello')`` - Equivalent to ``Tibs.from_bytes(b'hello')``.
+///
+///     Otherwise, to construct use a builder 'from' method:
 ///
 ///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
 ///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
@@ -180,8 +187,6 @@ impl Tibs {
 ///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
 ///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
-///
-///     Using ``Tibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[derive(Clone)]
 #[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
