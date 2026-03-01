@@ -2,17 +2,20 @@ name: Publish
 
 on:
   workflow_run:
-    workflows: [Test]
-    types: [completed]
+    workflows: [ Test ]
+    types: [ completed ]
 
 jobs:
   check-tag:
     name: Check for release tag
+    # Only consider publishing when Test succeeded.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       is_tag: ${{ steps.tag.outputs.is_tag }}
       tag_name: ${{ steps.tag.outputs.tag_name }}
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+      build_run_id: ${{ steps.build_run.outputs.build_run_id }}
     steps:
       - name: Download source code
         uses: actions/checkout@v4
@@ -29,8 +32,9 @@ jobs:
           set -euo pipefail
 
           sha="${{ github.event.workflow_run.head_sha }}"
-          TAG="$(git tag --points-at "$sha")"
-          echo "Found tag: $TAG"
+          # Multiple tags can theoretically point at the same SHA; pick the first v* tag.
+          TAG="$(git tag --points-at "$sha" | grep -E '^v' | head -n 1 || true)"
+          echo "Found tag: ${TAG:-<none>}"
 
           if [[ "$TAG" == v* ]]; then
             echo "is_tag=true" >> "$GITHUB_OUTPUT"
@@ -45,10 +49,28 @@ jobs:
             echo "is_tag=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Download upstream Build run id artifact (from this Test run)
+        uses: actions/download-artifact@v4
+        with:
+          name: upstream-build-run
+          path: workflow_meta
+
+      - name: Read upstream Build run id
+        id: build_run
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_run_id="$(cat workflow_meta/build_run_id.txt)"
+          if [[ -z "$build_run_id" ]]; then
+            echo "Missing build_run_id" >&2
+            exit 1
+          fi
+          echo "build_run_id=$build_run_id" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish to PyPI
     needs: check-tag
-    if: ${{ github.event.workflow_run.conclusion == 'success' && needs.check-tag.outputs.is_tag == 'true' }}
+    if: ${{ needs.check-tag.outputs.is_tag == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download source code
@@ -61,6 +83,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: build.yml
+          run_id: ${{ needs.check-tag.outputs.build_run_id }}
           workflow_conclusion: success
           path: artifacts
 
