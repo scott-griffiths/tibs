@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   test:
-    # Only run tests if the triggering Build succeeded.
+    # Run tests if the triggering Build succeeded.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Test ${{ matrix.os.name }} ${{ matrix.python.name }}
     runs-on: ${{ matrix.os.runs-on }}
@@ -72,13 +72,20 @@ jobs:
         run: git fetch --tags
 
 
-      - name: Download artifacts
+      - name: Download artifacts (if present)
+        id: download_artifacts
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: build.yml
           run_id: ${{ github.event.workflow_run.id }}
           name: ${{ matrix.os.artifact }}
           path: dist
+
+      - name: Show downloaded dist contents
+        shell: bash
+        run: |
+          ls -la dist || true
 
       - name: Save upstream Build run id (for Publish)
         # Only needs to run once; do it on Linux to avoid duplicates.
