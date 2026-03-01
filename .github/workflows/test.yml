@@ -11,6 +11,8 @@ defaults:
 
 jobs:
   test:
+    # Only run tests if the triggering Build succeeded.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Test ${{ matrix.os.name }} ${{ matrix.python.name }}
     runs-on: ${{ matrix.os.runs-on }}
     strategy:
@@ -63,13 +65,37 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags
+
 
       - name: Download artifacts
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: build.yml
+          run_id: ${{ github.event.workflow_run.id }}
           name: ${{ matrix.os.artifact }}
           path: dist
+
+      - name: Save upstream Build run id (for Publish)
+        # Only needs to run once; do it on Linux to avoid duplicates.
+        if: ${{ matrix.os.runs-on == 'ubuntu-latest' && matrix.python.action == '3.11' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p workflow_meta
+          echo '${{ github.event.workflow_run.id }}' > workflow_meta/build_run_id.txt
+
+      - name: Upload upstream Build run id artifact
+        if: ${{ matrix.os.runs-on == 'ubuntu-latest' && matrix.python.action == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-build-run
+          path: workflow_meta/build_run_id.txt
+          if-no-files-found: error
 
       # Setup steps
       - uses: actions/setup-python@v6
