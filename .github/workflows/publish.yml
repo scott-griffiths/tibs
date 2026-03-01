@@ -15,7 +15,7 @@ jobs:
       is_tag: ${{ steps.tag.outputs.is_tag }}
       tag_name: ${{ steps.tag.outputs.tag_name }}
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
-      build_run_id: ${{ steps.build_run.outputs.build_run_id }}
+      build_run_id: ${{ steps.build_run.outputs.build_run_id || steps.build_run_default.outputs.build_run_id }}
     steps:
       - name: Download source code
         uses: actions/checkout@v4
@@ -50,6 +50,7 @@ jobs:
           fi
 
       - name: Download upstream Build run id artifact (from this Test run)
+        if: ${{ steps.tag.outputs.is_tag == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: upstream-build-run
@@ -57,6 +58,7 @@ jobs:
 
       - name: Read upstream Build run id
         id: build_run
+        if: ${{ steps.tag.outputs.is_tag == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +68,14 @@ jobs:
             exit 1
           fi
           echo "build_run_id=$build_run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Set default build_run_id output (non-tag runs)
+        id: build_run_default
+        if: ${{ steps.tag.outputs.is_tag != 'true' }}
+        shell: bash
+        run: |
+          # Provide a harmless default so job outputs always exist.
+          echo "build_run_id=" >> "$GITHUB_OUTPUT"
 
   publish:
     name: Publish to PyPI
