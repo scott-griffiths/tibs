@@ -68,7 +68,6 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install tibs[dev] --find-links dist --force-reinstall
-          pip install pytest
           pytest
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
@@ -83,7 +82,7 @@ jobs:
             pip3 install -U pip pytest
           run: |
             set -e
-            pip3 install tibs --find-links dist --force-reinstall
+            pip3 install tibs[dev] --find-links dist --force-reinstall
             pytest
 
   musllinux:
@@ -132,7 +131,6 @@ jobs:
             python3 -m virtualenv .venv
             source .venv/bin/activate
             pip install tibs[dev] --no-index --find-links dist --force-reinstall
-            pip install pytest
             pytest
           '
       - name: pytest
@@ -148,7 +146,6 @@ jobs:
             set -e
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install pytest
             pip install tibs[dev] --find-links dist --force-reinstall
             pytest
 
@@ -200,7 +197,6 @@ jobs:
           python3 -m venv .venv
           source .venv/Scripts/activate
           pip install tibs[dev] --find-links dist --force-reinstall
-          pip install pytest
           pytest
 
   macos:
@@ -240,7 +236,6 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install tibs[dev] --find-links dist --force-reinstall
-          pip install pytest
           pytest
 
   emscripten:
@@ -295,7 +290,6 @@ jobs:
           pyodide venv .venv
           source .venv/bin/activate
           pip install tibs[dev] --find-links dist --force-reinstall
-          pip install pytest
           python -m pytest
 
   sdist:
