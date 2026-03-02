@@ -22,8 +22,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch tags
-        run: git fetch --tags
+      - name: Fetch tags (authoritative)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ensure we have all tags and the commit object for the triggering SHA.
+          git remote -v
+          git fetch --force --prune --tags origin "+refs/tags/*:refs/tags/*"
+          git cat-file -e "${{ github.event.workflow_run.head_sha }}^{commit}"
 
       - name: Get tag information
         id: tag
@@ -32,8 +38,15 @@ jobs:
           set -euo pipefail
 
           sha="${{ github.event.workflow_run.head_sha }}"
-          # Multiple tags can theoretically point at the same SHA; pick the first v* tag.
+
+          # Prefer local tags if present.
           TAG="$(git tag --points-at "$sha" | grep -E '^v' | head -n 1 || true)"
+
+          # Fallback: ask the remote for tags pointing at this SHA (more reliable in workflow_run contexts).
+          if [[ -z "$TAG" ]]; then
+            TAG="$(git ls-remote --tags origin | awk -v SHA="$sha" '$1==SHA {print $2}' | sed 's#refs/tags/##' | sed 's/\^{}$//' | grep -E '^v' | head -n 1 || true)"
+          fi
+
           echo "Found tag: ${TAG:-<none>}"
 
           if [[ "$TAG" == v* ]]; then
