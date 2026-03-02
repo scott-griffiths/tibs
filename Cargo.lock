@@ -467,7 +467,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tibs"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "bitvec",
  "bytemuck",
