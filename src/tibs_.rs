@@ -147,11 +147,6 @@ impl Tibs {
     }
 
     #[inline]
-    pub(crate) fn as_bitvec_ref(&self) -> &BV {
-        &self._data
-    }
-
-    #[inline]
     pub(crate) fn raw_bytes(&self) -> Vec<u8> {
         // Given the bit offset self._offset and the bit length self._length
         // return the byte data from the bitvec self._data. The data should cover just

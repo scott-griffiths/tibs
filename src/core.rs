@@ -1,10 +1,11 @@
-use crate::helpers::{bv_from_zeros, validate_index, BS, BV};
+use crate::helpers::{BS, BV, bv_from_zeros, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
+use bitvec::domain::Domain;
 use bitvec::prelude::*;
 use half::f16;
-use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::PyResult;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use std::fmt;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
@@ -240,32 +241,40 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     fn count(&self, count_ones: bool) -> usize {
-        let len = self.len();
-        let r = self.as_bitvec_ref();
-        let s = r.as_raw_slice();
-        let (mut ones, raw) = (0usize, s);
-        if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(raw) {
-            // Considerable speed increase by casting data to usize if possible.
-            for word in words {
-                ones += word.count_ones() as usize;
-            }
-            let used_bits = words.len() * usize::BITS as usize;
-            if used_bits > len {
-                let extra = used_bits - len;
-                if let Some(last) = words.last() {
-                    ones -= (last & (!0usize >> extra)).count_ones() as usize;
+        let slice = self.as_bitslice();
+        let mut ones = 0;
+
+        match slice.domain() {
+            bitvec::domain::Domain::Region { head, body, tail } => {
+                if let Some(h) = head {
+                    ones += h.into_bitslice().count_ones() as usize;
+                }
+                if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(body) {
+                    // Considerable speed increase by casting data to usize if possible.
+                    for &word in words {
+                        ones += word.count_ones() as usize;
+                    }
+                    // Handle the remainder not fitting into usize
+                    let remainder_start = words.len() * std::mem::size_of::<usize>();
+                    for &byte in &body[remainder_start..] {
+                        ones += byte.count_ones() as usize;
+                    }
+                } else {
+                    // Fallback for architectures where alignment is strict
+                    for &byte in body {
+                        ones += byte.count_ones() as usize;
+                    }
+                }
+                if let Some(t) = tail {
+                    ones += t.into_bitslice().count_ones() as usize;
                 }
             }
-        } else {
-            // Fallback to library method
-            ones = self.as_bitslice().count_ones();
+            _ => {
+                ones = slice.count_ones();
+            }
         }
 
-        if count_ones {
-            ones
-        } else {
-            len - ones
-        }
+        if count_ones { ones } else { self.len() - ones }
     }
 
     fn multiply(&self, n: usize) -> Self {
