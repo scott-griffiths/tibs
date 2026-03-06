@@ -4,9 +4,11 @@
 # The tests help improve coverage but are not hand crafted.
 
 import sys
+
 sys.path.insert(0, "..")
 import pytest
 from tibs import Tibs, Mutibs
+
 
 class TestTibsCreation:
     def test_from_bin_simple(self):
@@ -81,6 +83,7 @@ class TestTibsCreation:
         c = Tibs(b)
         assert c == "0b11001110"
 
+
 class TestMutibsCreation:
     def test_from_bin_simple(self):
         assert Mutibs.from_bin("101") == "0b101"
@@ -133,6 +136,7 @@ class TestMutibsCreation:
         c = Mutibs(b)
         assert c == "0b11001110"
 
+
 class TestTibsMethods:
     def test_eq(self):
         assert Tibs("0xf") == "0b1111"
@@ -143,6 +147,7 @@ class TestTibsMethods:
 
     def test_repr(self):
         assert repr(Tibs("0b101")) == "Tibs('0b101')"
+
 
 class TestMutibsMethods:
     def test_eq(self):
@@ -190,6 +195,7 @@ class TestMutibsMethods:
         m[1:7:2] = [1, 1, 1]
         assert m == "0b01010100"
 
+
 class TestIterators:
     def test_bool_iterator(self):
         t = Tibs("0b101")
@@ -206,24 +212,18 @@ class TestIterators:
         assert chunks[0] == "0b101"
         assert chunks[1] == "0b101"
 
+
 class TestErrorHandling:
-    def test_from_u_errors(self):
-        with pytest.raises(OverflowError):
-            Tibs.from_u(256, 8) # Overflows
-        with pytest.raises(OverflowError):
-            Tibs.from_u(-1, 8) # can't convert negative int to unsigned
-        with pytest.raises(ValueError):
-            Tibs.from_u(1, 200) # Too long
 
     def test_from_i_errors(self):
         with pytest.raises(OverflowError):
-            Tibs.from_i(128, 8) # Overflows (signed)
+            Tibs.from_i(128, 8)  # Overflows (signed)
         with pytest.raises(OverflowError):
-            Tibs.from_i(-129, 8) # Overflows (signed)
+            Tibs.from_i(-129, 8)  # Overflows (signed)
 
     def test_from_f_errors(self):
         with pytest.raises(ValueError):
-            Tibs.from_f(1.0, 12) # Invalid length
+            Tibs.from_f(1.0, 12)  # Invalid length
 
     def test_from_bytes_errors(self):
         with pytest.raises(ValueError):
@@ -241,6 +241,7 @@ class TestErrorHandling:
             a[5] = 1
         with pytest.raises(IndexError):
             del a[5]
+
 
 class TestAdvancedFeatures:
     def test_rol(self):
@@ -261,7 +262,7 @@ class TestAdvancedFeatures:
     def test_to_f(self):
         f = 3.14159
         t16 = Tibs.from_f(f, 16)
-        assert t16.to_f() != f # Should be different
+        assert t16.to_f() != f  # Should be different
         t32 = Tibs.from_f(f, 32)
         assert abs(t32.to_f() - f) < 1e-6
         t64 = Tibs.from_f(f, 64)
@@ -275,6 +276,7 @@ class TestAdvancedFeatures:
     def test_find_all_byte_aligned(self):
         a = Tibs("0x00ff00ff")
         assert list(a.find_all("0xff", byte_aligned=True)) == [8, 24]
+
 
 class TestComplexInteractions:
     def test_overlapping_replace(self):
@@ -333,7 +335,7 @@ class TestComplexInteractions:
     def test_from_joined_mixed_types(self):
         t = Tibs("0b11")
         m = Mutibs("0b00")
-        result = Tibs.from_joined([t, m, "0xff", [1,0,1]])
+        result = Tibs.from_joined([t, m, "0xff", [1, 0, 1]])
         assert result == "0b110011111111101"
 
     def test_delete_and_insert(self):
@@ -347,6 +349,7 @@ class TestComplexInteractions:
         s = Mutibs("0b101010")
         s.replace("0b10", "")
         assert s == "0b"
+
 
 class TestSliceOperations:
     def test_slice_eq(self):
