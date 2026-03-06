@@ -130,7 +130,7 @@ jobs:
             apk add py3-pip py3-virtualenv
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install tibs[dev] --no-index --find-links dist --force-reinstall
+            pip install tibs[dev] --find-links dist --force-reinstall
             pytest
           '
       - name: pytest

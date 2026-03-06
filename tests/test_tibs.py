@@ -72,7 +72,8 @@ def test_from_u_errors():
         _ = Tibs.from_u(0, -1)
     with pytest.raises(ValueError):
         _ = Tibs.from_u(0, 0)
-    with pytest.raises(OverflowError):
+    # Windows raises a ValueError instead of an OverflowError. :shrug:
+    with pytest.raises((OverflowError, ValueError)):
         _ = Tibs.from_u(-1, 5)
 
 
@@ -124,6 +125,7 @@ def test_from_f():
     h2 = c2.to_f()
     assert f == g == h == f2 == g2 == h2 == 0.25
 
+
 def test_raw_bytes_and_offset():
     a = Tibs('0xff00ff')
     raw_bytes, offset, length = a.to_raw_data()
@@ -134,6 +136,7 @@ def test_raw_bytes_and_offset():
     assert offset == 4
     assert raw_bytes == b'\xff\x00\xff'
     assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == '0x0f00f0'
+
 
 def test_mutibs_raw_bytes_and_offset():
     a = Mutibs('0xff')
@@ -150,11 +153,12 @@ def test_mutibs_raw_bytes_and_offset():
     assert length == 12
     assert b == []
 
+
 def test_from_bytes_offsets():
     x = b'\xff\x00\xee\x11'
     a = Tibs.from_bytes(x)
     assert a == '0xff00ee11'
-    b = Tibs.from_bytes(x, None,16)
+    b = Tibs.from_bytes(x, None, 16)
     assert b == '0xff00'
     c = Tibs.from_bytes(x, offset=16)
     assert c == '0xee11'
@@ -205,11 +209,13 @@ def test_raw_data_bug():
     assert a.to_raw_data() == (b'hello', 0, 40)
     assert b.to_raw_data() == (b'ello', 0, 32)
 
+
 def test_from_bools_generator():
     bits = [1, 0, 0, 1, 0]
     generator = (y for y in bits)
     t = Tibs.from_bools(generator)
     assert list(t) == bits
+
 
 def test_count_expanded():
     a = Tibs('0xaaaa')
