@@ -35,13 +35,6 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
         }
     }
 
-    fn as_bitvec_ref(&self) -> &BV {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitvec_ref(),
-            BorrowedOrOwnedTibs::Owned(t) => t.as_bitvec_ref(),
-        }
-    }
-
     fn as_bitslice(&self) -> &BS {
         match self {
             BorrowedOrOwnedTibs::Borrowed(t) => t.as_bitslice(),

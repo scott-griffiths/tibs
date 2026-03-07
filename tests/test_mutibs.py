@@ -1235,3 +1235,9 @@ def test_count_edge_cases():
     assert m.count(m + [0]) == 0
     with pytest.raises(ValueError):
         _ = m.count(2)
+
+
+def test_set_bug():
+    m = Mutibs.from_hex('0x001122')
+    m[8:0] = '0xff'
+    assert m == '0x00ff1122'
