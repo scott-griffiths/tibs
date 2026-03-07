@@ -1,7 +1,6 @@
 use crate::helpers::{BS, BV, bv_from_zeros, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
-use bitvec::domain::Domain;
 use bitvec::prelude::*;
 use half::f16;
 use pyo3::PyResult;
@@ -12,7 +11,6 @@ use std::fmt;
 pub(crate) trait BitCollection: Sized + Clone {
     fn from_bv(bv: BV) -> Self;
     fn to_bitvec(&self) -> BV;
-    fn as_bitvec_ref(&self) -> &BV;
     fn as_bitslice(&self) -> &BS;
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
@@ -499,11 +497,6 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn as_bitvec_ref(&self) -> &BV {
-        Tibs::as_bitvec_ref(self)
-    }
-
-    #[inline]
     fn as_bitslice(&self) -> &BS {
         Tibs::as_bitslice(self)
     }
@@ -527,11 +520,6 @@ impl BitCollection for Mutibs {
     #[inline]
     fn to_bitvec(&self) -> BV {
         Mutibs::as_bitvec_ref(self).to_bitvec()
-    }
-
-    #[inline]
-    fn as_bitvec_ref(&self) -> &BV {
-        Mutibs::as_bitvec_ref(self)
     }
 
     #[inline]

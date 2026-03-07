@@ -65,14 +65,14 @@ impl Mutibs {
     }
 
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &BS) {
-        if end - start == value.len() {
-            // This is an overwrite, so no need to move data around.
-            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value);
-        } else if start == end {
-            // Not sure why but splice doesn't work for this case, so we do it explicitly
+        if start >= end {
+            // This is an insertion in Python
             let tail = self.as_mut_bitvec_ref().split_off(start);
             self.as_mut_bitvec_ref().extend_from_bitslice(value);
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
+        } else if end - start == value.len() {
+            // This is an overwrite, so no need to move data around.
+            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value);
         } else {
             let tail = self.as_mut_bitvec_ref().split_off(end);
             self.as_mut_bitvec_ref().truncate(start);

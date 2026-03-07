@@ -3,7 +3,7 @@
 A sleek Python library for your binary data
 
 [![PyPI - Version](https://img.shields.io/pypi/v/tibs?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/tibs/)
-[![CI badge](https://github.com/scott-griffiths/tibs/actions/workflows/.github/workflows/test.yml/badge.svg)](https://github.com/scott-griffiths/tibs/actions/workflows/test.yml)
+[![CI badge](https://github.com/scott-griffiths/tibs/actions/workflows/.github/workflows/new_ci.yaml/badge.svg)](https://github.com/scott-griffiths/tibs/actions/workflows/new_ci.yaml)
 [![Docs](https://img.shields.io/readthedocs/mutibs?logo=readthedocs&logoColor=white)](https://mutibs.readthedocs.io/en/latest/)
 ![PyPI - License](https://img.shields.io/pypi/l/tibs)
 &nbsp; &nbsp;
@@ -13,7 +13,8 @@ A sleek Python library for your binary data
 ----
 
 ``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
-It is 100% written in Rust to give it excellent performance, and is from the same author as the [bitstring](https://github.com/scott-griffiths/bitstring) library.
+It is 100% written in Rust to give it excellent performance, and is from the same author as
+the [bitstring](https://github.com/scott-griffiths/bitstring) library.
 
 # Documentation
 
@@ -34,7 +35,7 @@ One way to get to know the library is to start a Python interactive session, imp
 classes, and experiment with some of the example code in the rest of this document.
 
 ```python
->>> from tibs import Tibs, Mutibs
+>> > from tibs import Tibs, Mutibs
 ```
 
 ## A quick tour
@@ -46,34 +47,35 @@ There are two classes:
 
 They are created by class methods starting with ``from_``, for example
 
-
 ```python
->>> a = Tibs.from_bin('0110')
->>> b = Tibs.from_hex('abc')
->>> c = Tibs.from_string('0xfee, 0b11001')
->>> d = Tibs.from_bytes(b'some_byte_data')
->>> e = Tibs.from_random(1000)  # 1000 random bits
->>> f = Tibs.from_u(76, 25)  # Unsigned int stored in 25 bits
->>> g = Tibs.from_f(-0.125, 16)  # A float stored in 16 bits
->>> h = Tibs.from_bools([1, 0, 0])
->>> i = Tibs.from_joined([a, b, c, d, e, f, g, h])
+>> > a = Tibs.from_bin('0110')
+>> > b = Tibs.from_hex('abc')
+>> > c = Tibs.from_string('0xfee, 0b11001')
+>> > d = Tibs.from_bytes(b'some_byte_data')
+>> > e = Tibs.from_random(1000)  # 1000 random bits
+>> > f = Tibs.from_u(76, 25)  # Unsigned int stored in 25 bits
+>> > g = Tibs.from_f(-0.125, 16)  # A float stored in 16 bits
+>> > h = Tibs.from_bools([1, 0, 0])
+>> > i = Tibs.from_joined([a, b, c, d, e, f, g, h])
 ```
 
-Once created they are just binary data, stored efficiently, and they don't retain any information about how they were created.
+Once created they are just binary data, stored efficiently, and they don't retain any information about how they were
+created.
 
-The `Tibs` constructor can also be used to create new instances, and it will delegate to `from_string`, `from_bytes` or `from_bools`.
+The `Tibs` constructor can also be used to create new instances, and it will delegate to `from_string`, `from_bytes` or
+`from_bools`.
 This is often more convenient:
 
 ```python
->>> a = Tibs('0b0110')
->>> b = Tibs('0xabc')
->>> c = Tibs('0xfee, 0b11001')
->>> d = Tibs(b'some_byte_data')
->>> h = Tibs([1, 0, 0])
+>> > a = Tibs('0b0110')
+>> > b = Tibs('0xabc')
+>> > c = Tibs('0xfee, 0b11001')
+>> > d = Tibs(b'some_byte_data')
+>> > h = Tibs([1, 0, 0])
 ```
 
 Anything that works in the constructor can also be used in other places where a `Tibs` is needed.
-For example, instead of writing 
+For example, instead of writing
 
 ```python
 x = b & Tibs.from_hex('0xff0')
@@ -89,31 +91,33 @@ if x.starts_with('0b11'):
     x += [0, 1, 1]
 ```
 
-
 Note that the binary and hex strings need the `0b` and `0x` prefixes when not called via `from_bin` and `from_hex`.
 
 To get the data out of the `Tibs` there are similar methods starting with ``to_``
 
 ```python
->>> a.to_bin()
+>> > a.to_bin()
 '0110'
->>> b.to_hex()
+>> > b.to_hex()
 'abc'
->>> d.to_bytes()
+>> > d.to_bytes()
 b'some_byte_data'
->>> f.to_u()
+>> > f.to_u()
 76
->>> g.to_f()
+>> > g.to_f()
 -0.125
 ```
 
 There isn't a `to_bools` method, but creating a `list` from the `Tibs` instance will have the same effect.
 You can also use `Tibs` instances as iterators of bits.
 
-Instances of `Tibs` are immutable. Once created they can't change in value, much like the Python `bytes` and `str` types.
-This allows them to be hashed, stored in sets, used as dictionary keys etc., and also allows various optimizations to be used to make them more efficient. They should be used by default if values don't need to be changed.
+Instances of `Tibs` are immutable. Once created they can't change in value, much like the Python `bytes` and `str`
+types.
+This allows them to be hashed, stored in sets, used as dictionary keys etc., and also allows various optimizations to be
+used to make them more efficient. They should be used by default if values don't need to be changed.
 
-This does mean that the standard pieces of advice for working with things like Python strings does apply, and why something like this line:
+This does mean that the standard pieces of advice for working with things like Python strings does apply, and why
+something like this line:
 
 ```python
 i = Tibs()
@@ -124,14 +128,15 @@ for t in [a, b, c, d, e, f, g, h]:
 is an anti-pattern to avoid as it will create a new instance every time it appends. Use `from_joined` instead.
 
 For the times when you do need a mutable container use `Mutibs`.
-This can do everything that `Tibs` can do, except that it's not hashable, so can't be used as a dictionary key, in sets etc.
+This can do everything that `Tibs` can do, except that it's not hashable, so can't be used as a dictionary key, in sets
+etc.
 It also has several extra methods that will mutate the value in-place.
 
 ```python
->>> m = Mutibs()
->>> m.extend('0xabde')
+>> > m = Mutibs()
+>> > m.extend('0xabde')
 Mutibs('0xabde')
->>> m.replace([1], [0, 1, 0])
+>> > m.replace([1], [0, 1, 0])
 Mutibs('0b01000100010001001001001000100100100100')
 ```
 
@@ -139,11 +144,12 @@ Note that mutating methods like `extend` and `replace` also return the modified 
 This perhaps isn't the most Pythonic of interfaces, but it allows methods to be chained:
 
 ```python
->>> m[:32].byte_swap().reverse().to_f()
+>> > m[:32].byte_swap().reverse().to_f()
 2.1993814317305072e-18
 ```
 
-You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding, replacing, setting, reversing etc.
+You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding,
+replacing, setting, reversing etc.
 
 For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
 
