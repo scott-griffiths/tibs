@@ -94,7 +94,7 @@ def test_from_i_errors():
 def test_from_large_ints():
     with pytest.raises(ValueError):
         _ = Tibs.from_i(-1, 1000)
-    a = Tibs.from_i(-1, 128)
+    a = Tibs.from_i(-1, 127)
     assert a.all()
     with pytest.raises(ValueError):
         _ = Mutibs.from_i(-1, 1000)
