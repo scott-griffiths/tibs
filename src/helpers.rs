@@ -498,7 +498,7 @@ pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
 
 #[inline]
 pub(crate) fn bv_from_i128(value: i128, length: i64) -> PyResult<BV> {
-    if length <= 0 || length > 128 {
+    if length <= 0 || length >= 128 {
         return Err(PyValueError::new_err(format!(
             "Bit length for signed int must be between 1 and 128. Received {length}."
         )));
