@@ -36,7 +36,7 @@ One way to get to know the library is to start a Python interactive session, imp
 classes, and experiment with some of the example code in the rest of this document.
 
 ```python
->> > from tibs import Tibs, Mutibs
+>>> from tibs import Tibs, Mutibs
 ```
 
 ## A quick tour
@@ -49,15 +49,15 @@ There are two classes:
 They are created by class methods starting with ``from_``, for example
 
 ```python
->> > a = Tibs.from_bin('0110')
->> > b = Tibs.from_hex('abc')
->> > c = Tibs.from_string('0xfee, 0b11001')
->> > d = Tibs.from_bytes(b'some_byte_data')
->> > e = Tibs.from_random(1000)  # 1000 random bits
->> > f = Tibs.from_u(76, 25)  # Unsigned int stored in 25 bits
->> > g = Tibs.from_f(-0.125, 16)  # A float stored in 16 bits
->> > h = Tibs.from_bools([1, 0, 0])
->> > i = Tibs.from_joined([a, b, c, d, e, f, g, h])
+>>> a = Tibs.from_bin('0110')
+>>> b = Tibs.from_hex('abc')
+>>> c = Tibs.from_string('0xfee, 0b11001')
+>>> d = Tibs.from_bytes(b'some_byte_data')
+>>> e = Tibs.from_random(1000)  # 1000 random bits
+>>> f = Tibs.from_u(76, 25)  # Unsigned int stored in 25 bits
+>>> g = Tibs.from_f(-0.125, 16)  # A float stored in 16 bits
+>>> h = Tibs.from_bools([1, 0, 0])
+>>> i = Tibs.from_joined([a, b, c, d, e, f, g, h])
 ```
 
 Once created they are just binary data, stored efficiently, and they don't retain any information about how they were
@@ -68,11 +68,11 @@ The `Tibs` constructor can also be used to create new instances, and it will del
 This is often more convenient:
 
 ```python
->> > a = Tibs('0b0110')
->> > b = Tibs('0xabc')
->> > c = Tibs('0xfee, 0b11001')
->> > d = Tibs(b'some_byte_data')
->> > h = Tibs([1, 0, 0])
+>>> a = Tibs('0b0110')
+>>> b = Tibs('0xabc')
+>>> c = Tibs('0xfee, 0b11001')
+>>> d = Tibs(b'some_byte_data')
+>>> h = Tibs([1, 0, 0])
 ```
 
 Anything that works in the constructor can also be used in other places where a `Tibs` is needed.
@@ -97,15 +97,15 @@ Note that the binary and hex strings need the `0b` and `0x` prefixes when not ca
 To get the data out of the `Tibs` there are similar methods starting with ``to_``
 
 ```python
->> > a.to_bin()
+>>> a.to_bin()
 '0110'
->> > b.to_hex()
+>>> b.to_hex()
 'abc'
->> > d.to_bytes()
+>>> d.to_bytes()
 b'some_byte_data'
->> > f.to_u()
+>>> f.to_u()
 76
->> > g.to_f()
+>>> g.to_f()
 -0.125
 ```
 
@@ -134,10 +134,10 @@ etc.
 It also has several extra methods that will mutate the value in-place.
 
 ```python
->> > m = Mutibs()
->> > m.extend('0xabde')
+>>> m = Mutibs()
+>>> m.extend('0xabde')
 Mutibs('0xabde')
->> > m.replace([1], [0, 1, 0])
+>>> m.replace([1], [0, 1, 0])
 Mutibs('0b01000100010001001001001000100100100100')
 ```
 
@@ -145,7 +145,7 @@ Note that mutating methods like `extend` and `replace` also return the modified 
 This perhaps isn't the most Pythonic of interfaces, but it allows methods to be chained:
 
 ```python
->> > m[:32].byte_swap().reverse().to_f()
+>>> m[:32].byte_swap().reverse().to_f()
 2.1993814317305072e-18
 ```
 
