@@ -91,17 +91,36 @@ def test_from_i_errors():
         _ = Tibs.from_i(4, 2)
 
 
-def test_from_large_ints():
+def test_signed_int_from_large_ints():
     with pytest.raises(ValueError):
-        _ = Tibs.from_i(-1, 1000)
-    a = Tibs.from_i(-1, 127)
+        _ = Tibs.from_i(-1, 129)
+    a = Tibs.from_i(-1, 128)
     assert a.all()
+    assert a.to_i() == -1
+    assert not Tibs.from_i(0, 128).any()
+    assert Tibs.from_i(17, 128).to_i() == 17
+    assert Tibs.from_i(-17, 128).to_i() == -17
     with pytest.raises(ValueError):
-        _ = Mutibs.from_i(-1, 1000)
+        _ = Mutibs.from_i(-1, 129)
+    b = Mutibs.from_i(-1, 128)
+    assert b.all()
+    assert b.to_i() == -1
+
+
+def test_unsigned_int_from_large_ints():
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(0, 129)
+    a = Tibs.from_u(0, 128)
+    assert not a.any()
+    assert a.to_u() == 0
+    assert Tibs.from_u((1 << 128) - 1, 128).all()
+    assert Tibs.from_u(17, 128).to_u() == 17
+    with pytest.raises(ValueError):
+        _ = Mutibs.from_u(0, 129)
     b = Mutibs.from_u(0, 128)
     assert not b.any()
-    assert a.to_i() == -1
     assert b.to_u() == 0
+    assert Mutibs.from_u((1 << 128) - 1, 128).all()
 
 
 def test_from_f():

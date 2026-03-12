@@ -486,6 +486,12 @@ pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
             "Bit length for unsigned int must be between 1 and 128. Received {length}."
         )));
     }
+    // Special case for 128 to avoid overflow in more general case
+    if length == 128 {
+        let mut bv = BV::repeat(false, 128);
+        bv.store_be(value);
+        return Ok(bv);
+    }
     if value >= (1u128 << length) {
         return Err(PyOverflowError::new_err(format!(
             "Value {value} does not fit in {length} bits."
@@ -498,10 +504,16 @@ pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
 
 #[inline]
 pub(crate) fn bv_from_i128(value: i128, length: i64) -> PyResult<BV> {
-    if length <= 0 || length >= 128 {
+    if length <= 0 || length > 128 {
         return Err(PyValueError::new_err(format!(
             "Bit length for signed int must be between 1 and 128. Received {length}."
         )));
+    }
+    // Special case for 128 to avoid overflow in more general case
+    if length == 128 {
+        let mut bv = BV::repeat(value < 0, 128);
+        bv.store_be(value);
+        return Ok(bv);
     }
     let min_val = -(1i128 << (length - 1));
     let max_val = (1i128 << (length - 1)) - 1;
