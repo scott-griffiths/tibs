@@ -1,4 +1,4 @@
 
 # Contributing
 
-The project is currently in its alpha phase, and I am not accepting code contributions at this time.
+The project is currently in beta, and I am happy to accept bug reports, fixes and feature requests.
