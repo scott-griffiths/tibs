@@ -115,23 +115,23 @@ impl Tibs {
     pub(crate) fn from_bv(bv: BV) -> Self {
         let length = bv.len();
         Tibs {
-            _data: Arc::new(bv),
-            _offset: 0,
-            _length: length,
+            data: Arc::new(bv),
+            offset: 0,
+            length: length,
         }
     }
 
     pub(crate) fn get_slice_unchecked(&self, offset: usize, length: usize) -> Self {
         Tibs {
-            _data: self._data.clone(),
-            _offset: self._offset + offset,
-            _length: length,
+            data: self.data.clone(),
+            offset: self.offset + offset,
+            length: length,
         }
     }
 
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
-        &self._data[self._offset..self._offset + self._length]
+        &self.data[self.offset..self.offset + self.length]
     }
 
     #[inline]
@@ -144,9 +144,9 @@ impl Tibs {
         // Given the bit offset self._offset and the bit length self._length
         // return the byte data from the bitvec self._data. The data should cover just
         // enough bytes and should not realign them in any way.
-        let byte_offset = self._offset / 8;
-        let final_byte = (self._offset + self._length).div_ceil(8);
-        let full_bytes = self._data.as_raw_slice();
+        let byte_offset = self.offset / 8;
+        let final_byte = (self.offset + self.length).div_ceil(8);
+        let full_bytes = self.data.as_raw_slice();
         full_bytes[byte_offset..final_byte].to_vec()
     }
 }
@@ -179,9 +179,9 @@ impl Tibs {
 #[derive(Clone)]
 #[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
 pub struct Tibs {
-    _data: Arc<BV>,
-    _offset: usize,
-    _length: usize,
+    data: Arc<BV>,
+    offset: usize,
+    length: usize,
 }
 
 /// Public Python-facing methods.

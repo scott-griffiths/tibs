@@ -36,28 +36,28 @@ use std::ops::Not;
 #[pyclass(freelist = 8, sequence, skip_from_py_object, module = "tibs")]
 #[derive(Clone)]
 pub struct Mutibs {
-    _data: BV,
+    data: BV,
 }
 
 // Internal methods, not exported to Python
 impl Mutibs {
     pub(crate) fn from_bv(bv: BV) -> Self {
-        Mutibs { _data: bv }
+        Mutibs { data: bv }
     }
 
     #[inline]
     pub(crate) fn as_bitvec_ref(&self) -> &BV {
-        &self._data
+        &self.data
     }
 
     #[inline]
     pub(crate) fn as_mut_bitvec_ref(&mut self) -> &mut BV {
-        &mut self._data
+        &mut self.data
     }
 
     #[inline]
     pub(crate) fn raw_bytes(&self) -> Vec<u8> {
-        self._data.as_raw_slice().to_vec()
+        self.data.as_raw_slice().to_vec()
     }
 
     pub fn set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
