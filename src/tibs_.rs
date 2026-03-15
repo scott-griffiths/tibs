@@ -24,8 +24,15 @@ pub(crate) enum BorrowedOrOwnedTibs<'a> {
 }
 
 impl BitCollection for BorrowedOrOwnedTibs<'_> {
-    fn from_bv(bv: BV) -> Self {
-        BorrowedOrOwnedTibs::Owned(Tibs::from_bv(bv))
+    fn from_bv(bv: BV, msb0: bool) -> Self {
+        BorrowedOrOwnedTibs::Owned(Tibs::from_bv(bv, msb0))
+    }
+
+    fn msb0(&self) -> bool {
+        match self {
+            BorrowedOrOwnedTibs::Borrowed(t) => t.msb0,
+            BorrowedOrOwnedTibs::Owned(t) => t.msb0,
+        }
     }
 
     fn to_bitvec(&self) -> BV {
@@ -44,7 +51,10 @@ impl BitCollection for BorrowedOrOwnedTibs<'_> {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::from_bv(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+        Self::from_bv(
+            self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
+            self.msb0(),
+        )
     }
 
     #[inline]
@@ -77,7 +87,7 @@ pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedO
     }
     let bv = promote_to_bv(any)?;
 
-    let tibs = Tibs::from_bv(bv);
+    let tibs = Tibs::from_bv(bv, true); // Default to MSB0 here as we have no other info.
     Ok(BorrowedOrOwnedTibs::Owned(tibs))
 }
 
@@ -112,12 +122,13 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
-    pub(crate) fn from_bv(bv: BV) -> Self {
+    pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
         let length = bv.len();
         Tibs {
             data: Arc::new(bv),
             offset: 0,
-            length: length,
+            length,
+            msb0,
         }
     }
 
@@ -126,6 +137,7 @@ impl Tibs {
             data: self.data.clone(),
             offset: self.offset + offset,
             length: length,
+            msb0: self.msb0,
         }
     }
 
@@ -182,16 +194,36 @@ pub struct Tibs {
     data: Arc<BV>,
     offset: usize,
     length: usize,
+    pub msb0: bool,
+}
+
+pub fn is_msb0(s: Option<&str>) -> PyResult<bool> {
+    match s {
+        Some(s) => {
+            if s == "msb0" {
+                Ok(true)
+            } else if s == "lsb0" {
+                Ok(false)
+            } else {
+                Err(PyValueError::new_err(format!(
+                    "bit_indexing should be either \"msb0\" or \"lsb0\". Received \"{}\".",
+                    s
+                )))
+            }
+        }
+        None => Ok(true), // Defaults to msb0
+    }
 }
 
 /// Public Python-facing methods.
 #[pymethods]
 impl Tibs {
     #[new]
-    #[pyo3(signature = (auto = None))]
-    pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+    #[pyo3(signature = (auto = None, bit_indexing = "msb0"))]
+    pub fn py_new(auto: Option<&Bound<'_, PyAny>>, bit_indexing: Option<&str>) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let Some(auto) = auto else {
-            return Ok(BitCollection::empty());
+            return Ok(BitCollection::empty(msb0));
         };
         if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
             return Ok(tibs_ref.clone());
@@ -200,7 +232,7 @@ impl Tibs {
             return Ok(mutibs_ref.to_tibs());
         }
 
-        Ok(Tibs::from_bv(promote_to_bv(auto)?))
+        Ok(Tibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
     /// Return a copy of the raw byte information.
@@ -233,9 +265,19 @@ impl Tibs {
     pub fn __repr__(&self, py: Python) -> String {
         let class_name = py.get_type::<Self>().name().unwrap();
         if self.is_empty() {
-            format!("{}()", class_name)
+            let bit_indexing = if self.msb0 {
+                "".to_string()
+            } else {
+                "bit_indexing='lsb0'".to_string()
+            };
+            format!("{}({})", class_name, bit_indexing)
         } else {
-            format!("{}('{}')", class_name, self.__str__())
+            let bit_indexing = if self.msb0 {
+                "".to_string()
+            } else {
+                ", 'lsb0'".to_string()
+            };
+            format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
         }
     }
 
@@ -394,15 +436,20 @@ impl Tibs {
     ///     a = Tibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
-    pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")")]
+    pub fn from_zeros(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
                 length
             )));
         }
-        Ok(Self::from_bv(bv_from_zeros(length as usize)))
+        Ok(Self::from_bv(bv_from_zeros(length as usize), msb0))
     }
 
     /// Create a new instance with all bits set to '1'.
@@ -415,15 +462,20 @@ impl Tibs {
     ///     Tibs('0b11111')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
-    pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")")]
+    pub fn from_ones(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
                 length
             )));
         }
-        Ok(Tibs::from_bv(bv_from_ones(length as usize)))
+        Ok(Tibs::from_bv(bv_from_ones(length as usize), msb0))
     }
 
     /// Create a new instance from a formatted string.
@@ -443,10 +495,15 @@ impl Tibs {
     ///     a = Tibs("0xff01")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    pub fn from_string(
+        _cls: &Bound<'_, PyType>,
+        s: String,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = str_to_bv(s)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance from an unsigned integer.
@@ -457,10 +514,16 @@ impl Tibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
-    pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (u, /, length, bit_indexing="msb0"), text_signature = "(cls, u, /, length, bit_indexing = \"msb0\")")]
+    pub fn from_u(
+        _cls: &Bound<'_, PyType>,
+        u: u128,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_u128(u, length)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the unsigned integer representation of the Tibs.
@@ -476,10 +539,16 @@ impl Tibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
-    pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (i, /, length, bit_indexing = "msb0"), text_signature = "(cls, i, /, length, bit_indexing = \"msb0\")")]
+    pub fn from_i(
+        _cls: &Bound<'_, PyType>,
+        i: i128,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_i128(i, length)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the signed integer representation of the Tibs.
@@ -492,10 +561,16 @@ impl Tibs {
     /// :param f: A floating point value.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
-    #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
-    pub fn from_f(_cls: &Bound<'_, PyType>, f: f64, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (f, /, length, bit_indexing = "msb0"), text_signature = "(cls, f, /, length, bit_indexing = \"msb0\")")]
+    pub fn from_f(
+        _cls: &Bound<'_, PyType>,
+        f: f64,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_f64(f, length)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the floating point representation of the Tibs.
@@ -514,10 +589,15 @@ impl Tibs {
     ///     a = Tibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    pub fn from_bin(
+        _cls: &Bound<'_, PyType>,
+        s: &str,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bin(s)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the binary representation of the Tibs as a string.
@@ -529,10 +609,15 @@ impl Tibs {
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    pub fn from_oct(
+        _cls: &Bound<'_, PyType>,
+        s: &str,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_oct(s)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the octal representation of the Tibs as a string.
@@ -546,10 +631,15 @@ impl Tibs {
     ///
     /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    pub fn from_hex(
+        _cls: &Bound<'_, PyType>,
+        s: &str,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_hex(s)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the hexadecimal representation of the Tibs as a string.
@@ -571,15 +661,17 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
+    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = "msb0"), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = \"msb0\")")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
         offset: Option<i64>,
         length: Option<i64>,
+        bit_indexing: Option<&str>,
     ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bytes_slice(data, offset, length)?;
-        Ok(Self::from_bv(bv))
+        Ok(Self::from_bv(bv, msb0))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -591,10 +683,15 @@ impl Tibs {
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
-    pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")")]
+    pub fn from_bools(
+        _cls: &Bound<'_, PyType>,
+        iterable: &Bound<'_, PyAny>,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bools(iterable)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance with all bits randomly set.
@@ -613,15 +710,17 @@ impl Tibs {
     ///     b = Tibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None), text_signature="(cls, length, /, secure=False, seed=None)")]
+    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = "msb0"), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = \"msb0\")")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
         seed: Option<Vec<u8>>,
+        bit_indexing: Option<&str>,
     ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_random(length, secure, &seed)?;
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance by concatenating a sequence of Tibs objects.
@@ -635,8 +734,13 @@ impl Tibs {
     ///     a = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
-    pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")")]
+    pub fn from_joined(
+        _cls: &Bound<'_, PyType>,
+        iterable: &Bound<'_, PyAny>,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         // Convert each item to BV, store, and sum total length for a single allocation.
         let iter = iterable.try_iter()?;
         let mut bv_parts: Vec<BV> = Vec::new();
@@ -657,7 +761,7 @@ impl Tibs {
         for b in bv_parts {
             bv.extend_from_bitslice(&b);
         }
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv, msb0))
     }
 
     /// Return the Tibs as a bytes object.
@@ -857,7 +961,7 @@ impl Tibs {
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
     pub fn to_mutibs(&self) -> Mutibs {
-        Mutibs::from_bv(self.to_bitvec())
+        Mutibs::from_bv(self.to_bitvec(), self.msb0)
     }
 
     #[inline]
@@ -886,7 +990,7 @@ impl Tibs {
                 if start < stop {
                     self.get_slice_unchecked(start as usize, (stop - start) as usize)
                 } else {
-                    Tibs::empty()
+                    Tibs::empty(self.msb0)
                 }
             } else {
                 self.get_slice_with_step(start, stop, step)?
@@ -922,7 +1026,7 @@ impl Tibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitslice());
         data.extend_from_bitslice(bs.as_bitslice());
-        Ok(Tibs::from_bv(data))
+        Ok(Tibs::from_bv(data, self.msb0))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -931,7 +1035,7 @@ impl Tibs {
         let mut data = BV::with_capacity(bs.len() + self.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitslice());
-        Ok(Tibs::from_bv(data))
+        Ok(Tibs::from_bv(data, self.msb0))
     }
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -1004,7 +1108,7 @@ impl Tibs {
         if self.as_bitslice().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
-        Ok(Tibs::from_bv(self.to_bitvec().not()))
+        Ok(Tibs::from_bv(self.to_bitvec().not(), self.msb0))
     }
 
     /// Return the Tibs as a bytes object.

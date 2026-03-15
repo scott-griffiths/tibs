@@ -5,7 +5,7 @@ use crate::helpers::{
     find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, is_msb0, tibs_from_any};
 
 use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -37,12 +37,13 @@ use std::ops::Not;
 #[derive(Clone)]
 pub struct Mutibs {
     data: BV,
+    pub msb0: bool,
 }
 
 // Internal methods, not exported to Python
 impl Mutibs {
-    pub(crate) fn from_bv(bv: BV) -> Self {
-        Mutibs { data: bv }
+    pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
+        Mutibs { data: bv, msb0 }
     }
 
     #[inline]
@@ -159,10 +160,11 @@ impl Mutibs {
 #[pymethods]
 impl Mutibs {
     #[new]
-    #[pyo3(signature = (auto = None))]
-    pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+    #[pyo3(signature = (auto = None, bit_indexing = "msb0"))]
+    pub fn py_new(auto: Option<&Bound<'_, PyAny>>, bit_indexing: Option<&str>) -> PyResult<Self> {
+        let msb0 = crate::tibs_::is_msb0(bit_indexing)?;
         let Some(auto) = auto else {
-            return Ok(BitCollection::empty());
+            return Ok(BitCollection::empty(msb0));
         };
         if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
             return Ok(tibs_ref.to_mutibs());
@@ -171,7 +173,7 @@ impl Mutibs {
             return Ok(mutibs_ref.clone());
         }
 
-        Ok(Mutibs::from_bv(promote_to_bv(auto)?))
+        Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
     /// Return True if two Mutibs have the same binary representation.
@@ -203,9 +205,19 @@ impl Mutibs {
     pub fn __repr__(&self, py: Python) -> String {
         let class_name = py.get_type::<Self>().name().unwrap();
         if self.is_empty() {
-            format!("{}()", class_name)
+            let bit_indexing = if self.msb0 {
+                "".to_string()
+            } else {
+                "bit_indexing='lsb0'".to_string()
+            };
+            format!("{}({})", class_name, bit_indexing)
         } else {
-            format!("{}('{}')", class_name, self.__str__())
+            let bit_indexing = if self.msb0 {
+                "".to_string()
+            } else {
+                ", 'lsb0'".to_string()
+            };
+            format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
         }
     }
 
@@ -228,10 +240,16 @@ impl Mutibs {
     ///     a = Mutibs("0xff01")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_string(
+        _cls: &Bound<'_, PyType>,
+        s: String,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = str_to_bv(s)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance from a binary string.
@@ -243,10 +261,16 @@ impl Mutibs {
     ///     a = Mutibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_bin(
+        _cls: &Bound<'_, PyType>,
+        s: String,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bin(&s)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the binary representation of the Mutibs as a string.
@@ -258,10 +282,16 @@ impl Mutibs {
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_oct(
+        _cls: &Bound<'_, PyType>,
+        s: String,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_oct(&s)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the octal representation of the Mutibs as a string.
@@ -275,10 +305,16 @@ impl Mutibs {
     ///
     /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_hex(
+        _cls: &Bound<'_, PyType>,
+        s: String,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_hex(&s)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the hexadecimal representation of the Mutibs as a string.
@@ -360,10 +396,17 @@ impl Mutibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length), text_signature = "(cls, u, /, length)")]
-    pub fn from_u(_cls: &Bound<'_, PyType>, u: u128, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (u, /, length, bit_indexing = "msb0"), text_signature = "(cls, u, /, length, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_u(
+        _cls: &Bound<'_, PyType>,
+        u: u128,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_u128(u, length)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the unsigned integer representation of the Mutibs.
@@ -379,10 +422,17 @@ impl Mutibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length), text_signature = "(cls, i, /, length)")]
-    pub fn from_i(_cls: &Bound<'_, PyType>, i: i128, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (i, /, length, bit_indexing = "msb0"), text_signature = "(cls, i, /, length, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_i(
+        _cls: &Bound<'_, PyType>,
+        i: i128,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_i128(i, length)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the signed integer representation of the Mutibs.
@@ -395,10 +445,17 @@ impl Mutibs {
     /// :param f: A float.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
-    #[pyo3(signature = (f, /, length), text_signature = "(cls, f, /, length)")]
-    pub fn from_f(_cls: &Bound<'_, PyType>, f: f64, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (f, /, length, bit_indexing = "msb0"), text_signature = "(cls, f, /, length, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_f(
+        _cls: &Bound<'_, PyType>,
+        f: f64,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_f64(f, length)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the floating point representation of the Mutibs.
@@ -418,15 +475,21 @@ impl Mutibs {
     ///     a = Mutibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
-    pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_zeros(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
                 length
             )));
         }
-        Ok(Self::from_bv(bv_from_zeros(length as usize)))
+        Ok(Self::from_bv(bv_from_zeros(length as usize), msb0))
     }
 
     /// Create a new instance with all bits set to one.
@@ -439,15 +502,21 @@ impl Mutibs {
     ///     Mutibs('0b11111')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
-    pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
+    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_ones(
+        _cls: &Bound<'_, PyType>,
+        length: i64,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
                 length
             )));
         }
-        Ok(Mutibs::from_bv(bv_from_ones(length as usize)))
+        Ok(Mutibs::from_bv(bv_from_ones(length as usize), msb0))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -459,10 +528,16 @@ impl Mutibs {
     ///     a = Mutibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
-    pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_bools(
+        _cls: &Bound<'_, PyType>,
+        iterable: &Bound<'_, PyAny>,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bools(iterable)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance with all bits randomly set.
@@ -481,16 +556,18 @@ impl Mutibs {
     ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None), text_signature="(cls, length, /, secure=False, seed=None)"
+    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = "msb0"), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = \"msb0\")"
     )]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
         seed: Option<Vec<u8>>,
+        bit_indexing: Option<&str>,
     ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_random(length, secure, &seed)?;
-        Ok(Mutibs::from_bv(bv))
+        Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Create a new instance from a bytes object.
@@ -505,16 +582,18 @@ impl Mutibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)"
+    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = "msb0"), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = \"msb0\")"
     )]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
         offset: Option<i64>,
         length: Option<i64>,
+        bit_indexing: Option<&str>,
     ) -> PyResult<Self> {
+        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_bytes_slice(data, offset, length)?;
-        Ok(Self::from_bv(bv))
+        Ok(Self::from_bv(bv, msb0))
     }
 
     /// Create a new instance by concatenating a sequence of bit sequences.
@@ -528,9 +607,14 @@ impl Mutibs {
     ///     a = Mutibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
-    pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Tibs::from_joined(_cls, iterable)?.to_mutibs())
+    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")"
+    )]
+    pub fn from_joined(
+        _cls: &Bound<'_, PyType>,
+        iterable: &Bound<'_, PyAny>,
+        bit_indexing: Option<&str>,
+    ) -> PyResult<Self> {
+        Ok(Tibs::from_joined(_cls, iterable, bit_indexing)?.to_mutibs())
     }
 
     /// The bit length of the Mutibs.
@@ -563,7 +647,7 @@ impl Mutibs {
                 if start < stop {
                     self.get_slice(start as usize, (stop - start) as usize)?
                 } else {
-                    Mutibs::empty()
+                    Mutibs::empty(self.msb0)
                 }
             } else {
                 self.get_slice_with_step(start, stop, step)?
@@ -612,7 +696,7 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.to_bitvec()))
+                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.to_bitvec(), slf.msb0))
             } else {
                 tibs_from_any(value)?
             };
@@ -1061,7 +1145,7 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         // TODO: Completely redo how rfind works!
-        let t = Tibs::from_bv(self.to_bitvec());
+        let t = Tibs::from_bv(self.to_bitvec(), self.msb0);
         t.rfind(b, start, end, byte_aligned)
     }
 
@@ -1185,7 +1269,7 @@ impl Mutibs {
         if self.as_bitvec_ref().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(Mutibs::from_bv(self.to_bitvec().not()))
+        Ok(Mutibs::from_bv(self.to_bitvec().not(), self.msb0))
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -1208,7 +1292,7 @@ impl Mutibs {
 
     /// Return a new copy of the Mutibs for the copy module.
     pub fn __copy__(&self) -> Self {
-        Mutibs::from_bv(self.to_bitvec())
+        Mutibs::from_bv(self.to_bitvec(), self.msb0)
     }
 
     /// Create and return a Tibs instance from a copy of the Mutibs data.
@@ -1228,7 +1312,7 @@ impl Mutibs {
     ///     Tibs('0b1011')
     ///
     pub fn to_tibs(&self) -> Tibs {
-        Tibs::from_bv(self.to_bitvec())
+        Tibs::from_bv(self.to_bitvec(), self.msb0)
     }
 
     /// Create and return a Tibs instance by moving the Mutibs data.
@@ -1252,7 +1336,7 @@ impl Mutibs {
     pub fn as_tibs(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut *self.as_mut_bitvec_ref());
         data.shrink_to_fit();
-        Tibs::from_bv(data)
+        Tibs::from_bv(data, self.msb0)
     }
 
     /// Clear all bits, making the Mutibs empty.
@@ -1294,7 +1378,7 @@ impl Mutibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitvec_ref());
         data.extend_from_bitslice(bs.as_bitslice());
-        Ok(Mutibs::from_bv(data))
+        Ok(Mutibs::from_bv(data, self.msb0))
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
@@ -1303,7 +1387,7 @@ impl Mutibs {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitvec_ref());
-        Ok(Mutibs::from_bv(data))
+        Ok(Mutibs::from_bv(data, self.msb0))
     }
 
     /// Concatenate in-place.
