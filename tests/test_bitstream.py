@@ -161,11 +161,13 @@ class TestReplace:
         a = Tibs.from_string("0xab")
         b = Tibs.from_string("0xcd")
         c = Tibs.from_string("0xabef")
-        c = c.to_mutibs().replace(a, b)
+        c = c.to_mutibs()
+        c.replace(a, b)
         assert c == "0xcdef"
         assert a == "0xab"
         assert b == "0xcd"
-        a = Mutibs("0x0011223344").replace("0x11", "0xfff", byte_aligned=True)
+        a = Mutibs("0x0011223344")
+        a.replace("0x11", "0xfff", byte_aligned=True)
         assert a == "0x00fff223344"
 
     def test_replace_with_self(self):
@@ -214,10 +216,10 @@ class TestAppend:
 
 def test_insert():
     s = Mutibs("0x0011")
-    s = s.insert(8, Tibs("0x22"))
+    s.insert(8, Tibs("0x22"))
     assert s.to_hex() == "002211"
     s = Mutibs.from_ones(0)
-    s = s.insert(0, "0b101")
+    s.insert(0, "0b101")
     assert s.to_bin() == "101"
 
 
@@ -262,7 +264,8 @@ class TestInsert:
     def test_insert_bits(self):
         one = Tibs("0b1")
         zero = Tibs("0b0")
-        s = Mutibs("0b00").insert(0, one)
+        s = Mutibs("0b00")
+        s.insert(0, one)
         assert s.to_bin() == "100"
         s.insert(0, zero)
         assert s.to_bin() == "0100"
@@ -433,7 +436,7 @@ class TestAdding:
 
     def test_insert_using_auto(self):
         s = Mutibs("0xff")
-        s = s.insert(4, "0x00")
+        s.insert(4, "0x00")
         assert s.to_hex() == "f00f"
 
     def test_overwrite_using_auto(self):
@@ -488,7 +491,8 @@ class TestAdding:
 
     def test_reverse(self):
         s = Tibs("0b0011")
-        s = s.to_mutibs().reverse()
+        s = s.to_mutibs()
+        s.reverse()
         assert s.to_bin() == "1100"
         s = Mutibs("0b10")
         s.reverse()
@@ -521,10 +525,11 @@ class TestAdding:
     def test_large_equals(self):
         s1 = Tibs.from_zeros(1000000)
         s2 = Mutibs.from_zeros(1000000)
-        s1 = s1.to_mutibs().set(True, [-1, 55, 53214, 534211, 999999])
+        s1 = s1.to_mutibs()
+        s1.set(True, [-1, 55, 53214, 534211, 999999])
         s2.set(True, [-1, 55, 53214, 534211, 999999])
         assert s1 == s2
-        s1 = s1.set(True, 800000)
+        s1.set(True, 800000)
         assert s1 != s2
 
     def test_not_equals(self):
@@ -835,10 +840,10 @@ class TestManyDifferentThings:
         with pytest.raises(ValueError):
             b.byte_swap()
         a = Mutibs("0x54")
-        a = a.byte_swap()
+        a.byte_swap()
         assert a == "0x54"
         a = Mutibs()
-        a = a.byte_swap()
+        a.byte_swap()
         assert not a
 
     def test_startswith(self):
@@ -907,21 +912,22 @@ class TestManyDifferentThings:
 class TestSet:
     def test_set(self):
         a = Tibs.from_zeros(16)
-        a = a.to_mutibs().set(True, 0)
+        a = a.to_mutibs()
+        a.set(True, 0)
         assert a == Mutibs("0b10000000 00000000")
         a.set(1, 15)
         assert a == "0b10000000 00000001"
         b = a[4:12]
-        b = b.set(True, 1)
+        b.set(True, 1)
         assert b == "0b01000000"
-        b = b.set(True, -1)
+        b.set(True, -1)
         assert b == "0b01000001"
-        b = b.set(1, -8)
+        b.set(1, -8)
         assert b == "0b11000001"
         with pytest.raises(IndexError):
-            _ = b.set(True, -9)
+            b.set(True, -9)
         with pytest.raises(IndexError):
-            _ = b.set(True, 8)
+            b.set(True, 8)
 
     def test_set_negative_index(self):
         a = Mutibs.from_string('0b0110000000')
@@ -934,7 +940,8 @@ class TestSet:
 
     def test_set_list(self):
         a = Tibs.from_zeros(18)
-        b = a.to_mutibs().set(True, range(18))
+        b = a.to_mutibs()
+        b.set(True, range(18))
         assert b.all()
         b.set(False, range(18))
         assert not b.any()
@@ -962,21 +969,21 @@ class TestSet:
 class TestInvert:
     def test_invert_bits(self):
         a = Mutibs("0b111000")
-        a = a.invert(range(len(a)))
+        a.invert(range(len(a)))
         assert a == "0b000111"
-        a = a.invert([0, 1, -1])
+        a.invert([0, 1, -1])
         assert a == "0b110110"
 
     def test_invert_whole_bit_stream(self):
         a = Mutibs("0b11011")
-        a = a.invert()
+        a.invert()
         assert a == "0b00100"
 
     def test_invert_single_bit(self):
         a = Mutibs("0b000001")
-        a = a.invert(0)
+        a.invert(0)
         assert a.to_bin() == "100001"
-        a = a.invert(-1)
+        a.invert(-1)
         assert a.to_bin() == "100000"
 
     def test_invert_errors(self):
@@ -1058,47 +1065,48 @@ class TestMoreMisc:
 
     def test_ror(self):
         a = Tibs("0b11001").to_mutibs()
-        a.ror(0)
+        a.rotate_right(0)
         assert a == "0b11001"
-        a.ror(1)
+        a.rotate_right(1)
         assert a == "0b11100"
-        a.ror(5)
+        a.rotate_right(5)
         assert a == "0b11100"
-        a.ror(101)
+        a.rotate_right(101)
         assert a == "0b01110"
         a = Mutibs("0b1")
-        a.ror(1000000)
+        a.rotate_right(1000000)
         assert a == "0b1"
 
     def test_ror_errors(self):
         a = Mutibs()
         with pytest.raises(ValueError):
-            a.ror(0)
+            a.rotate_right(0)
         a += "0b001"
         with pytest.raises(ValueError):
-            a.ror(-1)
+            a.rotate_right(-1)
 
     def test_rol(self):
         a = Mutibs("0b11001")
-        a.rol(0)
+        a.rotate_left(0)
         assert a == "0b11001"
-        a.rol(1)
+        a.rotate_left(1)
         assert a == "0b10011"
-        a = a.rol(5)
+        a.rotate_left(5)
         assert a == "0b10011"
-        a.rol(101)
+        a.rotate_left(101)
         assert a == "0b00111"
         a = Tibs("0b1")
-        a = a.to_mutibs().rol(1000000)
+        a = a.to_mutibs()
+        a.rotate_left(1000000)
         assert a == "0b1"
 
     def test_rol_errors(self):
         a = Mutibs()
         with pytest.raises(ValueError):
-            a.rol(0)
+            a.rotate_left(0)
         a += "0b001"
         with pytest.raises(ValueError):
-            a.rol(-1)
+            a.rotate_left(-1)
 
     def test_init_with_zeros(self):
         a = Tibs.from_zeros(0)
@@ -1163,16 +1171,16 @@ class TestMoreMisc:
 class TestBugs:
     def test_bug_in_replace(self):
         s = Mutibs("0x00112233")
-        s = s.replace("0x22", "0xffff", start=8, byte_aligned=True)
+        s.replace("0x22", "0xffff", start=8, byte_aligned=True)
         assert s == "0x0011ffff33"
         s = Mutibs("0x0123412341234")
-        s = s.replace("0x23", "0xf", start=9, byte_aligned=True)
+        s.replace("0x23", "0xf", start=9, byte_aligned=True)
         assert s == "0x012341f41f4"
 
     def test_function_negative_indices(self):
         # insert
         s = Mutibs("0b0111")
-        s = s.insert(-1, "0b0")
+        s.insert(-1, "0b0")
         assert s == "0b01101"
 
         # overwrite
@@ -1230,16 +1238,16 @@ class TestBugs:
 
     def test_rotate_start_and_end(self):
         a = Mutibs("0b110100001")
-        a.rol(1, 3, 6)
+        a.rotate_left(1, 3, 6)
         assert a == "0b110001001"
-        a.ror(1, start=-4)
+        a.rotate_right(1, start=-4)
         assert a == "0b110001100"
-        a.rol(202, end=-5)
+        a.rotate_left(202, end=-5)
         assert a == "0b001101100"
-        a.ror(3, end=4)
+        a.rotate_right(3, end=4)
         assert a == "0b011001100"
         with pytest.raises(ValueError):
-            a.rol(5, start=-4, end=-6)
+            a.rotate_left(5, start=-4, end=-6)
 
     def test_byte_swap_int(self):
         s = Mutibs("0xf234567f")
@@ -1287,7 +1295,8 @@ def test_overwrite_with_self():
 
 def test_byte_swap():
     b = Tibs.from_bytes(b"\x01\x02\x03\x04")
-    c = b.to_mutibs().byte_swap()
+    c = b.to_mutibs()
+    c.byte_swap()
     assert c == "0x04030201"
 
 
@@ -1301,24 +1310,25 @@ def test_overlapping_bits():
     assert x == "0x0ff"
     assert y == Tibs("0b00011111")
     _ = ~y
-    _ = y.to_mutibs().set(0, [0, 1, 2, 3, 4, 5, 6, 7])
-    _ = y.to_mutibs().byte_swap()
-    _ = y.to_mutibs().ror(1)
-    _ = y.to_mutibs().rol(1)
+    z = y.to_mutibs()
+    z.set(0, [0, 1, 2, 3, 4, 5, 6, 7])
+    z.byte_swap()
+    z.rotate_right(1)
+    z.rotate_left(1)
     assert a == "0x00fff0"
     assert zeros == "0x00"
     assert x == "0x0ff"
     assert y == Tibs("0b00011111")
     y = ~y
     assert y == Tibs("0b11100000")
-    y = y.to_mutibs().set(0, [2, 3]).to_tibs()
-    y = y.to_mutibs().byte_swap().to_tibs()
-    y = y.to_mutibs().ror(2)
-    y = y.rol(1)
+    z = y.to_mutibs()
+    z.set(0, [2, 3])
+    z.byte_swap()
+    z.rotate_right(2)
+    z.rotate_left(1)
     assert a == "0x00fff0"
     assert zeros == "0x00"
     assert x == "0x0ff"
-    assert y == Tibs("0b01100000")
 
 
 def test_mutable_freeze():

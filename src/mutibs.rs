@@ -176,6 +176,9 @@ impl Mutibs {
         Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
+    /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
+    /// least significant bit ("lsb0"). This doesn't affect the actual data stored, just how it's
+    /// accessed.
     #[getter]
     pub fn bit_indexing(&self) -> String {
         if self.msb0 {
@@ -1004,28 +1007,29 @@ impl Mutibs {
         self.__xor__(bs)
     }
 
-    /// Rotates bit pattern to the left. Returns self.
+    /// Rotates bit pattern to the left in-place.
     ///
     /// :param n: The number of bits to rotate by.
     /// :param start: Start of slice to rotate. Defaults to 0.
     /// :param end: End of slice to rotate. Defaults to len(self).
-    /// :return: self
+    /// :return: None
     ///
     /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0b1011')
-    ///     >>> a.rol(2)
+    ///     >>> a.rotate_left(2)
+    ///     >>> a
     ///     Mutibs('0b1110')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
-    pub fn rol(
+    pub fn rotate_left(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
         start: Option<i64>,
         end: Option<i64>,
-    ) -> PyResult<PyRefMut<'_, Self>> {
+    ) -> PyResult<()> {
         if slf.is_empty() {
             return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
@@ -1036,31 +1040,32 @@ impl Mutibs {
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let n = (n % (end as i64 - start as i64)) as usize;
         slf.as_mut_bitvec_ref()[start..end].rotate_left(n);
-        Ok(slf)
+        Ok(())
     }
 
-    /// Rotates bit pattern to the right. Returns self.
+    /// Rotates bit pattern to the right in-place.
     ///
     /// :param n: The number of bits to rotate by.
     /// :param start: Start of slice to rotate. Defaults to 0.
     /// :param end: End of slice to rotate. Defaults to len(self).
-    /// :return: self
+    /// :return: None
     ///
     /// :raises ValueError: if n < 0.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0b1011')
-    ///     >>> a.ror(1)
+    ///     >>> a.rotate_right(1)
+    ///     >>> a
     ///     Mutibs('0b1101')
     ///
     #[pyo3(signature = (n, start=None, end=None))]
-    pub fn ror(
+    pub fn rotate_right(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
         start: Option<i64>,
         end: Option<i64>,
-    ) -> PyResult<PyRefMut<'_, Self>> {
+    ) -> PyResult<()> {
         if slf.is_empty() {
             return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
@@ -1071,31 +1076,34 @@ impl Mutibs {
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let n = (n % (end as i64 - start as i64)) as usize;
         slf.as_mut_bitvec_ref()[start..end].rotate_right(n);
-        Ok(slf)
+        Ok(())
     }
 
-    /// Set one or many bits set to 1 or 0. Returns self.
+    /// Set one or many bits set to 1 or 0.
     ///
     /// :param value: If bool(value) is True, bits are set to 1, otherwise they are set to 0.
     /// :param pos: Either a single bit position or an iterable of bit positions.
-    /// :return: self
+    /// :return: None
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs.from_zeros(10)
     ///     >>> a.set(1, 5)
+    ///     >>> a
     ///     Mutibs('0b0000010000')
     ///     >>> a.set(1, [-1, -2])
+    ///     >>> a
     ///     Mutibs('0b0000010011')
     ///     >>> a.set(0, range(8, 10))
+    ///     >>> a
     ///     Mutibs('0b0000010000')
     ///
     pub fn set<'a>(
         mut slf: PyRefMut<'a, Self>,
         value: &Bound<'_, PyAny>,
         pos: &Bound<'_, PyAny>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    ) -> PyResult<()> {
         let v = value.is_truthy()?;
 
         if let Ok(index) = pos.extract::<i64>() {
@@ -1113,7 +1121,7 @@ impl Mutibs {
             slf.set_from_sequence(v, indices)?;
         }
 
-        Ok(slf)
+        Ok(())
     }
 
     /// Counts the total number of occurrences of a bit pattern.
@@ -1202,10 +1210,10 @@ impl Mutibs {
         t.rfind(b, start, end, byte_aligned)
     }
 
-    /// Return the Mutibs with one or many bits inverted between 0 and 1.
+    /// Invert one or many bits in place.
     ///
     /// :param pos: Either a single bit position or an iterable of bit positions.
-    /// :return: self
+    /// :return: None
     ///
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
     ///
@@ -1213,17 +1221,17 @@ impl Mutibs {
     ///
     ///     >>> a = Mutibs('0b10111')
     ///     >>> a.invert(1)
+    ///     >>> a
     ///     Mutibs('0b11111')
     ///     >>> a.invert([0, 2])
+    ///     >>> a
     ///     Mutibs('0b01011')
     ///     >>> a.invert()
+    ///     >>> a
     ///     Mutibs('0b10100')
     ///
     #[pyo3(signature = (pos = None))]
-    pub fn invert<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        pos: Option<&Bound<'a, PyAny>>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    pub fn invert<'a>(mut slf: PyRefMut<'a, Self>, pos: Option<&Bound<'a, PyAny>>) -> PyResult<()> {
         match pos {
             None => {
                 *slf.as_mut_bitvec_ref() = std::mem::take(&mut *slf.as_mut_bitvec_ref()).not();
@@ -1246,43 +1254,41 @@ impl Mutibs {
                 }
             }
         }
-        Ok(slf)
+        Ok(())
     }
 
     /// Reverse bits in-place.
     ///
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0b1011')
     ///     >>> a.reverse()
+    ///     >>> a
     ///     Mutibs('0b1101')
     ///
-    pub fn reverse(mut slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
+    pub fn reverse(mut slf: PyRefMut<'_, Self>) {
         slf.as_mut_bitvec_ref().reverse();
-        slf
     }
 
-    /// Change the byte endianness in-place. Returns self.
+    /// Change the byte endianness in-place.
     ///
     /// The whole of the Mutibs will be byte-swapped. It must be a multiple
     /// of byte_length long.
     ///
     /// :param byte_length: An int giving the number of bytes in each swap.
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x12345678')
     ///     >>> a.byte_swap(2)
+    ///     >>> a
     ///     Mutibs('0x34127856')
     ///
     #[pyo3(signature = (byte_length = None))]
-    pub fn byte_swap(
-        mut slf: PyRefMut<'_, Self>,
-        byte_length: Option<i64>,
-    ) -> PyResult<PyRefMut<'_, Self>> {
+    pub fn byte_swap(mut slf: PyRefMut<'_, Self>, byte_length: Option<i64>) -> PyResult<()> {
         let len = slf.len();
         if !len.is_multiple_of(8) {
             return Err(PyValueError::new_err(format!(
@@ -1291,7 +1297,7 @@ impl Mutibs {
         }
         let byte_length = byte_length.unwrap_or((len as i64) / 8);
         if byte_length == 0 && len == 0 {
-            return Ok(slf);
+            return Ok(());
         }
         if byte_length <= 0 {
             return Err(PyValueError::new_err(format!(
@@ -1311,7 +1317,7 @@ impl Mutibs {
             chunk.reverse();
         }
         *slf.as_mut_bitvec_ref() = BV::from_vec(bytes);
-        Ok(slf)
+        Ok(())
     }
 
     /// Return the instance with every bit inverted.
@@ -1452,22 +1458,20 @@ impl Mutibs {
     /// Append a single bit to the current Mutibs in-place.
     ///
     /// :param bit: Either `0`, `1`, `True` or `False` to append.
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs()
     ///     >>> a.append(True)
+    ///     >>> a
     ///     Mutibs('0b1')
     ///
-    pub fn append<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        bit: &Bound<'_, PyAny>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    pub fn append<'a>(mut slf: PyRefMut<'a, Self>, bit: &Bound<'_, PyAny>) -> PyResult<()> {
         match helpers::convert_to_bool(bit) {
             Some(b) => {
                 slf.as_mut_bitvec_ref().push(b);
-                Ok(slf)
+                Ok(())
             }
             None => Err(PyTypeError::new_err(
                 "Only True, False, 0 or 1 can be appended.",
@@ -1490,18 +1494,16 @@ impl Mutibs {
     /// Extend the current Mutibs in-place.
     ///
     /// :param bs: The bits to extend with.
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x0f')
     ///     >>> a.extend('0x0a')
+    ///     >>> a
     ///     Mutibs('0x0f0a')
     ///
-    pub fn extend<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        bs: &Bound<'_, PyAny>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    pub fn extend<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
             // If bs is slf, clone inner bits first then extend
@@ -1512,7 +1514,7 @@ impl Mutibs {
             slf.as_mut_bitvec_ref()
                 .extend_from_bitslice(bs.as_bitslice());
         }
-        Ok(slf)
+        Ok(())
     }
 
     /// Extend the current Mutibs in-place from the start.
@@ -1522,18 +1524,16 @@ impl Mutibs {
     /// should be avoided in performance critical code. See also :meth:`from_joined`.
     ///
     /// :param bs: The bits to prepend to the current Mutibs.
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x0f')
     ///     >>> a.extend_left('0x0a')
+    ///     >>> a
     ///     Mutibs('0x0a0f')
     ///
-    pub fn extend_left<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        bs: &Bound<'_, PyAny>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    pub fn extend_left<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
             let mut new_data = slf.to_bitvec();
@@ -1542,14 +1542,14 @@ impl Mutibs {
         } else {
             let to_prepend = tibs_from_any(bs)?;
             if to_prepend.is_empty() {
-                return Ok(slf);
+                return Ok(());
             }
             let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
             new_data.extend_from_bitslice(to_prepend.as_bitslice());
             new_data.extend_from_bitslice(slf.as_bitvec_ref());
             *slf.as_mut_bitvec_ref() = new_data;
         }
-        Ok(slf)
+        Ok(())
     }
 
     /// Search and replace in-place.
@@ -1566,6 +1566,7 @@ impl Mutibs {
     ///
     ///     >>> m = Mutibs('0b00010010')
     ///     >>> m.replace([0, 1], [1, 1, 1])
+    ///     >>> m
     ///     Mutibs('0b0011101110')
     ///
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false))]
@@ -1577,7 +1578,7 @@ impl Mutibs {
         end: Option<i64>,
         count: Option<i64>,
         byte_aligned: bool,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    ) -> PyResult<()> {
         let old = if old.as_ptr() == slf.as_ptr() {
             BorrowedOrOwnedTibs::Owned(slf.to_tibs())
         } else {
@@ -1619,7 +1620,7 @@ impl Mutibs {
         }
 
         if starting_points.is_empty() {
-            return Ok(slf);
+            return Ok(());
         }
 
         // Rebuild the bitstring with replacements
@@ -1633,14 +1634,14 @@ impl Mutibs {
         result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..]);
 
         *slf.as_mut_bitvec_ref() = result;
-        Ok(slf)
+        Ok(())
     }
 
-    /// Insert bits at position pos. Returns self.
+    /// Insert bits at position pos.
     ///
     /// :param pos: The bit position to insert at.
     /// :param bs: The bits to insert.
-    /// :return: self
+    /// :return: None
     ///
     /// :raises ValueError: if pos < 0 or pos > len(self).
     ///
@@ -1648,13 +1649,14 @@ impl Mutibs {
     ///
     ///     >>> a = Mutibs('0b1011')
     ///     >>> a.insert(2, '0b00')
+    ///     >>> a
     ///     Mutibs('0b100011')
     ///
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
         mut pos: i64,
         bs: &Bound<'_, PyAny>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
+    ) -> PyResult<()> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
             BorrowedOrOwnedTibs::Owned(slf.__copy__().as_tibs())
@@ -1662,7 +1664,7 @@ impl Mutibs {
             tibs_from_any(bs)?
         };
         if bs.len() == 0 {
-            return Ok(slf);
+            return Ok(());
         }
         if pos < 0 {
             pos += slf.len() as i64;
@@ -1676,13 +1678,13 @@ impl Mutibs {
         if bs.len() == 1 {
             slf.as_mut_bitvec_ref()
                 .insert(pos as usize, bs.as_bitslice()[0]);
-            return Ok(slf);
+            return Ok(());
         }
         let tail = slf.as_mut_bitvec_ref().split_off(pos as usize);
         slf.as_mut_bitvec_ref()
             .extend_from_bitslice(bs.as_bitslice());
         slf.as_mut_bitvec_ref().extend_from_bitslice(&tail);
-        Ok(slf)
+        Ok(())
     }
 
     /// Shift bits to the left in-place.

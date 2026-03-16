@@ -25,7 +25,7 @@ def test_chunking(benchmark):
 def test_count(benchmark):
     def count():
         s = Mutibs.from_zeros(100000000)
-        s = s.set(1, [10, 100, 1000, 10000000])
+        s.set(1, [10, 100, 1000, 10000000])
         return s.count(1)
 
     c = benchmark(count)

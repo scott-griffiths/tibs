@@ -9,7 +9,7 @@ import copy
 class TestNoPosAttribute:
     def test_replace(self):
         s = Mutibs.from_string("0b01")
-        s = s.replace("0b1", "0b11")
+        s.replace("0b1", "0b11")
         assert s == "0b011"
 
     def test_delete(self):
@@ -19,18 +19,18 @@ class TestNoPosAttribute:
 
     def test_insert(self):
         s = Mutibs.from_string("0b00")
-        s = s.insert(1, "0xf")
+        s.insert(1, "0xf")
         assert s == "0b011110"
 
     def test_insert_self(self):
         b = Mutibs.from_string("0b10")
-        b = b.insert(0, b)
+        b.insert(0, b)
         assert b == "0b1010"
         c = Mutibs.from_string("0x00ff")
-        c = c.insert(8, c)
+        c.insert(8, c)
         assert c == "0x0000ffff"
         a = Mutibs.from_string("0b11100")
-        a = a.insert(3, a)
+        a.insert(3, a)
         assert a == "0b1111110000"
 
     def test_overwrite(self):
@@ -46,12 +46,13 @@ class TestNoPosAttribute:
 
     def test_rol(self):
         s = Mutibs("0b0001")
-        t = s.rol(1)
-        assert t == "0b0010"
+        s.rotate_left(1)
+        assert s == "0b0010"
 
     def test_ror(self):
         s = Tibs.from_string("0b1000")
-        t = s.to_mutibs().ror(1)
+        t = s.to_mutibs()
+        t.rotate_right(1)
         assert s == "0b1000"
         assert t == "0b0100"
 
@@ -82,7 +83,8 @@ def test_not_byte_aligned():
     assert p == 4
     p = a.rfind("0xff")
     assert p == 20
-    a = a.to_mutibs().replace("0xff", "")
+    a = a.to_mutibs()
+    a.replace("0xff", "")
     assert a == "0x000"
 
 

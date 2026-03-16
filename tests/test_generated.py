@@ -246,12 +246,12 @@ class TestErrorHandling:
 class TestAdvancedFeatures:
     def test_rol(self):
         s = Mutibs("0b0001")
-        s.rol(1)
+        s.rotate_left(1)
         assert s == "0b0010"
 
     def test_ror(self):
         s = Mutibs("0b1000")
-        s.ror(1)
+        s.rotate_right(1)
         assert s == "0b0100"
 
     def test_byte_swap(self):
@@ -318,9 +318,9 @@ class TestComplexInteractions:
 
     def test_chained_mutations(self):
         m = Mutibs("0x1234")
-        m.rol(4)
+        m.rotate_left(4)
         m.invert()
-        m.ror(8)
+        m.rotate_right(8)
         assert m == "0xbedc"
 
     def test_immutable_slice_mutation_check(self):
