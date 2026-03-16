@@ -9,7 +9,7 @@ from typing import Iterable
 class TestCreation:
     def test_creation_from_bytes(self):
         s = Tibs.from_bytes(b"\xa0\xff")
-        assert (len(s), s.to_hex()) == (16, "a0ff")
+        assert (len(s), s.hex) == (16, "a0ff")
 
     @given(st.binary())
     def test_creation_from_bytes_roundtrip(self, data):
@@ -18,7 +18,7 @@ class TestCreation:
 
     def test_creation_from_hex(self):
         s = Tibs.from_hex("0xA0ff")
-        assert (len(s), s.to_hex()) == (16, "a0ff")
+        assert (len(s), s.hex) == (16, "a0ff")
 
 
 class TestInitialisation:
@@ -103,13 +103,13 @@ class TestUnderscoresInLiterals:
 
     def test_binary_creation(self):
         a = Tibs.from_bin("0000_0001_0010")
-        assert a.to_bin() == "000000010010"
+        assert a.bin == "000000010010"
         b = Tibs.from_string("0b0011_1100_1111_0000")
         assert b.to_bin() == "0011110011110000"
 
     def test_octal_creation(self):
         a = Tibs.from_oct("0011_2233_4455_6677")
-        assert a.to_oct() == "0011223344556677"
+        assert a.oct == "0011223344556677"
         b = Tibs.from_string("0o123_321_123_321")
         assert b.to_oct() == "123321123321"
 
@@ -186,7 +186,7 @@ def test_is_things():
 
 def test_bits_from_bytes_string():
     a = Tibs.from_bytes(b'ABC')
-    assert a.to_bytes() == b'ABC'
+    assert a.bytes == b'ABC'
 
 
 def test_bool_conversion():

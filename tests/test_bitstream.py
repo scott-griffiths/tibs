@@ -752,7 +752,7 @@ class TestManyDifferentThings:
         assert a == "0b1111100"
         assert (a + [0]).to_bytes() == b"\xf8"
         with pytest.raises(AttributeError):
-            _ = a.bytes
+            _ = a.i
         with pytest.raises(ValueError):
             _ = a.to_bytes()
 

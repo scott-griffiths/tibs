@@ -1241,3 +1241,11 @@ def test_set_bug():
     m = Mutibs.from_hex('0x001122')
     m[8:0] = '0xff'
     assert m == '0x00ff1122'
+
+
+def test_convenience_properties():
+    m = Mutibs('0x123', "lsb0")
+    assert m.to_hex() == m.hex
+    assert m.to_oct() == m.oct
+    assert m.to_bin() == m.bin
+    assert m[:8].to_bytes() == m[:8].bytes

@@ -293,6 +293,14 @@ impl Mutibs {
         BitCollection::to_binary(self)
     }
 
+    /// Read-only property of the binary representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_bin`.
+    #[getter]
+    fn bin(&self) -> String {
+        BitCollection::to_binary(self)
+    }
+
     /// Create a new instance from an octal string.
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
@@ -313,6 +321,16 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
+        BitCollection::to_octal(self)
+    }
+
+    /// Read-only property of the octal representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_oct`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 3.
+    #[getter]
+    fn oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
     }
 
@@ -339,10 +357,30 @@ impl Mutibs {
         BitCollection::to_hexadecimal(self)
     }
 
+    /// Read-only property of the hexadecimal representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_hex`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 4.
+    #[getter]
+    fn hex(&self) -> PyResult<String> {
+        BitCollection::to_hexadecimal(self)
+    }
+
     /// Return the Mutibs as a bytes object.
     ///
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(self)
+    }
+
+    /// Read-only property of the ``bytes`` representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_bytes`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 8.
+    #[getter]
+    fn bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
     }
 

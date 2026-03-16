@@ -240,6 +240,9 @@ impl Tibs {
         Ok(Tibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
+    /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
+    /// least significant bit ("lsb0"). This doesn't affect the actual data stored, just how it's
+    /// accessed.
     #[getter]
     pub fn bit_indexing(&self) -> String {
         if self.msb0 {
@@ -619,6 +622,14 @@ impl Tibs {
         BitCollection::to_binary(self)
     }
 
+    /// Read-only property of the binary representation of the Tibs.
+    ///
+    /// Equivalent to using :meth:`~to_bin`.
+    #[getter]
+    fn bin(&self) -> String {
+        BitCollection::to_binary(self)
+    }
+
     /// Create a new instance from an octal string.
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
@@ -641,6 +652,16 @@ impl Tibs {
         BitCollection::to_octal(self)
     }
 
+    /// Read-only property of the octal representation of the Tibs.
+    ///
+    /// Equivalent to using :meth:`~to_oct`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 3.
+    #[getter]
+    fn oct(&self) -> PyResult<String> {
+        BitCollection::to_octal(self)
+    }
+
     /// Create a new instance from a hexadecimal string.
     ///
     /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
@@ -660,6 +681,16 @@ impl Tibs {
     ///
     /// :raises ValueError: if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
+        BitCollection::to_hexadecimal(self)
+    }
+
+    /// Read-only property of the hexadecimal representation of the Tibs.
+    ///
+    /// Equivalent to using :meth:`~to_hex`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 4.
+    #[getter]
+    fn hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
     }
 
@@ -782,6 +813,16 @@ impl Tibs {
     ///
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(self)
+    }
+
+    /// Read-only property of the ``bytes`` representation of the Tibs.
+    ///
+    /// Equivalent to using :meth:`~to_bytes`.
+    ///
+    /// :raises ValueError: if the length is not a multiple of 8.
+    #[getter]
+    fn bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
     }
 
