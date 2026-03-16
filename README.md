@@ -135,17 +135,11 @@ It also has several extra methods that will mutate the value in-place.
 ```python
 >>> m = Mutibs()
 >>> m.extend('0xabde')
+>>> m
 Mutibs('0xabde')
 >>> m.replace([1], [0, 1, 0])
+>>> m
 Mutibs('0b01000100010001001001001000100100100100')
-```
-
-Note that mutating methods like `extend` and `replace` also return the modified `Mutibs` instance.
-This perhaps isn't the most Pythonic of interfaces, but it allows methods to be chained:
-
-```python
->>> m[:32].byte_swap().reverse().to_f()
-2.1993814317305072e-18
 ```
 
 You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding,
@@ -155,5 +149,5 @@ For more information see the full [documentation](https://mutibs.readthedocs.io/
 
 ## But why is it called tibs?
 
-Because 'tibs' is (almost) 'bits' backwards, it's distinctive, and the name was available on PyPI.
+Because 'tibs' is (almost) 'bits' backwards. It's also distinctive, and the name was available on PyPI.
 It's got nothing to do with Ethiopian stew.

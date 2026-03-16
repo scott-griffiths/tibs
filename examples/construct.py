@@ -13,6 +13,6 @@ t = Tibs.from_joined([
     Tibs.from_u(bit_rate, 13)
     flags])
 
-assert t[0:32].to_hex() == '000001b3'
+assert t[0:32].hex == '000001b3'
 assert t[32:44].to_u() == width
 assert t[-3:] == flags
