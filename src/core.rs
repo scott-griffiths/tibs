@@ -179,7 +179,11 @@ pub(crate) trait BitCollection: Sized + Clone {
     #[inline]
     fn get_index(&self, bit_index: i64) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len())?;
-        Ok(self.as_bitslice()[index])
+        if self.msb0() {
+            Ok(self.as_bitslice()[index])
+        } else {
+            Ok(self.as_bitslice()[self.len() - index - 1])
+        }
     }
 
     fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
@@ -207,16 +211,31 @@ pub(crate) trait BitCollection: Sized + Clone {
                     "Slice end goes past the end of the container.".to_string(),
                 ));
             }
-            // TODO: This alternate method might be faster
-            // Ok(Self::new(
-            //     self.data()[start_bit as usize..end_bit as usize]
-            //         .iter()
-            //         .step_by(step as usize)
-            //         .collect(),
-            // ))
-            let mut new_data = self.as_bitslice()[start_bit as usize..end_bit as usize].to_bitvec();
-            new_data.retain(|idx, _| idx % step as usize == 0);
-            Ok(Self::from_bv(new_data, self.msb0()))
+            if self.msb0() {
+                Ok(Self::from_bv(
+                    self.as_bitslice()[start_bit as usize..end_bit as usize]
+                        .iter()
+                        .step_by(step as usize)
+                        .collect(),
+                    true,
+                ))
+            } else {
+                // For lsb0 we step in reverse and then reverse the
+                // collected bits.
+                let lsb0_start = self.len() - end_bit as usize;
+                let lsb0_end = self.len() - start_bit as usize;
+                Ok(Self::from_bv(
+                    self.as_bitslice()[lsb0_start..lsb0_end]
+                        .iter()
+                        .rev()
+                        .step_by(step as usize)
+                        .collect::<BV>()
+                        .into_iter()
+                        .rev()
+                        .collect(),
+                    false,
+                ))
+            }
         } else {
             if start_bit <= end_bit || start_bit == -1 {
                 return Ok(BitCollection::empty(self.msb0()));
@@ -499,12 +518,12 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn to_bitvec(&self) -> BV {
-        self.as_bitslice().to_bitvec()
+        self.to_bitslice().to_bitvec()
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        Tibs::as_bitslice(self)
+        Tibs::to_bitslice(self)
     }
 
     #[inline]
@@ -539,10 +558,18 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::from_bv(
-            self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
-            self.msb0(),
-        )
+        if self.msb0() {
+            Self::from_bv(
+                self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
+                true,
+            )
+        } else {
+            let start_bit = self.data.len() - length - start_bit;
+            Self::from_bv(
+                self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
+                false,
+            )
+        }
     }
 
     #[inline]
@@ -577,14 +604,14 @@ impl fmt::Debug for Tibs {
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_bitslice() == other.as_bitslice()
+        self.to_bitslice() == other.to_bitslice()
     }
 }
 
 impl PartialEq<Mutibs> for Tibs {
     #[inline]
     fn eq(&self, other: &Mutibs) -> bool {
-        self.as_bitslice() == other.as_bitvec_ref()
+        self.to_bitslice() == other.as_bitvec_ref()
     }
 }
 
@@ -598,6 +625,6 @@ impl PartialEq for Mutibs {
 impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
-        self.as_bitvec_ref() == other.as_bitslice()
+        self.as_bitvec_ref() == other.to_bitslice()
     }
 }

@@ -77,8 +77,8 @@ impl FindAllIterator {
                 return Ok(None); // No space left for the needle or already past the end
             }
             helpers::find_bitvec_with_lps(
-                haystack_rs.as_bitslice(),
-                needle_rs.as_bitslice(),
+                haystack_rs.to_bitslice(),
+                needle_rs.to_bitslice(),
                 lps,
                 current_pos,
                 slf.end,

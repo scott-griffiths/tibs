@@ -36,7 +36,7 @@ use std::ops::Not;
 #[pyclass(freelist = 8, sequence, skip_from_py_object, module = "tibs")]
 #[derive(Clone)]
 pub struct Mutibs {
-    data: BV,
+    pub data: BV,
     pub msb0: bool,
 }
 
@@ -176,6 +176,21 @@ impl Mutibs {
         Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
+    #[getter]
+    pub fn bit_indexing(&self) -> String {
+        if self.msb0 {
+            "msb0".to_string()
+        } else {
+            "lsb0".to_string()
+        }
+    }
+
+    #[setter]
+    pub fn set_bit_indexing(&mut self, val: &str) -> PyResult<()> {
+        self.msb0 = is_msb0(Some(val))?;
+        Ok(())
+    }
+
     /// Return True if two Mutibs have the same binary representation.
     ///
     /// The right hand side will be promoted to a Mutibs if needed and possible.
@@ -185,7 +200,7 @@ impl Mutibs {
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         if let Ok(b) = other.extract::<PyRef<Tibs>>() {
-            return *self.as_bitvec_ref() == *b.as_bitslice();
+            return *self.as_bitvec_ref() == *b.to_bitslice();
         }
         if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
             return *self.as_bitvec_ref() == *b.as_bitvec_ref();
