@@ -337,6 +337,13 @@ pub(crate) trait BitCollection: Sized + Clone {
         Self::from_bv(result_data, self.msb0())
     }
 
+    /// Return a bit reversed copy
+    fn reverse_copy(&self) -> Self {
+        let mut bv = self.to_bitvec();
+        bv.reverse();
+        Self::from_bv(bv, self.msb0())
+    }
+
     #[inline]
     fn to_binary(&self) -> String {
         let mut s = String::with_capacity(self.len());

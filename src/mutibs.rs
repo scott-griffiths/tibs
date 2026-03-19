@@ -1272,6 +1272,20 @@ impl Mutibs {
         slf.as_mut_bitvec_ref().reverse();
     }
 
+    /// Return a new instance with the bits reversed.
+    ///
+    /// :return: Mutibs
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Mutibs('0b00011')
+    ///     >>> a.reversed()
+    ///     >>> Mutibs('0b11000')
+    ///
+    pub fn reversed(&self) -> Self {
+        BitCollection::reverse_copy(self)
+    }
+
     /// Change the byte endianness in-place.
     ///
     /// The whole of the Mutibs will be byte-swapped. It must be a multiple

@@ -255,3 +255,17 @@ def test_promotion_from_mutibs():
     m3 = Mutibs(m)
     assert isinstance(m3, Mutibs)
     assert m3 == t
+
+
+def test_reversed():
+    a = Tibs('0b1100')
+    b = a.reversed()
+    assert b == '0b0011'
+
+    m1 = Mutibs('0b11100')
+    m2 = m1.reversed()
+    assert m2 == '0b00111'
+    m3 = Mutibs.from_random(1_000_000)
+    m4 = m3.reversed()
+    m4.reverse()
+    assert m3 == m4

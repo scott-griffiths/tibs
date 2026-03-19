@@ -252,6 +252,20 @@ impl Tibs {
         }
     }
 
+    /// Return a new instance with the bits reversed.
+    ///
+    /// :return: Tibs
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Tibs('0b00011')
+    ///     >>> a.reversed()
+    ///     >>> Mutibs('0b11000')
+    ///
+    fn reversed(&self) -> Self {
+        BitCollection::reverse_copy(self)
+    }
+
     /// Return a copy of the raw byte information.
     ///
     /// This returns the underlying byte data and can contain leading and trailing
