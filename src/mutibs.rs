@@ -11,7 +11,7 @@ use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
-use std::ops::Not;
+use std::ops::{Deref, Not};
 
 ///     A mutable container of binary data.
 ///
@@ -1291,7 +1291,8 @@ impl Mutibs {
     /// The whole of the Mutibs will be byte-swapped. It must be a multiple
     /// of byte_length long.
     ///
-    /// :param byte_length: An int giving the number of bytes in each swap.
+    /// :param byte_length: An int giving the number of bytes in each swap, or None (the default)
+    ///   to do a single reverse over the whole data.
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -1303,35 +1304,31 @@ impl Mutibs {
     ///
     #[pyo3(signature = (byte_length = None))]
     pub fn byte_swap(mut slf: PyRefMut<'_, Self>, byte_length: Option<i64>) -> PyResult<()> {
-        let len = slf.len();
-        if !len.is_multiple_of(8) {
-            return Err(PyValueError::new_err(format!(
-                "Bit length must be an multiple of 8 to use byte_swap (got length of {len} bits). This error can also be caused by using an endianness modifier on non-whole byte data."
-            )));
-        }
-        let byte_length = byte_length.unwrap_or((len as i64) / 8);
-        if byte_length == 0 && len == 0 {
-            return Ok(());
-        }
-        if byte_length <= 0 {
-            return Err(PyValueError::new_err(format!(
-                "Need a positive byte length for byte_swap. Received '{byte_length}'."
-            )));
-        }
-        let byte_length = byte_length as usize;
-        let self_byte_length = len / 8;
-        if !self_byte_length.is_multiple_of(byte_length) {
-            return Err(PyValueError::new_err(format!(
-                "The Mutibs to byte_swap is {self_byte_length} bytes long, but it needs to be a multiple of {byte_length} bytes."
-            )));
-        }
-
-        let mut bytes = slf.to_bytes()?;
-        for chunk in bytes.chunks_mut(byte_length) {
-            chunk.reverse();
-        }
-        *slf.as_mut_bitvec_ref() = BV::from_vec(bytes);
+        // We create a new Mutibs and replace rather than explicitly doing this in-place.
+        // If we add a start / end later then this should be made properly in-place.
+        *slf = BitCollection::byte_swap_copy(slf.deref(), byte_length)?;
         Ok(())
+    }
+
+    /// Return a new instance with the byte endianness swapped.
+    ///
+    /// The whole of the data will be byte-swapped. It must be a multiple
+    /// of byte_length long.
+    ///
+    /// :param byte_length: An int giving the number of bytes in each swap, or None (the default)
+    ///   to do a single reverse over the whole data.
+    /// :return: Mutibs
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Mutibs('0x12345678')
+    ///     >>> a.byte_swapped(2)
+    ///     >>> a
+    ///     Mutibs('0x34127856')
+    ///
+    #[pyo3(signature = (byte_length = None))]
+    pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Mutibs> {
+        Ok(BitCollection::byte_swap_copy(self, byte_length)?)
     }
 
     /// Return the instance with every bit inverted.

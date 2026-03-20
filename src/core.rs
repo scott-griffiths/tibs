@@ -344,6 +344,38 @@ pub(crate) trait BitCollection: Sized + Clone {
         Self::from_bv(bv, self.msb0())
     }
 
+    /// Return a byte swapped copy
+    fn byte_swap_copy(&self, byte_length: Option<i64>) -> PyResult<Self> {
+        let len = self.len();
+        if !len.is_multiple_of(8) {
+            return Err(PyValueError::new_err(format!(
+                "Bit length must be an multiple of 8 to use byte_swap (got length of {len} bits). This error can also be caused by using an endianness modifier on non-whole byte data."
+            )));
+        }
+        let byte_length = byte_length.unwrap_or((len as i64) / 8);
+        if byte_length == 0 && len == 0 {
+            return Ok(BitCollection::empty(self.msb0()));
+        }
+        if byte_length <= 0 {
+            return Err(PyValueError::new_err(format!(
+                "Need a positive byte length for byte_swap. Received '{byte_length}'."
+            )));
+        }
+        let byte_length = byte_length as usize;
+        let self_byte_length = len / 8;
+        if !self_byte_length.is_multiple_of(byte_length) {
+            return Err(PyValueError::new_err(format!(
+                "The data to byte_swap is {self_byte_length} bytes long, but it needs to be a multiple of {byte_length} bytes."
+            )));
+        }
+
+        let mut bytes = self.to_byte_data()?;
+        for chunk in bytes.chunks_mut(byte_length) {
+            chunk.reverse();
+        }
+        Ok(BitCollection::from_bv(BV::from_vec(bytes), self.msb0()))
+    }
+
     #[inline]
     fn to_binary(&self) -> String {
         let mut s = String::with_capacity(self.len());

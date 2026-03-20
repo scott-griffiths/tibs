@@ -260,10 +260,31 @@ impl Tibs {
     ///
     ///     >>> a = Tibs('0b00011')
     ///     >>> a.reversed()
-    ///     >>> Mutibs('0b11000')
+    ///     >>> Tibs('0b11000')
     ///
     fn reversed(&self) -> Self {
         BitCollection::reverse_copy(self)
+    }
+
+    /// Return a new instance with the byte endianness swapped.
+    ///
+    /// The whole of the data will be byte-swapped. It must be a multiple
+    /// of byte_length long.
+    ///
+    /// :param byte_length: An int giving the number of bytes in each swap, or None (the default)
+    ///   to do a single reverse over the whole data.
+    /// :return: Tibs
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Tibs('0x12345678')
+    ///     >>> a.byte_swapped(2)
+    ///     >>> a
+    ///     Tibs('0x34127856')
+    ///
+    #[pyo3(signature = (byte_length = None))]
+    pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Tibs> {
+        Ok(BitCollection::byte_swap_copy(self, byte_length)?)
     }
 
     /// Return a copy of the raw byte information.

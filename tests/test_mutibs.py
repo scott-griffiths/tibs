@@ -1247,3 +1247,9 @@ def test_convenience_properties():
     assert m.to_oct() == m.oct
     assert m.to_bin() == m.bin
     assert m[:8].to_bytes() == m[:8].bytes
+
+
+def test_byte_swapped():
+    a = Mutibs.from_bytes(b'!olleh')
+    b = a.byte_swapped()
+    assert b == b'hello!'
