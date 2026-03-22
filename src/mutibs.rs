@@ -158,6 +158,22 @@ impl Mutibs {
     }
 }
 
+impl<'a, 'py> FromPyObject<'a, 'py> for Mutibs {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(tibs_ref) = obj.extract::<PyRef<Tibs>>() {
+            return Ok(tibs_ref.to_mutibs());
+        }
+        if let Ok(mutibs_ref) = obj.extract::<PyRef<Mutibs>>() {
+            return Ok(mutibs_ref.clone());
+        }
+        // Default to msb0 when creating from other types.
+        let bv = promote_to_bv(&obj)?;
+        Ok(Mutibs::from_bv(bv, true))
+    }
+}
+
 #[pymethods]
 impl Mutibs {
     #[new]
@@ -170,14 +186,9 @@ impl Mutibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty(msb0));
         };
-        if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
-            return Ok(tibs_ref.to_mutibs());
-        }
-        if let Ok(mutibs_ref) = auto.extract::<PyRef<Mutibs>>() {
-            return Ok(mutibs_ref.clone());
-        }
-
-        Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
+        let mut mutibs = Mutibs::extract(auto.as_borrowed())?;
+        mutibs.msb0 = msb0;
+        Ok(mutibs)
     }
 
     /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
@@ -877,6 +888,14 @@ impl Mutibs {
     ///
     pub fn starts_with(&self, prefix: Tibs) -> PyResult<bool> {
         Ok(<Mutibs as BitCollection>::starts_with(self, prefix))
+    }
+
+    /// Return True if b is a sub-sequence of self.
+    pub fn __contains__(&self, b: Tibs) -> bool {
+        match self.find(b, None, None, false) {
+            Ok(Some(_)) => true,
+            _ => false,
+        }
     }
 
     /// Return whether the current Mutibs ends with suffix.

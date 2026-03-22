@@ -232,14 +232,9 @@ impl Tibs {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty(msb0));
         };
-        if let Ok(tibs_ref) = auto.extract::<PyRef<Tibs>>() {
-            return Ok(tibs_ref.clone());
-        }
-        if let Ok(mutibs_ref) = auto.extract::<PyRef<Mutibs>>() {
-            return Ok(mutibs_ref.to_tibs());
-        }
-
-        Ok(Tibs::from_bv(promote_to_bv(auto)?, msb0))
+        let mut tibs = Tibs::extract(auto.as_borrowed())?;
+        tibs.msb0 = msb0;
+        Ok(tibs)
     }
 
     /// Whether the bits are indexed from the most significant bit (BitIndexing.Msb0, the default) or from the
