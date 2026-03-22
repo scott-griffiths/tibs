@@ -1,4 +1,5 @@
 use crate::core::BitCollection;
+use crate::enums::BitIndexing;
 use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -202,31 +203,16 @@ pub struct Tibs {
     pub msb0: bool,
 }
 
-pub fn is_msb0(s: Option<&str>) -> PyResult<bool> {
-    match s {
-        Some(s) => {
-            if s == "msb0" {
-                Ok(true)
-            } else if s == "lsb0" {
-                Ok(false)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "bit_indexing should be either \"msb0\" or \"lsb0\". Received \"{}\".",
-                    s
-                )))
-            }
-        }
-        None => Ok(true), // Defaults to msb0
-    }
-}
-
 /// Public Python-facing methods.
 #[pymethods]
 impl Tibs {
     #[new]
-    #[pyo3(signature = (auto = None, bit_indexing = "msb0"))]
-    pub fn py_new(auto: Option<&Bound<'_, PyAny>>, bit_indexing: Option<&str>) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+    #[pyo3(signature = (auto = None, bit_indexing = BitIndexing::Msb0))]
+    pub fn py_new(
+        auto: Option<&Bound<'_, PyAny>>,
+        bit_indexing: Option<BitIndexing>,
+    ) -> PyResult<Self> {
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let Some(auto) = auto else {
             return Ok(BitCollection::empty(msb0));
         };
@@ -240,15 +226,15 @@ impl Tibs {
         Ok(Tibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
-    /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
-    /// least significant bit ("lsb0"). This doesn't affect the actual data stored, just how it's
+    /// Whether the bits are indexed from the most significant bit (BitIndexing.Msb0, the default) or from the
+    /// least significant bit (BitIndexing.Lsb0). This doesn't affect the actual data stored, just how it's
     /// accessed.
     #[getter]
-    pub fn bit_indexing(&self) -> String {
+    pub fn bit_indexing(&self) -> BitIndexing {
         if self.msb0 {
-            "msb0".to_string()
+            BitIndexing::Msb0
         } else {
-            "lsb0".to_string()
+            BitIndexing::Lsb0
         }
     }
 
@@ -320,14 +306,14 @@ impl Tibs {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
-                "bit_indexing='lsb0'".to_string()
+                "bit_indexing=BitIndexing.Lsb0".to_string()
             };
             format!("{}({})", class_name, bit_indexing)
         } else {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
-                ", 'lsb0'".to_string()
+                ", 'BitIndexing.Lsb0'".to_string()
             };
             format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
         }
@@ -488,13 +474,13 @@ impl Tibs {
     ///     a = Tibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_zeros(
         _cls: &Bound<'_, PyType>,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
@@ -514,13 +500,13 @@ impl Tibs {
     ///     Tibs('0b11111')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_ones(
         _cls: &Bound<'_, PyType>,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
@@ -547,13 +533,13 @@ impl Tibs {
     ///     a = Tibs("0xff01")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_string(
         _cls: &Bound<'_, PyType>,
         s: String,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = str_to_bv(s)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -566,14 +552,14 @@ impl Tibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, bit_indexing="msb0"), text_signature = "(cls, u, /, length, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (u, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_u128(u, length)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -591,14 +577,14 @@ impl Tibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, bit_indexing = "msb0"), text_signature = "(cls, i, /, length, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (i, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_i128(i, length)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -613,14 +599,14 @@ impl Tibs {
     /// :param f: A floating point value.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
-    #[pyo3(signature = (f, /, length, bit_indexing = "msb0"), text_signature = "(cls, f, /, length, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (f, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_f64(f, length)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -641,13 +627,13 @@ impl Tibs {
     ///     a = Tibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_bin(
         _cls: &Bound<'_, PyType>,
         s: &str,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bin(s)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -669,13 +655,13 @@ impl Tibs {
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_oct(
         _cls: &Bound<'_, PyType>,
         s: &str,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_oct(s)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -701,13 +687,13 @@ impl Tibs {
     ///
     /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_hex(
         _cls: &Bound<'_, PyType>,
         s: &str,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_hex(s)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -741,15 +727,15 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = "msb0"), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
         offset: Option<i64>,
         length: Option<i64>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bytes_slice(data, offset, length)?;
         Ok(Self::from_bv(bv, msb0))
     }
@@ -763,13 +749,13 @@ impl Tibs {
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_bools(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bools(iterable)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -790,15 +776,15 @@ impl Tibs {
     ///     b = Tibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = "msb0"), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
         seed: Option<Vec<u8>>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_random(length, secure, &seed)?;
         Ok(Tibs::from_bv(bv, msb0))
     }
@@ -814,13 +800,13 @@ impl Tibs {
     ///     a = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")")]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_joined(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         // Convert each item to BV, store, and sum total length for a single allocation.
         let iter = iterable.try_iter()?;
         let mut bv_parts: Vec<BV> = Vec::new();

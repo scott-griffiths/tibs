@@ -1,11 +1,12 @@
 use crate::core::BitCollection;
+use crate::enums::BitIndexing;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
     find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, is_msb0, tibs_from_any};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 
 use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -160,9 +161,12 @@ impl Mutibs {
 #[pymethods]
 impl Mutibs {
     #[new]
-    #[pyo3(signature = (auto = None, bit_indexing = "msb0"))]
-    pub fn py_new(auto: Option<&Bound<'_, PyAny>>, bit_indexing: Option<&str>) -> PyResult<Self> {
-        let msb0 = crate::tibs_::is_msb0(bit_indexing)?;
+    #[pyo3(signature = (auto = None, bit_indexing = BitIndexing::Msb0))]
+    pub fn py_new(
+        auto: Option<&Bound<'_, PyAny>>,
+        bit_indexing: Option<BitIndexing>,
+    ) -> PyResult<Self> {
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let Some(auto) = auto else {
             return Ok(BitCollection::empty(msb0));
         };
@@ -176,22 +180,24 @@ impl Mutibs {
         Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
-    /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
-    /// least significant bit ("lsb0"). This doesn't affect the actual data stored, just how it's
+    /// Whether the bits are indexed from the most significant bit (BitIndexing.Msb0, the default) or from the
+    /// least significant bit (BitIndexing.Lsb0). This doesn't affect the actual data stored, just how it's
     /// accessed.
     #[getter]
-    pub fn bit_indexing(&self) -> String {
+    pub fn bit_indexing(&self) -> BitIndexing {
         if self.msb0 {
-            "msb0".to_string()
+            BitIndexing::Msb0
         } else {
-            "lsb0".to_string()
+            BitIndexing::Lsb0
         }
     }
 
     #[setter]
-    pub fn set_bit_indexing(&mut self, val: &str) -> PyResult<()> {
-        self.msb0 = is_msb0(Some(val))?;
-        Ok(())
+    pub fn set_bit_indexing(&mut self, val: BitIndexing) {
+        self.msb0 = match val {
+            BitIndexing::Msb0 => true,
+            BitIndexing::Lsb0 => false,
+        }
     }
 
     /// Return True if two Mutibs have the same binary representation.
@@ -226,14 +232,14 @@ impl Mutibs {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
-                "bit_indexing='lsb0'".to_string()
+                "bit_indexing=BitIndexing.Lsb0".to_string()
             };
             format!("{}({})", class_name, bit_indexing)
         } else {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
-                ", 'lsb0'".to_string()
+                ", BitIndexing.Lsb0".to_string()
             };
             format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
         }
@@ -258,14 +264,14 @@ impl Mutibs {
     ///     a = Mutibs("0xff01")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)"
     )]
     pub fn from_string(
         _cls: &Bound<'_, PyType>,
         s: String,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = str_to_bv(s)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -279,14 +285,14 @@ impl Mutibs {
     ///     a = Mutibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)"
     )]
     pub fn from_bin(
         _cls: &Bound<'_, PyType>,
         s: String,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bin(&s)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -308,14 +314,14 @@ impl Mutibs {
     ///
     /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)"
     )]
     pub fn from_oct(
         _cls: &Bound<'_, PyType>,
         s: String,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_oct(&s)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -341,14 +347,14 @@ impl Mutibs {
     ///
     /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = "msb0"), text_signature = "(cls, s, /, bit_indexing = \"msb0\")"
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)"
     )]
     pub fn from_hex(
         _cls: &Bound<'_, PyType>,
         s: String,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_hex(&s)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -452,17 +458,15 @@ impl Mutibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, bit_indexing = "msb0"), text_signature = "(cls, u, /, length, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (u, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
         let bv = bv_from_u128(u, length)?;
-        Ok(Mutibs::from_bv(bv, msb0))
+        Ok(Mutibs::from_bv(bv, BitIndexing::is_msb0(bit_indexing)))
     }
 
     /// Return the unsigned integer representation of the Mutibs.
@@ -478,15 +482,14 @@ impl Mutibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, bit_indexing = "msb0"), text_signature = "(cls, i, /, length, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (i, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_i128(i, length)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -501,15 +504,14 @@ impl Mutibs {
     /// :param f: A float.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
-    #[pyo3(signature = (f, /, length, bit_indexing = "msb0"), text_signature = "(cls, f, /, length, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (f, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_f64(f, length)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -531,14 +533,13 @@ impl Mutibs {
     ///     a = Mutibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_zeros(
         _cls: &Bound<'_, PyType>,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
@@ -558,14 +559,13 @@ impl Mutibs {
     ///     Mutibs('0b11111')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = "msb0"), text_signature = "(cls, length, /, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_ones(
         _cls: &Bound<'_, PyType>,
         length: i64,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         if length < 0 {
             return Err(PyValueError::new_err(format!(
                 "Negative bit length given: {}.",
@@ -584,14 +584,13 @@ impl Mutibs {
     ///     a = Mutibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_bools(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bools(iterable)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -612,16 +611,15 @@ impl Mutibs {
     ///     b = Mutibs.from_random(100, b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = "msb0"), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
         seed: Option<Vec<u8>>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_random(length, secure, &seed)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
@@ -638,16 +636,15 @@ impl Mutibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = "msb0"), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
         offset: Option<i64>,
         length: Option<i64>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = is_msb0(bit_indexing)?;
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
         let bv = bv_from_bytes_slice(data, offset, length)?;
         Ok(Self::from_bv(bv, msb0))
     }
@@ -663,12 +660,11 @@ impl Mutibs {
     ///     a = Mutibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = "msb0"), text_signature = "(cls, iterable, /, bit_indexing = \"msb0\")"
-    )]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_joined(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
-        bit_indexing: Option<&str>,
+        bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
         Ok(Tibs::from_joined(_cls, iterable, bit_indexing)?.to_mutibs())
     }

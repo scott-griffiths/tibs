@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs
+from tibs import Tibs, Mutibs, BitIndexing
 
 
 def test_creation():
@@ -1242,7 +1242,7 @@ def test_set_bug():
 
 
 def test_convenience_properties():
-    m = Mutibs('0x123', "lsb0")
+    m = Mutibs('0x123', BitIndexing.Lsb0)
     assert m.to_hex() == m.hex
     assert m.to_oct() == m.oct
     assert m.to_bin() == m.bin
@@ -1253,3 +1253,11 @@ def test_byte_swapped():
     a = Mutibs.from_bytes(b'!olleh')
     b = a.byte_swapped()
     assert b == b'hello!'
+
+
+def test_bit_indexing():
+    with pytest.raises(TypeError):
+        a = Mutibs.from_u(101, 16, "asdf")
+    a = Mutibs.from_u(101, 16, BitIndexing.Lsb0)
+    assert a.to_u() == 101
+    assert a.bit_indexing is BitIndexing.Lsb0
