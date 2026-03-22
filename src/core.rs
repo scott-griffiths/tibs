@@ -155,7 +155,11 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn starts_with(&self, prefix: impl BitCollection) -> bool {
         let n = prefix.len();
         if n <= self.len() {
-            *prefix.as_bitslice() == self.as_bitslice()[..n]
+            if self.msb0() {
+                *prefix.as_bitslice() == self.as_bitslice()[..n]
+            } else {
+                *prefix.as_bitslice() == self.as_bitslice()[self.len() - n..]
+            }
         } else {
             false
         }
@@ -169,7 +173,11 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
         let n = suffix.len();
         if n <= self.len() {
-            *suffix.as_bitslice() == self.as_bitslice()[self.len() - n..]
+            if self.msb0() {
+                *suffix.as_bitslice() == self.as_bitslice()[self.len() - n..]
+            } else {
+                *suffix.as_bitslice() == self.as_bitslice()[..n]
+            }
         } else {
             false
         }

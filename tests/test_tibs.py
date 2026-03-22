@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs
+from tibs import Tibs, Mutibs, BitIndexing
 
 
 def test_from_bin():
@@ -244,3 +244,15 @@ def test_count_expanded():
     assert b == 8
     b = a.count([1, 1])
     assert b == 0
+
+
+def test_lsb0_start_and_ends_with():
+    a = Tibs.from_bytes(b'xyz', bit_indexing=BitIndexing.Lsb0)
+    assert a.starts_with(b'z')
+    assert a.ends_with(b'x')
+
+    b = Mutibs.from_bytes(b'abcde')
+    assert b.starts_with(b'a')
+    b.bit_indexing = BitIndexing.Lsb0
+    assert b.starts_with(b'e')
+    assert b.ends_with(b'a')

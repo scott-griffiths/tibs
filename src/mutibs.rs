@@ -6,7 +6,7 @@ use crate::helpers::{
     find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
+use crate::tibs_::Tibs;
 
 use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -750,9 +750,9 @@ impl Mutibs {
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
             let bs = if value.as_ptr() == slf.as_ptr() {
-                BorrowedOrOwnedTibs::Owned(Tibs::from_bv(slf.to_bitvec(), slf.msb0))
+                Tibs::from_bv(slf.to_bitvec(), slf.msb0)
             } else {
-                tibs_from_any(value)?
+                Tibs::extract(value.as_borrowed())?
             };
 
             let indices = slice.indices(length as isize)?;
@@ -1138,7 +1138,7 @@ impl Mutibs {
     ///     12
     ///
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
-        match tibs_from_any(value) {
+        match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
                     Ok(<Mutibs as BitCollection>::count(self, v.get_index(0)?))
@@ -1519,7 +1519,7 @@ impl Mutibs {
             let bits_clone = slf.to_bitvec();
             slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
         } else {
-            let bs = tibs_from_any(bs)?;
+            let bs = Tibs::extract(bs.as_borrowed())?;
             slf.as_mut_bitvec_ref()
                 .extend_from_bitslice(bs.as_bitslice());
         }
@@ -1549,7 +1549,7 @@ impl Mutibs {
             new_data.extend_from_bitslice(slf.as_bitvec_ref());
             *slf.as_mut_bitvec_ref() = new_data;
         } else {
-            let to_prepend = tibs_from_any(bs)?;
+            let to_prepend = Tibs::extract(bs.as_borrowed())?;
             if to_prepend.is_empty() {
                 return Ok(());
             }
@@ -1589,18 +1589,18 @@ impl Mutibs {
         byte_aligned: bool,
     ) -> PyResult<()> {
         let old = if old.as_ptr() == slf.as_ptr() {
-            BorrowedOrOwnedTibs::Owned(slf.to_tibs())
+            slf.to_tibs()
         } else {
-            tibs_from_any(old)?
+            Tibs::extract(old.as_borrowed())?
         };
 
         if old.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
         let new = if new.as_ptr() == slf.as_ptr() {
-            BorrowedOrOwnedTibs::Owned(slf.to_tibs())
+            slf.to_tibs()
         } else {
-            tibs_from_any(new)?
+            Tibs::extract(new.as_borrowed())?
         };
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
@@ -1668,9 +1668,9 @@ impl Mutibs {
     ) -> PyResult<()> {
         // Check for self assignment
         let bs = if bs.as_ptr() == slf.as_ptr() {
-            BorrowedOrOwnedTibs::Owned(slf.__copy__().as_tibs())
+            slf.to_tibs()
         } else {
-            tibs_from_any(bs)?
+            Tibs::extract(bs.as_borrowed())?
         };
         if bs.len() == 0 {
             return Ok(());
@@ -1776,20 +1776,17 @@ impl Mutibs {
     }
 
     /// In-place bit-wise 'and'.
-    pub fn __iand__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        let other = tibs_from_any(bs)?;
+    pub fn __iand__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.iand(other.as_bitslice())
     }
 
     /// In-place bit-wise 'or'.
-    pub fn __ior__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        let other = tibs_from_any(bs)?;
+    pub fn __ior__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.ior(other.as_bitslice())
     }
 
     /// In-place bit-wise 'xor'.
-    pub fn __ixor__(mut slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        let other = tibs_from_any(bs)?;
+    pub fn __ixor__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.ixor(other.as_bitslice())
     }
 

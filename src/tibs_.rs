@@ -18,80 +18,6 @@ use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
 
-// Enum allows us to wrap and use a Tibs without copying it or owning it.
-pub(crate) enum BorrowedOrOwnedTibs<'a> {
-    Borrowed(PyRef<'a, Tibs>),
-    Owned(Tibs),
-}
-
-impl BitCollection for BorrowedOrOwnedTibs<'_> {
-    fn from_bv(bv: BV, msb0: bool) -> Self {
-        BorrowedOrOwnedTibs::Owned(Tibs::from_bv(bv, msb0))
-    }
-
-    fn msb0(&self) -> bool {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.msb0,
-            BorrowedOrOwnedTibs::Owned(t) => t.msb0,
-        }
-    }
-
-    fn to_bitvec(&self) -> BV {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.to_bitvec(),
-            BorrowedOrOwnedTibs::Owned(t) => t.to_bitvec(),
-        }
-    }
-
-    fn as_bitslice(&self) -> &BS {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.to_bitslice(),
-            BorrowedOrOwnedTibs::Owned(t) => t.to_bitslice(),
-        }
-    }
-
-    #[inline]
-    fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::from_bv(
-            self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
-            self.msb0(),
-        )
-    }
-
-    #[inline]
-    fn get_raw_bytes(&self) -> Vec<u8> {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.raw_bytes(),
-            BorrowedOrOwnedTibs::Owned(t) => t.raw_bytes(),
-        }
-    }
-}
-
-impl<'a> Clone for BorrowedOrOwnedTibs<'a> {
-    fn clone(&self) -> Self {
-        match self {
-            BorrowedOrOwnedTibs::Borrowed(t) => BorrowedOrOwnedTibs::Owned((**t).clone()),
-            BorrowedOrOwnedTibs::Owned(t) => BorrowedOrOwnedTibs::Owned(t.clone()),
-        }
-    }
-}
-
-pub(crate) fn tibs_from_any<'a>(any: &'a Bound<'a, PyAny>) -> PyResult<BorrowedOrOwnedTibs<'a>> {
-    // Is it of type Tibs?
-    if let Ok(tibs_ref) = any.extract::<PyRef<Tibs>>() {
-        return Ok(BorrowedOrOwnedTibs::Borrowed(tibs_ref));
-    }
-
-    // Is it of type Mutibs?
-    if let Ok(mutibs_ref) = any.extract::<PyRef<Mutibs>>() {
-        return Ok(BorrowedOrOwnedTibs::Owned(mutibs_ref.to_tibs()));
-    }
-    let bv = promote_to_bv(any)?;
-
-    let tibs = Tibs::from_bv(bv, true); // Default to MSB0 here as we have no other info.
-    Ok(BorrowedOrOwnedTibs::Owned(tibs))
-}
-
 impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
@@ -813,13 +739,9 @@ impl Tibs {
         let mut total_len: usize = 0;
         for item in iter {
             let obj = item?;
-            let bits = tibs_from_any(&obj)?;
-            total_len += bits.len();
-            let owned_tibs = match bits {
-                BorrowedOrOwnedTibs::Borrowed(t) => t.clone(),
-                BorrowedOrOwnedTibs::Owned(t) => t,
-            };
-            bv_parts.push(owned_tibs.to_bitvec());
+            let tibs = Tibs::extract(obj.as_borrowed())?;
+            total_len += tibs.len();
+            bv_parts.push(tibs.to_bitvec());
         }
 
         // Concatenate.
@@ -979,7 +901,7 @@ impl Tibs {
     ///         4
     ///
     pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
-        match tibs_from_any(value) {
+        match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
                     Ok(<Tibs as BitCollection>::count(self, v.get_index(0)?))
