@@ -6,7 +6,7 @@ use crate::helpers::{
     find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, is_msb0, tibs_from_any};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
 
 use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -875,8 +875,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let prefix = tibs_from_any(prefix)?;
+    pub fn starts_with(&self, prefix: Tibs) -> PyResult<bool> {
         Ok(<Mutibs as BitCollection>::starts_with(self, prefix))
     }
 
@@ -892,8 +891,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let suffix = tibs_from_any(suffix)?;
+    pub fn ends_with(&self, suffix: Tibs) -> PyResult<bool> {
         Ok(<Mutibs as BitCollection>::ends_with(self, suffix))
     }
 
@@ -901,7 +899,7 @@ impl Mutibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The Tibs to find.
+    /// :param needle: The Tibs to find.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
     /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
@@ -912,22 +910,21 @@ impl Mutibs {
     ///      >>> Mutibs('0xc3e').find('0b1111')
     ///      6
     ///
-    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
-        b: &Bound<'_, PyAny>,
+        needle: Tibs,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b)?;
-        if b.is_empty() {
+        if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
         Ok(find_bitvec(
             self.as_bitvec_ref(),
-            b.as_bitslice(),
+            needle.as_bitslice(),
             start,
             end,
             byte_aligned,
@@ -938,30 +935,27 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, &other))
+    pub fn __and__(&self, bs: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_and(self, &bs))
     }
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, &other))
+    pub fn __or__(&self, bs: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_or(self, &bs))
     }
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, &other))
+    pub fn __xor__(&self, bs: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_xor(self, &bs))
     }
 
     /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -970,7 +964,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __rand__(&self, bs: Tibs) -> PyResult<Self> {
         self.__and__(bs)
     }
 
@@ -980,7 +974,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __ror__(&self, bs: Tibs) -> PyResult<Self> {
         self.__or__(bs)
     }
 
@@ -990,7 +984,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __rxor__(&self, bs: Tibs) -> PyResult<Self> {
         self.__xor__(bs)
     }
 
@@ -1430,8 +1424,7 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = tibs_from_any(bs)?;
+    pub fn __add__(&self, bs: Tibs) -> PyResult<Self> {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitvec_ref());
         data.extend_from_bitslice(bs.as_bitslice());
@@ -1439,8 +1432,7 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = tibs_from_any(bs)?;
+    pub fn __radd__(&self, bs: Tibs) -> PyResult<Self> {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitvec_ref());

@@ -1261,3 +1261,9 @@ def test_bit_indexing():
     a = Mutibs.from_u(101, 16, BitIndexing.Lsb0)
     assert a.to_u() == 101
     assert a.bit_indexing is BitIndexing.Lsb0
+
+
+def test_contains():
+    m = Mutibs('0x12345')
+    assert '0x23' in m
+    assert '0xff' not in m
