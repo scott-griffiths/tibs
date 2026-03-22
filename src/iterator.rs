@@ -33,7 +33,7 @@ impl BoolIterator {
 #[pyclass]
 pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
-    pub needle: Py<Tibs>,
+    pub needle: Tibs,
     pub start: usize,
     pub end: usize,
     pub byte_aligned: bool,
@@ -62,10 +62,9 @@ impl FindAllIterator {
         // will end when this block finishes.
         let find_result = {
             let haystack_rs = slf.haystack.borrow(py);
-            let needle_rs = slf.needle.borrow(py);
             let lps = &slf.lps;
 
-            let needle_len = needle_rs.len();
+            let needle_len = slf.needle.len();
             if needle_len == 0 {
                 // If needle is empty, stop iteration.
                 return Ok(None);
@@ -78,7 +77,7 @@ impl FindAllIterator {
             }
             helpers::find_bitvec_with_lps(
                 haystack_rs.to_bitslice(),
-                needle_rs.to_bitslice(),
+                slf.needle.to_bitslice(),
                 lps,
                 current_pos,
                 slf.end,

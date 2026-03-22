@@ -203,6 +203,22 @@ pub struct Tibs {
     pub msb0: bool,
 }
 
+impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(tibs_ref) = obj.extract::<PyRef<Tibs>>() {
+            return Ok(tibs_ref.clone());
+        }
+        if let Ok(mutibs_ref) = obj.extract::<PyRef<Mutibs>>() {
+            return Ok(mutibs_ref.to_tibs());
+        }
+        // Default to msb0 when creating from other types.
+        let bv = promote_to_bv(&obj)?;
+        Ok(Tibs::from_bv(bv, true))
+    }
+}
+
 /// Public Python-facing methods.
 #[pymethods]
 impl Tibs {
@@ -387,11 +403,8 @@ impl Tibs {
     /// >>> Tibs('0b1110') == '0xe'
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        match tibs_from_any(other) {
-            Ok(b) => *self.to_bitslice() == *b.as_bitslice(),
-            Err(_) => false,
-        }
+    pub fn __eq__(&self, other: Tibs) -> bool {
+        *self.to_bitslice() == *other.as_bitslice()
     }
 
     #[pyo3(name = "__hash__")]
@@ -425,26 +438,18 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').find_all('0b11'))
     ///     [2, 3, 6]
     ///
-    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
     pub fn find_all(
         slf: PyRef<'_, Self>,
-        b: &Bound<'_, PyAny>,
+        needle: Tibs,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
-        let b = tibs_from_any(b)?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
-        let needle: Py<Tibs> = match b {
-            BorrowedOrOwnedTibs::Borrowed(t) => t.into(),
-            BorrowedOrOwnedTibs::Owned(t) => Py::new(py, t)?,
-        };
-        let lps = {
-            let needle_ref = needle.borrow(py);
-            compute_lps(needle_ref.to_bitslice())
-        };
+        let lps = { compute_lps(needle.to_bitslice()) };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             needle,
@@ -864,23 +869,22 @@ impl Tibs {
     ///      >>> Tibs('0xc3e').find('0b1111')
     ///      6
     ///
-    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
     pub fn find(
         &self,
-        b: &Bound<'_, PyAny>,
+        needle: Tibs,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b)?;
-        if b.is_empty() {
+        if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
 
         Ok(find_bitvec(
             self.to_bitslice(),
-            b.as_bitslice(),
+            needle.as_bitslice(),
             start,
             end,
             byte_aligned,
@@ -888,7 +892,7 @@ impl Tibs {
     }
 
     /// Return True if b is a sub-sequence of self.
-    pub fn __contains__(&self, b: &Bound<'_, PyAny>) -> bool {
+    pub fn __contains__(&self, b: Tibs) -> bool {
         match self.find(b, None, None, false) {
             Ok(Some(_)) => true,
             _ => false,
@@ -904,23 +908,22 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
+    /// :param needle: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
     /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
     ///
-    /// :raises ValueError: if ``b`` is empty, or if the slice parameters are invalid.
-    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
-        b: &Bound<'_, PyAny>,
+        needle: Tibs,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        let b = tibs_from_any(b)?;
-        if b.is_empty() {
+        if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
 
@@ -928,7 +931,7 @@ impl Tibs {
 
         Ok(rfind_bitvec(
             self.to_bitslice(),
-            b.as_bitslice(),
+            needle.as_bitslice(),
             start,
             end,
             byte_aligned,
@@ -947,8 +950,7 @@ impl Tibs {
     ///     >>> Tibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let prefix = tibs_from_any(prefix)?;
+    pub fn starts_with(&self, prefix: Tibs) -> PyResult<bool> {
         Ok(<Tibs as BitCollection>::starts_with(self, prefix))
     }
 
@@ -964,8 +966,7 @@ impl Tibs {
     ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let suffix = tibs_from_any(suffix)?;
+    pub fn ends_with(&self, suffix: Tibs) -> PyResult<bool> {
         Ok(<Tibs as BitCollection>::ends_with(self, suffix))
     }
 
@@ -1097,8 +1098,7 @@ impl Tibs {
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = tibs_from_any(bs)?;
+    pub fn __add__(&self, bs: Tibs) -> PyResult<Self> {
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.to_bitslice());
         data.extend_from_bitslice(bs.as_bitslice());
@@ -1106,8 +1106,7 @@ impl Tibs {
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = tibs_from_any(bs)?;
+    pub fn __radd__(&self, bs: Tibs) -> PyResult<Self> {
         let mut data = BV::with_capacity(bs.len() + self.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.to_bitslice());
@@ -1118,32 +1117,29 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __and__(&self, bs: Tibs) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, &other))
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_and(self, &bs))
     }
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __or__(&self, bs: Tibs) -> PyResult<Self> {
         // TODO: Return early `if bs is self`.
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, &other))
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_or(self, &bs))
     }
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = tibs_from_any(bs)?;
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, &other))
+    pub fn __xor__(&self, bs: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), bs.len())?;
+        Ok(BitCollection::logical_xor(self, &bs))
     }
 
     /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -1152,7 +1148,7 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __rand__(&self, bs: Tibs) -> PyResult<Self> {
         self.__and__(bs)
     }
 
@@ -1162,7 +1158,7 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __ror__(&self, bs: Tibs) -> PyResult<Self> {
         self.__or__(bs)
     }
 
@@ -1172,7 +1168,7 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __rxor__(&self, bs: Tibs) -> PyResult<Self> {
         self.__xor__(bs)
     }
 

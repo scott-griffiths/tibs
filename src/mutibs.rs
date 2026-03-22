@@ -6,7 +6,7 @@ use crate::helpers::{
     find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
     validate_shift, validate_slice,
 };
-use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, tibs_from_any};
+use crate::tibs_::{BorrowedOrOwnedTibs, Tibs, is_msb0, tibs_from_any};
 
 use crate::helpers;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -180,8 +180,8 @@ impl Mutibs {
         Ok(Mutibs::from_bv(promote_to_bv(auto)?, msb0))
     }
 
-    /// Whether the bits are indexed from the most significant bit (BitIndexing.Msb0, the default) or from the
-    /// least significant bit (BitIndexing.Lsb0). This doesn't affect the actual data stored, just how it's
+    /// Whether the bits are indexed from the most significant bit ("msb0", the default) or from the
+    /// least significant bit ("lsb0"). This doesn't affect the actual data stored, just how it's
     /// accessed.
     #[getter]
     pub fn bit_indexing(&self) -> BitIndexing {
@@ -207,17 +207,8 @@ impl Mutibs {
     /// >>> Mutibs('0xf2') == '0b11110010'
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        if let Ok(b) = other.extract::<PyRef<Tibs>>() {
-            return *self.as_bitvec_ref() == *b.to_bitslice();
-        }
-        if let Ok(b) = other.extract::<PyRef<Mutibs>>() {
-            return *self.as_bitvec_ref() == *b.as_bitvec_ref();
-        }
-        match tibs_from_any(other) {
-            Ok(b) => *self.as_bitvec_ref() == *b.as_bitslice(),
-            Err(_) => false,
-        }
+    pub fn __eq__(&self, other: Tibs) -> bool {
+        *self.as_bitvec_ref() == *other.as_bitslice()
     }
 
     /// Return string representations for printing.
@@ -1188,22 +1179,22 @@ impl Mutibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param b: The bits to find.
+    /// :param needle: The bits to find.
     /// :param start: The starting bit position. Defaults to 0.
     /// :param end: The end position. Defaults to len(self).
     /// :param byte_aligned: If ``True``, the bits will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
-    #[pyo3(signature = (b, start=None, end=None, byte_aligned=false))]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
     pub fn rfind(
         &self,
-        b: &Bound<'_, PyAny>,
+        needle: Tibs,
         start: Option<i64>,
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         // TODO: Completely redo how rfind works!
         let t = Tibs::from_bv(self.to_bitvec(), self.msb0);
-        t.rfind(b, start, end, byte_aligned)
+        t.rfind(needle, start, end, byte_aligned)
     }
 
     /// Invert one or many bits in place.
