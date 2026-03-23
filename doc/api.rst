@@ -17,3 +17,4 @@ The two classes available in the tibs module are:
 
     tibs
     mutibs
+    other
