@@ -25,7 +25,7 @@ def test_chunking(benchmark):
 def test_count(benchmark):
     def count():
         s = Mutibs.from_zeros(100000000)
-        s.set(1, [10, 100, 1000, 10000000])
+        s.set([10, 100, 1000, 10000000])
         return s.count(1)
 
     c = benchmark(count)
@@ -63,11 +63,11 @@ def test_primes(benchmark):
         limit = 1000000
         is_prime = Mutibs.from_ones(limit)
         # Manually set 0 and 1 to be not prime.
-        is_prime.set(False, [0, 1])
+        is_prime.unset([0, 1])
         # For every other integer, if it's set as prime then unset all of its multiples
         for i in range(2, math.ceil(math.sqrt(limit))):
             if is_prime[i]:
-                is_prime.set(False, range(i * i, limit, i))
+                is_prime.unset(range(i * i, limit, i))
         twin_primes = len(list(is_prime.to_tibs().find_all("0b101")))
         return twin_primes
 

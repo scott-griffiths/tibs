@@ -1082,46 +1082,75 @@ impl Mutibs {
         Ok(())
     }
 
-    /// Set one or many bits set to 1 or 0.
+    /// Set one or many bits set to 1.
     ///
-    /// :param value: If bool(value) is True, bits are set to 1, otherwise they are set to 0.
     /// :param pos: Either a single bit position or an iterable of bit positions.
     /// :return: None
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
     ///
+    /// See also meth:`unset`.
+    ///
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs.from_zeros(10)
-    ///     >>> a.set(1, 5)
+    ///     >>> a.set(5)
     ///     >>> a
     ///     Mutibs('0b0000010000')
-    ///     >>> a.set(1, [-1, -2])
+    ///     >>> a.set([-1, -2])
     ///     >>> a
     ///     Mutibs('0b0000010011')
-    ///     >>> a.set(0, range(8, 10))
-    ///     >>> a
-    ///     Mutibs('0b0000010000')
     ///
-    pub fn set<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        value: &Bound<'_, PyAny>,
-        pos: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        let v = value.is_truthy()?;
-
+    pub fn set<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(index) = pos.extract::<i64>() {
-            slf.set_index(v, index)?;
+            slf.set_index(true, index)?;
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
             let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<i64>()?;
             let step = pos.getattr("step")?.extract::<Option<i64>>()?.unwrap_or(1);
-            slf.set_from_slice(v, start, stop, step)?;
+            slf.set_from_slice(true, start, stop, step)?;
         }
         // Otherwise treat as a sequence
         else {
             // Convert to Vec<i64> if possible
             let indices = pos.extract::<Vec<i64>>()?;
-            slf.set_from_sequence(v, indices)?;
+            slf.set_from_sequence(true, indices)?;
+        }
+
+        Ok(())
+    }
+
+    /// Set one or many bits set to 0.
+    ///
+    /// :param pos: Either a single bit position or an iterable of bit positions.
+    /// :return: None
+    /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
+    /// See also meth:`set`.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Mutibs.from_ones(10)
+    ///     >>> a.unset(5)
+    ///     >>> a
+    ///     Mutibs('0b1111101111')
+    ///     >>> a.unset([-1, -2])
+    ///     >>> a
+    ///     Mutibs('0b1111101100')
+    ///
+    pub fn unset<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(index) = pos.extract::<i64>() {
+            slf.set_index(false, index)?;
+        } else if pos.is_instance_of::<pyo3::types::PyRange>() {
+            let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
+            let stop = pos.getattr("stop")?.extract::<i64>()?;
+            let step = pos.getattr("step")?.extract::<Option<i64>>()?.unwrap_or(1);
+            slf.set_from_slice(false, start, stop, step)?;
+        }
+        // Otherwise treat as a sequence
+        else {
+            // Convert to Vec<i64> if possible
+            let indices = pos.extract::<Vec<i64>>()?;
+            slf.set_from_sequence(false, indices)?;
         }
 
         Ok(())

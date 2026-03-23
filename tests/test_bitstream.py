@@ -526,10 +526,10 @@ class TestAdding:
         s1 = Tibs.from_zeros(1000000)
         s2 = Mutibs.from_zeros(1000000)
         s1 = s1.to_mutibs()
-        s1.set(True, [-1, 55, 53214, 534211, 999999])
-        s2.set(True, [-1, 55, 53214, 534211, 999999])
+        s1.set([-1, 55, 53214, 534211, 999999])
+        s2.set([-1, 55, 53214, 534211, 999999])
         assert s1 == s2
-        s1.set(True, 800000)
+        s1.set(800000)
         assert s1 != s2
 
     def test_not_equals(self):
@@ -913,57 +913,57 @@ class TestSet:
     def test_set(self):
         a = Tibs.from_zeros(16)
         a = a.to_mutibs()
-        a.set(True, 0)
+        a.set(0)
         assert a == Mutibs("0b10000000 00000000")
-        a.set(1, 15)
+        a.set(15)
         assert a == "0b10000000 00000001"
         b = a[4:12]
-        b.set(True, 1)
+        b.set(1)
         assert b == "0b01000000"
-        b.set(True, -1)
+        b.set(-1)
         assert b == "0b01000001"
-        b.set(1, -8)
+        b.set(-8)
         assert b == "0b11000001"
         with pytest.raises(IndexError):
-            b.set(True, -9)
+            b.set(-9)
         with pytest.raises(IndexError):
-            b.set(True, 8)
+            b.set(8)
 
     def test_set_negative_index(self):
         a = Mutibs.from_string('0b0110000000')
-        a.set(1, -1)
+        a.set(-1)
         assert a.to_bin() == "0110000001"
-        a.set(1, [-1, -10])
+        a.set([-1, -10])
         assert a.to_bin() == "1110000001"
         with pytest.raises(IndexError):
-            a.set(1, [-11])
+            a.set([-11])
 
     def test_set_list(self):
         a = Tibs.from_zeros(18)
         b = a.to_mutibs()
-        b.set(True, range(18))
+        b.set(range(18))
         assert b.all()
-        b.set(False, range(18))
+        b.unset(range(18))
         assert not b.any()
 
     def test_unset(self):
         a = Mutibs.from_ones(16)
-        a.set(False, 0)
+        a.unset(0)
         b = ~a
         assert b == "0b10000000 00000000"
-        a.set(0, 15)
+        a.unset(15)
         assert ~a == "0b10000000 00000001"
         b = a[4:12]
-        b.set(False, 1)
+        b.unset(1)
         assert ~b == "0b01000000"
-        b.set(False, -1)
+        b.unset(-1)
         assert ~b == "0b01000001"
-        b.set(False, -8)
+        b.unset(-8)
         assert ~b == "0b11000001"
         with pytest.raises(IndexError):
-            b.set(False, -9)
+            b.unset(-9)
         with pytest.raises(IndexError):
-            b.set(False, 8)
+            b.unset(8)
 
 
 class TestInvert:
@@ -1311,7 +1311,7 @@ def test_overlapping_bits():
     assert y == Tibs("0b00011111")
     _ = ~y
     z = y.to_mutibs()
-    z.set(0, [0, 1, 2, 3, 4, 5, 6, 7])
+    z.set([0, 1, 2, 3, 4, 5, 6, 7])
     z.byte_swap()
     z.rotate_right(1)
     z.rotate_left(1)
@@ -1322,7 +1322,7 @@ def test_overlapping_bits():
     y = ~y
     assert y == Tibs("0b11100000")
     z = y.to_mutibs()
-    z.set(0, [2, 3])
+    z.unset([2, 3])
     z.byte_swap()
     z.rotate_right(2)
     z.rotate_left(1)
@@ -1336,7 +1336,7 @@ def test_mutable_freeze():
     b = a.to_tibs()
     assert isinstance(b, Tibs)
     assert a == b
-    a.set(1, -1)
+    a.set(-1)
     assert a == '0x0001'
     assert b.to_hex() == '0000'
 

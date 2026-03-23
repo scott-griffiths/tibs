@@ -187,7 +187,7 @@ class TestMutibsMethods:
 
     def test_set_from_sequence(self):
         m = Mutibs("0b00000")
-        m.set(True, [1, 3])
+        m.set([1, 3])
         assert m == "0b01010"
 
     def test_set_from_slice(self):

@@ -359,91 +359,82 @@ def test_insert_beyond_length():
 def test_set_single_bit_to_one():
     # Basic set functionality - setting a single bit to 1
     a = Mutibs('0b0000')
-    a.set(1, 2)
+    a.set(2)
     assert a == '0b0010'
 
 
 def test_set_single_bit_to_zero():
     # Setting a single bit to 0
     a = Mutibs('0b1111')
-    a.set(0, 2)
+    a.unset(2)
     assert a == '0b1101'
 
 
 def test_set_with_boolean_values():
     # Setting with boolean values
     a = Mutibs('0b0000')
-    a.set(True, 1)
+    a.set(1)
     assert a == '0b0100'
-    a.set(False, 1)
+    a.unset(1)
     assert a == '0b0000'
 
 
 def test_set_with_negative_index():
     # Setting with negative index
     a = Mutibs('0b0010')
-    a.set(1, -1)
+    a.set(-1)
     assert a == '0b0011'
-    a.set(0, -2)
+    a.unset(-2)
     assert a == '0b0001'
 
 
 def test_set_multiple_positions():
     # Setting multiple positions
     a = Mutibs('0b0000')
-    a.set(1, [0, 2])
+    a.set([0, 2])
     assert a == '0b1010'
 
 
 def test_set_mixed_indices():
     # Setting with mixed positive and negative indices
     a = Mutibs('0b0000')
-    a.set(1, [1, -1])
+    a.set([1, -1])
     assert a == '0b0101'
 
 
 def test_set_with_range():
     # Setting with range
     a = Mutibs('0b0000')
-    a.set(1, range(4))
+    a.set(range(4))
     assert a == '0b1111'
 
 
 def test_set_with_empty_sequence():
     # Setting with an empty sequence
     a = Mutibs('0b1010')
-    a.set(0, [])
+    a.unset([])
     assert a == '0b1010'  # Should remain unchanged
 
 
 def test_set_method_chaining():
     a = Mutibs('0b0000')
-    result = a.set(1, 0)
+    result = a.set(0)
     assert result is None
-    a.set(1, 2)
+    a.set(2)
     assert a == '0b1010'
-
-
-def test_set_with_non_boolean_values():
-    # Testing non-boolean values
-    a = Mutibs('0b0000')
-    a.set("string", 1)  # Any non-empty string evaluates to True
-    assert a == '0b0100'
-    a.set(0, 1)  # 0 evaluates to False
-    assert a == '0b0000'
 
 
 def test_set_index_out_of_range():
     # Error cases
     with pytest.raises(IndexError):
         a = Mutibs('0b1010')
-        a.set(1, 4)  # Index out of range
+        a.set(4)  # Index out of range
 
 
 def test_set_negative_index_out_of_range():
     with pytest.raises(IndexError):
         a = Mutibs('0b1010')
-        a.set(0, -5)  # Negative index out of range
+        a.unset(-5)  # Negative index out of range
 
 
 def test_invert_all():
@@ -1180,7 +1171,7 @@ def test_iter():
 def test_partial_update():
     a = Mutibs.from_ones(10)
     try:
-        a.set(0, [0, 1, 1000])
+        a.unset([0, 1, 1000])
     except IndexError:
         pass
     assert a == '0b1111111111'
