@@ -107,10 +107,10 @@ def test_primes_bitarray():
 def test_primes_tibs():
     limit = 50_000_000
     is_prime = Mutibs.from_ones(limit)
-    is_prime.set(False, [0, 1])
+    is_prime.unset([0, 1])
     for i in range(2, isqrt(limit) + 1):
         if is_prime[i]:
-            is_prime.set(False, range(i * i, limit, i))
+            is_prime.unset(range(i * i, limit, i))
     twin_primes = is_prime.count([1, 0, 1]);
     assert twin_primes == 239101
 
@@ -161,12 +161,13 @@ def test_extending_bits_bitarray():
 def test_pop_bitarray():
     b = bitarray()
     b.frombytes(some_bytes)
-    while(b):
+    while (b):
         _ = b.pop()
+
 
 def test_pop_tibs():
     t = Mutibs.from_bytes(some_bytes)
-    while(t):
+    while (t):
         _ = t.pop()
 
 

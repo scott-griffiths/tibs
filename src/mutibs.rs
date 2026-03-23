@@ -749,7 +749,7 @@ impl Mutibs {
         }
         if let Ok(slice) = key.cast::<PySlice>() {
             // Need to guard against value being self
-            let bs = if value.as_ptr() == slf.as_ptr() {
+            let tibs = if value.as_ptr() == slf.as_ptr() {
                 Tibs::from_bv(slf.to_bitvec(), slf.msb0)
             } else {
                 Tibs::extract(value.as_borrowed())?
@@ -763,7 +763,7 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                slf.set_slice(start as usize, stop as usize, bs.as_bitslice());
+                slf.set_slice(start as usize, stop as usize, tibs.as_bitslice());
                 return Ok(());
             }
             if step == 0 {
@@ -791,17 +791,17 @@ impl Mutibs {
             }
 
             // Enforce equal sizes.
-            if bs.len() != positions.len() {
+            if tibs.len() != positions.len() {
                 return Err(PyValueError::new_err(format!(
                     "Attempt to assign sequence of size {} to extended slice of size {}",
-                    bs.len(),
+                    tibs.len(),
                     positions.len()
                 )));
             }
 
             // Assign element-wise.
             for (k, &pos) in positions.iter().enumerate() {
-                let v = bs.as_bitslice()[k];
+                let v = tibs.as_bitslice()[k];
                 slf.as_mut_bitvec_ref().set(pos, v);
             }
 
@@ -954,30 +954,30 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_and(self, &bs))
+    pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, &other))
     }
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_or(self, &bs))
+    pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, &other))
     }
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_xor(self, &bs))
+    pub fn __xor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, &other))
     }
 
     /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -986,8 +986,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__and__(bs)
+    pub fn __rand__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__and__(other)
     }
 
     /// Reverse bit-wise 'or' between two Mutibs. Returns new Mutibs.
@@ -996,8 +996,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__or__(bs)
+    pub fn __ror__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__or__(other)
     }
 
     /// Reverse bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -1006,8 +1006,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__xor__(bs)
+    pub fn __rxor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__xor__(other)
     }
 
     /// Rotates bit pattern to the left in-place.
@@ -1475,29 +1475,29 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // We accept the PyAny and convert manually here because if we instead
         // accept a Tibs, then correct types with wrong values (e.g. a malformed string)
         // will fail and return a TypeError instead of ValueError which we can't control.
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + bs.len());
+        let other = Tibs::extract(other.as_borrowed())?;
+        let mut data = BV::with_capacity(self.len() + other.len());
         data.extend_from_bitslice(self.as_bitvec_ref());
-        data.extend_from_bitslice(bs.as_bitslice());
+        data.extend_from_bitslice(other.as_bitslice());
         Ok(Mutibs::from_bv(data, self.msb0))
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + bs.len());
-        data.extend_from_bitslice(bs.as_bitslice());
+    pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        let mut data = BV::with_capacity(self.len() + other.len());
+        data.extend_from_bitslice(other.as_bitslice());
         data.extend_from_bitslice(self.as_bitvec_ref());
         Ok(Mutibs::from_bv(data, self.msb0))
     }
 
     /// Concatenate in-place.
-    pub fn __iadd__(slf: PyRefMut<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        Self::extend(slf, bs)?;
+    pub fn __iadd__(slf: PyRefMut<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<()> {
+        Self::extend(slf, other)?;
         Ok(())
     }
 
@@ -1549,6 +1549,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0x0f0a')
     ///
+    #[pyo3(signature = (bs, /))]
     pub fn extend<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         // Check if bs is the same object as slf
         if bs.as_ptr() == slf.as_ptr() {
@@ -1579,6 +1580,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0x0a0f')
     ///
+    #[pyo3(signature = (bs, /))]
     pub fn extend_left<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         // Check for self-prepending
         if bs.as_ptr() == slf.as_ptr() {
@@ -1698,6 +1700,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b100011')
     ///
+    #[pyo3(signature = (pos, bs, /))]
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
         mut pos: i64,

@@ -1015,19 +1015,19 @@ impl Tibs {
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + bs.len());
+    pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        let mut data = BV::with_capacity(self.len() + other.len());
         data.extend_from_bitslice(self.to_bitslice());
-        data.extend_from_bitslice(bs.as_bitslice());
+        data.extend_from_bitslice(other.as_bitslice());
         Ok(Tibs::from_bv(data, self.msb0))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
-    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-        let mut data = BV::with_capacity(bs.len() + self.len());
-        data.extend_from_bitslice(bs.as_bitslice());
+    pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        let mut data = BV::with_capacity(other.len() + self.len());
+        data.extend_from_bitslice(other.as_bitslice());
         data.extend_from_bitslice(self.to_bitslice());
         Ok(Tibs::from_bv(data, self.msb0))
     }
@@ -1036,35 +1036,33 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-
-        // TODO: Return early `if bs is self`.
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_and(self, &bs))
+    pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        // TODO: Return early `if other is self`.
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_and(self, &other))
     }
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
-
-        // TODO: Return early `if bs is self`.
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_or(self, &bs))
+    pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
+        // TODO: Return early `if other is self`.
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_or(self, &other))
     }
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bs = Tibs::extract(bs.as_borrowed())?;
+    pub fn __xor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let other = Tibs::extract(other.as_borrowed())?;
 
-        validate_logical_op_lengths(self.len(), bs.len())?;
-        Ok(BitCollection::logical_xor(self, &bs))
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(BitCollection::logical_xor(self, &other))
     }
 
     /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -1073,8 +1071,8 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__and__(bs)
+    pub fn __rand__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__and__(other)
     }
 
     /// Reverse bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -1083,8 +1081,8 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__or__(bs)
+    pub fn __ror__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__or__(other)
     }
 
     /// Reverse bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -1093,8 +1091,8 @@ impl Tibs {
     ///
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.__xor__(bs)
+    pub fn __rxor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
+        self.__xor__(other)
     }
 
     /// Return the instance with every bit inverted.
