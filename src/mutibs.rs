@@ -954,7 +954,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __and__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __and__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
         validate_logical_op_lengths(self.len(), bs.len())?;
         Ok(BitCollection::logical_and(self, &bs))
     }
@@ -963,7 +964,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __or__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __or__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
         validate_logical_op_lengths(self.len(), bs.len())?;
         Ok(BitCollection::logical_or(self, &bs))
     }
@@ -972,7 +974,8 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __xor__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __xor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
         validate_logical_op_lengths(self.len(), bs.len())?;
         Ok(BitCollection::logical_xor(self, &bs))
     }
@@ -983,7 +986,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rand__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __rand__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__and__(bs)
     }
 
@@ -993,7 +996,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __ror__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __ror__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__or__(bs)
     }
 
@@ -1003,7 +1006,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
-    pub fn __rxor__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __rxor__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__xor__(bs)
     }
 
@@ -1443,7 +1446,11 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __add__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __add__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        // We accept the PyAny and convert manually here because if we instead
+        // accept a Tibs, then correct types with wrong values (e.g. a malformed string)
+        // will fail and return a TypeError instead of ValueError which we can't control.
+        let bs = Tibs::extract(bs.as_borrowed())?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(self.as_bitvec_ref());
         data.extend_from_bitslice(bs.as_bitslice());
@@ -1451,7 +1458,8 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
-    pub fn __radd__(&self, bs: Tibs) -> PyResult<Self> {
+    pub fn __radd__(&self, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
         let mut data = BV::with_capacity(self.len() + bs.len());
         data.extend_from_bitslice(bs.as_bitslice());
         data.extend_from_bitslice(self.as_bitvec_ref());

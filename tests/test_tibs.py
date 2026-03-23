@@ -256,3 +256,17 @@ def test_lsb0_start_and_ends_with():
     b.bit_indexing = BitIndexing.Lsb0
     assert b.starts_with(b'e')
     assert b.ends_with(b'a')
+
+
+def test_special_method_creation_fails():
+    m = Tibs('0xff')
+    with pytest.raises(ValueError):
+        _ = m + 'percy'
+    with pytest.raises(ValueError):
+        _ = 'percy' + m
+    with pytest.raises(ValueError):
+        _ = m & 'percy'
+    with pytest.raises(ValueError):
+        _ = m | 'percy'
+    with pytest.raises(ValueError):
+        _ = m ^ 'percy'

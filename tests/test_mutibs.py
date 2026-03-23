@@ -1267,3 +1267,23 @@ def test_contains():
     m = Mutibs('0x12345')
     assert '0x23' in m
     assert '0xff' not in m
+    with pytest.raises(ValueError):
+        'trevor' not in m
+
+
+def test_special_method_creation_fails():
+    m = Mutibs('0xff')
+    with pytest.raises(ValueError):
+        _ = 'macdonald' + m
+    with pytest.raises(ValueError):
+        _ = m & 'grebditch'
+    with pytest.raises(ValueError):
+        _ = m | 'grebditch'
+    with pytest.raises(ValueError):
+        _ = m ^ 'grebditch'
+    with pytest.raises(ValueError):
+        m ^= 'grebditch'
+    with pytest.raises(ValueError):
+        m |= 'grebditch'
+    with pytest.raises(ValueError):
+        m &= 'grebditch'
