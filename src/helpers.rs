@@ -248,7 +248,8 @@ pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
     count
 }
 
-pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
+/// Validates the index is in range and returns an absolute MSB0 index.
+pub(crate) fn validate_index(index: i64, length: usize, is_msb0: bool) -> PyResult<usize> {
     let index_p = if index < 0 {
         length as i64 + index
     } else {
@@ -259,7 +260,11 @@ pub(crate) fn validate_index(index: i64, length: usize) -> PyResult<usize> {
             "Index of {index} is out of range for length of {length}"
         )));
     }
-    Ok(index_p as usize)
+    if is_msb0 {
+        Ok(index_p as usize)
+    } else {
+        Ok((length as i64 - index_p - 1) as usize)
+    }
 }
 
 pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {

@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, "..")
 import pytest
-from tibs import Tibs, Mutibs
+from tibs import Tibs, Mutibs, BitIndexing
 
 
 class TestTibsCreation:
@@ -450,3 +450,58 @@ class TestSliceOperations:
         s_a = a[1:9]
         s_b = b[1:9]
         assert s_a ^ s_b == "0b10100101"
+
+
+class TestKnownRegressions:
+    def test_lsb0_setitem_writes_logical_index(self):
+        m = Mutibs("0b0000", bit_indexing=BitIndexing.Lsb0)
+        m[0] = 1
+        # In lsb0, logical index 0 is the rightmost bit.
+        assert m.to_bin() == "0001"
+
+    def test_rotate_empty_selected_slice_is_noop(self):
+        m = Mutibs("0b101010")
+        m.rotate_left(3, start=2, end=2)
+        m.rotate_right(1, start=4, end=4)
+        assert m == "0b101010"
+
+    def test_set_negative_step_range(self):
+        m = Mutibs("0b00000000")
+        m.set(range(7, 3, -1))
+        assert m.to_bin() == "00001111"
+
+    def test_unset_negative_step_range(self):
+        m = Mutibs("0b11111111")
+        m.unset(range(7, 3, -1))
+        assert m.to_bin() == "11110000"
+
+    def test_lsb0_slice_assignment_writes_logical_positions(self):
+        m = Mutibs("0b000000", bit_indexing=BitIndexing.Lsb0)
+        m[0:2] = "0b11"
+        # In lsb0, [0:2] addresses the two least-significant logical bits.
+        assert m.to_bin() == "000011"
+
+    def test_lsb0_delete_index_removes_logical_position(self):
+        m = Mutibs("0b1010", bit_indexing=BitIndexing.Lsb0)
+        del m[0]
+        # In lsb0, index 0 is the rightmost logical bit.
+        assert m.to_bin() == "101"
+
+    def test_lsb0_set_updates_logical_positions(self):
+        m = Mutibs("0b00000000", bit_indexing=BitIndexing.Lsb0)
+        m.set([0, 1])
+        # In lsb0, indices 0 and 1 are the two rightmost logical bits.
+        assert m.to_bin() == "00000011"
+
+    def test_lsb0_extended_slice_assignment_negative_step_logical_order(self):
+        m = Mutibs("0b00000000", bit_indexing=BitIndexing.Lsb0)
+        m[7:3:-1] = "0b1010"
+        # Logical indices [7, 6, 5, 4] should map to the left nibble.
+        assert m.to_bin() == "10100000"
+
+    def test_lsb0_extended_slice_delete_negative_step_logical_positions(self):
+        m = Mutibs("0b11110000", bit_indexing=BitIndexing.Lsb0)
+        del m[7:3:-1]
+        # Deleting logical indices [7, 6, 5, 4] should remove the left nibble.
+        assert m.to_bin() == "0000"
+

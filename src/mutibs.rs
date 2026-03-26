@@ -62,8 +62,14 @@ impl Mutibs {
         self.data.as_raw_slice().to_vec()
     }
 
-    pub fn set_index(&mut self, value: bool, index: i64) -> PyResult<()> {
-        self.set_from_sequence(value, vec![index])
+    #[inline]
+    pub fn set_index(&mut self, index: i64) -> PyResult<()> {
+        self.set_from_sequence(true, vec![index])
+    }
+
+    #[inline]
+    pub fn unset_index(&mut self, index: i64) -> PyResult<()> {
+        self.set_from_sequence(false, vec![index])
     }
 
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &BS) {
@@ -104,7 +110,7 @@ impl Mutibs {
     pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<i64>) -> PyResult<()> {
         let mut validated = Vec::with_capacity(indices.len());
         for idx in indices {
-            validated.push(validate_index(idx, self.len())?);
+            validated.push(validate_index(idx, self.len(), self.msb0)?);
         }
         for idx in validated {
             self.as_mut_bitvec_ref().set(idx, value);
@@ -744,7 +750,11 @@ impl Mutibs {
     ) -> PyResult<()> {
         let length = slf.len();
         if let Ok(index) = key.extract::<i64>() {
-            slf.set_index(value.is_truthy()?, index)?;
+            if value.is_truthy()? {
+                slf.set_index(index)?;
+            } else {
+                slf.unset_index(index)?;
+            }
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -756,9 +766,15 @@ impl Mutibs {
             };
 
             let indices = slice.indices(length as isize)?;
-            let start: i64 = indices.start.try_into()?;
-            let stop: i64 = indices.stop.try_into()?;
+            let mut start: i64 = indices.start.try_into()?;
+            let mut stop: i64 = indices.stop.try_into()?;
             let step: i64 = indices.step.try_into()?;
+
+            // Possibly wrong...
+            // if !slf.msb0 {
+            //     start = slf.len() as i64 - stop - 1;
+            //     stop = slf.len() as i64 - start - 1;
+            // }
 
             if step == 1 {
                 debug_assert!(start >= 0);
@@ -1102,7 +1118,7 @@ impl Mutibs {
     ///
     pub fn set<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(index) = pos.extract::<i64>() {
-            slf.set_index(true, index)?;
+            slf.set_index(index)?;
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
             let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<i64>()?;
@@ -1139,7 +1155,7 @@ impl Mutibs {
     ///
     pub fn unset<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(index) = pos.extract::<i64>() {
-            slf.set_index(false, index)?;
+            slf.unset_index(index)?;
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
             let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<i64>()?;
@@ -1270,12 +1286,12 @@ impl Mutibs {
             }
             Some(p) => {
                 if let Ok(pos) = p.extract::<i64>() {
-                    let pos: usize = validate_index(pos, slf.len())?;
+                    let pos: usize = validate_index(pos, slf.len(), slf.msb0)?;
                     let value = slf.as_bitvec_ref()[pos];
                     slf.as_mut_bitvec_ref().set(pos, !value);
                 } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
                     for pos in pos_list {
-                        let pos: usize = validate_index(pos, slf.len())?;
+                        let pos: usize = validate_index(pos, slf.len(), slf.msb0)?;
                         let value = slf.as_bitvec_ref()[pos];
                         slf.as_mut_bitvec_ref().set(pos, !value);
                     }
