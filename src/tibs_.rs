@@ -702,7 +702,7 @@ impl Tibs {
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_random(1000000)  # A million random bits
-    ///     b = Tibs.from_random(100, b'a_seed')
+    ///     b = Tibs.from_random(100, seed=b'a_seed')
     ///
     #[classmethod]
     #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = BitIndexing.Msb0)")]
