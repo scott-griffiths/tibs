@@ -367,6 +367,9 @@ impl Tibs {
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
