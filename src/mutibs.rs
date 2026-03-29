@@ -1078,8 +1078,10 @@ impl Mutibs {
         }
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
-        let n = (n % (end as i64 - start as i64)) as usize;
-        slf.as_mut_bitvec_ref()[start..end].rotate_left(n);
+        if start != end {
+            let n = (n % (end as i64 - start as i64)) as usize;
+            slf.as_mut_bitvec_ref()[start..end].rotate_left(n);
+        }
         Ok(())
     }
 
@@ -1114,8 +1116,10 @@ impl Mutibs {
         }
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
-        let n = (n % (end as i64 - start as i64)) as usize;
-        slf.as_mut_bitvec_ref()[start..end].rotate_right(n);
+        if start != end {
+            let n = (n % (end as i64 - start as i64)) as usize;
+            slf.as_mut_bitvec_ref()[start..end].rotate_right(n);
+        }
         Ok(())
     }
 
