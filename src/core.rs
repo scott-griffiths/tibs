@@ -472,6 +472,11 @@ pub(crate) trait BitCollection: Sized + Clone {
     #[inline]
     fn to_u128(&self) -> PyResult<u128> {
         let length = self.len();
+        if length == 0 {
+            return Err(PyValueError::new_err(
+                "Cannot convert to unsigned int when bit length is zero.",
+            ));
+        }
         if length > 128 {
             return Err(PyValueError::new_err(format!(
                 "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
@@ -487,9 +492,14 @@ pub(crate) trait BitCollection: Sized + Clone {
     #[inline]
     fn to_i128(&self) -> PyResult<i128> {
         let length = self.len();
+        if length == 0 {
+            return Err(PyValueError::new_err(
+                "Cannot convert to signed int when bit length is zero.",
+            ));
+        }
         if length > 128 {
             return Err(PyValueError::new_err(format!(
-                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
+                "Bit length to convert to signed int must be between 1 and 128. Received {length}."
             )));
         }
         let mut padded_bv = BV::new();
