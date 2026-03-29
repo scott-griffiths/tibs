@@ -1278,3 +1278,18 @@ def test_special_method_creation_fails():
         m |= 'grebditch'
     with pytest.raises(ValueError):
         m &= 'grebditch'
+
+
+def test_lsb0_set_slice():
+    m = Mutibs('0x0000', bit_indexing=BitIndexing.Lsb0)
+    m[0] = 1
+    assert m == '0x0001'
+    m[-8:] = '0xab'
+    assert m == '0xab01'
+
+
+def test_lsb0_del_slice():
+    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
+    t = m.to_tibs()
+    del m[:8]
+    assert m == '0xabcd'

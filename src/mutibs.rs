@@ -129,8 +129,8 @@ impl Mutibs {
         if len == 0 {
             return Ok(());
         }
-        let mut positive_start = if start < 0 { start + len } else { start };
-        let mut positive_stop = if stop < 0 { stop + len } else { stop };
+        let positive_start = if start < 0 { start + len } else { start };
+        let positive_stop = if stop < 0 { stop + len } else { stop };
         if positive_start < 0 || positive_start >= len {
             return Err(PyIndexError::new_err("Start of slice out of bounds."));
         }
@@ -140,24 +140,24 @@ impl Mutibs {
         if step == 0 {
             return Err(PyValueError::new_err("Step cannot be zero."));
         }
-        if step < 0 {
-            positive_stop = positive_start - 1;
-            positive_start = positive_stop - (positive_stop - positive_start) / step;
-        }
-        let positive_step = if step > 0 {
-            step as usize
-        } else {
-            -step as usize
-        };
-
-        let mut index = positive_start as usize;
-        let stop = positive_stop as usize;
-
-        while index < stop {
-            unsafe {
-                self.as_mut_bitvec_ref().set_unchecked(index, value);
+        let mut logical_positions: Vec<i64> = Vec::new();
+        let mut i = positive_start;
+        if step > 0 {
+            while i < positive_stop {
+                logical_positions.push(i);
+                i += step;
             }
-            index += positive_step;
+        } else {
+            while i > positive_stop {
+                logical_positions.push(i);
+                i += step;
+            }
+        }
+
+        let len_usize = len as usize;
+        for logical_pos in logical_positions {
+            let phys_index = validate_index(logical_pos, len_usize, self.msb0)?;
+            self.as_mut_bitvec_ref().set(phys_index, value);
         }
 
         Ok(())
@@ -766,20 +766,22 @@ impl Mutibs {
             };
 
             let indices = slice.indices(length as isize)?;
-            let mut start: i64 = indices.start.try_into()?;
-            let mut stop: i64 = indices.stop.try_into()?;
+            let start: i64 = indices.start.try_into()?;
+            let stop: i64 = indices.stop.try_into()?;
             let step: i64 = indices.step.try_into()?;
-
-            // Possibly wrong...
-            // if !slf.msb0 {
-            //     start = slf.len() as i64 - stop - 1;
-            //     stop = slf.len() as i64 - start - 1;
-            // }
 
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                slf.set_slice(start as usize, stop as usize, tibs.as_bitslice());
+                if slf.msb0 {
+                    slf.set_slice(start as usize, stop as usize, tibs.as_bitslice());
+                } else {
+                    slf.set_slice(
+                        length - stop as usize,
+                        length - start as usize,
+                        tibs.as_bitslice(),
+                    );
+                }
                 return Ok(());
             }
             if step == 0 {
@@ -794,14 +796,15 @@ impl Mutibs {
                 debug_assert!(stop >= 0);
                 let mut i = start;
                 while i < stop {
-                    positions.push(i as usize);
+                    // TODO: This validate_index call is overkill just to do the msb0/lsb0.
+                    positions.push(validate_index(i, length, slf.msb0)?);
                     i += step;
                 }
             } else {
                 // TODO: with a negative step I think start or stop could be -1.
                 let mut i = start;
                 while i > stop {
-                    positions.push(i as usize);
+                    positions.push(validate_index(i, length, slf.msb0)?);
                     i += step; // step < 0
                 }
             }
@@ -847,7 +850,12 @@ impl Mutibs {
                     "Bit index {index} out of range for length {length}"
                 )));
             }
-            self.as_mut_bitvec_ref().remove(index as usize);
+            if self.msb0 {
+                self.as_mut_bitvec_ref().remove(index as usize);
+            } else {
+                self.as_mut_bitvec_ref()
+                    .remove((length as i64 - index - 1) as usize);
+            }
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -855,10 +863,16 @@ impl Mutibs {
             let start: i64 = indices.start.try_into()?;
             let stop: i64 = indices.stop.try_into()?;
             let step: i64 = indices.step.try_into()?;
+
             if step == 1 {
                 if stop > start {
-                    self.as_mut_bitvec_ref()
-                        .drain(start as usize..stop as usize);
+                    if self.msb0 {
+                        self.as_mut_bitvec_ref()
+                            .drain(start as usize..stop as usize);
+                    } else {
+                        self.as_mut_bitvec_ref()
+                            .drain(length - start as usize..length - stop as usize);
+                    }
                 }
             } else {
                 // Collect indices to remove, then remove from highest to lowest.
@@ -881,8 +895,15 @@ impl Mutibs {
                 };
 
                 to_remove.sort();
-                for i in to_remove.into_iter().rev() {
-                    self.as_mut_bitvec_ref().remove(i);
+                // Remove from end of underlying bitvec for both MSB0 and LSB0.
+                if self.msb0 {
+                    for i in to_remove.into_iter().rev() {
+                        self.as_mut_bitvec_ref().remove(i);
+                    }
+                } else {
+                    for i in to_remove.into_iter() {
+                        self.as_mut_bitvec_ref().remove(length - i - 1);
+                    }
                 }
             }
             return Ok(());
