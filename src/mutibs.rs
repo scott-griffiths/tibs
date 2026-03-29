@@ -616,7 +616,7 @@ impl Mutibs {
     /// .. code-block:: python
     ///
     ///     a = Mutibs.from_random(1000000)  # A million random bits
-    ///     b = Mutibs.from_random(100, b'a_seed')
+    ///     b = Mutibs.from_random(100, seed=b'a_seed')
     ///
     #[classmethod]
     #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = BitIndexing.Msb0)")]
@@ -1684,16 +1684,18 @@ impl Mutibs {
         };
 
         let (start, end) = validate_slice(slf.len(), start, end)?;
+        let mut countdown = count.unwrap_or(i64::MAX);
+        if countdown < 0 {
+            return Err(PyValueError::new_err(format!(
+                "The count in replace() should not be negative. Received {}.",
+                countdown
+            )));
+        }
 
         // Find all non-overlapping occurrences
         let mut starting_points: Vec<usize> = Vec::new();
         let mut current_pos = start;
-        while current_pos < end {
-            if let Some(count) = count
-                && starting_points.len() >= count as usize
-            {
-                break;
-            }
+        while current_pos < end && countdown > 0 {
             if let Some(found_pos) = find_bitvec(
                 slf.as_bitvec_ref(),
                 old.as_bitslice(),
@@ -1703,6 +1705,7 @@ impl Mutibs {
             ) {
                 starting_points.push(found_pos);
                 current_pos = found_pos + old.len();
+                countdown -= 1;
             } else {
                 break;
             }
