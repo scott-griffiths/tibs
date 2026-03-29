@@ -250,7 +250,7 @@ impl Tibs {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
-                ", 'BitIndexing.Lsb0'".to_string()
+                ", BitIndexing.Lsb0".to_string()
             };
             format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
         }
