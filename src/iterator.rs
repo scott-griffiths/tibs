@@ -57,38 +57,33 @@ impl FindAllIterator {
         let current_pos = slf.current_pos;
         let byte_aligned = slf.byte_aligned;
         let step = slf.step; // Needed to update slf.current_pos later
+        let needle_len = slf.needle.len();
+        if needle_len == 0 {
+            return Ok(None);
+        }
 
         // This block limits the scope of haystack_rs and needle_rs.
         // The immutable borrows of slf (to access slf.haystack and slf.needle)
         // will end when this block finishes.
-        let find_result = {
+        let (find_result, haystack_len, haystack_msb0) = {
             let haystack_rs = slf.haystack.borrow(py);
             let lps = &slf.lps;
+            let haystack_len = haystack_rs.len();
+            let haystack_msb0 = haystack_rs.msb0;
 
-            let needle_len = slf.needle.len();
-            if needle_len == 0 {
-                // If needle is empty, stop iteration.
-                return Ok(None);
-            }
-
-            if slf.is_reverse {
-                // For reverse iteration, current_pos tracks the moving right bound (end)
-                // after the first yield; initialize from slf.end on first call.
-                let reverse_end = if current_pos == slf.start {
-                    slf.end
-                } else {
-                    current_pos
-                };
+            let result = if slf.is_reverse {
+                if current_pos <= slf.start || current_pos > slf.end {
+                    return Ok(None);
+                }
                 helpers::rfind_bitvec_with_lps(
                     haystack_rs.to_bitslice(),
                     slf.needle.to_bitslice(),
                     lps,
                     slf.start,
-                    reverse_end,
+                    current_pos,
                     byte_aligned,
                 )
             } else {
-                let haystack_len = haystack_rs.len();
                 if current_pos >= haystack_len
                     || haystack_len.saturating_sub(current_pos) < needle_len
                 {
@@ -102,19 +97,24 @@ impl FindAllIterator {
                     slf.end,
                     byte_aligned,
                 )
-            }
+            };
+            (result, haystack_len, haystack_msb0)
         };
 
         // Now, `slf` can be mutably accessed without conflicting with the previous borrows.
         match find_result {
             Some(pos) => {
                 if slf.is_reverse {
-                    let needle_len = slf.needle.len();
                     slf.current_pos = pos + needle_len.saturating_sub(step);
                 } else {
                     slf.current_pos = pos + step;
                 }
-                Ok(Some(pos))
+                Ok(Some(helpers::physical_match_to_logical_start(
+                    haystack_len,
+                    needle_len,
+                    pos,
+                    haystack_msb0,
+                )))
             }
             None => Ok(None),
         }

@@ -3,8 +3,8 @@ use crate::enums::BitIndexing;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    find_bitvec, logical_range_to_physical, physical_match_to_logical_start, promote_to_bv,
+    str_to_bv, validate_index, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::Tibs;
 
@@ -977,14 +977,33 @@ impl Mutibs {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        Ok(find_bitvec(
-            self.as_bitvec_ref(),
-            needle.as_bitslice(),
-            start,
-            end,
-            byte_aligned,
-        ))
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let needle = if self.msb0 {
+            needle
+        } else {
+            BitCollection::reverse_copy(&needle)
+        };
+        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
+
+        let found = if self.msb0 {
+            find_bitvec(
+                self.as_bitvec_ref(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        } else {
+            helpers::rfind_bitvec(
+                self.as_bitvec_ref(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        };
+        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.

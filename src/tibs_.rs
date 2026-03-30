@@ -4,8 +4,9 @@ use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    compute_lps, find_bitvec, promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    compute_lps, find_bitvec, logical_range_to_physical, physical_match_to_logical_start,
+    promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths, validate_shift,
+    validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -371,6 +372,9 @@ impl Tibs {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(slf.len(), start, end)?;
+        let needle = if slf.msb0 { needle } else { needle.reversed() };
+        let (start, end) = logical_range_to_physical(slf.len(), start, end, slf.msb0);
+        let is_reverse = !slf.msb0;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let lps = { compute_lps(needle.to_bitslice()) };
@@ -382,8 +386,8 @@ impl Tibs {
             end,
             byte_aligned,
             step,
-            current_pos: start,
-            is_reverse: false,
+            current_pos: if is_reverse { end } else { start },
+            is_reverse,
         };
         Py::new(py, iter_obj)
     }
@@ -423,6 +427,9 @@ impl Tibs {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
         let (start, end) = validate_slice(slf.len(), start, end)?;
+        let needle = if slf.msb0 { needle } else { needle.reversed() };
+        let (start, end) = logical_range_to_physical(slf.len(), start, end, slf.msb0);
+        let is_reverse = slf.msb0;
         let step = if byte_aligned { 8 } else { 1 };
         let py = slf.py();
         let lps = { compute_lps(needle.to_bitslice()) };
@@ -434,8 +441,8 @@ impl Tibs {
             end,
             byte_aligned,
             step,
-            current_pos: end,
-            is_reverse: true,
+            current_pos: if is_reverse { end } else { start },
+            is_reverse,
         };
         Py::new(py, iter_obj)
     }
@@ -853,15 +860,29 @@ impl Tibs {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
-        let (start, end) = validate_slice(self.len(), start, end)?;
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let needle = if self.msb0 { needle } else { needle.reversed() };
+        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
 
-        Ok(find_bitvec(
-            self.to_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            byte_aligned,
-        ))
+        let found = if self.msb0 {
+            find_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        } else {
+            rfind_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        };
+        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -899,16 +920,29 @@ impl Tibs {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to rfind."));
         }
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let needle = if self.msb0 { needle } else { needle.reversed() };
+        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
 
-        let (start, end) = validate_slice(self.len(), start, end)?;
-
-        Ok(rfind_bitvec(
-            self.to_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            byte_aligned,
-        ))
+        let found = if self.msb0 {
+            rfind_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        } else {
+            find_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        };
+        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
     }
 
     /// Return whether the current Tibs starts with prefix.

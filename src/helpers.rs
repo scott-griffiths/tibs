@@ -304,6 +304,34 @@ pub(crate) fn validate_slice(
     Ok((start as usize, end as usize))
 }
 
+#[inline]
+pub(crate) fn logical_range_to_physical(
+    length: usize,
+    start: usize,
+    end: usize,
+    msb0: bool,
+) -> (usize, usize) {
+    if msb0 {
+        (start, end)
+    } else {
+        (length - end, length - start)
+    }
+}
+
+#[inline]
+pub(crate) fn physical_match_to_logical_start(
+    length: usize,
+    needle_len: usize,
+    physical_start: usize,
+    msb0: bool,
+) -> usize {
+    if msb0 {
+        physical_start
+    } else {
+        length - needle_len - physical_start
+    }
+}
+
 pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
     match seed {
         None => {
