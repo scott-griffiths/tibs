@@ -1702,7 +1702,17 @@ impl Mutibs {
             Tibs::extract(new.as_borrowed())?
         };
 
-        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let len = slf.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let (search_old, replace_new) = if slf.msb0 {
+            (old, new)
+        } else {
+            (
+                BitCollection::reverse_copy(&old),
+                BitCollection::reverse_copy(&new),
+            )
+        };
+        let (search_start, search_end) = logical_range_to_physical(len, start, end, slf.msb0);
         let mut countdown = count.unwrap_or(i64::MAX);
         if countdown < 0 {
             return Err(PyValueError::new_err(format!(
@@ -1713,20 +1723,39 @@ impl Mutibs {
 
         // Find all non-overlapping occurrences
         let mut starting_points: Vec<usize> = Vec::new();
-        let mut current_pos = start;
-        while current_pos < end && countdown > 0 {
-            if let Some(found_pos) = find_bitvec(
-                slf.as_bitvec_ref(),
-                old.as_bitslice(),
-                current_pos,
-                end,
-                byte_aligned,
-            ) {
-                starting_points.push(found_pos);
-                current_pos = found_pos + old.len();
-                countdown -= 1;
-            } else {
-                break;
+        if slf.msb0 {
+            let mut current_pos = search_start;
+            while current_pos < search_end && countdown > 0 {
+                if let Some(found_pos) = find_bitvec(
+                    slf.as_bitvec_ref(),
+                    search_old.as_bitslice(),
+                    current_pos,
+                    search_end,
+                    byte_aligned,
+                ) {
+                    starting_points.push(found_pos);
+                    current_pos = found_pos + search_old.len();
+                    countdown -= 1;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            let mut current_end = search_end;
+            while current_end > search_start && countdown > 0 {
+                if let Some(found_pos) = helpers::rfind_bitvec(
+                    slf.as_bitvec_ref(),
+                    search_old.as_bitslice(),
+                    search_start,
+                    current_end,
+                    byte_aligned,
+                ) {
+                    starting_points.push(found_pos);
+                    current_end = found_pos;
+                    countdown -= 1;
+                } else {
+                    break;
+                }
             }
         }
 
@@ -1734,13 +1763,15 @@ impl Mutibs {
             return Ok(());
         }
 
+        starting_points.sort_unstable();
+
         // Rebuild the bitstring with replacements
         let mut result = BV::new();
         let mut last_pos = 0;
         for &pos in &starting_points {
             result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..pos]);
-            result.extend_from_bitslice(new.as_bitslice());
-            last_pos = pos + old.len();
+            result.extend_from_bitslice(replace_new.as_bitslice());
+            last_pos = pos + search_old.len();
         }
         result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..]);
 

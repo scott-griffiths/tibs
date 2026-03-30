@@ -505,6 +505,39 @@ class TestKnownRegressions:
         # Deleting logical indices [7, 6, 5, 4] should remove the left nibble.
         assert m.to_bin() == "0000"
 
+    def test_lsb0_delete_simple_slice_removes_logical_prefix(self):
+        m = Mutibs("0xabcdef", bit_indexing=BitIndexing.Lsb0)
+        del m[:8]
+        # In lsb0, [:8] deletes the least-significant logical byte.
+        assert m.to_hex() == "abcd"
+
+    def test_lsb0_replace_uses_logical_search_order(self):
+        m = Mutibs("0b110100", bit_indexing=BitIndexing.Lsb0)
+        # First logical '1' is at index 2 for this lsb0 view.
+        assert m.find("0b1") == 2
+        m.replace("0b1", "0b0", count=1)
+        assert m.to_bin() == "110000"
+
+    def test_lsb0_replace_respects_count_for_logical_matches(self):
+        m = Mutibs("0b10110100", bit_indexing=BitIndexing.Lsb0)
+        # Logical view is reversed; replacing one logical '10' should touch the right side.
+        m.replace("0b10", "0b11", count=1)
+        assert m.to_bin() == "10111100"
+
+    def test_lsb0_replace_all_replacements_follow_logical_order(self):
+        m = Mutibs("0b10110100", bit_indexing=BitIndexing.Lsb0)
+        m.replace("0b10", "0b11")
+        assert m.to_bin() == "11111100"
+
+    def test_lsb0_delete_prefix_and_suffix_slices(self):
+        m = Mutibs("0b11001010", bit_indexing=BitIndexing.Lsb0)
+        del m[:3]
+        # In lsb0 this removes the 3 least-significant logical bits.
+        assert m.to_bin() == "11001"
+        del m[-2:]
+        # Then remove two most-significant logical bits from the remaining logical view.
+        assert m.to_bin() == "001"
+
 
 class TestDocsMismatchRegressions:
     def test_find_all_empty_needle_raises_value_error_docs_contract(self):
