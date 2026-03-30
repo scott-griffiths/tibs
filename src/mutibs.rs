@@ -130,11 +130,21 @@ impl Mutibs {
             return Ok(());
         }
         let positive_start = if start < 0 { start + len } else { start };
-        let positive_stop = if stop < 0 { stop + len } else { stop };
+        // For negative steps, Python ranges use stop=-1 as an exclusive sentinel
+        // so that index 0 is included (e.g. range(3, -1, -1) -> 3,2,1,0).
+        let positive_stop = if step < 0 && stop == -1 {
+            -1
+        } else if stop < 0 {
+            stop + len
+        } else {
+            stop
+        };
         if positive_start < 0 || positive_start >= len {
             return Err(PyIndexError::new_err("Start of slice out of bounds."));
         }
-        if positive_stop < 0 || positive_stop > len {
+        if (step > 0 && (positive_stop < 0 || positive_stop > len))
+            || (step < 0 && (positive_stop < -1 || positive_stop >= len))
+        {
             return Err(PyIndexError::new_err("End of slice out of bounds."));
         }
         if step == 0 {

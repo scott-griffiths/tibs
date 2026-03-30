@@ -572,3 +572,25 @@ class TestDocsMismatchRegressions:
         t = Tibs("0b110100", bit_indexing=BitIndexing.Lsb0)
         assert t[0] is False
         assert t.find("0b1") == 2
+
+
+class TestKnownLogicFaults:
+    def test_lsb0_delete_simple_slice_matches_logical_semantics(self):
+        m = Mutibs("0b101010", bit_indexing=BitIndexing.Lsb0)
+        # This currently errors due to an invalid underlying drain range in lsb0 mode.
+        del m[1:4]
+        assert m == '0b100'
+
+    def test_lsb0_negative_step_slice_matches_logical_semantics(self):
+        t = Tibs("0b110100", bit_indexing=BitIndexing.Lsb0)
+        assert t[::-1] == '0b001011'
+
+    def test_set_range_descending_to_minus_one_includes_zero(self):
+        m = Mutibs.from_zeros(4)
+        m.set(range(3, -1, -1))
+        assert m.to_bin() == "1111"
+
+    def test_unset_range_descending_to_minus_one_includes_zero(self):
+        m = Mutibs.from_ones(4)
+        m.unset(range(3, -1, -1))
+        assert m.to_bin() == "0000"
