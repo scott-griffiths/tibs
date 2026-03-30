@@ -383,6 +383,59 @@ impl Tibs {
             byte_aligned,
             step,
             current_pos: start,
+            is_reverse: false,
+        };
+        Py::new(py, iter_obj)
+    }
+
+    /// Find all occurrences of a bit sequence, searching in reverse. Return generator of bit positions.
+    ///
+    /// :param b: The Tibs to find.
+    /// :param start: The starting bit position of the slice to search. Defaults to 0.
+    /// :type start: int | None
+    /// :param end: The end bit position of the slice to search. Defaults to len(self).
+    /// :type end: int | None
+    /// :param byte_aligned: If True, the Tibs will only be found on byte boundaries. Defaults to False.
+    /// :type byte_aligned: bool
+    /// :return: A generator yielding bit positions.
+    ///
+    /// :raises ValueError: if b is empty, if start < 0, if end > len(self) or if end < start.
+    ///
+    /// All occurrences of b are found, even if they overlap.
+    ///
+    /// Note that this method is not available for :class:`Mutibs` as its value could change while the
+    /// generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_tibs`.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> list(Tibs('0b10111011').rfind_all('0b11'))
+    ///     [6, 3, 2]
+    ///
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false))]
+    pub fn rfind_all(
+        slf: PyRef<'_, Self>,
+        needle: Tibs,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+    ) -> PyResult<Py<FindAllIterator>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
+        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let step = if byte_aligned { 8 } else { 1 };
+        let py = slf.py();
+        let lps = { compute_lps(needle.to_bitslice()) };
+        let iter_obj = FindAllIterator {
+            haystack: slf.into(),
+            needle,
+            lps,
+            start,
+            end,
+            byte_aligned,
+            step,
+            current_pos: end,
+            is_reverse: true,
         };
         Py::new(py, iter_obj)
     }

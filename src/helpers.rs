@@ -111,42 +111,42 @@ pub(crate) fn rfind_bitvec(
 ) -> Option<usize> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
+    let lps = compute_lps(needle);
     if byte_aligned {
-        rfind_bitvec_impl::<true>(haystack, needle, start, end)
+        rfind_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
     } else {
-        rfind_bitvec_impl::<false>(haystack, needle, start, end)
+        rfind_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
     }
 }
 
-fn rfind_bitvec_impl<const BYTE_ALIGNED: bool>(
+pub(crate) fn rfind_bitvec_with_lps(
     haystack: &BS,
     needle: &BS,
+    lps: &[usize],
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    if byte_aligned {
+        rfind_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
+    } else {
+        rfind_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
+    }
+}
+
+fn rfind_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
+    haystack: &BS,
+    needle: &BS,
+    lps: &[usize],
     start: usize,
     end: usize,
 ) -> Option<usize> {
-    let needle_len = needle.len();
-    if needle.is_empty() || needle_len > end - start {
+    if needle.is_empty() || needle.len() > end - start {
         return None;
     }
-
-    // TODO: this should be hoisted out as it shouldn't be recalculated for a rfind_all.
-    // We treat needle as if it were reversed: needle_rev[i] == needle[len - 1 - i]
-    // The lps_rev array matches the indices of the conceptual reversed needle.
-    let mut lps_rev = vec![0; needle_len];
-    let mut len_prev = 0;
-    let mut i = 1;
-    while i < needle_len {
-        if needle[needle_len - 1 - i] == needle[needle_len - 1 - len_prev] {
-            len_prev += 1;
-            lps_rev[i] = len_prev;
-            i += 1;
-        } else if len_prev != 0 {
-            len_prev = lps_rev[len_prev - 1];
-        } else {
-            lps_rev[i] = 0;
-            i += 1;
-        }
-    }
+    let needle_len = needle.len();
 
     // 2. Search backwards in haystack
     // i is the current index in haystack (moving backwards)
@@ -168,12 +168,12 @@ fn rfind_bitvec_impl<const BYTE_ALIGNED: bool>(
                     return Some(i);
                 }
                 // Mismatch due to alignment, slide using the table
-                j = lps_rev[j - 1];
+                j = lps[j - 1];
             }
         } else if j != 0 {
             // Mismatch, but we have some progress `j`.
             // Jump to the longest suffix that is also a prefix (in reverse logic)
-            j = lps_rev[j - 1];
+            j = lps[j - 1];
         } else {
             i -= 1;
         }
