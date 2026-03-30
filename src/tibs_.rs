@@ -202,8 +202,8 @@ impl Tibs {
     /// .. code-block:: pycon
     ///
     ///     >>> a = Tibs('0x12345678')
-    ///     >>> a.byte_swapped(2)
-    ///     >>> a
+    ///     >>> b = a.byte_swapped(2)
+    ///     >>> b
     ///     Tibs('0x34127856')
     ///
     #[pyo3(signature = (byte_length = None))]
@@ -348,7 +348,7 @@ impl Tibs {
     /// :type byte_aligned: bool
     /// :return: A generator yielding bit positions.
     ///
-    /// :raises ValueError: if b is empty, if start < 0, if end > len(self) or if end < start.
+    /// :raises ValueError: if b is empty, if start or end are out of range of if end is before start.
     ///
     /// All occurrences of b are found, even if they overlap.
     ///
@@ -403,7 +403,7 @@ impl Tibs {
     /// :type byte_aligned: bool
     /// :return: A generator yielding bit positions.
     ///
-    /// :raises ValueError: if b is empty, if start < 0, if end > len(self) or if end < start.
+    /// :raises ValueError: if b is empty, if start or end are out of range or end is before start.
     ///
     /// All occurrences of b are found, even if they overlap.
     ///

@@ -1414,8 +1414,8 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0x12345678')
-    ///     >>> a.byte_swapped(2)
-    ///     >>> a
+    ///     >>> b = a.byte_swapped(2)
+    ///     >>> b
     ///     Mutibs('0x34127856')
     ///
     #[pyo3(signature = (byte_length = None))]
@@ -1668,7 +1668,7 @@ impl Mutibs {
     /// :param end: The end position. Defaults to len(self).
     /// :param count: If present, the maximum number of replacements to make.
     /// :param byte_aligned: If ``True``, the bits will only be found on byte boundaries.
-    /// :return: self
+    /// :return: None
     ///
     /// .. code-block:: pycon
     ///
