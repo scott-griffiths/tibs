@@ -1750,11 +1750,11 @@ impl Mutibs {
 
     /// Insert bits at position pos.
     ///
+    /// Clips to start or end if insert position is out of range.
+    ///
     /// :param pos: The bit position to insert at.
     /// :param bs: The bits to insert.
     /// :return: None
-    ///
-    /// :raises ValueError: if pos < 0 or pos > len(self).
     ///
     /// .. code-block:: pycon
     ///

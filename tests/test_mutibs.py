@@ -1293,3 +1293,13 @@ def test_lsb0_del_slice():
     t = m.to_tibs()
     del m[:8]
     assert m == '0xabcd'
+
+
+def test_replace_negative_count():
+    m = Mutibs.from_random(1_000_000, bit_indexing=BitIndexing.Lsb0)
+    t = m.to_tibs()
+    m.replace('0b1', '0b0', count=0)
+    assert m == t
+    with pytest.raises(ValueError):
+        m.replace('0b1', '0b0', count=-1)
+    assert m == t

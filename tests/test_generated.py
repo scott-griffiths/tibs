@@ -505,3 +505,37 @@ class TestKnownRegressions:
         # Deleting logical indices [7, 6, 5, 4] should remove the left nibble.
         assert m.to_bin() == "0000"
 
+
+class TestDocsMismatchRegressions:
+    def test_find_all_empty_needle_raises_value_error_docs_contract(self):
+        t = Tibs("0b101")
+        with pytest.raises(ValueError):
+            print(list(t.find_all("")))
+
+    def test_tibs_from_random_positional_seed_is_deterministic_docs_example(self):
+        a = Tibs.from_random(256, seed=b"a_seed")
+        b = Tibs.from_random(256, seed=b"a_seed")
+        assert a == b
+
+    def test_mutibs_from_random_positional_seed_is_deterministic_docs_example(self):
+        a = Mutibs.from_random(256, seed=b"a_seed")
+        b = Mutibs.from_random(256, seed=b"a_seed")
+        assert a == b
+
+    def test_mutibs_insert_out_of_range_raises_value_error_docs_contract(self):
+        m = Mutibs("0b101")
+        m.insert(len(m) + 1, "0b1")
+        assert m == "0b1011"
+
+    def test_tibs_to_u_empty_raises_value_error_docs_contract(self):
+        with pytest.raises(ValueError):
+            Tibs().to_u()
+
+    def test_tibs_to_i_empty_raises_value_error_docs_contract(self):
+        with pytest.raises(ValueError):
+            Tibs().to_i()
+
+    def test_tibs_find_respects_lsb0_logical_indexing_contract(self):
+        t = Tibs("0b110100", bit_indexing=BitIndexing.Lsb0)
+        assert t[0] is False
+        assert t.find("0b1") == 2

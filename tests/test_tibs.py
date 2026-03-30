@@ -270,3 +270,47 @@ def test_special_method_creation_fails():
         _ = m | 'percy'
     with pytest.raises(ValueError):
         _ = m ^ 'percy'
+
+
+def test_rfind_all():
+    t = Mutibs.from_zeros(100)
+    t.set([4, 8, 14, 99])
+    a = t.to_tibs().rfind_all([1])
+    assert list(a) == [99, 14, 8, 4]
+    a = t.to_tibs().rfind_all([1, 0])
+    assert list(a) == [14, 8, 4]
+
+
+def test_rfind_all_lsb0():
+    t = Mutibs.from_zeros(100, bit_indexing=BitIndexing.Lsb0)
+    t.set([0, 1, 10, 11, 80])
+    t = t.as_tibs()
+    a = t.rfind_all([1])
+    assert list(a) == [80, 11, 10, 1, 0]
+    a = t.rfind_all([1, 1])
+    assert list(a) == [10, 0]
+
+
+def test_find_methods_lsb0_logical_indices():
+    t = Tibs("0b110100", bit_indexing=BitIndexing.Lsb0)
+    assert t.find("0b1") == 2
+    assert t.rfind("0b1") == 5
+    assert list(t.find_all("0b1")) == [2, 4, 5]
+    assert list(t.rfind_all("0b1")) == [5, 4, 2]
+
+# def test_lsb0_find_all():
+#     t = Tibs.from_random(10_000)
+#     a1 = list(t.find_all([1, 0, 1]))  # The needle looks the same forward and backwards.
+#     t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
+#     assert t == t2.reversed()
+#     a2 = list(t2.rfind_all([1, 0, 1]))
+#     assert a1 == a2
+#
+#
+# def test_lsb0_find():
+#     t = Tibs.from_random(10_000)
+#     a1 = t.find([1, 0, 1])  # The needle looks the same forward and backwards.
+#     t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
+#     assert t == t2.reversed()
+#     a2 = t2.rfind([1, 0, 1])
+#     assert a1 == a2
