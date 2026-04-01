@@ -13,7 +13,7 @@ It can also be less efficient to use a Mutibs if an immutable Tibs would work eq
 likely to be small in most use-cases.
 
 Methods on Tibs which produce an iterator over the data, such as :meth:`Tibs.find_all` and :meth:`Tibs.chunks`,
- as well as iterating over the instance directly are
+as well as iterating over the instance directly are
 not available for Mutibs. This is
 because the underlying data could change while the iterator is active. To use these methods
 call :meth:`Mutibs.to_tibs` first to create an immutable copy.
