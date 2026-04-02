@@ -150,26 +150,64 @@ impl Mutibs {
         if step == 0 {
             return Err(PyValueError::new_err("Step cannot be zero."));
         }
-        let mut logical_positions: Vec<i64> = Vec::new();
+        // after your existing start/stop/step validation:
+        let len_i64 = self.len() as i64;
+        let len_usize = self.len();
+        let msb0 = self.msb0;
         let mut i = positive_start;
+
+        // Contiguous fast paths
+        if step == 1 {
+            let bv = self.as_mut_bitvec_ref();
+            if msb0 {
+                bv[positive_start as usize..positive_stop as usize].fill(value);
+            } else {
+                // logical [start, stop) -> physical [len-stop, len-start)
+                let a = len_usize - positive_stop as usize;
+                let b = len_usize - positive_start as usize;
+                bv[a..b].fill(value);
+            }
+            return Ok(());
+        }
+        if step == -1 {
+            // logical i = start, start-1, ..., stop+1
+            let bv = self.as_mut_bitvec_ref();
+            if msb0 {
+                bv[(positive_stop + 1) as usize..(positive_start + 1) as usize].fill(value);
+            } else {
+                // mapped contiguous region in physical space
+                let a = len_usize - (positive_start as usize) - 1;
+                let b = len_usize - (positive_stop as usize) - 1;
+                bv[a..b].fill(value);
+            }
+            return Ok(());
+        }
+        // General strided path
+        let bv = self.as_mut_bitvec_ref();
         if step > 0 {
             while i < positive_stop {
-                logical_positions.push(i);
+                debug_assert!(i >= 0 && i < len_i64);
+                let p = if msb0 {
+                    i as usize
+                } else {
+                    len_usize - 1 - i as usize
+                };
+                unsafe { bv.set_unchecked(p, value) };
                 i += step;
             }
         } else {
             while i > positive_stop {
-                logical_positions.push(i);
-                i += step;
+                debug_assert!(i >= 0 && i < len_i64);
+                debug_assert!(step < 0);
+                let p = if msb0 {
+                    i as usize
+                } else {
+                    len_usize - 1 - i as usize
+                };
+                unsafe { bv.set_unchecked(p, value) };
+                i += step; // step < 0
             }
         }
-
-        let len_usize = len as usize;
-        for logical_pos in logical_positions {
-            let phys_index = validate_index(logical_pos, len_usize, self.msb0)?;
-            self.as_mut_bitvec_ref().set(phys_index, value);
-        }
-
         Ok(())
     }
 }
