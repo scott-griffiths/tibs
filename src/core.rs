@@ -470,7 +470,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn to_u128(&self) -> PyResult<u128> {
+    fn to_u128(&self, is_little_endian: bool) -> PyResult<u128> {
         let length = self.len();
         if length == 0 {
             return Err(PyValueError::new_err(
@@ -482,11 +482,12 @@ pub(crate) trait BitCollection: Sized + Clone {
                 "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
             )));
         }
-        let mut padded_bv = BV::new();
-        let padding = 128 - length;
-        padded_bv.resize(padding, false);
-        padded_bv.extend_from_bitslice(self.as_bitslice());
-        Ok(padded_bv.load_be::<u128>())
+        let raw = if is_little_endian {
+            self.as_bitslice().load_le::<u128>()
+        } else {
+            self.as_bitslice().load_be::<u128>()
+        };
+        Ok(raw)
     }
 
     #[inline]
@@ -537,7 +538,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn is_empty(&self) -> bool {
         self.as_bitslice().is_empty()
     }
-    
+
     #[inline]
     fn len(&self) -> usize {
         self.as_bitslice().len()

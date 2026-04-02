@@ -513,7 +513,7 @@ pub(crate) fn bv_from_bytes_slice(
 }
 
 #[inline]
-pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
+pub(crate) fn bv_from_u128(value: u128, length: i64, is_little_endian: bool) -> PyResult<BV> {
     if length <= 0 || length > 128 {
         return Err(PyValueError::new_err(format!(
             "Bit length for unsigned int must be between 1 and 128. Received {length}."
@@ -531,7 +531,11 @@ pub(crate) fn bv_from_u128(value: u128, length: i64) -> PyResult<BV> {
         )));
     }
     let mut bv = BV::repeat(false, length as usize);
-    bv.store_be(value);
+    if is_little_endian {
+        bv.store_le(value);
+    } else {
+        bv.store_be(value);
+    }
     Ok(bv)
 }
 

@@ -538,25 +538,30 @@ impl Tibs {
     ///
     /// :param u: An unsigned integer.
     /// :param length: The bit length to create. Can be up to 128.
+    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.None.
+    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.None.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
         length: i64,
+        endianness: Option<Endianness>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = BitIndexing::is_msb0(bit_indexing);
-        let bv = bv_from_u128(u, length)?;
-        Ok(Tibs::from_bv(bv, msb0))
+        let is_msb0 = BitIndexing::is_msb0(bit_indexing);
+        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
+        Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?, is_msb0))
     }
 
     /// Return the unsigned integer representation of the Tibs.
-    pub fn to_u(&self) -> PyResult<u128> {
-        BitCollection::to_u128(self)
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
+    pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
+        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
+        BitCollection::to_u128(self, is_little_endian)
     }
 
     /// Create a new instance from a signed integer.
@@ -564,12 +569,12 @@ impl Tibs {
     /// :param i: A signed integer.
     /// :param length: The bit length to create. Can be up to 128.
     /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.None.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.None.
+    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, endianness = Endianness::None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, endianness= Endianness.None, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
@@ -578,20 +583,14 @@ impl Tibs {
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
         let is_msb0 = BitIndexing::is_msb0(bit_indexing);
-        let is_little_endian = match endianness{
-            Some(Endianness::Little) => true,
-            _ => false,
-        };
+        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
         Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?, is_msb0))
     }
 
     /// Return the signed integer representation of the Tibs.
-    #[pyo3(signature = (endianness = Endianness::None), text_signature = "(endianness = Endianness.None)")]
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
     pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
-        let is_little_endian = match endianness{
-            Some(Endianness::Little) => true,
-            _ => false,
-        };
+        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_i128(self, is_little_endian)
     }
 

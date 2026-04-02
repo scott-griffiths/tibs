@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing
+from tibs import Tibs, Mutibs, BitIndexing, Endianness
 
 
 def test_creation():
@@ -1249,7 +1249,7 @@ def test_byte_swapped():
 def test_bit_indexing():
     with pytest.raises(TypeError):
         a = Mutibs.from_u(101, 16, "asdf")
-    a = Mutibs.from_u(101, 16, BitIndexing.Lsb0)
+    a = Mutibs.from_u(101, 16, Endianness.Unspecified, BitIndexing.Lsb0)
     assert a.to_u() == 101
     assert a.bit_indexing is BitIndexing.Lsb0
 

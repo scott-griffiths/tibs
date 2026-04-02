@@ -326,3 +326,16 @@ def test_endianness_i():
     assert t2.to_i(Endianness.Little) == 3
     assert t2.to_i() == 3 << 8
 
+def test_endianness_u():
+    t1 = Tibs.from_u(10001, 32)
+    t2 = Tibs.from_u(10001, 32, Endianness.Big)
+    t3 = Tibs.from_u(10001, 32, Endianness.Little)
+    assert t1 == t2
+    assert t1 != t3
+    assert t2.to_u() == 10001
+    assert t3.to_u() != 10001
+    assert t3.to_u(Endianness.Little) == 10001
+    with pytest.raises(ValueError):
+        _ = Tibs.from_u(999, 31, Endianness.Big)
+    with pytest.raises(ValueError):
+        _ = Tibs('0x123').to_u(Endianness.Big)
