@@ -110,9 +110,9 @@ impl Tibs {
 ///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
 ///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
 ///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
-///     * ``Tibs.from_u(u, length)`` - Create from an unsigned int to a given length.
-///     * ``Tibs.from_i(i, length)`` - Create from a signed int to a given length.
-///     * ``Tibs.from_f(f, length)`` - Create from an IEEE float to a 16, 32 or 64 bit length.
+///     * ``Tibs.from_u(u, length, [endianness])`` - Create from an unsigned int to a given length.
+///     * ``Tibs.from_i(i, length, [endianness])`` - Create from a signed int to a given length.
+///     * ``Tibs.from_f(f, length, [endianness])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
@@ -558,6 +558,8 @@ impl Tibs {
     }
 
     /// Return the unsigned integer representation of the Tibs.
+    ///
+    /// :param endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
     pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
@@ -588,6 +590,8 @@ impl Tibs {
     }
 
     /// Return the signed integer representation of the Tibs.
+    ///
+    /// :param endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
     pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
@@ -598,6 +602,8 @@ impl Tibs {
     ///
     /// :param f: A floating point value.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
+    /// :param endianness: The byte endianness used to store the float. Defaults to Endianness.Unspecified.
+    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     #[classmethod]
     #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_f(
@@ -616,6 +622,8 @@ impl Tibs {
     /// Return the floating point representation of the Tibs.
     ///
     /// The length must be 16, 32 or 64.
+    ///
+    /// :param endianness: The byte endianness used to interpret the float. Defaults to Endianness.Unspecified.
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
     pub fn to_f(&self, endianness: Option<Endianness>) -> PyResult<f64> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
