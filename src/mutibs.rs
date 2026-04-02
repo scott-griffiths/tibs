@@ -529,7 +529,7 @@ impl Mutibs {
     }
 
     /// Return the unsigned integer representation of the Mutibs.
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.None)")]
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
     pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_u128(self, is_little_endian)
@@ -591,7 +591,7 @@ impl Mutibs {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_f64(self, is_little_endian)
     }
-    
+
     /// Create a new instance with all bits set to zero.
     ///
     /// :param length: The number of bits to set.

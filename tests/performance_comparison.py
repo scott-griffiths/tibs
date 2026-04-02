@@ -111,7 +111,7 @@ def test_primes_tibs():
     for i in range(2, isqrt(limit) + 1):
         if is_prime[i]:
             is_prime.unset(range(i * i, limit, i))
-    twin_primes = is_prime.count([1, 0, 1]);
+    twin_primes = is_prime.count([1, 0, 1])
     assert twin_primes == 239101
 
 

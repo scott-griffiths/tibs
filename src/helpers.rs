@@ -522,7 +522,11 @@ pub(crate) fn bv_from_u128(value: u128, length: i64, is_little_endian: bool) -> 
     // Special case for 128 to avoid overflow in more general case
     if length == 128 {
         let mut bv = BV::repeat(false, 128);
-        bv.store_be(value);
+        if is_little_endian {
+            bv.store_le(value);
+        } else {
+            bv.store_be(value);
+        }
         return Ok(bv);
     }
     if value >= (1u128 << length) {

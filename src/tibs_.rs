@@ -538,8 +538,8 @@ impl Tibs {
     ///
     /// :param u: An unsigned integer.
     /// :param length: The bit length to create. Can be up to 128.
-    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.None.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.None.
+    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
@@ -568,7 +568,7 @@ impl Tibs {
     ///
     /// :param i: A signed integer.
     /// :param length: The bit length to create. Can be up to 128.
-    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.None.
+    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
     /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
