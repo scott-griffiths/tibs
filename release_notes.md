@@ -1,5 +1,18 @@
 # Release Notes
 
+### Unreleased: version 0.6.
+
+* Added LSB0 mode.
+* Added byte endianness for integer and float interpretations.
+* Added Tibs.rfind_all method.
+* Mutibs.set method split into .set and .unset methods.
+* New byte_swapped() method.
+* New reversed() method.
+* Mutibs methods no longer mutate and return self.
+* .bin, .oct, .hex and .bytes readonly properties added.
+* ror renamed to rotate_right
+* A few small fixes and documentation improvements.
+
 ### March 2025: version 0.5.7
 
 Just a single bug fix.
