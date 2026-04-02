@@ -12,5 +12,6 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tibs_::Tibs>()?;
     m.add_class::<mutibs::Mutibs>()?;
     m.add_class::<enums::BitIndexing>()?;
+    m.add_class::<enums::Endianness>()?;
     Ok(())
 }

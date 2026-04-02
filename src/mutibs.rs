@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::BitIndexing;
+use crate::enums::{BitIndexing, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
@@ -537,21 +537,31 @@ impl Mutibs {
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (i, /, length, endianness = Endianness::None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, endianness = Endianness.None, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
         length: i64,
+        endianness: Option<Endianness>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
         let msb0 = BitIndexing::is_msb0(bit_indexing);
-        let bv = bv_from_i128(i, length)?;
+        let is_little_endian = match endianness{
+            Some(Endianness::Little) => true,
+            _ => false,
+        };
+        let bv = bv_from_i128(i, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the signed integer representation of the Mutibs.
-    pub fn to_i(&self) -> PyResult<i128> {
-        BitCollection::to_i128(self)
+    #[pyo3(signature = (endianness = Endianness::None), text_signature = "(endianness = Endianness.None)")]
+    pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
+        let is_little_endian = match endianness{
+            Some(Endianness::Little) => true,
+            _ => false,
+        };
+        BitCollection::to_i128(self, is_little_endian)
     }
 
     /// Create a new instance from a floating point number.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing
+from tibs import Tibs, Mutibs, BitIndexing, Endianness
 
 
 def test_from_bin():
@@ -298,19 +298,31 @@ def test_find_methods_lsb0_logical_indices():
     assert list(t.find_all("0b1")) == [2, 4, 5]
     assert list(t.rfind_all("0b1")) == [5, 4, 2]
 
-# def test_lsb0_find_all():
-#     t = Tibs.from_random(10_000)
-#     a1 = list(t.find_all([1, 0, 1]))  # The needle looks the same forward and backwards.
-#     t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
-#     assert t == t2.reversed()
-#     a2 = list(t2.rfind_all([1, 0, 1]))
-#     assert a1 == a2
-#
-#
-# def test_lsb0_find():
-#     t = Tibs.from_random(10_000)
-#     a1 = t.find([1, 0, 1])  # The needle looks the same forward and backwards.
-#     t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
-#     assert t == t2.reversed()
-#     a2 = t2.rfind([1, 0, 1])
-#     assert a1 == a2
+
+def test_lsb0_find_all():
+    t = Tibs.from_random(10_000)
+    a1 = list(t.find_all([1, 0, 1]))  # The needle looks the same forward and backwards.
+    t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
+    assert t == t2.reversed()
+    a2 = list(t2.find_all([1, 0, 1]))
+    assert a1 == a2
+
+
+def test_lsb0_find():
+    t = Tibs.from_random(10_000)
+    a1 = t.find([1, 0, 1])  # The needle looks the same forward and backwards.
+    t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
+    assert t == t2.reversed()
+    a2 = t2.find([1, 0, 1])
+    assert a1 == a2
+
+def test_endianness_i():
+    t1 = Tibs.from_i(3, 16, endianness=Endianness.Big)
+    assert t1.bin == '0000000000000011'
+    t2 = Tibs.from_i(3, 16, endianness=Endianness.Little)
+    assert t2.bin == '0000001100000000'
+    assert t1.to_i() == 3
+    assert t1.to_i(Endianness.Big) == 3
+    assert t2.to_i(Endianness.Little) == 3
+    assert t2.to_i() == 3 << 8
+

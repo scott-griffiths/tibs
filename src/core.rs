@@ -490,7 +490,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn to_i128(&self) -> PyResult<i128> {
+    fn to_i128(&self, is_little_endian: bool) -> PyResult<i128> {
         let length = self.len();
         if length == 0 {
             return Err(PyValueError::new_err(
@@ -502,12 +502,14 @@ pub(crate) trait BitCollection: Sized + Clone {
                 "Bit length to convert to signed int must be between 1 and 128. Received {length}."
             )));
         }
-        let mut padded_bv = BV::new();
-        let padding = 128 - length;
-        let pad_bit = self.get_bit(0);
-        padded_bv.resize(padding, pad_bit);
-        padded_bv.extend_from_bitslice(self.as_bitslice());
-        Ok(padded_bv.load_be::<i128>())
+        let raw = if is_little_endian {
+            self.as_bitslice().load_le::<u128>()
+        } else {
+            self.as_bitslice().load_be::<u128>()
+        };
+
+        let shift = 128 - length;
+        Ok(((raw << shift) as i128) >> shift)
     }
 
     fn to_f64(&self) -> PyResult<f64> {
@@ -535,12 +537,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn is_empty(&self) -> bool {
         self.as_bitslice().is_empty()
     }
-
-    #[inline]
-    fn get_bit(&self, i: usize) -> bool {
-        self.as_bitslice()[i]
-    }
-
+    
     #[inline]
     fn len(&self) -> usize {
         self.as_bitslice().len()
