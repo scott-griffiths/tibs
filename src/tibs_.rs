@@ -238,22 +238,21 @@ impl Tibs {
     }
 
     /// Return representation that could be used to recreate the instance.
-    pub fn __repr__(&self, py: Python) -> String {
-        let class_name = py.get_type::<Self>().name().unwrap();
+    pub fn __repr__(&self) -> String {
         if self.is_empty() {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
                 "bit_indexing=BitIndexing.Lsb0".to_string()
             };
-            format!("{}({})", class_name, bit_indexing)
+            format!("Tibs({})", bit_indexing)
         } else {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
                 ", BitIndexing.Lsb0".to_string()
             };
-            format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
+            format!("Tibs('{}'{})", self.__str__(), bit_indexing)
         }
     }
 
@@ -371,6 +370,8 @@ impl Tibs {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
+        // TODO: For single bits we could use more specialised methods
+        // See https://docs.rs/bitvec/1.0.1/bitvec/slice/struct.BitSlice.html#method.iter_ones
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let needle = if slf.msb0 { needle } else { needle.reversed() };
         let (start, end) = logical_range_to_physical(slf.len(), start, end, slf.msb0);

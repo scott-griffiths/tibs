@@ -282,22 +282,21 @@ impl Mutibs {
     }
 
     /// Return representation that could be used to recreate the instance.
-    pub fn __repr__(&self, py: Python) -> String {
-        let class_name = py.get_type::<Self>().name().unwrap();
+    pub fn __repr__(&self) -> String {
         if self.is_empty() {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
                 "bit_indexing=BitIndexing.Lsb0".to_string()
             };
-            format!("{}({})", class_name, bit_indexing)
+            format!("Mutibs({})", bit_indexing)
         } else {
             let bit_indexing = if self.msb0 {
                 "".to_string()
             } else {
                 ", BitIndexing.Lsb0".to_string()
             };
-            format!("{}('{}'{})", class_name, self.__str__(), bit_indexing)
+            format!("Mutibs('{}'{})", self.__str__(), bit_indexing)
         }
     }
 
