@@ -573,23 +573,35 @@ pub(crate) fn bv_from_i128(value: i128, length: i64, is_little_endian: bool) -> 
     Ok(bv)
 }
 
-pub(crate) fn bv_from_f64(value: f64, length: i64) -> PyResult<BV> {
+pub(crate) fn bv_from_f64(value: f64, length: i64, is_little_endian: bool) -> PyResult<BV> {
     let bv = match length {
         64 => {
             let mut bv = BV::repeat(false, 64);
-            bv.store_be(value.to_bits());
+            if is_little_endian {
+                bv.store_le(value.to_bits());
+            } else {
+                bv.store_be(value.to_bits());
+            }
             bv
         }
         32 => {
             let value_f32 = value as f32;
             let mut bv = BV::repeat(false, 32);
-            bv.store_be(value_f32.to_bits());
+            if is_little_endian {
+                bv.store_le(value_f32.to_bits());
+            } else {
+                bv.store_be(value_f32.to_bits());
+            }
             bv
         }
         16 => {
             let value_f16 = f16::from_f64(value);
             let mut bv = BV::repeat(false, 16);
-            bv.store_be(value_f16.to_bits());
+            if is_little_endian {
+                bv.store_le(value_f16.to_bits());
+            } else {
+                bv.store_be(value_f16.to_bits());
+            }
             bv
         }
         _ => {

@@ -513,19 +513,31 @@ pub(crate) trait BitCollection: Sized + Clone {
         Ok(((raw << shift) as i128) >> shift)
     }
 
-    fn to_f64(&self) -> PyResult<f64> {
+    fn to_f64(&self, is_little_endian: bool) -> PyResult<f64> {
         let length = self.len();
         match length {
             64 => {
-                let bits = self.as_bitslice().load_be::<u64>();
+                let bits = if is_little_endian {
+                    self.as_bitslice().load_le::<u64>()
+                } else {
+                    self.as_bitslice().load_be::<u64>()
+                };
                 Ok(f64::from_bits(bits))
             }
             32 => {
-                let bits = self.as_bitslice().load_be::<u32>();
+                let bits = if is_little_endian {
+                    self.as_bitslice().load_le::<u32>()
+                } else {
+                    self.as_bitslice().load_be::<u32>()
+                };
                 Ok(f32::from_bits(bits) as f64)
             }
             16 => {
-                let bits = self.as_bitslice().load_be::<u16>();
+                let bits = if is_little_endian {
+                    self.as_bitslice().load_le::<u16>()
+                } else {
+                    self.as_bitslice().load_be::<u16>()
+                };
                 Ok(f16::from_bits(bits).to_f64())
             }
             _ => Err(PyValueError::new_err(format!(

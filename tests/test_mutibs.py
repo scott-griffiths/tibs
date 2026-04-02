@@ -1303,3 +1303,13 @@ def test_replace_negative_count():
     with pytest.raises(ValueError):
         m.replace('0b1', '0b0', count=-1)
     assert m == t
+
+def test_float_endianness():
+    m1 = Mutibs.from_f(3.5, 32)
+    m2 = Mutibs.from_f(3.5, 32, Endianness.Unspecified)
+    m3 = Mutibs.from_f(3.5, 32, Endianness.Big)
+    m4 = Mutibs.from_f(3.5, 32, Endianness.Little)
+    assert m1.to_f() == m2.to_f() == 3.5
+    assert m4.to_f(Endianness.Little) == 3.5
+    assert m3.to_f(Endianness.Big) == 3.5
+    assert m3.byte_swapped() == m4

@@ -569,25 +569,29 @@ impl Mutibs {
     /// :param f: A float.
     /// :param length: The bit length to create. Must be 16, 32 or 64.
     #[classmethod]
-    #[pyo3(signature = (f, /, length, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
         length: i64,
+        endianness: Option<Endianness>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
         let msb0 = BitIndexing::is_msb0(bit_indexing);
-        let bv = bv_from_f64(f, length)?;
+        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
+        let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
 
     /// Return the floating point representation of the Mutibs.
     ///
     /// The length must be 16, 32 or 64.
-    pub fn to_f(&self) -> PyResult<f64> {
-        BitCollection::to_f64(self)
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
+    pub fn to_f(&self, endianness: Option<Endianness>) -> PyResult<f64> {
+        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
+        BitCollection::to_f64(self, is_little_endian)
     }
-
+    
     /// Create a new instance with all bits set to zero.
     ///
     /// :param length: The number of bits to set.
