@@ -1865,12 +1865,18 @@ impl Mutibs {
         } else if pos > slf.len() as i64 {
             pos = slf.len() as i64;
         }
+        let logical_pos = pos as usize;
+        let insert_pos = if slf.msb0 {
+            logical_pos
+        } else {
+            slf.len() - logical_pos
+        };
         if bs.len() == 1 {
             slf.as_mut_bitvec_ref()
-                .insert(pos as usize, bs.as_bitslice()[0]);
+                .insert(insert_pos, bs.as_bitslice()[0]);
             return Ok(());
         }
-        let tail = slf.as_mut_bitvec_ref().split_off(pos as usize);
+        let tail = slf.as_mut_bitvec_ref().split_off(insert_pos);
         slf.as_mut_bitvec_ref()
             .extend_from_bitslice(bs.as_bitslice());
         slf.as_mut_bitvec_ref().extend_from_bitslice(&tail);

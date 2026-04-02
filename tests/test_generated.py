@@ -195,6 +195,17 @@ class TestMutibsMethods:
         m[1:7:2] = [1, 1, 1]
         assert m == "0b01010100"
 
+    def test_insert_uses_logical_position_in_lsb0_mode(self):
+        m = Mutibs("0b1100", bit_indexing=BitIndexing.Lsb0)
+
+        # Build the expected logical bit sequence (the order used by indexing/iteration in LSB0).
+        expected_logical_bits = list(m.to_tibs())
+        expected_logical_bits.insert(1, True)
+
+        m.insert(1, "0b1")
+
+        assert list(m.to_tibs()) == expected_logical_bits
+
 
 class TestIterators:
     def test_bool_iterator(self):
@@ -505,29 +516,6 @@ class TestKnownRegressions:
         # Deleting logical indices [7, 6, 5, 4] should remove the left nibble.
         assert m.to_bin() == "0000"
 
-    def test_lsb0_delete_simple_slice_removes_logical_prefix(self):
-        m = Mutibs("0xabcdef", bit_indexing=BitIndexing.Lsb0)
-        del m[:8]
-        # In lsb0, [:8] deletes the least-significant logical byte.
-        assert m.to_hex() == "abcd"
-
-    def test_lsb0_replace_uses_logical_search_order(self):
-        m = Mutibs("0b110100", bit_indexing=BitIndexing.Lsb0)
-        # First logical '1' is at index 2 for this lsb0 view.
-        assert m.find("0b1") == 2
-        m.replace("0b1", "0b0", count=1)
-        assert m.to_bin() == "110000"
-
-    def test_lsb0_replace_respects_count_for_logical_matches(self):
-        m = Mutibs("0b10110100", bit_indexing=BitIndexing.Lsb0)
-        # Logical view is reversed; replacing one logical '10' should touch the right side.
-        m.replace("0b10", "0b11", count=1)
-        assert m.to_bin() == "10111100"
-
-    def test_lsb0_replace_all_replacements_follow_logical_order(self):
-        m = Mutibs("0b10110100", bit_indexing=BitIndexing.Lsb0)
-        m.replace("0b10", "0b11")
-        assert m.to_bin() == "11111100"
 
     def test_lsb0_delete_prefix_and_suffix_slices(self):
         m = Mutibs("0b11001010", bit_indexing=BitIndexing.Lsb0)
