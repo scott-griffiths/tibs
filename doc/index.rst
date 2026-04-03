@@ -51,6 +51,7 @@ This is all explained in the documentation and API docs that follow. ::
 .. toctree::
     :maxdepth: 1
 
+    self
     intro
     examples
     api

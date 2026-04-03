@@ -3,6 +3,14 @@
 User Manual
 -----------
 
+.. toctree::
+    :maxdepth: 1
+    :hidden:
+
+    self
+    examples
+    api
+
 First Steps
 ^^^^^^^^^^^
 
