@@ -150,7 +150,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
 #[pymethods]
 impl Tibs {
     #[new]
-    #[pyo3(signature = (auto = None, bit_indexing = BitIndexing::Msb0), text_signature = "(auto=None, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (auto = None, bit_indexing = BitIndexing::Msb0), text_signature = "(auto=None, bit_indexing)")]
     pub fn py_new(
         auto: Option<&Bound<'_, PyAny>>,
         bit_indexing: Option<BitIndexing>,
@@ -195,7 +195,7 @@ impl Tibs {
     /// The whole of the data will be byte-swapped. It must be a multiple
     /// of byte_length long.
     ///
-    /// :param byte_length: An int giving the number of bytes in each swap, or None (the default)
+    /// :param int | None byte_length: An int giving the number of bytes in each swap, or None (the default)
     ///   to do a single reverse over the whole data.
     /// :return: Tibs
     ///
@@ -206,7 +206,7 @@ impl Tibs {
     ///     >>> b
     ///     Tibs('0x34127856')
     ///
-    #[pyo3(signature = (byte_length = None), text_signature = "(byte_length=None)")]
+    #[pyo3(signature = (byte_length = None), text_signature = "($self, byte_length=None)")]
     pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Tibs> {
         Ok(BitCollection::byte_swap_copy(self, byte_length)?)
     }
@@ -272,8 +272,8 @@ impl Tibs {
 
     /// Return Tibs generator by cutting into chunks.
     ///
-    /// :param chunk_size: The size in bits of the chunks to generate.
-    /// :param count: If specified, at most count items are generated. Default is to cut as many times as possible.
+    /// :param int chunk_size: The size in bits of the chunks to generate.
+    /// :param int | None count: If specified, at most count items are generated. Default is to cut as many times as possible.
     /// :return: A generator yielding Tibs chunks.
     ///
     /// .. code-block:: pycon
@@ -281,7 +281,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b110011').chunks(2))
     ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
     ///
-    #[pyo3(signature = (chunk_size, count = None), text_signature = "(chunk_size, count=None)")]
+    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
     pub fn chunks(
         slf: PyRef<'_, Self>,
         chunk_size: i64,
@@ -338,13 +338,10 @@ impl Tibs {
 
     /// Find all occurrences of a bit sequence. Return generator of bit positions.
     ///
-    /// :param needle: The Tibs to find.
-    /// :param start: The starting bit position of the slice to search. Defaults to 0.
-    /// :type start: int | None
-    /// :param end: The end bit position of the slice to search. Defaults to len(self).
-    /// :type end: int | None
-    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
-    /// :type byte_aligned: bool
+    /// :param Tibs needle: The bit sequence to find.
+    /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
+    /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
     /// :return: A generator yielding bit positions.
     ///
     /// :raises ValueError: if needle is empty, if start or end are out of range or if end is before start.
@@ -359,7 +356,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').find_all('0b11'))
     ///     [2, 3, 6]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "(needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find_all(
         slf: PyRef<'_, Self>,
         needle: Tibs,
@@ -395,13 +392,10 @@ impl Tibs {
 
     /// Find all occurrences of a bit sequence, searching in reverse. Return generator of bit positions.
     ///
-    /// :param needle: The Tibs to find.
-    /// :param start: The starting bit position of the slice to search. Defaults to 0.
-    /// :type start: int | None
-    /// :param end: The end bit position of the slice to search. Defaults to len(self).
-    /// :type end: int | None
-    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
-    /// :type byte_aligned: bool
+    /// :param Tibs needle: The bit sequence to find.
+    /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
+    /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
     /// :return: A generator yielding bit positions.
     ///
     /// :raises ValueError: if needle is empty, if start or end are out of range or end is before start.
@@ -416,7 +410,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').rfind_all('0b11'))
     ///     [6, 3, 2]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "(needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn rfind_all(
         slf: PyRef<'_, Self>,
         needle: Tibs,
@@ -456,8 +450,8 @@ impl Tibs {
 
     /// Create a new instance with all bits set to '0'.
     ///
-    /// :param length: The number of bits to set.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param int length: The number of bits to set.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     /// :return: A Tibs object with all bits set to zero.
     ///
     /// .. code-block:: python
@@ -465,7 +459,7 @@ impl Tibs {
     ///     a = Tibs.from_zeros(500)  # 500 zero bits
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, bit_indexing)")]
     pub fn from_zeros(
         _cls: &Bound<'_, PyType>,
         length: i64,
@@ -483,8 +477,8 @@ impl Tibs {
 
     /// Create a new instance with all bits set to '1'.
     ///
-    /// :param length: The number of bits to set.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param int length: The number of bits to set.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// .. code-block:: pycon
     ///
@@ -492,7 +486,7 @@ impl Tibs {
     ///     Tibs('0b11111')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (length, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, length, bit_indexing)")]
     pub fn from_ones(
         _cls: &Bound<'_, PyType>,
         length: i64,
@@ -510,8 +504,8 @@ impl Tibs {
 
     /// Create a new instance from a formatted string.
     ///
-    /// :param s: The formatted string to convert. This can begin with '0b', '0o' or '0x' to indicate binary, octal or hexadecimal, and commas can be used to separate items.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param str s: The formatted string to convert. This can begin with '0b', '0o' or '0x' to indicate binary, octal or hexadecimal, and commas can be used to separate items.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: python
@@ -526,7 +520,7 @@ impl Tibs {
     ///     a = Tibs("0xff01")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, bit_indexing)")]
     pub fn from_string(
         _cls: &Bound<'_, PyType>,
         s: String,
@@ -539,15 +533,15 @@ impl Tibs {
 
     /// Create a new instance from an unsigned integer.
     ///
-    /// :param u: An unsigned integer.
-    /// :param length: The bit length to create. Can be up to 128.
-    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param int u: An unsigned integer.
+    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, length, endianness, bit_indexing)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
@@ -562,8 +556,8 @@ impl Tibs {
 
     /// Return the unsigned integer representation of the Tibs.
     ///
-    /// :param endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
+    /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness)")]
     pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_u128(self, is_little_endian)
@@ -571,15 +565,15 @@ impl Tibs {
 
     /// Create a new instance from a signed integer.
     ///
-    /// :param i: A signed integer.
-    /// :param length: The bit length to create. Can be up to 128.
-    /// :param endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param int i: A signed integer.
+    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, length, endianness, bit_indexing)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
@@ -594,8 +588,8 @@ impl Tibs {
 
     /// Return the signed integer representation of the Tibs.
     ///
-    /// :param endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
+    /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness)")]
     pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_i128(self, is_little_endian)
@@ -603,12 +597,12 @@ impl Tibs {
 
     /// Create a new instance from a floating point number.
     ///
-    /// :param f: A floating point value.
-    /// :param length: The bit length to create. Must be 16, 32 or 64.
-    /// :param endianness: The byte endianness used to store the float. Defaults to Endianness.Unspecified.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param float f: A floating point value.
+    /// :param int length: The bit length to create. Must be 16, 32 or 64.
+    /// :param Endianness endianness: The byte endianness used to store the float. Defaults to Endianness.Unspecified.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     #[classmethod]
-    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, endianness = Endianness.Unspecified, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, length, endianness, bit_indexing)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
@@ -626,8 +620,8 @@ impl Tibs {
     ///
     /// The length must be 16, 32 or 64.
     ///
-    /// :param endianness: The byte endianness used to interpret the float. Defaults to Endianness.Unspecified.
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "(endianness = Endianness.Unspecified)")]
+    /// :param Endianness endianness: The byte endianness used to interpret the float. Defaults to Endianness.Unspecified.
+    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness)")]
     pub fn to_f(&self, endianness: Option<Endianness>) -> PyResult<f64> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
         BitCollection::to_f64(self, is_little_endian)
@@ -635,15 +629,15 @@ impl Tibs {
 
     /// Create a new instance from a binary string.
     ///
-    /// :param s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param str s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_bin("0000_1111_0101")
     ///
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, bit_indexing)")]
     pub fn from_bin(
         _cls: &Bound<'_, PyType>,
         s: &str,
@@ -669,10 +663,10 @@ impl Tibs {
 
     /// Create a new instance from an octal string.
     ///
-    /// :param s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param str s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, bit_indexing)")]
     pub fn from_oct(
         _cls: &Bound<'_, PyType>,
         s: &str,
@@ -702,10 +696,10 @@ impl Tibs {
 
     /// Create a new instance from a hexadecimal string.
     ///
-    /// :param s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param str s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     #[classmethod]
-    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, bit_indexing)")]
     pub fn from_hex(
         _cls: &Bound<'_, PyType>,
         s: &str,
@@ -735,10 +729,10 @@ impl Tibs {
 
     /// Create a new instance from a bytes object.
     ///
-    /// :param data: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
-    /// :param offset: The bit offset from the start. Defaults to zero.
-    /// :param length: The bit length to use. Defaults to the whole of the data.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param bytes | bytearray | memoryview data: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
+    /// :param int | None offset: The bit offset from the start. Defaults to zero.
+    /// :param int | None length: The bit length to use. Defaults to the whole of the data.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// .. code-block:: python
     ///
@@ -746,7 +740,7 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, data, /, offset=None, length=None, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (data, /, offset=None, length=None, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, data, offset=None, length=None, bit_indexing=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: Vec<u8>,
@@ -761,15 +755,15 @@ impl Tibs {
 
     /// Create a new instance from an iterable by converting each element to a bool.
     ///
-    /// :param iterable: The iterable to convert to a :class:`Tibs`.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param Iterable iterable: The iterable to convert to a :class:`Tibs`.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_bools([False, 0, 1, "Steven"])  # binary 0011
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, bit_indexing)")]
     pub fn from_bools(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
@@ -782,10 +776,10 @@ impl Tibs {
 
     /// Create a new instance with all bits randomly set.
     ///
-    /// :param length: The number of bits to set. Must be positive.
-    /// :param secure: If ``True``, use the OS's cryptographically secure generator. Default is ``False``.
-    /// :param seed: A bytes or bytearray to use as an optional seed, only if ``secure`` is ``False``.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param int length: The number of bits to set. Must be positive.
+    /// :param bool secure: If ``True``, use the OS's cryptographically secure generator. Default is ``False``.
+    /// :param bytes | bytearray | None seed: A bytes or bytearray to use as an optional seed, only if ``secure`` is ``False``.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     /// :return: A newly constructed ``Tibs`` with random data.
     ///
     /// The 'secure' option uses the OS's random data source, so will be slower and could potentially
@@ -797,7 +791,7 @@ impl Tibs {
     ///     b = Tibs.from_random(100, seed=b'a_seed')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, /, secure=False, seed=None, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (length, /, secure=false, seed=None, bit_indexing = BitIndexing::Msb0), text_signature="(cls, length, secure=False, seed=None, bit_indexing=None)")]
     pub fn from_random(
         _cls: &Bound<'_, PyType>,
         length: i64,
@@ -814,15 +808,15 @@ impl Tibs {
     ///
     /// This method concatenates a sequence of Tibs objects into a single Tibs object.
     ///
-    /// :param iterable: An iterable to concatenate. Items can be anything that can be promoted to a Tibs.
-    /// :param bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :param Iterable iterable: An iterable to concatenate. Items can be anything that can be promoted to a Tibs.
+    /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
     ///
     /// .. code-block:: python
     ///
     ///     a = Tibs.from_joined(['0x01', [1, 0], b'some_bytes'])
     ///
     #[classmethod]
-    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, /, bit_indexing = BitIndexing.Msb0)")]
+    #[pyo3(signature = (iterable, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, iterable, bit_indexing)")]
     pub fn from_joined(
         _cls: &Bound<'_, PyType>,
         iterable: &Bound<'_, PyAny>,
@@ -869,10 +863,10 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param needle: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
-    /// :param start: The starting bit position. Defaults to 0.
-    /// :param end: The end position. Defaults to len(self).
-    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :param Tibs needle: The bit sequence to find.
+    /// :param int | None start: The starting bit position. Defaults to 0.
+    /// :param int | None end: The end position. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
     ///
     /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
@@ -882,7 +876,7 @@ impl Tibs {
     ///      >>> Tibs('0xc3e').find('0b1111')
     ///      6
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "(needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find(
         &self,
         needle: Tibs,
@@ -935,14 +929,14 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param needle: The bit sequence to find. Can be anything that can be promoted to a :class:`Tibs`.
-    /// :param start: The starting bit position. Defaults to 0.
-    /// :param end: The end position. Defaults to len(self).
-    /// :param byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :param Tibs needle: The bit sequence to find.
+    /// :param int | None start: The starting bit position. Defaults to 0.
+    /// :param int | None end: The end position. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
     ///
     /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "(needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn rfind(
         &self,
         needle: Tibs,
@@ -980,7 +974,7 @@ impl Tibs {
 
     /// Return whether the current Tibs starts with prefix.
     ///
-    /// :param prefix: The bits to search for.
+    /// :param Tibs prefix: The bits to search for.
     /// :return: True if the Tibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -996,7 +990,7 @@ impl Tibs {
 
     /// Return whether the current Tibs ends with suffix.
     ///
-    /// :param suffix: The bits to search for.
+    /// :param Tibs suffix: The bits to search for.
     /// :return: True if the Tibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -1012,7 +1006,7 @@ impl Tibs {
 
     /// Counts the total number of occurrences of a bit pattern.
     ///
-    /// :param value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    /// :param object value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
     ///
     /// :return: The number of times the bit pattern is found.
     ///
@@ -1084,7 +1078,7 @@ impl Tibs {
     #[inline]
     /// Get a bit or a slice of bits.
     ///
-    /// :param key: The index or slice to get.
+    /// :param int | slice key: The index or slice to get.
     /// :return: A bool for a single index, or a new Tibs for a slice.
     /// :raises IndexError: If the index is out of range.
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
