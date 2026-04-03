@@ -1,6 +1,6 @@
 # Release Notes
 
-### Unreleased: version 0.6.
+### April 3rd 2026: version 0.6.0.
 
 * Added LSB0 mode.
 * Added byte endianness for integer and float interpretations.
@@ -10,8 +10,8 @@
 * New reversed() method.
 * Mutibs methods no longer mutate and return self.
 * .bin, .oct, .hex and .bytes readonly properties added.
-* ror renamed to rotate_right
-* A few small fixes and documentation improvements.
+* ror renamed to rotate_right, rol renamed to rotate_left
+* Bug fixes and documentation improvements.
 
 ### March 2025: version 0.5.7
 
