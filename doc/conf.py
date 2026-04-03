@@ -35,8 +35,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
 html_sidebars = {
-    "index": ["globaltoc.html"],
-    "**": ["sidebar-nav-bs"],
+    "**": ["sidebar-nav-bs-root.html"],
 }
 
 html_theme = "pydata_sphinx_theme"
@@ -44,6 +43,10 @@ html_logo = "tibs.png"
 html_theme_options = {
     "content_footer_items": ["last-updated"],
     "show_toc_level": 2,
+    "show_nav_level": 1,
+    "sidebar_includehidden": True,
+    "navigation_depth": 3,
+    "collapse_navigation": False,
     "logo": {
         # "text": "My awesome documentation",
         "image_light": "tibs.png",
