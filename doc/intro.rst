@@ -1,7 +1,10 @@
 .. currentmodule:: tibs
 
-First Steps
+User Manual
 -----------
+
+First Steps
+^^^^^^^^^^^
 
 One way to get to know the library is to start a Python interactive session, import the two main
 classes, and experiment with some of the example code in the rest of this document. ::
@@ -97,6 +100,55 @@ It also has several extra methods that will mutate the value in-place. ::
 
 
 You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding, replacing, setting, reversing etc.
+
+Creation
+^^^^^^^^
+
+Data views
+^^^^^^^^^^
+
+to_bin() - always available.
+
+to_oct(), to_hex(), to_bytes() - need to be appropriate length.
+
+Read-only properties are equivalent - bin, oct, hex, bytes.
+
+Can always reconstruct the Tibs from a view - from_bin(), from_oct(), from_hex(), from_bytes().
+
+Data interpretations
+^^^^^^^^^^^^^^^^^^^^
+
+Unlike the data views the interpretations have many-to-one relationships in both directions.
+
+Endianness
+^^^^^^^^^^
+
+TODO
+
+Bit indexing
+^^^^^^^^^^^^
+
+TODO
+
+
+Tibs vs Mutibs
+^^^^^^^^^^^^^^
+
+* Tibs instances cannot change after they are created. This lets you use them as keys in dictionaries,
+they can be hashed and used in sets.
+* Methods that return iterators over the data are available for Tibs, but not Mutibs. This is because for
+a Mutibs the data could change while the iterator is live. To use these methods on a Mutibs first convert
+to a Tibs.
+* Mutibs
+
+Mutating and copy methods
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Tibs has no mutating methods, but it can return a new Tibs. Mutibs has mutating methods with similar names.
+
+* reversed -> reverse
+* byte_swapped -> byte_swap
+etc.
 
 
 

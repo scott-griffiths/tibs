@@ -11,7 +11,7 @@ year = datetime.datetime.utcfromtimestamp(
 project = "tibs"
 copyright = f"2025 - {year}, Scott Griffiths"
 author = "Scott Griffiths"
-release = "0.5"
+release = "0.6"
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -35,7 +35,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
 html_sidebars = {
-    "intro": []
+    # "intro": []
 }
 
 html_theme = "pydata_sphinx_theme"
