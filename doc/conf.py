@@ -28,7 +28,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 root_doc = "index"
 
-add_function_parentheses = False
+add_function_parentheses = True
 
 html_show_sphinx = False
 html_static_path = ["_static"]

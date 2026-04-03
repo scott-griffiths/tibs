@@ -8,8 +8,8 @@ function in a Python interpreted session.
 
 The two classes available in the tibs module are:
 
-* :class:`Tibs` An immutable sequence of bits.
-* :class:`Mutibs` A mutable sequence of bits.
+* :doc:`tibs` — An immutable sequence of bits.
+* :doc:`mutibs` — A mutable sequence of bits.
 
 .. toctree::
     :maxdepth: 1
