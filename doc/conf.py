@@ -44,7 +44,6 @@ html_logo = "tibs.png"
 html_theme_options = {
     "content_footer_items": ["last-updated"],
     "show_toc_level": 2,
-    "globaltoc_includehidden": True,
     "logo": {
         # "text": "My awesome documentation",
         "image_light": "tibs.png",
