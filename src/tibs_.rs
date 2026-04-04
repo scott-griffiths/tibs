@@ -649,6 +649,8 @@ impl Tibs {
     }
 
     /// Return the binary representation of the Tibs as a string.
+    ///
+    /// :return: The binary representation.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
     }
@@ -656,6 +658,8 @@ impl Tibs {
     /// Read-only property of the binary representation of the Tibs.
     ///
     /// Equivalent to using :meth:`~to_bin`.
+    ///
+    /// :return: The binary representation.
     #[getter]
     fn bin(&self) -> String {
         BitCollection::to_binary(self)
@@ -679,6 +683,7 @@ impl Tibs {
 
     /// Return the octal representation of the Tibs as a string.
     ///
+    /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
@@ -688,6 +693,7 @@ impl Tibs {
     ///
     /// Equivalent to using :meth:`~to_oct`.
     ///
+    /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     #[getter]
     fn oct(&self) -> PyResult<String> {
@@ -712,6 +718,7 @@ impl Tibs {
 
     /// Return the hexadecimal representation of the Tibs as a string.
     ///
+    /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
@@ -721,6 +728,7 @@ impl Tibs {
     ///
     /// Equivalent to using :meth:`~to_hex`.
     ///
+    /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
     #[getter]
     fn hex(&self) -> PyResult<String> {
@@ -844,6 +852,7 @@ impl Tibs {
 
     /// Return the Tibs as a bytes object.
     ///
+    /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
@@ -853,6 +862,7 @@ impl Tibs {
     ///
     /// Equivalent to using :meth:`~to_bytes`.
     ///
+    /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     #[getter]
     fn bytes(&self) -> PyResult<Vec<u8>> {

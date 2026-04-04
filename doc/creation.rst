@@ -71,10 +71,10 @@ Data interpretations
 Unlike the data views, the interpretations can have many-to-one relationships in both directions.
 For example there are many ways for a Tibs to be constructed from the unsigned integer 3::
 
-    i1 = Tibs.from_u(3, 5)   # binary 00011
-    i2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
-    i3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
+    u1 = Tibs.from_u(3, 5)   # binary 00011
+    u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
+    u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
 
 These are three different Tibs, but they all can have equal interpretations::
 
-    i1.to_u() == i2.to_u() == i3.to_u(Endianness.Little) == 3  # True
+    u1.to_u() == u2.to_u() == u3.to_u(Endianness.Little) == 3  # True

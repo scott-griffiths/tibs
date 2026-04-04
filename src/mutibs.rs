@@ -355,6 +355,8 @@ impl Mutibs {
     }
 
     /// Return the binary representation of the Mutibs as a string.
+    ///
+    /// :return: The binary representation.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
     }
@@ -362,6 +364,8 @@ impl Mutibs {
     /// Read-only property of the binary representation of the Mutibs.
     ///
     /// Equivalent to using :meth:`~to_bin`.
+    ///
+    /// :return: The binary representation.
     #[getter]
     fn bin(&self) -> String {
         BitCollection::to_binary(self)
@@ -386,6 +390,7 @@ impl Mutibs {
 
     /// Return the octal representation of the Mutibs as a string.
     ///
+    /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
@@ -395,6 +400,7 @@ impl Mutibs {
     ///
     /// Equivalent to using :meth:`~to_oct`.
     ///
+    /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     #[getter]
     fn oct(&self) -> PyResult<String> {
@@ -420,6 +426,7 @@ impl Mutibs {
 
     /// Return the hexadecimal representation of the Mutibs as a string.
     ///
+    /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
     pub fn to_hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
@@ -429,6 +436,7 @@ impl Mutibs {
     ///
     /// Equivalent to using :meth:`~to_hex`.
     ///
+    /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
     #[getter]
     fn hex(&self) -> PyResult<String> {
@@ -437,6 +445,7 @@ impl Mutibs {
 
     /// Return the Mutibs as a bytes object.
     ///
+    /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
@@ -446,6 +455,7 @@ impl Mutibs {
     ///
     /// Equivalent to using :meth:`~to_bytes`.
     ///
+    /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     #[getter]
     fn bytes(&self) -> PyResult<Vec<u8>> {
@@ -1588,6 +1598,8 @@ impl Mutibs {
     ///
     /// This doesn't change the allocated capacity, so won't free up any memory.
     ///
+    /// :return: None.
+    ///
     pub fn clear(&mut self) {
         self.as_mut_bitvec_ref().clear();
     }
@@ -1601,6 +1613,8 @@ impl Mutibs {
     /// It can be helpful as a performance optimization to reserve enough capacity before
     /// constructing a large Mutibs incrementally. See also :meth:`reserve`.
     ///
+    /// :return: The current capacity in bits.
+    ///
     pub fn capacity(&self) -> usize {
         self.as_bitvec_ref().capacity()
     }
@@ -1612,6 +1626,7 @@ impl Mutibs {
     /// this method will have no effect. See also :meth:`capacity`.
     ///
     /// :param int additional: The number of bits that can be appended without any further memory reallocations.
+    /// :return: None.
     ///
     pub fn reserve(&mut self, additional: usize) {
         self.as_mut_bitvec_ref().reserve(additional);
