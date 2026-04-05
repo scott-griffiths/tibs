@@ -650,6 +650,8 @@ impl Tibs {
 
     /// Return the binary representation of the Tibs as a string.
     ///
+    /// Equivalent to using the ``bin`` property.
+    ///
     /// :return: The binary representation.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
@@ -682,6 +684,8 @@ impl Tibs {
     }
 
     /// Return the octal representation of the Tibs as a string.
+    ///
+    /// Equivalent to using the ``oct`` property.
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
@@ -717,6 +721,8 @@ impl Tibs {
     }
 
     /// Return the hexadecimal representation of the Tibs as a string.
+    ///
+    /// Equivalent to using the ``hex`` property.
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
@@ -1081,6 +1087,17 @@ impl Tibs {
     }
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> t = Tibs.from_hex('abc')
+    ///     >>> m = t.to_mutibs()
+    ///     >>> m *= 4
+    ///     >>> t.hex
+    ///     abc
+    ///     >>> m.hex
+    ///     abcabcabcabc
+    ///
     pub fn to_mutibs(&self) -> Mutibs {
         Mutibs::from_bv(self.to_bitvec(), self.msb0)
     }

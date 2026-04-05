@@ -43,12 +43,12 @@ html_logo = "tibs.png"
 html_theme_options = {
     "content_footer_items": ["last-updated"],
     "show_toc_level": 2,
-    "show_nav_level": 1,
     "sidebar_includehidden": True,
+    "show_nav_level": 3,
     "navigation_depth": 3,
     "collapse_navigation": False,
     "logo": {
-        # "text": "My awesome documentation",
+        "text": f"v{release}",
         "image_light": "tibs.png",
         "image_dark": "tibs.png",
     },

@@ -47,3 +47,9 @@ html[data-theme="dark"] {
         background-color: #05385e  !important;
     }
 }
+
+.navbar-brand p {
+    font-size: 0.8rem;
+    margin-bottom: -2rem;
+    white-space: nowrap;
+}

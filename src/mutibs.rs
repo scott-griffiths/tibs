@@ -356,6 +356,8 @@ impl Mutibs {
 
     /// Return the binary representation of the Mutibs as a string.
     ///
+    /// Equivalent to using the ``bin`` property.
+    ///
     /// :return: The binary representation.
     pub fn to_bin(&self) -> String {
         BitCollection::to_binary(self)
@@ -390,6 +392,8 @@ impl Mutibs {
 
     /// Return the octal representation of the Mutibs as a string.
     ///
+    /// Equivalent to using the ``oct`` property.
+    ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     pub fn to_oct(&self) -> PyResult<String> {
@@ -408,6 +412,8 @@ impl Mutibs {
     }
 
     /// Create a new instance from a hexadecimal string.
+    ///
+    /// Equivalent to using the ``hex`` property.
     ///
     /// :param str s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
