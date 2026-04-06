@@ -1,0 +1,6 @@
+.. currentmodule:: tibs
+
+
+Manipulation
+------------
+

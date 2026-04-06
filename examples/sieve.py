@@ -13,7 +13,7 @@ for i in range(2, isqrt(limit) + 1):
     if is_prime[i]:
         is_prime.unset(range(i * i, limit, i))
 
-# We can now use it to count the primes less than a billion
+# We can now use it to count how many primes.
 primes_count = is_prime.count(1)
 assert primes_count == 5_761_455
 

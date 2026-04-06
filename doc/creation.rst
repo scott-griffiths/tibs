@@ -1,15 +1,12 @@
 .. currentmodule:: tibs
 
-Creation, Views and Interpretations
------------------------------------
-
 Creation
-^^^^^^^^
+--------
 
 Tibs and Mutibs can be constructed from a number of different types. Their constructors are identical, so I'll
 use Tibs in this section, but it all applies equally well to Mutibs.
 
-Several ``from_`` constructor methods are provided:
+A wide range of ``from_`` constructor methods are provided:
 
 * :meth:`Tibs.from_bin`
 * :meth:`Tibs.from_oct`
@@ -52,14 +49,38 @@ Data views
 
 When a Tibs has been created there are multiple ways to interpret the data. These methods start with ``to_``.
 
-A subset of these methods are simply views on the data, and they either convert to a string or a bytes object.
+A subset of these methods are simple views of the binary data, and they either convert to a string or a bytes object.
 
 * :meth:`Tibs.to_bin()` / :attr:`Tibs.bin`. Converts to a string of ``0`` and ``1`` characters. Always available.
 * :meth:`Tibs.to_oct()` / :attr:`Tibs.oct`. Converts to an octal string. Length must be a multiple of 3.
 * :meth:`Tibs.to_hex()` / :attr:`Tibs.hex`. Converts to a hexadecimal string. Length must be a multiple of 4.
 * :meth:`Tibs.to_bytes()` / :attr:`Tibs.bytes`. Converts to a ``bytes`` object. Length must be a multiple of 8.
 
-The ``to_`` methods here don't accept any parameters, so read-only properties are provided as a convenient alias.
+These ``to_`` methods don't accept any parameters, so read-only properties are provided as a convenient alias.
+So instead of using ``t.to_bin()`` you can use just ``t.bin`` as there is no ambiguity.
+
+Except for ``bin``, the views all need the data to have a length that's a correct multiple, for example ``bytes``
+needs the data length to be a multiple of 8::
+
+    >>> t = Tibs('0x4145c')
+    >>> len(t)
+    20
+    >>> t.bin
+    '01000001010001011100'
+    >>> t.bytes
+    ValueError: Cannot interpret as bytes - length of 20 is not a multiple of 8 bits.
+
+.. note::
+
+    ``Tibs`` can be arbitrary sizes, so lengths are always given in bits and not bytes.
+
+To convert to a ``bytes`` object we need to change the length, for example by extending it with four ``0`` bits::
+
+    >>> (t + '0x0').bytes
+    b'AE\xc0'
+
+Here we used the string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
+before being used to create a 24-bit value that we could interpret as ``bytes``.
 
 When you have a view, you can always reconstruct the original Tibs - there is a 1:1 relationship.
 So ``t == Tibs.from_bin(t.to_bin())`` will always be true.
@@ -68,13 +89,24 @@ So ``t == Tibs.from_bin(t.to_bin())`` will always be true.
 Data interpretations
 ^^^^^^^^^^^^^^^^^^^^
 
+There are also a number of data interpretations that complement the data views:
+
+* :meth:`Tibs.to_u()`. Interprets as an unsigned integer.
+* :meth:`Tibs.to_i()`. Interprets as a signed integer.
+* :meth:`Tibs.to_f()`. Converts to Python float. Length must be 16, 32 or 64.
+
+
+
 Unlike the data views, the interpretations can have many-to-one relationships in both directions.
-For example there are many ways for a Tibs to be constructed from the unsigned integer 3::
+For example there are many ways for a ``Tibs`` to be constructed from the unsigned integer 3::
 
     u1 = Tibs.from_u(3, 5)   # binary 00011
     u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
     u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
 
-These are three different Tibs, but they all can have equal interpretations::
+These are three different ``Tibs``, but they all can have equal interpretations::
 
-    u1.to_u() == u2.to_u() == u3.to_u(Endianness.Little) == 3  # True
+    >>> set([u1, u2, u3])
+    {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
+    >>> set([u1.to_u(), u2.to_u(), u3.to_u(Endianness.Little)])
+    {3}
