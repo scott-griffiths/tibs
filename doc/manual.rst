@@ -18,10 +18,12 @@ The two classes available in the tibs module are:
 
 These classes efficiently hold arbitrary length binary data; they can be constructed
 from bytes, ints, floats, binary and hex strings, random data, and bools. They can then be
-sliced, indexed, searched, replaced, rotated, reversed, byte-swapped, set, unset,
-appended, extended, counted, concatenated, cut into chunks, and joined back together,
+sliced, spliced, searched, replaced, rotated, reversed, byte-swapped, set, unset,
+appended, extended, indexed, counted, concatenated, chunked, and joined back together,
 before being interpreted as bytes, ints, floats, binary and hex strings, and bools.
 
+The rest of this manual will talk about all the major features of the library, but will not
+be exhaustive - see the API docs for every method and parameter.
 
 .. toctree::
     :maxdepth: 1

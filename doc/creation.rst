@@ -3,25 +3,56 @@
 Creation
 --------
 
-Tibs and Mutibs can be constructed from a number of different types. Their constructors are identical, so I'll
+Tibs and Mutibs can be constructed from a number of different types. The constructors for both types are identical, so I'll
 use Tibs in this section, but it all applies equally well to Mutibs.
 
 A wide range of ``from_`` constructor methods are provided:
 
-* :meth:`Tibs.from_bin`
-* :meth:`Tibs.from_oct`
-* :meth:`Tibs.from_hex`
-* :meth:`Tibs.from_bytes`
-* :meth:`Tibs.from_string`
-* :meth:`Tibs.from_bools`
-* :meth:`Tibs.from_zeros`
-* :meth:`Tibs.from_ones`
-* :meth:`Tibs.from_random`
-* :meth:`Tibs.from_u`
-* :meth:`Tibs.from_i`
-* :meth:`Tibs.from_f`
-* :meth:`Tibs.from_joined`
+* :meth:`Tibs.from_bin`: Create from a binary string, optionally starting with '0b'.
+* :meth:`Tibs.from_oct`: Create from an octal string, optionally starting with '0o'.
+* :meth:`Tibs.from_hex`:Create from a hex string, optionally starting with '0x'.
+* :meth:`Tibs.from_bytes`: Create directly from a ``bytes`` or ``bytearray`` object.
+* :meth:`Tibs.from_string`: Create from a formatted string.
+* :meth:`Tibs.from_bools`: Convert each element in an iterable to a bool.
+* :meth:`Tibs.from_zeros`: Initialise with ``0`` bits.
+* :meth:`Tibs.from_ones`: Initialise with ``1`` bits.
+* :meth:`Tibs.from_random`: Initialise with randomly set bits.
+* :meth:`Tibs.from_u`: Create from an unsigned int to a given length.
+* :meth:`Tibs.from_i`: Create from a signed int to a given length.
+* :meth:`Tibs.from_f`: Create from an IEEE float to a 16, 32 or 64 bit length.
+* :meth:`Tibs.from_joined`: Concatenate an iterable of objects.
 
+Some examples::
+
+    # Five bits from a binary string
+    a = Tibs.from_bin('11001')
+
+    # Directly from bytes or a bytearray. Useful if creating from a file.
+    b = Tibs.from_bytes(b'some_bytes')
+
+    # Create bits from the truthiness of any iterator.
+    c = Tibs.from_bools([1, 0, 1, 1, 1])
+
+    # Optionally seeded random bits. There's also an option to use the OS's secure generator.
+    d = Tibs.from_random(1000, seed=b'a_seed')
+
+    # From a signed integer. The length can be any value up to 128 bits.
+    e = Tibs.from_i(-384, 20)
+
+    # From an unsigned integer. For whole byte lengths a byte endianness can be used.
+    f = Tibs.from_u(3, 32, Endianness.Little)
+
+    # Floating point values need to have a length of 16, 32 or 64.
+    g = Tibs.from_f(-0.125, 16)
+
+    # Hex, binary and octal strings can be parsed.
+    h = Tibs.from_string('0xff01, 0b101')
+
+    # An efficient way to join many other Tibs together.
+    i = Tibs.from_joined([a, b, c, d, e, f, g, h, i])
+
+Promotion to Tibs
+^^^^^^^^^^^^^^^^^
 
 The ``__init__`` method can also be called directly, which is often more convenient, if ever so slightly slower.
 This will look at the type of object its been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`,
@@ -32,8 +63,9 @@ So for example ::
     t = Tibs([1, 0, 1])   # Same as Tibs.from_bools([1, 0, 1])
     u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
 
-The automatic promotion of these types to Tibs is quite pervasive in the library. Roughly speaking, anywhere that
-requires a Tibs will also accept another type it can promote in this way. So, for example, if you want to count
+These types (string, iterables and bytes/bytearray) can also be automatically promoted to ``Tibs``.
+Roughly speaking, anywhere that
+requires a ``Tibs`` or ``Mutibs`` will also accept another type it can promote in this way. So, for example, if you want to count
 how many times the bit pattern `101` appears in a random bit sequence you could write::
 
     t = Tibs.from_random(1_000_000)  # A million random bits
@@ -42,6 +74,11 @@ how many times the bit pattern `101` appears in a random bit sequence you could 
 but it's more natural to use automatic promotion ::
 
     c = t.count([1, 0, 1])
+
+This automatic promotion of these types to Tibs is quite pervasive in the library, and is generally recommended
+for conciseness and clarity.
+An exception is when performance is critical and not having the small overhead of examining the type and dispatching to
+another method is significant — in this rare case using an explicit ``from_`` method for construction is preferred.
 
 
 Data views
@@ -79,7 +116,7 @@ To convert to a ``bytes`` object we need to change the length, for example by ex
     >>> (t + '0x0').bytes
     b'AE\xc0'
 
-Here we used the string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
+Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
 before being used to create a 24-bit value that we could interpret as ``bytes``.
 
 When you have a view, you can always reconstruct the original Tibs - there is a 1:1 relationship.
@@ -110,3 +147,42 @@ These are three different ``Tibs``, but they all can have equal interpretations:
     {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
     >>> set([u1.to_u(), u2.to_u(), u3.to_u(Endianness.Little)])
     {3}
+
+
+Switching between Tibs and Mutibs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The other ``to_`` methods are for changing from the immutable ``Tibs`` to the mutable ``Mutibs`` and
+vice versa.
+
+If you have a ``Tibs`` but want to use one of the in-place modifying methods like :meth:`Mutibs.reverse`, then
+you can first use :meth:`Tibs.to_mutibs` to create a mutable copy::
+
+    >>> t = Tibs.from_i(-99, 16)
+    >>> t.bin
+    '1111111110011101'
+    >>> m = t.to_mutibs()
+    >>> m.reverse()
+    >>> m.bin
+    '1011100111111111'
+
+In this simple case it's better to use the :meth:`Tibs.reversed` method, which creates and returns a new reversed
+``Tibs``. There are a number of these ``reverse`` / ``reversed`` method pairs which either modify in place (for ``Mutibs``
+only) or return a new instance.
+
+There are also some methods that are only available on ``Tibs``, which take advantage of its immutable nature.
+For example the :meth:`Tibs.chunks` method, which returns an iterator over equal sized chunks of the data, is
+not available for ``Mutibs`` as its data could change while the iterator is active. Here we can use
+:meth:`Mutibs.to_tibs`::
+
+    >>> m = Mutibs('0xb2')
+    >>> m *= 3
+    >>> for c in m.chunks(12): print(c.hex)
+    AttributeError: 'Mutibs' has no 'chunks' method, but 'Tibs' does. You could use '.to_tibs().chunks()' instead.
+    >>> for c in m.to_tibs().chunks(12): print(c.hex)
+    ...
+    b2b
+    2b2
+
+For completeness we should also mention :meth:`Mutibs.as_tibs`, which moves the data to a ``Tibs`` instead of making a copy.
+This is more efficient if you don't need to use the ``Mutibs`` any more (as it will be empty after the move).
