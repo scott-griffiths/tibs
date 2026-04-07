@@ -582,3 +582,172 @@ class TestKnownLogicFaults:
         m = Mutibs.from_ones(4)
         m.unset(range(3, -1, -1))
         assert m.to_bin() == "0000"
+
+def _lsb0_delete_expected(bits: list[bool], key) -> list[bool]:
+    expected = bits.copy()
+    del expected[key]
+    return expected
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        slice(None, 8),
+        slice(8, None),
+        slice(4, 20),
+        slice(-16, -4),
+        slice(10, 10),
+        slice(None, None, 2),
+        slice(1, None, 3),
+        slice(None, None, -1),
+        slice(20, 2, -3),
+    ],
+)
+def test_lsb0_del_slice_matches_python_list_semantics(key):
+    # Use a non-trivial pattern so direction/indexing errors are obvious.
+    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
+    before = list(m.to_tibs())
+
+    expected = _lsb0_delete_expected(before, key)
+    del m[key]
+
+    assert list(m.to_tibs()) == expected
+
+
+def _lsb0_set_expected(bits: list[bool], key, value: list[bool]) -> list[bool]:
+    expected = bits.copy()
+    expected[key] = value
+    return expected
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        (slice(None, 8), [True, False, True, False]),
+        (slice(8, None), [False, True, False]),
+        (slice(4, 20), [True] * 5),
+        (slice(-16, -4), [False, False, True, True]),
+        (slice(10, 10), [True, False, True]),
+    ],
+)
+def test_lsb0_set_slice_matches_python_list_semantics(key, value):
+    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
+    before = list(m.to_tibs())
+    replacement = Tibs.from_bools(value, bit_indexing=BitIndexing.Lsb0)
+
+    expected = _lsb0_set_expected(before, key, list(replacement))
+    m[key] = replacement
+
+    assert list(m.to_tibs()) == expected
+
+
+@pytest.mark.xfail(
+    reason="LSB0 extended-slice assignment currently does not match Python logical-index semantics",
+    strict=False,
+)
+@pytest.mark.parametrize("key", [slice(None, None, 2), slice(1, None, 3), slice(20, 2, -3)])
+def test_lsb0_set_extended_slice_matches_python_list_semantics(key):
+    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
+    before = list(m.to_tibs())
+
+    target_len = len(before[key])
+    value = [(i % 2) == 0 for i in range(target_len)]
+    replacement = Tibs.from_bools(value, bit_indexing=BitIndexing.Lsb0)
+
+    expected = _lsb0_set_expected(before, key, list(replacement))
+    m[key] = replacement
+
+    assert list(m.to_tibs()) == expected
+
+
+def test_lsb0_set_extended_slice_length_mismatch_raises():
+    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
+    with pytest.raises(ValueError):
+        m[::2] = [1, 0]
+
+
+def test_lsb0_del_full_and_single_index_regression():
+    m = Mutibs.from_hex("1234", bit_indexing=BitIndexing.Lsb0)
+    before = list(m.to_tibs())
+
+    m2 = Mutibs.from_hex("1234", bit_indexing=BitIndexing.Lsb0)
+    del m2[:]
+    assert list(m2.to_tibs()) == []
+
+    del m[0]
+    expected = before.copy()
+    del expected[0]
+    assert list(m.to_tibs()) == expected
+
+
+
+def _find_expected(
+        bits: list[bool],
+        needle: list[bool],
+        start: int | None,
+        end: int | None,
+        reverse: bool,
+        byte_aligned: bool,
+) -> int | None:
+    n = len(bits)
+    s = 0 if start is None else start
+    e = n if end is None else end
+    if s < 0:
+        s += n
+    if e < 0:
+        e += n
+    m = len(needle)
+    if m == 0 or m > (e - s):
+        return None
+
+    if reverse:
+        i_range = range(e - m, s - 1, -1)
+    else:
+        i_range = range(s, e - m + 1)
+
+    for i in i_range:
+        if byte_aligned and (i % 8 != 0):
+            continue
+        if bits[i:i + m] == needle:
+            return i
+    return None
+
+
+@pytest.mark.parametrize(
+    "needle,start,end,byte_aligned",
+    [
+        ([1, 1], None, None, False),
+        ([1, 0, 1], 3, 28, False),
+        ([0, 1], -20, -1, False),
+        pytest.param(
+            [1, 1, 0],
+            0,
+            32,
+            True,
+            marks=pytest.mark.xfail(
+                reason="LSB0 byte_aligned find/rfind does not currently match logical-index reference",
+                strict=False,
+            ),
+        ),
+        pytest.param(
+            [0, 0, 1],
+            5,
+            31,
+            True,
+            marks=pytest.mark.xfail(
+                reason="LSB0 byte_aligned find/rfind does not currently match logical-index reference",
+                strict=False,
+            ),
+        ),
+    ],
+)
+def test_lsb0_find_rfind_match_python_reference(needle, start, end, byte_aligned):
+    t = Tibs("0xd35a1c9e", bit_indexing=BitIndexing.Lsb0)
+    bits = list(t)
+    needle_bits = [bool(x) for x in needle]
+
+    expected_find = _find_expected(bits, needle_bits, start, end, False, byte_aligned)
+    expected_rfind = _find_expected(bits, needle_bits, start, end, True, byte_aligned)
+
+    assert t.find(needle, start=start, end=end, byte_aligned=byte_aligned) == expected_find
+    assert t.rfind(needle, start=start, end=end, byte_aligned=byte_aligned) == expected_rfind
