@@ -138,6 +138,32 @@ impl Mutibs {
         Ok(())
     }
 
+    pub(crate) fn apply_rotation(
+        &mut self,
+        n: i64,
+        start: Option<i64>,
+        end: Option<i64>,
+        rotate_left: bool,
+    ) -> PyResult<()> {
+        if self.is_empty() {
+            return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
+        }
+        if n < 0 {
+            return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
+        }
+
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        if start != end {
+            let n = (n % (end as i64 - start as i64)) as usize;
+            if rotate_left {
+                self.as_mut_bitvec_ref()[start..end].rotate_left(n);
+            } else {
+                self.as_mut_bitvec_ref()[start..end].rotate_right(n);
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn set_from_slice(
         &mut self,
         value: bool,
@@ -1208,19 +1234,7 @@ impl Mutibs {
         start: Option<i64>,
         end: Option<i64>,
     ) -> PyResult<()> {
-        if slf.is_empty() {
-            return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
-        }
-        if n < 0 {
-            return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
-        }
-
-        let (start, end) = validate_slice(slf.len(), start, end)?;
-        if start != end {
-            let n = (n % (end as i64 - start as i64)) as usize;
-            slf.as_mut_bitvec_ref()[start..end].rotate_left(n);
-        }
-        Ok(())
+        slf.apply_rotation(n, start, end, true)
     }
 
     /// Rotates bit pattern to the right in-place.
@@ -1246,19 +1260,27 @@ impl Mutibs {
         start: Option<i64>,
         end: Option<i64>,
     ) -> PyResult<()> {
-        if slf.is_empty() {
-            return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
-        }
-        if n < 0 {
-            return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
-        }
+        slf.apply_rotation(n, start, end, false)
+    }
 
-        let (start, end) = validate_slice(slf.len(), start, end)?;
-        if start != end {
-            let n = (n % (end as i64 - start as i64)) as usize;
-            slf.as_mut_bitvec_ref()[start..end].rotate_right(n);
-        }
-        Ok(())
+    /// Return a new Mutibs with the bits rotated to the left.
+    ///
+    /// This is the non-inplace version of :meth:`rotate_left`.
+    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    pub fn rotated_left(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+        let mut out = self.clone();
+        out.apply_rotation(n, start, end, true)?;
+        Ok(out)
+    }
+
+    /// Return a new Mutibs with the bits rotated to the right.
+    ///
+    /// This is the non-inplace version of :meth:`rotate_right`.
+    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    pub fn rotated_right(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+        let mut out = self.clone();
+        out.apply_rotation(n, start, end, false)?;
+        Ok(out)
     }
 
     /// Set one or many bits set to 1.

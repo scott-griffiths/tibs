@@ -261,6 +261,21 @@ def test_tibs_unset_at_returns_new_instance():
     assert b == '0b0011'
 
 
+def test_tibs_rotated_left_returns_new_instance():
+    a = Tibs('0b1010')
+    b = a.rotated_left(1)
+    assert a == '0b1010'
+    assert b == '0b0101'
+    assert isinstance(b, Tibs)
+
+
+def test_tibs_rotated_right_with_slice():
+    a = Tibs('0b10101100')
+    b = a.rotated_right(2, start=2, end=6)
+    assert a == '0b10101100'
+    assert b == '0b10111000'
+
+
 def test_lsb0_start_and_ends_with():
     a = Tibs.from_bytes(b'xyz', bit_indexing=BitIndexing.Lsb0)
     assert a.starts_with(b'z')

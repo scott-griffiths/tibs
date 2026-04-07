@@ -217,8 +217,7 @@ impl Tibs {
     // inverted
     // inserted
     // replaced
-    // set_at
-    // unset_at
+
 
 
     /// Return a copy of the raw byte information.
@@ -1273,6 +1272,26 @@ impl Tibs {
     ///
     pub fn __rxor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.__xor__(other)
+    }
+
+    /// Return a new Tibs with the bits rotated to the left.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.rotate_left`.
+    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    pub fn rotated_left(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        out.apply_rotation(n, start, end, true)?;
+        Ok(out.to_tibs())
+    }
+
+    /// Return a new Tibs with the bits rotated to the right.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.rotate_right`.
+    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    pub fn rotated_right(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        out.apply_rotation(n, start, end, false)?;
+        Ok(out.to_tibs())
     }
 
     /// Return the instance with every bit inverted.

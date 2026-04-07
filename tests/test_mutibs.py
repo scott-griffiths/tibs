@@ -699,6 +699,14 @@ def test_rol_method_chaining():
     assert result is None
 
 
+def test_rotated_left_returns_new_mutibs():
+    a = Mutibs('0b1010')
+    b = a.rotated_left(1)
+    assert a == '0b1010'
+    assert b == '0b0101'
+    assert isinstance(b, Mutibs)
+
+
 def test_rol_negative_amount():
     # Error cases - negative rotation
     with pytest.raises(ValueError):
@@ -760,6 +768,14 @@ def test_ror_method_chaining():
     result = a.rotate_right(1)
     assert a == '0b0101'
     assert result is None
+
+
+def test_rotated_right_returns_new_mutibs():
+    a = Mutibs('0b1010')
+    b = a.rotated_right(1)
+    assert a == '0b1010'
+    assert b == '0b0101'
+    assert isinstance(b, Mutibs)
 
 
 def test_rol_ror_cancellation():
