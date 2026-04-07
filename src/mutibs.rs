@@ -11,7 +11,7 @@ use crate::tibs_::Tibs;
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PySlice, PyTuple, PyType};
+use pyo3::types::{PyBool, PySlice, PyType};
 use std::ops::{Deref, Not};
 
 ///     A mutable container of binary data.
@@ -2208,25 +2208,18 @@ impl Mutibs {
     }
 
     // Supply some more helpful errors for things which aren't supported for Mutibs, but are for Tibs.
-    #[pyo3(signature = (*_py_args, **_py_kwargs))]
-    pub fn find_all(&self, _py_args: &Bound<'_, PyTuple>, _py_kwargs: Option<&Bound<'_, PyDict>>,) -> PyResult<()> {
-        Err(PyAttributeError::new_err("'Mutibs' has no 'find_all' method, but 'Tibs' does. You could use '.to_tibs().find_all()' instead."))
-    }
-
-    #[pyo3(signature = (*_py_args, **_py_kwargs))]
-    pub fn rfind_all(&self, _py_args: &Bound<'_, PyTuple>, _py_kwargs: Option<&Bound<'_, PyDict>>,) -> PyResult<()> {
-        Err(PyAttributeError::new_err("'Mutibs' has no 'rfind_all' method, but 'Tibs' does. You could use '.to_tibs().rfind_all()' instead."))
-    }
-
-    #[pyo3(signature = (*_py_args, **_py_kwargs))]
-    pub fn chunks(&self, _py_args: &Bound<'_, PyTuple>, _py_kwargs: Option<&Bound<'_, PyDict>>,) -> PyResult<()> {
-        Err(PyAttributeError::new_err("'Mutibs' has no 'chunks' method, but 'Tibs' does. You could use '.to_tibs().chunks()' instead."))
-    }
-
     pub fn __iter__(&self) -> PyResult<()> {
         Err(PyTypeError::new_err(
             "'Mutibs' objects are not iterable. You can use '.to_tibs()' or '.as_tibs()' to convert to a 'Tibs' object that does support iteration.",
         ))
+    }
+
+    pub fn __getattr__(&self, name: String) -> PyResult<()> {
+        if name == "find_all" || name == "rfind_all" || name == "chunks" {
+            Err(PyAttributeError::new_err(format!("'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead.")))
+        } else {
+            Err(PyAttributeError::new_err(format!("'Mutibs' object has no attribute '{name}'")))
+        }
     }
 
 }
