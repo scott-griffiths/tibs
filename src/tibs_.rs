@@ -112,7 +112,48 @@ impl Tibs {
         let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
 
         let use_find = self.msb0 ^ reverse;
-        let found = if use_find {
+        let found = if !self.msb0 && byte_aligned {
+            let mut search_start = start;
+            let mut search_end = end;
+            let needle_len = needle.len();
+            loop {
+                let candidate = if use_find {
+                    find_bitvec(
+                        self.to_bitslice(),
+                        needle.as_bitslice(),
+                        search_start,
+                        search_end,
+                        false,
+                    )
+                } else {
+                    rfind_bitvec(
+                        self.to_bitslice(),
+                        needle.as_bitslice(),
+                        search_start,
+                        search_end,
+                        false,
+                    )
+                };
+                let Some(pos) = candidate else {
+                    break None;
+                };
+                let logical = physical_match_to_logical_start(len, needle_len, pos, self.msb0);
+                if logical % 8 == 0 {
+                    break Some(pos);
+                }
+                if use_find {
+                    search_start = pos.saturating_add(1);
+                    if search_start >= search_end {
+                        break None;
+                    }
+                } else {
+                    search_end = pos.saturating_add(needle_len.saturating_sub(1));
+                    if search_end <= search_start {
+                        break None;
+                    }
+                }
+            }
+        } else if use_find {
             find_bitvec(
                 self.to_bitslice(),
                 needle.as_bitslice(),

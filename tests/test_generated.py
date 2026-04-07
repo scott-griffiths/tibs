@@ -641,10 +641,6 @@ def test_lsb0_set_slice_matches_python_list_semantics(key, value):
     assert list(m.to_tibs()) == expected
 
 
-@pytest.mark.xfail(
-    reason="LSB0 extended-slice assignment currently does not match Python logical-index semantics",
-    strict=False,
-)
 @pytest.mark.parametrize("key", [slice(None, None, 2), slice(1, None, 3), slice(20, 2, -3)])
 def test_lsb0_set_extended_slice_matches_python_list_semantics(key):
     m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
@@ -719,26 +715,8 @@ def _find_expected(
         ([1, 1], None, None, False),
         ([1, 0, 1], 3, 28, False),
         ([0, 1], -20, -1, False),
-        pytest.param(
-            [1, 1, 0],
-            0,
-            32,
-            True,
-            marks=pytest.mark.xfail(
-                reason="LSB0 byte_aligned find/rfind does not currently match logical-index reference",
-                strict=False,
-            ),
-        ),
-        pytest.param(
-            [0, 0, 1],
-            5,
-            31,
-            True,
-            marks=pytest.mark.xfail(
-                reason="LSB0 byte_aligned find/rfind does not currently match logical-index reference",
-                strict=False,
-            ),
-        ),
+        ([1, 1, 0], 0, 32, True),
+        ([0, 0, 1], 5, 31, True),
     ],
 )
 def test_lsb0_find_rfind_match_python_reference(needle, start, end, byte_aligned):

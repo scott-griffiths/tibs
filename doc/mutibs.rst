@@ -4,7 +4,7 @@ Mutibs
 ------
 
 
-The Mutibs class (pronounced 'mew-tibs') is an mutable container for binary data.
+The Mutibs class (pronounced 'mew-tibs') is a mutable container for binary data.
 
 It's mostly a superset of the Tibs class, and adds methods that can change the contained data in-place.
 
