@@ -306,6 +306,47 @@ impl Mutibs {
         Ok(())
     }
 
+    pub(crate) fn find_impl(
+        &self,
+        needle: Tibs,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        reverse: bool,
+    ) -> PyResult<Option<usize>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let needle = if self.msb0 {
+            needle
+        } else {
+            BitCollection::reverse_copy(&needle)
+        };
+        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
+
+        let use_find = self.msb0 ^ reverse;
+        let found = if use_find {
+            find_bitvec(
+                self.as_bitvec_ref(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        } else {
+            helpers::rfind_bitvec(
+                self.as_bitvec_ref(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        };
+        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
+    }
+
     pub(crate) fn set_from_slice(
         &mut self,
         value: bool,
@@ -1261,36 +1302,7 @@ impl Mutibs {
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let len = self.len();
-        let (start, end) = validate_slice(len, start, end)?;
-        let needle = if self.msb0 {
-            needle
-        } else {
-            BitCollection::reverse_copy(&needle)
-        };
-        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
-
-        let found = if self.msb0 {
-            find_bitvec(
-                self.as_bitvec_ref(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        } else {
-            helpers::rfind_bitvec(
-                self.as_bitvec_ref(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        };
-        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
+        self.find_impl(needle, start, end, byte_aligned, false)
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -1576,9 +1588,7 @@ impl Mutibs {
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        // TODO: Completely redo how rfind works!
-        let t = Tibs::from_bv(self.to_bitvec(), self.msb0);
-        t.rfind(needle, start, end, byte_aligned)
+        self.find_impl(needle, start, end, byte_aligned, true)
     }
 
     /// Invert one or many bits in place.

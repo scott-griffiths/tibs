@@ -94,6 +94,43 @@ impl Tibs {
         let full_bytes = self.data.as_raw_slice();
         full_bytes[byte_offset..final_byte].to_vec()
     }
+
+    pub(crate) fn find_impl(
+        &self,
+        needle: Tibs,
+        start: Option<i64>,
+        end: Option<i64>,
+        byte_aligned: bool,
+        reverse: bool,
+    ) -> PyResult<Option<usize>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let needle = if self.msb0 { needle } else { needle.reversed() };
+        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
+
+        let use_find = self.msb0 ^ reverse;
+        let found = if use_find {
+            find_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        } else {
+            rfind_bitvec(
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            )
+        };
+        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
+    }
 }
 
 ///     An immutable container of binary data.
@@ -900,32 +937,7 @@ impl Tibs {
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let len = self.len();
-        let (start, end) = validate_slice(len, start, end)?;
-        let needle = if self.msb0 { needle } else { needle.reversed() };
-        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
-
-        let found = if self.msb0 {
-            find_bitvec(
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        } else {
-            rfind_bitvec(
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        };
-        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
+        self.find_impl(needle, start, end, byte_aligned, false)
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -960,32 +972,7 @@ impl Tibs {
         end: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to rfind."));
-        }
-        let len = self.len();
-        let (start, end) = validate_slice(len, start, end)?;
-        let needle = if self.msb0 { needle } else { needle.reversed() };
-        let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
-
-        let found = if self.msb0 {
-            rfind_bitvec(
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        } else {
-            find_bitvec(
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            )
-        };
-        Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
+        self.find_impl(needle, start, end, byte_aligned, true)
     }
 
     /// Return whether the current Tibs starts with prefix.

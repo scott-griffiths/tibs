@@ -1,5 +1,11 @@
 # Release Notes
 
+### Unreleased: version 0.7.
+
+* Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
+  unset_at methods.
+
+
 ### April 3rd 2026: version 0.6.0.
 
 * Added LSB0 mode.
