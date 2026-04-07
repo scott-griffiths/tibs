@@ -211,6 +211,16 @@ impl Tibs {
         Ok(BitCollection::byte_swap_copy(self, byte_length)?)
     }
 
+    // TODO: These all return a new Tibs, and mirror the methods in Mutibs.
+    // rotated_left
+    // rotated_right
+    // inverted
+    // inserted
+    // replaced
+    // set_at
+    // unset_at
+
+
     /// Return a copy of the raw byte information.
     ///
     /// This returns the underlying byte data and can contain leading and trailing
@@ -1084,6 +1094,32 @@ impl Tibs {
     #[inline]
     pub fn any(&self) -> bool {
         self.to_bitslice().any()
+    }
+
+    /// Return a new Tibs with one or many bits set to 1.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.set`.
+    ///
+    /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
+    /// :return: A new Tibs.
+    /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        out.apply_set_positions(true, pos)?;
+        Ok(out.to_tibs())
+    }
+
+    /// Return a new Tibs with one or many bits set to 0.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.unset`.
+    ///
+    /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
+    /// :return: A new Tibs.
+    /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        out.apply_set_positions(false, pos)?;
+        Ok(out.to_tibs())
     }
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.

@@ -246,6 +246,21 @@ def test_count_expanded():
     assert b == 0
 
 
+def test_tibs_set_at_returns_new_instance():
+    a = Tibs('0b0000')
+    b = a.set_at([0, -1])
+    assert a == '0b0000'
+    assert b == '0b1001'
+    assert isinstance(b, Tibs)
+
+
+def test_tibs_unset_at_returns_new_instance():
+    a = Tibs('0b1111')
+    b = a.unset_at(range(2))
+    assert a == '0b1111'
+    assert b == '0b0011'
+
+
 def test_lsb0_start_and_ends_with():
     a = Tibs.from_bytes(b'xyz', bit_indexing=BitIndexing.Lsb0)
     assert a.starts_with(b'z')

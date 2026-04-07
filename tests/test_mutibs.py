@@ -424,6 +424,21 @@ def test_set_method_chaining():
     assert a == '0b1010'
 
 
+def test_set_at_returns_new_mutibs():
+    a = Mutibs('0b0000')
+    b = a.set_at([0, 2])
+    assert a == '0b0000'
+    assert b == '0b1010'
+    assert isinstance(b, Mutibs)
+
+
+def test_unset_at_returns_new_mutibs():
+    a = Mutibs('0b1111')
+    b = a.unset_at(range(1, 4))
+    assert a == '0b1111'
+    assert b == '0b1000'
+
+
 def test_set_index_out_of_range():
     # Error cases
     with pytest.raises(IndexError):
