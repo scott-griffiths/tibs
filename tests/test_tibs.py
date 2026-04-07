@@ -261,6 +261,27 @@ def test_tibs_unset_at_returns_new_instance():
     assert b == '0b0011'
 
 
+def test_tibs_inverted_returns_new_instance():
+    a = Tibs('0b1010')
+    b = a.inverted([0, -1])
+    assert a == '0b1010'
+    assert b == '0b0011'
+
+
+def test_tibs_inserted_returns_new_instance():
+    a = Tibs('0b1010')
+    b = a.inserted(2, '0b11')
+    assert a == '0b1010'
+    assert b == '0b101110'
+
+
+def test_tibs_replaced_returns_new_instance():
+    a = Tibs('0b10101010')
+    b = a.replaced('0b10', '0b11', count=2)
+    assert a == '0b10101010'
+    assert b == '0b11111010'
+
+
 def test_tibs_rotated_left_returns_new_instance():
     a = Tibs('0b1010')
     b = a.rotated_left(1)

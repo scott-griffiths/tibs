@@ -164,6 +164,148 @@ impl Mutibs {
         Ok(())
     }
 
+    pub(crate) fn apply_invert_positions(&mut self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        match pos {
+            None => {
+                *self.as_mut_bitvec_ref() = std::mem::take(&mut *self.as_mut_bitvec_ref()).not();
+            }
+            Some(p) => {
+                if let Ok(pos) = p.extract::<i64>() {
+                    let pos: usize = validate_index(pos, self.len(), self.msb0)?;
+                    let value = self.as_bitvec_ref()[pos];
+                    self.as_mut_bitvec_ref().set(pos, !value);
+                } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
+                    for pos in pos_list {
+                        let pos: usize = validate_index(pos, self.len(), self.msb0)?;
+                        let value = self.as_bitvec_ref()[pos];
+                        self.as_mut_bitvec_ref().set(pos, !value);
+                    }
+                } else {
+                    return Err(PyTypeError::new_err(
+                        "invert() argument must be an integer, an iterable of ints, or None",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn apply_replace_bits(
+        &mut self,
+        old: Tibs,
+        new: Tibs,
+        start: Option<i64>,
+        end: Option<i64>,
+        count: Option<i64>,
+        byte_aligned: bool,
+    ) -> PyResult<()> {
+        if old.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to replace."));
+        }
+
+        let len = self.len();
+        let (start, end) = validate_slice(len, start, end)?;
+        let (search_old, replace_new) = if self.msb0 {
+            (old, new)
+        } else {
+            (
+                BitCollection::reverse_copy(&old),
+                BitCollection::reverse_copy(&new),
+            )
+        };
+        let (search_start, search_end) = logical_range_to_physical(len, start, end, self.msb0);
+        let mut countdown = count.unwrap_or(i64::MAX);
+        if countdown < 0 {
+            return Err(PyValueError::new_err(format!(
+                "The count in replace() should not be negative. Received {}.",
+                countdown
+            )));
+        }
+
+        let mut starting_points: Vec<usize> = Vec::new();
+        if self.msb0 {
+            let mut current_pos = search_start;
+            while current_pos < search_end && countdown > 0 {
+                if let Some(found_pos) = find_bitvec(
+                    self.as_bitvec_ref(),
+                    search_old.as_bitslice(),
+                    current_pos,
+                    search_end,
+                    byte_aligned,
+                ) {
+                    starting_points.push(found_pos);
+                    current_pos = found_pos + search_old.len();
+                    countdown -= 1;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            let mut current_end = search_end;
+            while current_end > search_start && countdown > 0 {
+                if let Some(found_pos) = helpers::rfind_bitvec(
+                    self.as_bitvec_ref(),
+                    search_old.as_bitslice(),
+                    search_start,
+                    current_end,
+                    byte_aligned,
+                ) {
+                    starting_points.push(found_pos);
+                    current_end = found_pos;
+                    countdown -= 1;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if starting_points.is_empty() {
+            return Ok(());
+        }
+
+        starting_points.sort_unstable();
+        let mut result = BV::new();
+        let mut last_pos = 0;
+        for &pos in &starting_points {
+            result.extend_from_bitslice(&self.as_bitvec_ref()[last_pos..pos]);
+            result.extend_from_bitslice(replace_new.as_bitslice());
+            last_pos = pos + search_old.len();
+        }
+        result.extend_from_bitslice(&self.as_bitvec_ref()[last_pos..]);
+
+        *self.as_mut_bitvec_ref() = result;
+        Ok(())
+    }
+
+    pub(crate) fn apply_insert_bits(&mut self, mut pos: i64, bs: &Tibs) -> PyResult<()> {
+        if bs.is_empty() {
+            return Ok(());
+        }
+        if pos < 0 {
+            pos += self.len() as i64;
+        }
+        if pos < 0 {
+            pos = 0;
+        } else if pos > self.len() as i64 {
+            pos = self.len() as i64;
+        }
+        let logical_pos = pos as usize;
+        let insert_pos = if self.msb0 {
+            logical_pos
+        } else {
+            self.len() - logical_pos
+        };
+        if bs.len() == 1 {
+            self.as_mut_bitvec_ref()
+                .insert(insert_pos, bs.as_bitslice()[0]);
+            return Ok(());
+        }
+        let tail = self.as_mut_bitvec_ref().split_off(insert_pos);
+        self.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
+        self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
+        Ok(())
+    }
+
     pub(crate) fn set_from_slice(
         &mut self,
         value: bool,
@@ -1461,29 +1603,17 @@ impl Mutibs {
     ///
     #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
     pub fn invert<'a>(mut slf: PyRefMut<'a, Self>, pos: Option<&Bound<'a, PyAny>>) -> PyResult<()> {
-        match pos {
-            None => {
-                *slf.as_mut_bitvec_ref() = std::mem::take(&mut *slf.as_mut_bitvec_ref()).not();
-            }
-            Some(p) => {
-                if let Ok(pos) = p.extract::<i64>() {
-                    let pos: usize = validate_index(pos, slf.len(), slf.msb0)?;
-                    let value = slf.as_bitvec_ref()[pos];
-                    slf.as_mut_bitvec_ref().set(pos, !value);
-                } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
-                    for pos in pos_list {
-                        let pos: usize = validate_index(pos, slf.len(), slf.msb0)?;
-                        let value = slf.as_bitvec_ref()[pos];
-                        slf.as_mut_bitvec_ref().set(pos, !value);
-                    }
-                } else {
-                    return Err(PyTypeError::new_err(
-                        "invert() argument must be an integer, an iterable of ints, or None",
-                    ));
-                }
-            }
-        }
-        Ok(())
+        slf.apply_invert_positions(pos)
+    }
+
+    /// Return a new Mutibs with selected bits inverted.
+    ///
+    /// This is the non-inplace version of :meth:`invert`.
+    #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
+    pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut out = self.clone();
+        out.apply_invert_positions(pos)?;
+        Ok(out)
     }
 
     /// Reverse bits in-place.
@@ -1843,82 +1973,27 @@ impl Mutibs {
         } else {
             Tibs::extract(new.as_borrowed())?
         };
+        slf.apply_replace_bits(old, new, start, end, count, byte_aligned)
+    }
 
-        let len = slf.len();
-        let (start, end) = validate_slice(len, start, end)?;
-        let (search_old, replace_new) = if slf.msb0 {
-            (old, new)
-        } else {
-            (
-                BitCollection::reverse_copy(&old),
-                BitCollection::reverse_copy(&new),
-            )
-        };
-        let (search_start, search_end) = logical_range_to_physical(len, start, end, slf.msb0);
-        let mut countdown = count.unwrap_or(i64::MAX);
-        if countdown < 0 {
-            return Err(PyValueError::new_err(format!(
-                "The count in replace() should not be negative. Received {}.",
-                countdown
-            )));
-        }
-
-        // Find all non-overlapping occurrences
-        let mut starting_points: Vec<usize> = Vec::new();
-        if slf.msb0 {
-            let mut current_pos = search_start;
-            while current_pos < search_end && countdown > 0 {
-                if let Some(found_pos) = find_bitvec(
-                    slf.as_bitvec_ref(),
-                    search_old.as_bitslice(),
-                    current_pos,
-                    search_end,
-                    byte_aligned,
-                ) {
-                    starting_points.push(found_pos);
-                    current_pos = found_pos + search_old.len();
-                    countdown -= 1;
-                } else {
-                    break;
-                }
-            }
-        } else {
-            let mut current_end = search_end;
-            while current_end > search_start && countdown > 0 {
-                if let Some(found_pos) = helpers::rfind_bitvec(
-                    slf.as_bitvec_ref(),
-                    search_old.as_bitslice(),
-                    search_start,
-                    current_end,
-                    byte_aligned,
-                ) {
-                    starting_points.push(found_pos);
-                    current_end = found_pos;
-                    countdown -= 1;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if starting_points.is_empty() {
-            return Ok(());
-        }
-
-        starting_points.sort_unstable();
-
-        // Rebuild the bitstring with replacements
-        let mut result = BV::new();
-        let mut last_pos = 0;
-        for &pos in &starting_points {
-            result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..pos]);
-            result.extend_from_bitslice(replace_new.as_bitslice());
-            last_pos = pos + search_old.len();
-        }
-        result.extend_from_bitslice(&slf.as_bitvec_ref()[last_pos..]);
-
-        *slf.as_mut_bitvec_ref() = result;
-        Ok(())
+    /// Search and replace and return a new Mutibs.
+    ///
+    /// This is the non-inplace version of :meth:`replace`.
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
+    pub fn replaced(
+        &self,
+        old: &Bound<'_, PyAny>,
+        new: &Bound<'_, PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        count: Option<i64>,
+        byte_aligned: bool,
+    ) -> PyResult<Self> {
+        let old = Tibs::extract(old.as_borrowed())?;
+        let new = Tibs::extract(new.as_borrowed())?;
+        let mut out = self.clone();
+        out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
+        Ok(out)
     }
 
     /// Insert bits at position pos.
@@ -1939,7 +2014,7 @@ impl Mutibs {
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
-        mut pos: i64,
+        pos: i64,
         bs: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         // Check for self assignment
@@ -1948,34 +2023,18 @@ impl Mutibs {
         } else {
             Tibs::extract(bs.as_borrowed())?
         };
-        if bs.len() == 0 {
-            return Ok(());
-        }
-        if pos < 0 {
-            pos += slf.len() as i64;
-        }
-        // Keep Python insert behaviour. Clips to start and end.
-        if pos < 0 {
-            pos = 0;
-        } else if pos > slf.len() as i64 {
-            pos = slf.len() as i64;
-        }
-        let logical_pos = pos as usize;
-        let insert_pos = if slf.msb0 {
-            logical_pos
-        } else {
-            slf.len() - logical_pos
-        };
-        if bs.len() == 1 {
-            slf.as_mut_bitvec_ref()
-                .insert(insert_pos, bs.as_bitslice()[0]);
-            return Ok(());
-        }
-        let tail = slf.as_mut_bitvec_ref().split_off(insert_pos);
-        slf.as_mut_bitvec_ref()
-            .extend_from_bitslice(bs.as_bitslice());
-        slf.as_mut_bitvec_ref().extend_from_bitslice(&tail);
-        Ok(())
+        slf.apply_insert_bits(pos, &bs)
+    }
+
+    /// Insert bits at position pos and return a new Mutibs.
+    ///
+    /// This is the non-inplace version of :meth:`insert`.
+    #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
+    pub fn inserted(&self, pos: i64, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
+        let mut out = self.clone();
+        out.apply_insert_bits(pos, &bs)?;
+        Ok(out)
     }
 
     /// Shift bits to the left in-place.

@@ -211,15 +211,6 @@ impl Tibs {
         Ok(BitCollection::byte_swap_copy(self, byte_length)?)
     }
 
-    // TODO: These all return a new Tibs, and mirror the methods in Mutibs.
-    // rotated_left
-    // rotated_right
-    // inverted
-    // inserted
-    // replaced
-
-
-
     /// Return a copy of the raw byte information.
     ///
     /// This returns the underlying byte data and can contain leading and trailing
@@ -1118,6 +1109,47 @@ impl Tibs {
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_set_positions(false, pos)?;
+        Ok(out.to_tibs())
+    }
+
+    /// Return a new Tibs with selected bits inverted.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.invert`.
+    #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
+    pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        out.apply_invert_positions(pos)?;
+        Ok(out.to_tibs())
+    }
+
+    /// Insert bits at position pos and return a new Tibs.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.insert`.
+    #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
+    pub fn inserted(&self, pos: i64, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bs = Tibs::extract(bs.as_borrowed())?;
+        let mut out = self.to_mutibs();
+        out.apply_insert_bits(pos, &bs)?;
+        Ok(out.to_tibs())
+    }
+
+    /// Search and replace and return a new Tibs.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.replace`.
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
+    pub fn replaced(
+        &self,
+        old: &Bound<'_, PyAny>,
+        new: &Bound<'_, PyAny>,
+        start: Option<i64>,
+        end: Option<i64>,
+        count: Option<i64>,
+        byte_aligned: bool,
+    ) -> PyResult<Self> {
+        let old = Tibs::extract(old.as_borrowed())?;
+        let new = Tibs::extract(new.as_borrowed())?;
+        let mut out = self.to_mutibs();
+        out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
         Ok(out.to_tibs())
     }
 

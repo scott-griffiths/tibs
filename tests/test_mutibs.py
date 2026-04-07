@@ -342,6 +342,13 @@ def test_insert_from_mutable_bits():
     assert a == '0b101110'
 
 
+def test_inserted_returns_new_mutibs():
+    a = Mutibs('0b1010')
+    b = a.inserted(2, '0b11')
+    assert a == '0b1010'
+    assert b == '0b101110'
+
+
 def test_insert_chaining():
     a = Mutibs('0b10')
     a.insert(1, '0b1')
@@ -502,6 +509,14 @@ def test_invert_chaining():
     assert a == '0b1100'
 
 
+def test_inverted_returns_new_mutibs():
+    a = Mutibs('0b1010')
+    b = a.inverted([0, -1])
+    assert a == '0b1010'
+    assert b == '0b0011'
+    assert isinstance(b, Mutibs)
+
+
 def test_invert_index_out_of_range():
     # Error cases
     with pytest.raises(IndexError):
@@ -584,6 +599,13 @@ def test_replace_method_chaining():
     assert result is None
     a.replace('0b11', '0b00')
     assert a == '0b00000000'
+
+
+def test_replaced_returns_new_mutibs():
+    a = Mutibs('0b10101010')
+    b = a.replaced('0b10', '0b11', count=2)
+    assert a == '0b10101010'
+    assert b == '0b11111010'
 
 
 def test_replace_different_types():
