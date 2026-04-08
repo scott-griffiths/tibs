@@ -55,7 +55,7 @@ Promotion to Tibs
 ^^^^^^^^^^^^^^^^^
 
 The ``__init__`` method can also be called directly, which is often more convenient, if ever so slightly slower.
-This will look at the type of object its been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`,
+This will look at the type of object it's been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`,
 :meth:`Tibs.from_bools` or :meth:`Tibs.from_bytes` for strings, iterables and bytes types respectively.
 So for example ::
 
@@ -66,7 +66,7 @@ So for example ::
 These types (string, iterables and bytes/bytearray) can also be automatically promoted to ``Tibs``.
 Roughly speaking, anywhere that
 requires a ``Tibs`` or ``Mutibs`` will also accept another type it can promote in this way. So, for example, if you want to count
-how many times the bit pattern `101` appears in a random bit sequence you could write::
+how many times the bit pattern ``101`` appears in a random bit sequence you could write::
 
     t = Tibs.from_random(1_000_000)  # A million random bits
     c = t.count(Tibs.from_bools([1, 0, 1]))
