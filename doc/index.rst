@@ -48,8 +48,8 @@ This is all explained in the documentation and API docs that follow. ::
     -39.59375
     >>> list(t.find_all([1, 0]))
     [1, 3, 11]
-    >>> t.to_mutibs().replace([1, 1, 0], [0, 0])
-    Mutibs('0b00100001100011')
+    >>> t.replaced([1, 1, 0], [0, 0])
+    Tibs('0b00100001100011')
     >>> Tibs.from_random(1_000_000_000).count(1)
     499997660
 
@@ -65,9 +65,6 @@ One way to get to know the library is to start a Python interactive session, imp
 classes, and experiment with some of the example code in the rest of this document. ::
 
     >>> from tibs import Tibs, Mutibs
-
-
-
 
 The two main classes are:
 
