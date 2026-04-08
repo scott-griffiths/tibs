@@ -1043,8 +1043,23 @@ impl Mutibs {
         iterable: &Bound<'_, PyAny>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        Ok(Tibs::from_joined(_cls, iterable, bit_indexing)?.to_mutibs())
-    }
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
+        // Collect Tibs handles first so we can preallocate once without BV temporaries.
+        let iter = iterable.try_iter()?;
+        let mut parts: Vec<Tibs> = Vec::new();
+        let mut total_len: usize = 0;
+        for item in iter {
+            let obj = item?;
+            let tibs = Tibs::extract(obj.as_borrowed())?;
+            total_len += tibs.len();
+            parts.push(tibs);
+        }
+
+        let mut bv = BV::with_capacity(total_len);
+        for part in parts {
+            bv.extend_from_bitslice(part.as_bitslice());
+        }
+        Ok(Mutibs::from_bv(bv, msb0))    }
 
     /// The bit length of the Mutibs.
     pub fn __len__(&self) -> usize {

@@ -914,24 +914,7 @@ impl Tibs {
         iterable: &Bound<'_, PyAny>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        let msb0 = BitIndexing::is_msb0(bit_indexing);
-        // Convert each item to BV, store, and sum total length for a single allocation.
-        let iter = iterable.try_iter()?;
-        let mut bv_parts: Vec<BV> = Vec::new();
-        let mut total_len: usize = 0;
-        for item in iter {
-            let obj = item?;
-            let tibs = Tibs::extract(obj.as_borrowed())?;
-            total_len += tibs.len();
-            bv_parts.push(tibs.to_bitvec());
-        }
-
-        // Concatenate.
-        let mut bv = BV::with_capacity(total_len);
-        for b in bv_parts {
-            bv.extend_from_bitslice(&b);
-        }
-        Ok(Tibs::from_bv(bv, msb0))
+        Ok(Mutibs::from_joined(_cls, iterable, bit_indexing)?.as_tibs())
     }
 
     /// Return the Tibs as a bytes object.
