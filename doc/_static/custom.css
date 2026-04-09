@@ -20,9 +20,9 @@ code.literal {
     border: 0;
 }
 
-.bd-sidebar-primary {
-    width: 20%;
-}
+/*.bd-sidebar-primary {*/
+/*    width: 20%;*/
+/*}*/
 
 /* Don't display Section Navigation title */
 nav.bd-links p.bd-links__title, nav.bd-links p.caption {

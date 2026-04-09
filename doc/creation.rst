@@ -1,7 +1,7 @@
 .. currentmodule:: tibs
 
-Creation
---------
+Creation and Interpretation
+---------------------------
 
 Tibs and Mutibs can be constructed from a number of different types. The constructors for both types are identical, so I'll
 use Tibs in this section, but it all applies equally well to Mutibs.
@@ -10,7 +10,7 @@ A wide range of ``from_`` constructor methods are provided:
 
 * :meth:`Tibs.from_bin`: Create from a binary string, optionally starting with '0b'.
 * :meth:`Tibs.from_oct`: Create from an octal string, optionally starting with '0o'.
-* :meth:`Tibs.from_hex`:Create from a hex string, optionally starting with '0x'.
+* :meth:`Tibs.from_hex`: Create from a hex string, optionally starting with '0x'.
 * :meth:`Tibs.from_bytes`: Create directly from a ``bytes`` or ``bytearray`` object.
 * :meth:`Tibs.from_string`: Create from a formatted string.
 * :meth:`Tibs.from_bools`: Convert each element in an iterable to a bool.
@@ -184,5 +184,5 @@ not available for ``Mutibs`` as its data could change while the iterator is acti
     b2b
     2b2
 
-For completeness we should also mention :meth:`Mutibs.as_tibs`, which moves the data to a ``Tibs`` instead of making a copy.
+There is also the :meth:`Mutibs.as_tibs` method, which *moves* the data to a ``Tibs`` instead of making a copy.
 This is more efficient if you don't need to use the ``Mutibs`` any more (as it will be empty after the move).

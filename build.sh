@@ -30,7 +30,7 @@ uv pip install ".[dev]"
 
 # Build and install the entire package
 log "Building and installing package"
-uvx maturin develop
+uvx maturin develop --release
 
 # Run tests
 log "Running tests"

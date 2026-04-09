@@ -30,6 +30,7 @@ be exhaustive - see the API docs for every method and parameter.
     :hidden:
 
     creation
+    inspection
     manipulation
     tibs_vs_mutibs
     misc
