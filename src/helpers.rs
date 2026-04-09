@@ -249,13 +249,13 @@ pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
 }
 
 /// Validates the index is in range and returns an absolute MSB0 index.
-pub(crate) fn validate_index(index: i64, length: usize, is_msb0: bool) -> PyResult<usize> {
+pub(crate) fn validate_index(index: isize, length: usize, is_msb0: bool) -> PyResult<usize> {
     let index_p = if index < 0 {
-        length as i64 + index
+        length as isize + index
     } else {
         index
     };
-    if index_p >= length as i64 || index_p < 0 {
+    if index_p >= length as isize || index_p < 0 {
         return Err(PyIndexError::new_err(format!(
             "Index of {index} is out of range for length of {length}"
         )));
@@ -263,7 +263,7 @@ pub(crate) fn validate_index(index: i64, length: usize, is_msb0: bool) -> PyResu
     if is_msb0 {
         Ok(index_p as usize)
     } else {
-        Ok((length as i64 - index_p - 1) as usize)
+        Ok((length as isize - index_p - 1) as usize)
     }
 }
 
@@ -284,19 +284,19 @@ pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> 
 #[inline]
 pub(crate) fn validate_slice(
     length: usize,
-    start: Option<i64>,
-    end: Option<i64>,
+    start: Option<isize>,
+    end: Option<isize>,
 ) -> PyResult<(usize, usize)> {
     let mut start = start.unwrap_or(0);
-    let mut end = end.unwrap_or(length as i64);
+    let mut end = end.unwrap_or(length as isize);
     if start < 0 {
-        start += length as i64;
+        start += length as isize;
     }
     if end < 0 {
-        end += length as i64;
+        end += length as isize;
     }
 
-    if !(0 <= start && start <= end && end <= length as i64) {
+    if !(0 <= start && start <= end && end <= length as isize) {
         return Err(PyValueError::new_err(format!(
             "Invalid slice positions for length of {length}: start={start}, end={end}."
         )));

@@ -6,8 +6,8 @@ use pyo3::prelude::*;
 #[pyclass]
 pub struct BoolIterator {
     pub(crate) bits: Py<Tibs>,
-    pub(crate) index: usize,
-    pub(crate) length: usize,
+    pub(crate) index: isize,
+    pub(crate) length: isize,
 }
 
 #[pymethods]
@@ -21,7 +21,7 @@ impl BoolIterator {
             // It's probably pretty inefficient borrowing on each iterator.
             // It may make more sense to buffer some values in advance.
             let bits = self.bits.borrow(py);
-            let result = bits.get_index(self.index as i64);
+            let result = bits.get_index(self.index);
             self.index += 1;
             result.map(Some)
         } else {

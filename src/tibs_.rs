@@ -64,7 +64,7 @@ impl Tibs {
         Tibs {
             data: self.data.clone(),
             offset: self.offset + offset,
-            length: length,
+            length,
             msb0: self.msb0,
         }
     }
@@ -98,8 +98,8 @@ impl Tibs {
     pub(crate) fn find_impl(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
         reverse: bool,
     ) -> PyResult<Option<usize>> {
@@ -194,8 +194,8 @@ impl Tibs {
 ///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
-///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
-///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
+///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.
+///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` ``1`` bits.
 ///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
@@ -337,7 +337,7 @@ impl Tibs {
     /// Iterate over the bits of the Tibs, yielding each bit as a boolean.
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<BoolIterator>> {
         let py = slf.py();
-        let length = slf.len();
+        let length = slf.len() as isize;
         Py::new(
             py,
             BoolIterator {
@@ -438,8 +438,8 @@ impl Tibs {
     pub fn find_all(
         slf: PyRef<'_, Self>,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         if needle.is_empty() {
@@ -492,8 +492,8 @@ impl Tibs {
     pub fn rfind_all(
         slf: PyRef<'_, Self>,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
         if needle.is_empty() {
@@ -957,8 +957,8 @@ impl Tibs {
     pub fn find(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         self.find_impl(needle, start, end, byte_aligned, false)
@@ -992,8 +992,8 @@ impl Tibs {
     pub fn rfind(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         self.find_impl(needle, start, end, byte_aligned, true)
@@ -1137,7 +1137,7 @@ impl Tibs {
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.insert`.
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
-    pub fn inserted(&self, pos: i64, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
         let mut out = self.to_mutibs();
         out.apply_insert_bits(pos, &bs)?;
@@ -1152,8 +1152,8 @@ impl Tibs {
         &self,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Self> {
@@ -1189,7 +1189,7 @@ impl Tibs {
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
-        if let Ok(index) = key.extract::<i64>() {
+        if let Ok(index) = key.extract::<isize>() {
             let value: bool = self.get_index(index)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
@@ -1198,9 +1198,11 @@ impl Tibs {
         // Handle slice indexing
         if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
-            let start: i64 = indices.start.try_into()?;
-            let stop: i64 = indices.stop.try_into()?;
-            let step: i64 = indices.step.try_into()?;
+            let (start, stop, step) = (
+                isize::try_from(indices.start)?,
+                isize::try_from(indices.stop)?,
+                isize::try_from(indices.step)?,
+                );
 
             let result = if step == 1 {
                 if start < stop {
@@ -1321,7 +1323,7 @@ impl Tibs {
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.rotate_left`.
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_left(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+    pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_rotation(n, start, end, true)?;
         Ok(out.to_tibs())
@@ -1331,7 +1333,7 @@ impl Tibs {
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.rotate_right`.
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_right(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+    pub fn rotated_right(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_rotation(n, start, end, false)?;
         Ok(out.to_tibs())

@@ -27,8 +27,8 @@ use std::ops::{Deref, Not};
 ///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
 ///     * ``Mutibs.from_string(s)`` - Use a formatted string.
 ///     * ``Mutibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
-///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` '0' bits.
-///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` '1' bits.
+///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.
+///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` ``1`` bits.
 ///     * ``Mutibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
@@ -63,12 +63,12 @@ impl Mutibs {
     }
 
     #[inline]
-    pub fn set_index(&mut self, index: i64) -> PyResult<()> {
+    pub fn set_index(&mut self, index: isize) -> PyResult<()> {
         self.set_from_sequence(true, vec![index])
     }
 
     #[inline]
-    pub fn unset_index(&mut self, index: i64) -> PyResult<()> {
+    pub fn unset_index(&mut self, index: isize) -> PyResult<()> {
         self.set_from_sequence(false, vec![index])
     }
 
@@ -107,7 +107,7 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<i64>) -> PyResult<()> {
+    pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<isize>) -> PyResult<()> {
         let mut validated = Vec::with_capacity(indices.len());
         for idx in indices {
             validated.push(validate_index(idx, self.len(), self.msb0)?);
@@ -119,19 +119,19 @@ impl Mutibs {
     }
 
     pub(crate) fn apply_set_positions(&mut self, value: bool, pos: &Bound<'_, PyAny>) -> PyResult<()> {
-        if let Ok(index) = pos.extract::<i64>() {
+        if let Ok(index) = pos.extract::<isize>() {
             if value {
                 self.set_index(index)?;
             } else {
                 self.unset_index(index)?;
             }
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
-            let start = pos.getattr("start")?.extract::<Option<i64>>()?.unwrap_or(0);
-            let stop = pos.getattr("stop")?.extract::<i64>()?;
-            let step = pos.getattr("step")?.extract::<Option<i64>>()?.unwrap_or(1);
+            let start = pos.getattr("start")?.extract::<Option<isize>>()?.unwrap_or(0);
+            let stop = pos.getattr("stop")?.extract::<isize>()?;
+            let step = pos.getattr("step")?.extract::<Option<isize>>()?.unwrap_or(1);
             self.set_from_slice(value, start, stop, step)?;
         } else {
-            let indices = pos.extract::<Vec<i64>>()?;
+            let indices = pos.extract::<Vec<isize>>()?;
             self.set_from_sequence(value, indices)?;
         }
 
@@ -141,8 +141,8 @@ impl Mutibs {
     pub(crate) fn apply_rotation(
         &mut self,
         n: i64,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         rotate_left: bool,
     ) -> PyResult<()> {
         if self.is_empty() {
@@ -170,11 +170,11 @@ impl Mutibs {
                 *self.as_mut_bitvec_ref() = std::mem::take(&mut *self.as_mut_bitvec_ref()).not();
             }
             Some(p) => {
-                if let Ok(pos) = p.extract::<i64>() {
+                if let Ok(pos) = p.extract::<isize>() {
                     let pos: usize = validate_index(pos, self.len(), self.msb0)?;
                     let value = self.as_bitvec_ref()[pos];
                     self.as_mut_bitvec_ref().set(pos, !value);
-                } else if let Ok(pos_list) = p.extract::<Vec<i64>>() {
+                } else if let Ok(pos_list) = p.extract::<Vec<isize>>() {
                     for pos in pos_list {
                         let pos: usize = validate_index(pos, self.len(), self.msb0)?;
                         let value = self.as_bitvec_ref()[pos];
@@ -194,8 +194,8 @@ impl Mutibs {
         &mut self,
         old: Tibs,
         new: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<()> {
@@ -277,17 +277,17 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn apply_insert_bits(&mut self, mut pos: i64, bs: &Tibs) -> PyResult<()> {
+    pub(crate) fn apply_insert_bits(&mut self, mut pos: isize, bs: &Tibs) -> PyResult<()> {
         if bs.is_empty() {
             return Ok(());
         }
         if pos < 0 {
-            pos += self.len() as i64;
+            pos += self.len() as isize;
         }
         if pos < 0 {
             pos = 0;
-        } else if pos > self.len() as i64 {
-            pos = self.len() as i64;
+        } else if pos > self.len() as isize {
+            pos = self.len() as isize;
         }
         let logical_pos = pos as usize;
         let insert_pos = if self.msb0 {
@@ -309,8 +309,8 @@ impl Mutibs {
     pub(crate) fn find_impl(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
         reverse: bool,
     ) -> PyResult<Option<usize>> {
@@ -391,11 +391,11 @@ impl Mutibs {
     pub(crate) fn set_from_slice(
         &mut self,
         value: bool,
-        start: i64,
-        stop: i64,
-        step: i64,
+        start: isize,
+        stop: isize,
+        step: isize,
     ) -> PyResult<()> {
-        let len = self.len() as i64;
+        let len = self.len() as isize;
         if len == 0 {
             return Ok(());
         }
@@ -421,7 +421,7 @@ impl Mutibs {
             return Err(PyValueError::new_err("Step cannot be zero."));
         }
         // after your existing start/stop/step validation:
-        let len_i64 = self.len() as i64;
+        let len_isize = self.len() as isize;
         let len_usize = self.len();
         let msb0 = self.msb0;
         let mut i = positive_start;
@@ -456,7 +456,7 @@ impl Mutibs {
         let bv = self.as_mut_bitvec_ref();
         if step > 0 {
             while i < positive_stop {
-                debug_assert!(i >= 0 && i < len_i64);
+                debug_assert!(i >= 0 && i < len_isize);
                 let p = if msb0 {
                     i as usize
                 } else {
@@ -467,7 +467,7 @@ impl Mutibs {
             }
         } else {
             while i > positive_stop {
-                debug_assert!(i >= 0 && i < len_i64);
+                debug_assert!(i >= 0 && i < len_isize);
                 debug_assert!(step < 0);
                 let p = if msb0 {
                     i as usize
@@ -1074,7 +1074,7 @@ impl Mutibs {
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
-        if let Ok(index) = key.extract::<i64>() {
+        if let Ok(index) = key.extract::<isize>() {
             let value: bool = self.get_index(index)?;
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
@@ -1083,9 +1083,11 @@ impl Mutibs {
         // Handle slice indexing
         if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
-            let start: i64 = indices.start.try_into()?;
-            let stop: i64 = indices.stop.try_into()?;
-            let step: i64 = indices.step.try_into()?;
+            let (start, stop, step) = (
+                isize::try_from(indices.start)?,
+                isize::try_from(indices.stop)?,
+                isize::try_from(indices.step)?,
+            );
 
             let result = if step == 1 {
                 if start < stop {
@@ -1133,7 +1135,7 @@ impl Mutibs {
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let length = slf.len();
-        if let Ok(index) = key.extract::<i64>() {
+        if let Ok(index) = key.extract::<isize>() {
             if value.is_truthy()? {
                 slf.set_index(index)?;
             } else {
@@ -1150,9 +1152,9 @@ impl Mutibs {
             };
 
             let indices = slice.indices(length as isize)?;
-            let start: i64 = indices.start.try_into()?;
-            let stop: i64 = indices.stop.try_into()?;
-            let step: i64 = indices.step.try_into()?;
+            let start: isize = indices.start.try_into()?;
+            let stop: isize = indices.stop.try_into()?;
+            let step: isize = indices.step.try_into()?;
 
             if step == 1 {
                 debug_assert!(start >= 0);
@@ -1204,7 +1206,7 @@ impl Mutibs {
 
             // Assign element-wise in logical order.
             for (k, &pos) in positions.iter().enumerate() {
-                let v = tibs.get_index(k as i64)?;
+                let v = tibs.get_index(k as isize)?;
                 slf.as_mut_bitvec_ref().set(pos, v);
             }
 
@@ -1354,8 +1356,8 @@ impl Mutibs {
     pub fn find(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         self.find_impl(needle, start, end, byte_aligned, false)
@@ -1441,8 +1443,8 @@ impl Mutibs {
     pub fn rotate_left(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
     ) -> PyResult<()> {
         slf.apply_rotation(n, start, end, true)
     }
@@ -1467,8 +1469,8 @@ impl Mutibs {
     pub fn rotate_right(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
     ) -> PyResult<()> {
         slf.apply_rotation(n, start, end, false)
     }
@@ -1477,7 +1479,7 @@ impl Mutibs {
     ///
     /// This is the non-inplace version of :meth:`rotate_left`.
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_left(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+    pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_rotation(n, start, end, true)?;
         Ok(out)
@@ -1487,7 +1489,7 @@ impl Mutibs {
     ///
     /// This is the non-inplace version of :meth:`rotate_right`.
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_right(&self, n: i64, start: Option<i64>, end: Option<i64>) -> PyResult<Self> {
+    pub fn rotated_right(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_rotation(n, start, end, false)?;
         Ok(out)
@@ -1640,8 +1642,8 @@ impl Mutibs {
     pub fn rfind(
         &self,
         needle: Tibs,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
         self.find_impl(needle, start, end, byte_aligned, true)
@@ -2020,8 +2022,8 @@ impl Mutibs {
         mut slf: PyRefMut<'a, Self>,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<()> {
@@ -2050,8 +2052,8 @@ impl Mutibs {
         &self,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
-        start: Option<i64>,
-        end: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
     ) -> PyResult<Self> {
@@ -2080,7 +2082,7 @@ impl Mutibs {
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn insert<'a>(
         mut slf: PyRefMut<'a, Self>,
-        pos: i64,
+        pos: isize,
         bs: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         // Check for self assignment
@@ -2096,7 +2098,7 @@ impl Mutibs {
     ///
     /// This is the non-inplace version of :meth:`insert`.
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
-    pub fn inserted(&self, pos: i64, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
         let mut out = self.clone();
         out.apply_insert_bits(pos, &bs)?;

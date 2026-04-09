@@ -185,12 +185,12 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     /// Returns the bool value at a given bit index.
     #[inline]
-    fn get_index(&self, bit_index: i64) -> PyResult<bool> {
+    fn get_index(&self, bit_index: isize) -> PyResult<bool> {
         let index = validate_index(bit_index, self.len(), self.msb0())?;
         Ok(self.as_bitslice()[index])
     }
 
-    fn get_slice_with_step(&self, start_bit: i64, end_bit: i64, step: i64) -> PyResult<Self> {
+    fn get_slice_with_step(&self, start_bit: isize, end_bit: isize, step: isize) -> PyResult<Self> {
         if step == 0 {
             return Err(PyValueError::new_err(
                 "Slice step cannot be zero.".to_string(),
