@@ -4,6 +4,7 @@
 
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
   unset_at methods.
+* Added Tibs.rchunks method.
 
 
 ### April 3rd 2026: version 0.6.0.

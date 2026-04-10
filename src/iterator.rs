@@ -129,6 +129,7 @@ pub struct ChunksIterator {
     pub(crate) current_pos: usize,
     pub(crate) chunks_generated: usize,
     pub(crate) bits_len: usize,
+    pub is_reverse: bool,
 }
 
 #[pymethods]
@@ -138,16 +139,39 @@ impl ChunksIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Tibs>> {
-        if slf.chunks_generated >= slf.max_chunks || slf.current_pos >= slf.bits_len {
+        if slf.chunks_generated >= slf.max_chunks {
             return Ok(None);
         }
-        let take = std::cmp::min(slf.chunk_size, slf.bits_len - slf.current_pos);
+
+        if slf.is_reverse {
+            if slf.current_pos == 0 {
+                return Ok(None);
+            }
+        } else if slf.current_pos >= slf.bits_len {
+            return Ok(None);
+        }
+
+        let take = if slf.is_reverse {
+            std::cmp::min(slf.chunk_size, slf.current_pos)
+        } else {
+            std::cmp::min(slf.chunk_size, slf.bits_len - slf.current_pos)
+        };
+        let start = if slf.is_reverse {
+            slf.current_pos - take
+        } else {
+            slf.current_pos
+        };
+
         // Create a cheap slice without copying the underlying data.
         let chunk_bits = {
             let bits = slf.bits_object.borrow(slf.py());
-            bits.get_slice_unchecked(slf.current_pos, take)
+            bits.get_slice_unchecked(start, take)
         };
-        slf.current_pos += take;
+        if slf.is_reverse {
+            slf.current_pos -= take;
+        } else {
+            slf.current_pos += take;
+        }
         slf.chunks_generated += 1;
 
         Ok(Some(chunk_bits))

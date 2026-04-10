@@ -390,3 +390,108 @@ def test_endianness_u():
         _ = Tibs.from_u(999, 31, Endianness.Big)
     with pytest.raises(ValueError):
         _ = Tibs('0x123').to_u(Endianness.Big)
+
+
+def test_rchunks():
+    t = Tibs('0b111')
+    for i in range(5):
+        t += Tibs.from_u(i, 7)
+    c = list(t.rchunks(7))
+    assert c[-1] == '0b111'
+    for i in range(5):
+        assert c[i].to_u() == 4 - i
+        assert len(c[i]) == 7
+
+
+def test_rchunks_remainder_and_count():
+    t = Tibs('0b1010110010')
+
+    # Reverse chunks are yielded from the end of the bitstring.
+    all_chunks = list(t.rchunks(4))
+    assert [chunk.bin for chunk in all_chunks] == ['0010', '1011', '10']
+
+    # count limits the number of yielded chunks, even in reverse mode.
+    limited_chunks = list(t.rchunks(4, count=2))
+    assert [chunk.bin for chunk in limited_chunks] == ['0010', '1011']
+
+
+# def encode_tibs(t: Tibs) -> bytes:
+#     raw_flag = True
+#     msb0_flag = t.bit_indexing is BitIndexing.Msb0
+#     small_tibs_flag = len(t) <= 4
+#     flags = Tibs([raw_flag, msb0_flag, small_tibs_flag])
+#     if small_tibs_flag:
+#         if len(t) == 4:
+#             body = [0] + t
+#         elif len(t) == 3:
+#             body = [1, 0] + t
+#         elif len(t) == 2:
+#             body = [1, 1, 0] + t
+#         elif len(t) == 1:
+#             body = [1, 1, 1, 0] + t
+#         elif len(t) == 0:
+#             body = [1, 1, 1, 1, 0] + t
+#         e = flags + body
+#         assert len(e) == 8
+#         return e.to_bytes()
+#     # We have 4 bits to encode a length, so 16 values. So we can go from 5 -> 20
+#     length_continuation = len(t) > 20
+#     if not length_continuation:
+#         short_length = Tibs.from_u(len(t) - 5, 4)
+#         e = Mutibs.from_joined([flags, [0], short_length, t])
+#         padding = 8 - (len(e) % 8)
+#         if padding != 8:
+#             return (e + [0]*padding).to_bytes()
+#         return e.to_bytes()
+#     length_to_encode = Mutibs.from_u(t.len(), 64)
+#     bits_to_encode = length_to_encode[length_to_encode.find([1]):]
+#     initial_bits = len(bits_to_encode - 4) % 7  # 4 bits in first byte
+#
+#     bits_to_encode.reverse()  # TODO: it would be nice to be able to start from the other end to chunk.
+#     a = []
+#     chunks = list(bits_to_encode.chunks(7))  # TODO: This is wrong, we want the first 4 bits in the first byte.
+#     for chunk in chunks[:-1]:
+#         a.append(chunk.reversed())
+#         a.append([1])  # length_continuation flag
+#     a.append(chunks[-1].reversed())
+#     a.reverse()
+#     e = Mutibs.from_joined([flags,
+#
+#
+# def decode_tibs(b: bytes) -> Tibs:
+#     m = Mutibs.from_bytes(b)
+#     raw_flag, msb0_flag, small_tibs_flag = m[0], m[1], m[2]
+#     body = m[3:]
+#     if small_tibs_flag:
+#         if body.starts_with([0]):
+#             m_out = body[1:]
+#         elif body.starts_with([1, 0]):
+#             m_out = body[2:]
+#         elif body.starts_with([1, 1, 0]):
+#             m_out = body[3:]
+#         elif body.starts_with([1, 1, 1, 0]):
+#             m_out = body[4:]
+#         elif body.starts_with([1, 1, 1, 1, 0]):
+#             m_out = body[5:]
+#         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+#         return m_out.as_tibs()
+#     length_continuation = m[3]
+#     if not length_continuation:
+#         short_length = m[4:8].to_u() + 5
+#         m_out = Mutibs.from_bytes(b[1:])[:short_length]
+#         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+#         return m_out.as_tibs()
+#
+#
+#
+# def test_encoding():
+#     for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
+#         for length in range(1, 1000):
+#             for u in [0, 2 ** length - 1]:
+#                 print(length, u)
+#                 t = Tibs.from_u(u, length, bit_indexing = indexing_mode)
+#                 b = encode_tibs(t)
+#                 print(Tibs.from_bytes(b).bin)
+#                 t2 = decode_tibs(b)
+#                 assert t == t2
+#                 assert t.bit_indexing is t2.bit_indexing

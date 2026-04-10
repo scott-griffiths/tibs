@@ -391,6 +391,55 @@ impl Tibs {
             current_pos: 0,
             chunks_generated: 0,
             bits_len,
+            is_reverse: false,
+        };
+        Py::new(py, iter)
+    }
+
+    /// Return reverse Tibs generator by cutting into chunks, starting from the end.
+    ///
+    /// :param int chunk_size: The size in bits of the chunks to generate.
+    /// :param int | None count: If specified, at most count items are generated. Default is to cut as many times as possible.
+    /// :return: A generator yielding Tibs chunks.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> list(Tibs('0b1100111').rchunks(3))
+    ///     [Tibs('0b111'), Tibs('0b100'), Tibs('0b11')]
+    ///
+    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    pub fn rchunks(
+        slf: PyRef<'_, Self>,
+        chunk_size: i64,
+        count: Option<i64>,
+    ) -> PyResult<Py<ChunksIterator>> {
+        if chunk_size <= 0 {
+            return Err(PyValueError::new_err(format!(
+                "Cannot create chunk generator - chunk_size of {chunk_size} given, but it must be > 0."
+            )));
+        }
+        let max_chunks = match count {
+            Some(c) => {
+                if c < 0 {
+                    return Err(PyValueError::new_err(format!(
+                        "Cannot create chunk generator - count of {c} given, but it must be > 0 if present."
+                    )));
+                }
+                c as usize
+            }
+            None => usize::MAX,
+        };
+
+        let py = slf.py();
+        let bits_len = slf.len();
+        let iter = ChunksIterator {
+            bits_object: slf.into(),
+            chunk_size: chunk_size as usize,
+            max_chunks,
+            current_pos: bits_len,
+            chunks_generated: 0,
+            bits_len,
+            is_reverse: true,
         };
         Py::new(py, iter)
     }
