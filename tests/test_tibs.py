@@ -415,83 +415,128 @@ def test_rchunks_remainder_and_count():
     assert [chunk.bin for chunk in limited_chunks] == ['0010', '1011']
 
 
-# def encode_tibs(t: Tibs) -> bytes:
-#     raw_flag = True
-#     msb0_flag = t.bit_indexing is BitIndexing.Msb0
-#     small_tibs_flag = len(t) <= 4
-#     flags = Tibs([raw_flag, msb0_flag, small_tibs_flag])
-#     if small_tibs_flag:
-#         if len(t) == 4:
-#             body = [0] + t
-#         elif len(t) == 3:
-#             body = [1, 0] + t
-#         elif len(t) == 2:
-#             body = [1, 1, 0] + t
-#         elif len(t) == 1:
-#             body = [1, 1, 1, 0] + t
-#         elif len(t) == 0:
-#             body = [1, 1, 1, 1, 0] + t
-#         e = flags + body
-#         assert len(e) == 8
-#         return e.to_bytes()
-#     # We have 4 bits to encode a length, so 16 values. So we can go from 5 -> 20
-#     length_continuation = len(t) > 20
-#     if not length_continuation:
-#         short_length = Tibs.from_u(len(t) - 5, 4)
-#         e = Mutibs.from_joined([flags, [0], short_length, t])
-#         padding = 8 - (len(e) % 8)
-#         if padding != 8:
-#             return (e + [0]*padding).to_bytes()
-#         return e.to_bytes()
-#     length_to_encode = Mutibs.from_u(t.len(), 64)
-#     bits_to_encode = length_to_encode[length_to_encode.find([1]):]
-#     initial_bits = len(bits_to_encode - 4) % 7  # 4 bits in first byte
-#
-#     bits_to_encode.reverse()  # TODO: it would be nice to be able to start from the other end to chunk.
-#     a = []
-#     chunks = list(bits_to_encode.chunks(7))  # TODO: This is wrong, we want the first 4 bits in the first byte.
-#     for chunk in chunks[:-1]:
-#         a.append(chunk.reversed())
-#         a.append([1])  # length_continuation flag
-#     a.append(chunks[-1].reversed())
-#     a.reverse()
-#     e = Mutibs.from_joined([flags,
-#
-#
-# def decode_tibs(b: bytes) -> Tibs:
-#     m = Mutibs.from_bytes(b)
-#     raw_flag, msb0_flag, small_tibs_flag = m[0], m[1], m[2]
-#     body = m[3:]
-#     if small_tibs_flag:
-#         if body.starts_with([0]):
-#             m_out = body[1:]
-#         elif body.starts_with([1, 0]):
-#             m_out = body[2:]
-#         elif body.starts_with([1, 1, 0]):
-#             m_out = body[3:]
-#         elif body.starts_with([1, 1, 1, 0]):
-#             m_out = body[4:]
-#         elif body.starts_with([1, 1, 1, 1, 0]):
-#             m_out = body[5:]
-#         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
-#         return m_out.as_tibs()
-#     length_continuation = m[3]
-#     if not length_continuation:
-#         short_length = m[4:8].to_u() + 5
-#         m_out = Mutibs.from_bytes(b[1:])[:short_length]
-#         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
-#         return m_out.as_tibs()
-#
-#
-#
-# def test_encoding():
-#     for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
-#         for length in range(1, 1000):
-#             for u in [0, 2 ** length - 1]:
-#                 print(length, u)
-#                 t = Tibs.from_u(u, length, bit_indexing = indexing_mode)
-#                 b = encode_tibs(t)
-#                 print(Tibs.from_bytes(b).bin)
-#                 t2 = decode_tibs(b)
-#                 assert t == t2
-#                 assert t.bit_indexing is t2.bit_indexing
+
+def encode_long_int(u: int) -> Tibs:
+    if u <= 127:
+        return [0] + Tibs.from_u(u, 7)
+    # Work out how many bits long it is
+    t = Tibs.from_u(u, 64)
+    t = t[t.find([1]):]
+    # For each non-final chunk of 7, we want a continuation bit and then the data
+    chunks = list(t.rchunks(7))[::-1]
+    if len(chunks[0]) < 7:
+        chunks[0] = [0]*(7 - len(chunks[0])) + chunks[0]
+    m = Mutibs()
+    for chunk in chunks[:-1]:
+        m += [1] + chunk  # With continuation bit
+    m += [0] + chunks[-1]
+    assert len(m) % 8 == 0
+    return m.as_tibs()
+
+
+def decode_to_long_int(t: Tibs) -> int:
+    assert len(t) > 0 and len(t) % 8 == 0
+    if len(t) == 8:
+        assert t[0] == 0
+        return t[1:].to_u()
+    m = Mutibs()
+    for byte in t.chunks(8):
+        m += byte[1:]
+        if byte[0] == 0:
+            break
+    return m.to_u()
+
+
+def test_encoding_ints():
+    lengths = [0, 1, 2, 3, 14, 55, 101, 1022, 1023123, 12312451251, 86987698138715283]
+    for u in lengths:
+        t = encode_long_int(u)
+        u2 = decode_to_long_int(t)
+        assert u == u2
+
+
+def encode_tibs(t: Tibs) -> bytes:
+    raw_flag = True
+    msb0_flag = t.bit_indexing is BitIndexing.Msb0
+    small_tibs_flag = len(t) <= 4
+    flags = Tibs([raw_flag, msb0_flag, small_tibs_flag])
+    if small_tibs_flag:
+        if len(t) == 4:
+            body = [0] + t
+        elif len(t) == 3:
+            body = [1, 0] + t
+        elif len(t) == 2:
+            body = [1, 1, 0] + t
+        elif len(t) == 1:
+            body = [1, 1, 1, 0] + t
+        elif len(t) == 0:
+            body = [1, 1, 1, 1, 0] + t
+        e = flags + body
+        assert len(e) == 8
+        return e.to_bytes()
+    # We have 4 bits to encode a length, so 16 values. So we can go from 5 -> 20
+    length_continuation = len(t) > 20
+    if not length_continuation:
+        short_length = Tibs.from_u(len(t) - 5, 4)
+        e = Mutibs.from_joined([flags, [0], short_length, t])
+        padding = 8 - (len(e) % 8)
+        if padding != 8:
+            return (e + [0]*padding).to_bytes()
+        return e.to_bytes()
+    # Now we need variable length encoding of the length > 20
+    var_length = encode_long_int(len(t) - 20)
+    e = Mutibs.from_joined([flags, [1], [0, 0, 0, 0], var_length])
+    assert len(e) % 8 == 0
+    e += t
+    padding = 8 - (len(e) % 8)
+    if padding != 8:
+        return (e + [0]*padding).to_bytes()
+    return e.to_bytes()
+
+
+def decode_tibs(b: bytes) -> Tibs:
+    m = Mutibs.from_bytes(b)
+    raw_flag, msb0_flag, small_tibs_flag = m[0], m[1], m[2]
+    body = m[3:]
+    if small_tibs_flag:
+        if body.starts_with([0]):
+            m_out = body[1:]
+        elif body.starts_with([1, 0]):
+            m_out = body[2:]
+        elif body.starts_with([1, 1, 0]):
+            m_out = body[3:]
+        elif body.starts_with([1, 1, 1, 0]):
+            m_out = body[4:]
+        elif body.starts_with([1, 1, 1, 1, 0]):
+            m_out = body[5:]
+        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+        return m_out.as_tibs()
+    length_continuation = m[3]
+    if not length_continuation:
+        short_length = m[4:8].to_u() + 5
+        m_out = Mutibs.from_bytes(b[1:])[:short_length]
+        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+        return m_out.as_tibs()
+    u = Mutibs()
+    for byte in m[8:].to_tibs().chunks(8):
+        if byte[0] == 1:  # Continuation bit
+            u += byte
+        else:
+            u += byte
+            break
+    data_start = 8 + len(u)
+    length = decode_to_long_int(u.as_tibs()) + 20
+    m_out = m[data_start: data_start + length]
+    m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+    return m_out.as_tibs()
+
+
+def test_encoding():
+    for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
+        for length in [2**23, 666666, 123115125, 1_000_000_001]:
+            t = Tibs.from_random(length, bit_indexing = indexing_mode)
+            b = encode_tibs(t)
+            t2 = decode_tibs(b)
+            assert t == t2
+            assert t.bit_indexing is t2.bit_indexing
+            print(f"{len(t)}: {len(b)*8}: {len(b)*8 - (len(t) + 7) // 8 * 8}")
