@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import pytest
 from tibs import Tibs, Mutibs, BitIndexing, Endianness
-
+import random
 
 def test_from_bin():
     a = Tibs.from_bin('010')
@@ -456,84 +456,97 @@ def test_encoding_ints():
 
 
 def encode_tibs(t: Tibs) -> bytes:
-    raw_flag = True
     msb0_flag = t.bit_indexing is BitIndexing.Msb0
-    small_tibs_flag = len(t) <= 4
-    flags = Tibs([raw_flag, msb0_flag, small_tibs_flag])
-    if small_tibs_flag:
-        if len(t) == 4:
-            body = [0] + t
-        elif len(t) == 3:
-            body = [1, 0] + t
-        elif len(t) == 2:
-            body = [1, 1, 0] + t
-        elif len(t) == 1:
-            body = [1, 1, 1, 0] + t
-        elif len(t) == 0:
-            body = [1, 1, 1, 1, 0] + t
-        e = flags + body
+    n = len(t)
+
+    # Single-byte form: bit0=1, bit1=msb0_flag, then prefix-coded length/data for 0..5 bits.
+    if n <= 5:
+        if n == 5:
+            e = Mutibs.from_joined([[1, msb0_flag, 1], t])
+        elif n == 4:
+            e = Mutibs.from_joined([[1, msb0_flag, 0, 1], t])
+        elif n == 3:
+            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 1], t])
+        elif n == 2:
+            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 0, 1], t])
+        elif n == 1:
+            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 0, 0, 1], t])
+        else:
+            # Canonical empty representation sets remaining bits to zero.
+            e = Mutibs([1, msb0_flag, 0, 0, 0, 0, 0, 0])
         assert len(e) == 8
         return e.to_bytes()
-    # We have 4 bits to encode a length, so 16 values. So we can go from 5 -> 20
-    length_continuation = len(t) > 20
-    if not length_continuation:
-        short_length = Tibs.from_u(len(t) - 5, 4)
-        e = Mutibs.from_joined([flags, [0], short_length, t])
-        padding = 8 - (len(e) % 8)
-        if padding != 8:
-            return (e + [0]*padding).to_bytes()
+
+    # Short form: bit0=0, bit1=msb0_flag, bit2=1, bit3..bit7 = length_minus_6.
+    if n <= 37:
+        header = Mutibs.from_joined([[0, msb0_flag, 1], Tibs.from_u(n - 6, 5)])
+        e = Mutibs.from_joined([header, t])
+        padding = (-len(e)) % 8
+        if padding:
+            e += [0] * padding
         return e.to_bytes()
-    # Now we need variable length encoding of the length > 20
-    var_length = encode_long_int(len(t) - 20)
-    e = Mutibs.from_joined([flags, [1], [0, 0, 0, 0], var_length])
+
+    # Long form: bit0=0, bit1=msb0_flag, bit2=0, codec=00(raw), bit_padding(3).
+    byte_length = (n + 7) // 8
+    bit_padding = byte_length * 8 - n
+    header = Mutibs.from_joined([[0, msb0_flag, 0, 0, 0], Tibs.from_u(bit_padding, 3)])
+    var_length = encode_long_int(byte_length)
+    e = Mutibs.from_joined([header, var_length, t])
+    if bit_padding:
+        e += [0] * bit_padding
     assert len(e) % 8 == 0
-    e += t
-    padding = 8 - (len(e) % 8)
-    if padding != 8:
-        return (e + [0]*padding).to_bytes()
     return e.to_bytes()
 
 
 def decode_tibs(b: bytes) -> Tibs:
     m = Mutibs.from_bytes(b)
-    raw_flag, msb0_flag, small_tibs_flag = m[0], m[1], m[2]
-    body = m[3:]
-    if small_tibs_flag:
-        if body.starts_with([0]):
-            m_out = body[1:]
-        elif body.starts_with([1, 0]):
-            m_out = body[2:]
-        elif body.starts_with([1, 1, 0]):
-            m_out = body[3:]
-        elif body.starts_with([1, 1, 1, 0]):
-            m_out = body[4:]
-        elif body.starts_with([1, 1, 1, 1, 0]):
-            m_out = body[5:]
-        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
-        return m_out.as_tibs()
-    length_continuation = m[3]
-    if not length_continuation:
-        short_length = m[4:8].to_u() + 5
-        m_out = Mutibs.from_bytes(b[1:])[:short_length]
-        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
-        return m_out.as_tibs()
-    u = Mutibs()
-    for byte in m[8:].to_tibs().chunks(8):
-        if byte[0] == 1:  # Continuation bit
-            u += byte
+    single_byte_flag, msb0_flag, mode_flag = m[0], m[1], m[2]
+
+    if single_byte_flag:
+        if m[2] == 1:
+            m_out = m[3:8]
+        elif m[3] == 1:
+            m_out = m[4:8]
+        elif m[4] == 1:
+            m_out = m[5:8]
+        elif m[5] == 1:
+            m_out = m[6:8]
+        elif m[6] == 1:
+            m_out = m[7:8]
         else:
-            u += byte
+            m_out = Mutibs()
+        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+        return m_out.as_tibs()
+
+    if mode_flag:
+        short_length = m[3:8].to_u() + 6
+        m_out = m[8:8 + short_length]
+        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
+        return m_out.as_tibs()
+
+    codec = m[3:5].to_u()
+    assert codec == 0
+    bit_padding = m[5:8].to_u()
+    u = Mutibs()
+    var_len_bits = 0
+    for byte in m[8:].to_tibs().chunks(8):
+        var_len_bits += 8
+        u += byte
+        if byte[0] == 0:
             break
-    data_start = 8 + len(u)
-    length = decode_to_long_int(u.as_tibs()) + 20
-    m_out = m[data_start: data_start + length]
+    byte_length = decode_to_long_int(u.as_tibs())
+    data_start = 8 + var_len_bits
+    m_out = m[data_start: data_start + byte_length * 8]
+    if bit_padding:
+        m_out = m_out[:-bit_padding]
     m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
     return m_out.as_tibs()
 
 
 def test_encoding():
     for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
-        for length in [2**23, 666666, 123115125, 1_000_000_001]:
+        for _ in range(100000):
+            length = random.randint(0, 129)
             t = Tibs.from_random(length, bit_indexing = indexing_mode)
             b = encode_tibs(t)
             t2 = decode_tibs(b)
