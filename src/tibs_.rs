@@ -1410,6 +1410,51 @@ impl Tibs {
         Ok(out.to_tibs())
     }
 
+    #[classmethod]
+    #[pyo3(signature = (b, /), text_signature = "(cls, b)")]
+    pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Tibs> {
+        if b.len() == 0 {
+            return Err(PyValueError::new_err("Cannot decode an empty bytes."));
+        }
+        let bv = BV::from_vec(b);
+        let single_byte_flag = bv[0];
+        let msb0_flag = bv[1];
+        if single_byte_flag {
+            if bv.len() != 8 {
+                return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+            }
+            for bit_pos in 2..7 {
+                if bv[bit_pos] == true {
+                    return Ok(Tibs::from_bv(bv[bit_pos + 1..].to_bitvec(), msb0_flag));
+                }
+            }
+            if bv[7] == false {
+                return Err(PyValueError::new_err("The encoded sequence is reserved."));
+            }
+            return Ok(Tibs::empty(msb0_flag));
+        }
+        let short_form_flag = bv[2];
+        if short_form_flag {
+            let mut length_minus_6 = 0;
+            for bit in bv[3..8].iter() {
+                length_minus_6 = (length_minus_6 << 1) | (*bit as usize);
+            }
+            let bit_length = length_minus_6 + 6;
+            if bv.len() < bit_length + 8 {
+                return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            }
+            if bv.len() != (1 + (bit_length + 7) / 8) * 8 {
+                return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+            }
+            // TODO: Should we check that padding bits are all zeros?
+            return Ok(Tibs::from_bv(bv[8..8 + bit_length].to_bitvec(), msb0_flag));
+
+        }
+        // TODO
+        return Ok(Tibs::empty(msb0_flag));
+    }
+
+
     /// Encode the tibs as a bytes instance.
     ///
     /// The bit length and the bit indexing are stored in the encoded bytes.
