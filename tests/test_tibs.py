@@ -543,7 +543,7 @@ def decode_tibs(b: bytes) -> Tibs:
 
 def test_encoding():
     for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
-        for length in range(37):
+        for length in range(400):
             # value = random.randint(0, (1 << length) - 1)
             t = Tibs.from_random(length, bit_indexing = indexing_mode)
             b = encode_tibs(t)

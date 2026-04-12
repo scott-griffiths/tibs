@@ -72,6 +72,40 @@ impl Tibs {
         out
     }
 
+    fn decode_varint(bits: &BS) -> PyResult<(usize, usize)> {
+        let mut value: usize = 0;
+        let mut bits_consumed: usize = 0;
+        let mut saw_final = false;
+
+        for byte in bits.chunks(8) {
+            if byte.len() < 8 {
+                break;
+            }
+            let continuation = byte[0];
+            let payload = byte[1..8].load_be::<u8>() as usize;
+
+            // Per spec, a first varint byte of 10000000 is reserved.
+            if bits_consumed == 0 && continuation && payload == 0 {
+                return Err(PyValueError::new_err("The encoded sequence is reserved."));
+            }
+            if value > (usize::MAX >> 7) {
+                return Err(PyValueError::new_err("The encoded sequence is too large to decode."));
+            }
+            value = (value << 7) | payload;
+            bits_consumed += 8;
+
+            if !continuation {
+                saw_final = true;
+                break;
+            }
+        }
+
+        if !saw_final {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        Ok((value, bits_consumed))
+    }
+
     pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
         let length = bv.len();
         Tibs {
@@ -1450,8 +1484,35 @@ impl Tibs {
             return Ok(Tibs::from_bv(bv[8..8 + bit_length].to_bitvec(), msb0_flag));
 
         }
-        // TODO
-        return Ok(Tibs::empty(msb0_flag));
+
+        // Long form
+        let codec = bv[3..5].load_be::<u8>();
+        if codec != 0 {
+            return Err(PyValueError::new_err("The codec value is reserved."));
+        }
+        let bit_padding = bv[5..8].load_be::<u8>() as usize;
+
+        let (byte_length, varint_bits) = Self::decode_varint(&bv[8..])?;
+        let data_start = 8 + varint_bits;
+        let data_bits = byte_length
+            .checked_mul(8)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        let data_end = data_start
+            .checked_add(data_bits)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+
+        if bv.len() < data_end {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        if bv.len() != data_end {
+            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+        }
+        if bit_padding > data_bits {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+
+        let out_end = data_end - bit_padding;
+        Ok(Tibs::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
     }
 
 
