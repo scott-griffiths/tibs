@@ -25,6 +25,11 @@ be used to reconstruct the Tibs via :meth:`~Tibs.decode`.
 The raw encoding is very efficient, and the encoded sequence contains the bit length, which
 means that they can be safely concatenated without losing any information.
 
+It is planned that extra codecs will be added that can compress the data at a later date,
+but the base raw implementation does a good job at the smaller bit sequences that compression
+algorithms would be very inefficient at storing. For longer sequences the raw codec overhead
+is still small.
+
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
 
@@ -52,7 +57,7 @@ Each encoded Tibs is in one of three forms, determined by its bit length:
 The single byte and short forms can only be used to encode 0..5 bits and 6..37 bits respectively.
 
 The long form can be used for any length, but is required for lengths >37 bits. It is not
-recommended to use the long form for lengths <=37 bits as it will less efficient.
+recommended to use the long form for lengths <=37 bits as it will be less efficient.
 
 The encoding and decoding methods are symmetric.
 Note that when decoding, any illegal or reserved values encountered are considered errors.

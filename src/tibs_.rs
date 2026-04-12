@@ -50,6 +50,28 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
+    fn encode_varint(mut u: u64) -> BV {
+        let mut chunks: Vec<u8> = Vec::new();
+        loop {
+            chunks.push((u & 0x7f) as u8);
+            u >>= 7;
+            if u == 0 {
+                break;
+            }
+        }
+        chunks.reverse();
+
+        let mut out: BV = BV::with_capacity(chunks.len() * 8);
+        for (i, chunk) in chunks.iter().enumerate() {
+            let continuation = i + 1 < chunks.len(); // 1 if another varint byte follows
+            out.push(continuation);
+            for shift in (0..7).rev() {
+                out.push(((chunk >> shift) & 1) == 1);
+            }
+        }
+        out
+    }
+
     pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
         let length = bv.len();
         Tibs {
@@ -1387,6 +1409,79 @@ impl Tibs {
         out.apply_rotation(n, start, end, false)?;
         Ok(out.to_tibs())
     }
+
+    /// Encode the tibs as a bytes instance.
+    ///
+    /// The bit length and the bit indexing are stored in the encoded bytes.
+    ///
+    /// The bytes instance can be used to recreate the Tibs exactly -
+    /// see :meth:`Tibs.decode`.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> t = Tibs([1, 0, 1, 1, 1], bit_indexing=BitIndexing.Lsb0)
+    ///     >>> b = t.encode()
+    ///     >>> b
+    ///     b'\xb7'
+    ///     >>> Tibs.decode(b)
+    ///     Tibs('0b10111', BitIndexing.Lsb0)
+    ///
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bv: BV = BV::new();
+        let bit_length = self.len();
+        match bit_length {
+            0..=5 => {
+                bv.push(true);  // single_byte_flag
+                bv.push(self.msb0);
+                let leading_zeros = 5 - bit_length;
+                for _ in 0..leading_zeros {
+                    bv.push(false);
+                }
+                bv.push(true);
+                bv.extend_from_bitslice(self.to_bitslice());
+                bv.into_vec()
+            },
+            6..=37 => {
+                bv.push(false);  // single_byte_flag
+                bv.push(self.msb0);
+                bv.push(true);  // short_form_flag
+                let length_minus_6 = (bit_length - 6) as u8;
+                for shift in (0..5).rev() {
+                    bv.push((length_minus_6 >> shift) & 1 == 1);
+                }
+                bv.extend(self.to_bitvec());
+                let padding_bits = 8 - bv.len() % 8;
+                if padding_bits != 8 {
+                    for _ in 0..padding_bits {
+                        bv.push(false);
+                    }
+                }
+                bv.into_vec()
+            },
+            38.. => {
+                bv.push(false);  // single_byte_flag
+                bv.push(self.msb0);
+                bv.push(false);  // short_form_flag
+                // codec is hard-wired to 'raw' for now
+                bv.push(false);
+                bv.push(false);
+                let data_byte_length = (bit_length + 7) / 8;
+                let bit_padding = data_byte_length * 8 - bit_length;
+                debug_assert!(bit_padding <= 7);
+                for shift in (0..3).rev() {
+                    bv.push((bit_padding >> shift) & 1 == 1);
+                }
+                // Encode the length in a varint
+                bv.extend(Self::encode_varint(data_byte_length as u64));
+                bv.extend(self.to_bitvec());
+                for _ in 0..bit_padding {
+                    bv.push(false);
+                }
+                bv.into_vec()
+            }
+        }
+    }
+
 
     /// Return the instance with every bit inverted.
     ///

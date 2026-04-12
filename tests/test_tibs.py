@@ -472,8 +472,8 @@ def encode_tibs(t: Tibs) -> bytes:
         elif n == 1:
             e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 0, 0, 1], t])
         else:
-            # Canonical empty representation sets remaining bits to zero.
-            e = Mutibs([1, msb0_flag, 0, 0, 0, 0, 0, 0])
+            # Canonical empty representation sets final bit to one.
+            e = Mutibs([1, msb0_flag, 0, 0, 0, 0, 0, 1])
         assert len(e) == 8
         return e.to_bytes()
 
@@ -500,7 +500,7 @@ def encode_tibs(t: Tibs) -> bytes:
 
 def decode_tibs(b: bytes) -> Tibs:
     m = Mutibs.from_bytes(b)
-    single_byte_flag, msb0_flag, mode_flag = m[0], m[1], m[2]
+    single_byte_flag, msb0_flag, short_form_flag = m[0], m[1], m[2]
 
     if single_byte_flag:
         if m[2] == 1:
@@ -518,7 +518,7 @@ def decode_tibs(b: bytes) -> Tibs:
         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
         return m_out.as_tibs()
 
-    if mode_flag:
+    if short_form_flag:
         short_length = m[3:8].to_u() + 6
         m_out = m[8:8 + short_length]
         m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
@@ -528,14 +528,12 @@ def decode_tibs(b: bytes) -> Tibs:
     assert codec == 0
     bit_padding = m[5:8].to_u()
     u = Mutibs()
-    var_len_bits = 0
     for byte in m[8:].to_tibs().chunks(8):
-        var_len_bits += 8
         u += byte
         if byte[0] == 0:
             break
+    data_start = 8 + len(u)
     byte_length = decode_to_long_int(u.as_tibs())
-    data_start = 8 + var_len_bits
     m_out = m[data_start: data_start + byte_length * 8]
     if bit_padding:
         m_out = m_out[:-bit_padding]
@@ -545,11 +543,15 @@ def decode_tibs(b: bytes) -> Tibs:
 
 def test_encoding():
     for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
-        for _ in range(100000):
-            length = random.randint(0, 129)
+        for _ in range(100):
+            length = random.randint(0, 1024)
             t = Tibs.from_random(length, bit_indexing = indexing_mode)
             b = encode_tibs(t)
+            b2 = t.encode()
+            assert b == b2
             t2 = decode_tibs(b)
+            t3 = Tibs.decode(b)
             assert t == t2
+            assert t2 == t3
             assert t.bit_indexing is t2.bit_indexing
             print(f"{len(t)}: {len(b)*8}: {len(b)*8 - (len(t) + 7) // 8 * 8}")
