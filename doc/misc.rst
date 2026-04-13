@@ -17,7 +17,6 @@ TODO
 Byte encoding format
 ^^^^^^^^^^^^^^^^^^^^
 
-(Note this isn't implemented yet)
 
 The :meth:`~Tibs.encode` method stores an arbitrary Tibs as a sequence of bytes which can
 be used to reconstruct the Tibs via :meth:`~Tibs.decode`.
@@ -29,6 +28,10 @@ It is planned that extra codecs will be added that can compress the data at a la
 but the base raw implementation does a good job at the smaller bit sequences that compression
 algorithms would be very inefficient at storing. For longer sequences the raw codec overhead
 is still small.
+
+The mutable nature of ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
+``Mutibs.decode(t.encode())`` is equivalent to ``t.to_mutibs()`` for example, though of
+course the more efficient :meth:`Tibs.to_mutibs` method is preferred in this case.
 
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"

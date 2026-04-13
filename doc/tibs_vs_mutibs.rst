@@ -68,7 +68,7 @@ in place. We could have instead used a ``Tibs``, and returned a new value on eac
             is_prime = is_prime.unset_at(range(i * i, limit, i))  # No mutation
 
 The :meth:`Tibs.unset_at` method returns a brand new ``Tibs`` on each iteration. Most
-of the time in this version is spend allocating memory each new ``Tibs``,
+of the time in this version is spent allocating memory each new ``Tibs``,
 which is only being used to generate the next value before being destroyed.
 
 On my laptop the mutating version runs about 30x faster; calculating the first 100 million

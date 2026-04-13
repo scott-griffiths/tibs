@@ -1209,6 +1209,7 @@ impl Tibs {
     /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
     /// :return: A new Tibs.
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_set_positions(true, pos)?;
@@ -1222,6 +1223,7 @@ impl Tibs {
     /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
     /// :return: A new Tibs.
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_set_positions(false, pos)?;
@@ -1231,6 +1233,7 @@ impl Tibs {
     /// Return a new Tibs with selected bits inverted.
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.invert`.
+    ///
     #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
@@ -1241,6 +1244,7 @@ impl Tibs {
     /// Insert bits at position pos and return a new Tibs.
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.insert`.
+    ///
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
@@ -1427,6 +1431,7 @@ impl Tibs {
     /// Return a new Tibs with the bits rotated to the left.
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.rotate_left`.
+    ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
@@ -1437,6 +1442,7 @@ impl Tibs {
     /// Return a new Tibs with the bits rotated to the right.
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.rotate_right`.
+    ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotated_right(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
@@ -1444,6 +1450,11 @@ impl Tibs {
         Ok(out.to_tibs())
     }
 
+    /// Create a Tibs by decoding bytes created via Tibs.encode()
+    ///
+    /// :return: A new Tibs.
+    /// :raises ValueError: for badly formed, truncated or extended input bytes.
+    ///
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Tibs> {
@@ -1469,10 +1480,7 @@ impl Tibs {
         }
         let short_form_flag = bv[2];
         if short_form_flag {
-            let mut length_minus_6 = 0;
-            for bit in bv[3..8].iter() {
-                length_minus_6 = (length_minus_6 << 1) | (*bit as usize);
-            }
+            let length_minus_6 = bv[3..8].load_be::<u8>() as usize;
             let bit_length = length_minus_6 + 6;
             if bv.len() < bit_length + 8 {
                 return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
