@@ -152,13 +152,14 @@ The first byte's format will be::
     bit3..bit4: codec
     bit5..bit7: bit_padding
 
-There are 2 bits to specify the codec. Currently only ``00`` for the 'raw' encoding is supported.
+There are 2 bits to specify the codec. Currently ``00`` is used for the implemented 'raw'
+encoding and ``01`` is assigned to Rice encoding for a future implementation.
 
 .. csv-table::
    :header: "``codec``", "Byte codec"
 
    ``00``, raw
-   ``01``, reserved
+   ``01``, rice
    ``10``, reserved
    ``11``, reserved
 
@@ -180,10 +181,51 @@ Varint rules:
 
 A first varint byte equal to ``10000000`` is not permitted and is reserved.
 
-The varint is then followed by ``byte_length`` bytes, which is decoded according to the ``codec`` to a sequence of bytes.
-For the raw codec the bytes are just stored literally.
+Raw decoding
+""""""""""""
 
-Finally ``bit_padding`` bits at the end of the decoded bytes are removed to get the final Tibs instance.
+If the ``codec`` is 'raw', this is then followed by ``byte_length`` bytes. The raw bit sequence are these bytes with ``bit_padding`` bits at the end removed.
+
+This bit sequence is just the bits of the Tibs.
+
+Rice decoding
+"""""""""""""
+
+If the ``codec`` is 'rice', next comes a configuration byte::
+
+    bit0..4: k (unsigned int, range 0 - 31)
+    bit5: sparse_bit
+    bit6: final_bit
+    bit7: reserved
+
+This is then followed by ``byte_length`` bytes, with ``bit_padding`` bits at the end removed in the same way as for raw.
+This bit sequence is then decoded as follows:
+
+- The bit sequence is a concatenation of Rice-coded unsigned integers using the configured ``k`` value.
+- Each integer is decoded in the usual Rice form:
+
+  1. Count a unary prefix of ``1`` bits up to and excluding the next ``0`` bit. This count is the quotient ``q``.
+  2. Consume that ``0`` separator bit.
+  3. Consume the next ``k`` bits as an unsigned integer remainder ``r``. If ``k == 0``, then no remainder bits are consumed and ``r = 0``.
+  4. The decoded gap value is ``gap = q * 2**k + r``.
+
+- The decoded gaps describe runs of the opposite bit value associated with occurrences of ``sparse_bit``.
+- If ``sparse_bit == 1``, each gap gives the number of ``0`` bits before the next ``1`` bit.
+- If ``sparse_bit == 0``, each gap gives the number of ``1`` bits before the next ``0`` bit.
+- For each decoded gap:
+
+  1. Append ``gap`` copies of the opposite bit.
+  2. Append one ``sparse_bit``.
+
+- After all gaps have been decoded, replace the final decoded bit with ``final_bit``.
+
+This means the encoded gaps always reconstruct a sequence ending in ``sparse_bit``. The
+``final_bit`` field then overwrites that last bit so that the decoded sequence can end in
+either bit value.
+
+
+
+----
 
 For a final example let's encode rather than decode. Let's say we have a 50 bit MSB0 sequence of all ``1``.
 First the header byte is::
@@ -229,4 +271,3 @@ But why is it called tibs?
 Because 'tibs' is (almost) 'bits' backwards. It's also distinctive, and the name was available on PyPI.
 
 It's got nothing to do with Ethiopian stew.
-

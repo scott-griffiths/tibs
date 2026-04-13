@@ -50,6 +50,260 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
+    fn rice_encode_int(value: usize, k: u8) -> BV {
+        let mut out = BV::new();
+        let quotient = value >> k;
+        for _ in 0..quotient {
+            out.push(true);
+        }
+        out.push(false);
+        if k > 0 {
+            let remainder_mask = (1usize << k) - 1;
+            let remainder = value & remainder_mask;
+            for shift in (0..k).rev() {
+                out.push(((remainder >> shift) & 1) == 1);
+            }
+        }
+        out
+    }
+
+    fn rice_decode_int(bits: &BS, start: usize, k: u8) -> PyResult<(usize, usize)> {
+        let mut pos = start;
+        while pos < bits.len() && bits[pos] {
+            pos += 1;
+        }
+        if pos >= bits.len() {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        let quotient = pos - start;
+        pos += 1; // separator bit
+
+        let k_usize = k as usize;
+        if bits.len() - pos < k_usize {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        let remainder = if k == 0 {
+            0
+        } else {
+            bits[pos..pos + k_usize].load_be::<usize>()
+        };
+        pos += k_usize;
+
+        let base = quotient
+            .checked_shl(k as u32)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        let value = base
+            .checked_add(remainder)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        Ok((value, pos))
+    }
+
+    fn encode_raw_long(&self) -> BV {
+        let bit_length = self.len();
+        let data_byte_length = bit_length.div_ceil(8);
+        let bit_padding = data_byte_length * 8 - bit_length;
+
+        let mut bv = BV::new();
+        bv.push(false); // codec bit 0
+        bv.push(false); // codec bit 1
+        for shift in (0..3).rev() {
+            bv.push((bit_padding >> shift) & 1 == 1);
+        }
+        bv.extend(Self::encode_varint(data_byte_length as u64));
+        bv.extend(self.to_bitvec());
+        for _ in 0..bit_padding {
+            bv.push(false);
+        }
+        bv
+    }
+
+    fn rice_encoded_gaps(bits: &BS, sparse_bit: bool) -> Vec<usize> {
+        let mut gaps = Vec::new();
+        let mut gap = 0usize;
+        let opposite_bit = !sparse_bit;
+
+        for bit in bits {
+            if *bit == sparse_bit {
+                gaps.push(gap);
+                gap = 0;
+            } else {
+                debug_assert_eq!(*bit, opposite_bit);
+                gap += 1;
+            }
+        }
+
+        if let Some(last) = bits.last() {
+            if *last != sparse_bit {
+                debug_assert!(gap > 0);
+                gaps.push(gap - 1);
+            }
+        }
+
+        gaps
+    }
+
+    fn estimated_rice_k(gaps: &[usize]) -> u8 {
+        if gaps.is_empty() {
+            return 0;
+        }
+
+        let total_gap: usize = gaps.iter().sum();
+        if total_gap == 0 {
+            return 0;
+        }
+
+        let mean_gap = total_gap as f64 / gaps.len() as f64;
+        let estimate = (mean_gap * std::f64::consts::LN_2).log2().round();
+        estimate.clamp(0.0, 31.0) as u8
+    }
+
+    fn rice_payload_bit_length(gaps: &[usize], k: u8) -> usize {
+        gaps.iter().map(|gap| (gap >> k) + 1 + k as usize).sum()
+    }
+
+    fn encode_rice_long(&self, sparse_bit: bool) -> Option<BV> {
+        let bits = self.to_bitslice();
+        if bits.is_empty() {
+            return None;
+        }
+
+        let gaps = Self::rice_encoded_gaps(bits, sparse_bit);
+        let final_bit = *bits.last().unwrap();
+        let estimated_k = Self::estimated_rice_k(&gaps);
+        let candidate_ks = [
+            estimated_k.saturating_sub(1),
+            estimated_k,
+            estimated_k.saturating_add(1).min(31),
+        ];
+
+        let mut best: Option<(usize, BV)> = None;
+        for k in candidate_ks {
+            let payload_bit_length = Self::rice_payload_bit_length(&gaps, k);
+            let mut payload = BV::new();
+            for gap in &gaps {
+                payload.extend(Self::rice_encode_int(*gap, k));
+            }
+            debug_assert_eq!(payload.len(), payload_bit_length);
+            let payload_byte_length = payload_bit_length.div_ceil(8);
+            let bit_padding = payload_byte_length * 8 - payload_bit_length;
+            for _ in 0..bit_padding {
+                payload.push(false);
+            }
+
+            let total_bytes = 1 + Self::encode_varint(payload_byte_length as u64).len() / 8 + 1 + payload_byte_length;
+
+            let should_replace = match &best {
+                Some((best_total_bytes, _)) => total_bytes < *best_total_bytes,
+                None => true,
+            };
+            if !should_replace {
+                continue;
+            }
+
+            let mut encoded = BV::new();
+            encoded.push(false); // codec bit 0
+            encoded.push(true); // codec bit 1 => 01
+            for shift in (0..3).rev() {
+                encoded.push((bit_padding >> shift) & 1 == 1);
+            }
+            encoded.extend(Self::encode_varint(payload_byte_length as u64));
+            for shift in (0..5).rev() {
+                encoded.push((k >> shift) & 1 == 1);
+            }
+            encoded.push(sparse_bit);
+            encoded.push(final_bit);
+            encoded.push(false); // reserved
+            encoded.extend(payload);
+
+            best = Some((total_bytes, encoded));
+        }
+
+        best.map(|(_, encoded)| encoded)
+    }
+
+    fn decode_raw_long(
+        bv: &BS,
+        msb0_flag: bool,
+        bit_padding: usize,
+        data_start: usize,
+        data_bits: usize,
+    ) -> PyResult<Tibs> {
+        let data_end = data_start
+            .checked_add(data_bits)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        if bv.len() < data_end {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        if bv.len() != data_end {
+            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+        }
+        if bit_padding > data_bits {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+
+        let out_end = data_end - bit_padding;
+        Ok(Tibs::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
+    }
+
+    fn decode_rice_long(
+        bv: &BS,
+        msb0_flag: bool,
+        bit_padding: usize,
+        data_start: usize,
+        payload_bits: usize,
+    ) -> PyResult<Tibs> {
+        let config_end = data_start
+            .checked_add(8)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        if bv.len() < config_end {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+
+        let payload_start = config_end;
+        let payload_end = payload_start
+            .checked_add(payload_bits)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+        if bv.len() < payload_end {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        if bv.len() != payload_end {
+            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+        }
+        if bit_padding > payload_bits {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+
+        let config = &bv[data_start..config_end];
+        if config[7] {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+        let k = config[0..5].load_be::<u8>();
+        let sparse_bit = config[5];
+        let final_bit = config[6];
+
+        let encoded_gaps_end = payload_end - bit_padding;
+        let encoded_gaps = &bv[payload_start..encoded_gaps_end];
+
+        let mut decoded = BV::new();
+        let mut pos = 0usize;
+        while pos < encoded_gaps.len() {
+            let (gap, next_pos) = Self::rice_decode_int(encoded_gaps, pos, k)?;
+            pos = next_pos;
+
+            for _ in 0..gap {
+                decoded.push(!sparse_bit);
+            }
+            decoded.push(sparse_bit);
+        }
+
+        if decoded.is_empty() {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+        let final_pos = decoded.len() - 1;
+        decoded.set(final_pos, final_bit);
+        Ok(Tibs::from_bv(decoded, msb0_flag))
+    }
+
     fn encode_varint(mut u: u64) -> BV {
         let mut chunks: Vec<u8> = Vec::new();
         loop {
@@ -1493,11 +1747,7 @@ impl Tibs {
 
         }
 
-        // Long form
         let codec = bv[3..5].load_be::<u8>();
-        if codec != 0 {
-            return Err(PyValueError::new_err("The codec value is reserved."));
-        }
         let bit_padding = bv[5..8].load_be::<u8>() as usize;
 
         let (byte_length, varint_bits) = Self::decode_varint(&bv[8..])?;
@@ -1505,22 +1755,11 @@ impl Tibs {
         let data_bits = byte_length
             .checked_mul(8)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-        let data_end = data_start
-            .checked_add(data_bits)
-            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-
-        if bv.len() < data_end {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        match codec {
+            0 => Self::decode_raw_long(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            1 => Self::decode_rice_long(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            _ => Err(PyValueError::new_err("The codec value is reserved.")),
         }
-        if bv.len() != data_end {
-            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
-        }
-        if bit_padding > data_bits {
-            return Err(PyValueError::new_err("The encoded sequence is reserved."));
-        }
-
-        let out_end = data_end - bit_padding;
-        Ok(Tibs::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
     }
 
 
@@ -1576,20 +1815,25 @@ impl Tibs {
                 bv.push(false);  // single_byte_flag
                 bv.push(self.msb0);
                 bv.push(false);  // short_form_flag
-                // codec is hard-wired to 'raw' for now
-                bv.push(false);
-                bv.push(false);
-                let data_byte_length = (bit_length + 7) / 8;
-                let bit_padding = data_byte_length * 8 - bit_length;
-                debug_assert!(bit_padding <= 7);
-                for shift in (0..3).rev() {
-                    bv.push((bit_padding >> shift) & 1 == 1);
-                }
-                // Encode the length in a varint
-                bv.extend(Self::encode_varint(data_byte_length as u64));
-                bv.extend(self.to_bitvec());
-                for _ in 0..bit_padding {
-                    bv.push(false);
+                let ones_count = <Tibs as BitCollection>::count(self, true);
+                let ones_proportion = ones_count as f64 / self.len() as f64;
+                let raw_long = self.encode_raw_long();
+                let rice_long = match ones_proportion {
+                    ..=0.25 => self.encode_rice_long(true),
+                    0.75.. => self.encode_rice_long(false),
+                    _ => None,
+                };
+                match rice_long {
+                    Some(b) => {
+                        if b.len() < raw_long.len() {
+                            bv.extend(b);
+                        } else {
+                            bv.extend(raw_long);
+                        }
+                    },
+                    None => {
+                        bv.extend(raw_long);
+                    }
                 }
                 bv.into_vec()
             }
