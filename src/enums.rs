@@ -45,3 +45,11 @@ impl Endianness {
         }
     }
 }
+
+#[pyclass(from_py_object, module = "tibs")]
+#[derive(Clone, Copy)]
+pub enum Codec {
+    Auto,
+    Raw,
+    Rice,
+}

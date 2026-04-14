@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{BitIndexing, Endianness};
+use crate::enums::{BitIndexing, Codec, Endianness};
 use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -98,7 +98,7 @@ impl Tibs {
         Ok((value, pos))
     }
 
-    fn encode_raw_long(&self) -> BV {
+    fn encode_raw_header_byte(&self) -> BV {
         let bit_length = self.len();
         let data_byte_length = bit_length.div_ceil(8);
         let bit_padding = data_byte_length * 8 - bit_length;
@@ -161,64 +161,41 @@ impl Tibs {
         gaps.iter().map(|gap| (gap >> k) + 1 + k as usize).sum()
     }
 
-    fn encode_rice_long(&self, sparse_bit: bool) -> Option<BV> {
+    fn encode_rice_header_byte(&self, sparse_bit: bool) -> BV {
         let bits = self.to_bitslice();
-        if bits.is_empty() {
-            return None;
-        }
 
         let gaps = Self::rice_encoded_gaps(bits, sparse_bit);
         let final_bit = *bits.last().unwrap();
         let estimated_k = Self::estimated_rice_k(&gaps);
-        let candidate_ks = [
-            estimated_k.saturating_sub(1),
-            estimated_k,
-            estimated_k.saturating_add(1).min(31),
-        ];
 
-        let mut best: Option<(usize, BV)> = None;
-        for k in candidate_ks {
-            let payload_bit_length = Self::rice_payload_bit_length(&gaps, k);
-            let mut payload = BV::new();
-            for gap in &gaps {
-                payload.extend(Self::rice_encode_int(*gap, k));
-            }
-            debug_assert_eq!(payload.len(), payload_bit_length);
-            let payload_byte_length = payload_bit_length.div_ceil(8);
-            let bit_padding = payload_byte_length * 8 - payload_bit_length;
-            for _ in 0..bit_padding {
-                payload.push(false);
-            }
-
-            let total_bytes = 1 + Self::encode_varint(payload_byte_length as u64).len() / 8 + 1 + payload_byte_length;
-
-            let should_replace = match &best {
-                Some((best_total_bytes, _)) => total_bytes < *best_total_bytes,
-                None => true,
-            };
-            if !should_replace {
-                continue;
-            }
-
-            let mut encoded = BV::new();
-            encoded.push(false); // codec bit 0
-            encoded.push(true); // codec bit 1 => 01
-            for shift in (0..3).rev() {
-                encoded.push((bit_padding >> shift) & 1 == 1);
-            }
-            encoded.extend(Self::encode_varint(payload_byte_length as u64));
-            for shift in (0..5).rev() {
-                encoded.push((k >> shift) & 1 == 1);
-            }
-            encoded.push(sparse_bit);
-            encoded.push(final_bit);
-            encoded.push(false); // reserved
-            encoded.extend(payload);
-
-            best = Some((total_bytes, encoded));
+        let payload_bit_length = Self::rice_payload_bit_length(&gaps, estimated_k);
+        let mut payload = BV::new();
+        for gap in &gaps {
+            payload.extend(Self::rice_encode_int(*gap, estimated_k));
+        }
+        debug_assert_eq!(payload.len(), payload_bit_length);
+        let payload_byte_length = payload_bit_length.div_ceil(8);
+        let bit_padding = payload_byte_length * 8 - payload_bit_length;
+        for _ in 0..bit_padding {
+            payload.push(false);
         }
 
-        best.map(|(_, encoded)| encoded)
+        let mut encoded = BV::new();
+        encoded.push(false); // codec bit 0
+        encoded.push(true); // codec bit 1 => 01
+        for shift in (0..3).rev() {
+            encoded.push((bit_padding >> shift) & 1 == 1);
+        }
+        encoded.extend(Self::encode_varint(payload_byte_length as u64));
+        for shift in (0..5).rev() {
+            encoded.push((estimated_k >> shift) & 1 == 1);
+        }
+        encoded.push(sparse_bit);
+        encoded.push(final_bit);
+        encoded.push(false); // reserved
+        encoded.extend(payload);
+
+        encoded
     }
 
     fn decode_raw_long(
@@ -1779,7 +1756,9 @@ impl Tibs {
     ///     >>> Tibs.decode(b)
     ///     Tibs('0b10111', BitIndexing.Lsb0)
     ///
-    pub fn encode(&self) -> Vec<u8> {
+    #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
+    pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
+        let codec = codec.unwrap_or(Codec::Auto);
         let mut bv: BV = BV::new();
         let bit_length = self.len();
         match bit_length {
@@ -1817,10 +1796,10 @@ impl Tibs {
                 bv.push(false);  // short_form_flag
                 let ones_count = <Tibs as BitCollection>::count(self, true);
                 let ones_proportion = ones_count as f64 / self.len() as f64;
-                let raw_long = self.encode_raw_long();
+                let raw_long = self.encode_raw_header_byte();
                 let rice_long = match ones_proportion {
-                    ..=0.25 => self.encode_rice_long(true),
-                    0.75.. => self.encode_rice_long(false),
+                    ..=0.25 => Some(self.encode_rice_header_byte(true)),
+                    0.75.. => Some(self.encode_rice_header_byte(false)),
                     _ => None,
                 };
                 match rice_long {
