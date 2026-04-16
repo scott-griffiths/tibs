@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing, Endianness
+from tibs import Tibs, Mutibs, BitIndexing, Endianness, Codec
 import random
 
 def test_from_bin():
@@ -546,7 +546,7 @@ def test_encoding():
         for length in range(400):
             # value = random.randint(0, (1 << length) - 1)
             t = Tibs.from_zeros(length, bit_indexing = indexing_mode)
-            b = encode_tibs(t)
+            # b = encode_tibs(t)
             b2 = t.encode()
             # assert b == b2
             # t2 = decode_tibs(b)
@@ -554,4 +554,11 @@ def test_encoding():
             # assert t == t2
             assert t == t3
             assert t.bit_indexing is t3.bit_indexing
-            print(f"{len(t)}: {len(b)*8}: {len(b)*8 - (len(t) + 7) // 8 * 8}")
+
+def test_more_encoding():
+    t = Tibs.from_ones(100) + [0] + Tibs.from_ones(99)
+    b1 = t.encode()
+    b2 = t.encode(Codec.Raw)
+    assert len(b2) > len(b1)
+    assert Tibs.decode(b1) == t
+    assert Tibs.decode(b2) == t

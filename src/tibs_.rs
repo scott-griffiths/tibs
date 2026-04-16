@@ -98,7 +98,7 @@ impl Tibs {
         Ok((value, pos))
     }
 
-    fn encode_raw_header_byte(&self) -> BV {
+    fn encode_as_raw(&self) -> BV {
         let bit_length = self.len();
         let data_byte_length = bit_length.div_ceil(8);
         let bit_padding = data_byte_length * 8 - bit_length;
@@ -161,7 +161,7 @@ impl Tibs {
         gaps.iter().map(|gap| (gap >> k) + 1 + k as usize).sum()
     }
 
-    fn encode_rice_header_byte(&self, sparse_bit: bool) -> BV {
+    fn encode_as_rice(&self, sparse_bit: bool) -> BV {
         let bits = self.to_bitslice();
 
         let gaps = Self::rice_encoded_gaps(bits, sparse_bit);
@@ -1758,9 +1758,8 @@ impl Tibs {
     ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
     pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
-        let codec = codec.unwrap_or(Codec::Auto);
-        let mut bv: BV = BV::new();
         let bit_length = self.len();
+        let mut bv: BV = BV::new();
         match bit_length {
             0..=5 => {
                 bv.push(true);  // single_byte_flag
@@ -1794,25 +1793,29 @@ impl Tibs {
                 bv.push(false);  // single_byte_flag
                 bv.push(self.msb0);
                 bv.push(false);  // short_form_flag
-                let ones_count = <Tibs as BitCollection>::count(self, true);
-                let ones_proportion = ones_count as f64 / self.len() as f64;
-                let raw_long = self.encode_raw_header_byte();
-                let rice_long = match ones_proportion {
-                    ..=0.25 => Some(self.encode_rice_header_byte(true)),
-                    0.75.. => Some(self.encode_rice_header_byte(false)),
-                    _ => None,
-                };
-                match rice_long {
-                    Some(b) => {
-                        if b.len() < raw_long.len() {
-                            bv.extend(b);
+                match codec.unwrap_or(Codec::Auto) {
+                    Codec::Auto => {
+                        // Choose the best codec
+                        let data_byte_length = bit_length.div_ceil(8);
+                        let raw_bit_length =
+                            5 + Self::encode_varint(data_byte_length as u64).len() + data_byte_length * 8;
+
+                        let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
+                        let rice_payload = self.encode_as_rice(sparse_bit);
+
+                        if rice_payload.len() < raw_bit_length {
+                            bv.extend(rice_payload);
                         } else {
-                            bv.extend(raw_long);
+                            bv.extend(self.encode_as_raw());
                         }
                     },
-                    None => {
-                        bv.extend(raw_long);
-                    }
+                    Codec::Raw => {
+                        bv.extend(self.encode_as_raw());
+                    },
+                    Codec::Rice => {
+                        let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
+                        bv.extend(self.encode_as_rice(sparse_bit));
+                    },
                 }
                 bv.into_vec()
             }
