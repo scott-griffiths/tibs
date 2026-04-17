@@ -10,9 +10,18 @@
     api
 
 
-.. figure:: ./tibs.png
+.. raw:: html
 
-   A sleek Python library for binary data
+   <div style="display: flex; justify-content: center; margin: 0 0 1rem 0;">
+     <div style="display: flex; align-items: flex-end; gap: 1rem;">
+       <img src="_static/tibbs_black.png" alt="tibbs" class="only-light" style="width: 120px; height: auto;"/>
+       <img src="_static/tibbs_white.png" alt="tibbs" class="only-dark pst-js-only" style="width: 120px; height: auto;"/>
+       <div style="display: flex; flex-direction: column; align-items: center;">
+         <img src="_static/tibs.png" alt="tibs" style="width: 240px; height: auto;"/>
+         <div>A sleek Python library for binary data</div>
+       </div>
+     </div>
+   </div>
 
 Overview
 --------
@@ -154,7 +163,9 @@ It also has several extra methods that will mutate the value in-place. ::
 You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding, replacing, setting, reversing etc.
 
 
+Credits
+^^^^^^^
 
+The tibs library is copyright 2025 Scott Griffiths.
 
-
-
+The Tibbs cat logo is copyright 2026 Ada Griffiths.
