@@ -223,11 +223,56 @@ This means the encoded gaps always reconstruct a sequence ending in ``sparse_bit
 ``final_bit`` field then overwrites that last bit so that the decoded sequence can end in
 either bit value.
 
+----
+
+For example, let's decode the four byte sequence ``b'I\x01.\xbe'``.
+This corresponds to the binary ``01001001_00000001_00101110_10111110``
+
+byte ``01001001`` ::
+
+    0: single_byte_flag
+    1: msb0_flag
+    0: short_form_flag
+    01: codec (rice)
+    001: bit_padding (=1)
+
+byte ``00000001`` ::
+
+    0: length_continuation_flag
+    0000001: length_data (=1)
+
+So this is Rice encoded with 1 byte of data, with the final bit ignored (so 7 bits of encoded data).
+
+The next byte is the Rice configuration byte ``00101110`` ::
+
+    00101: k (=5)
+    1: sparse_bit
+    1: final_bit
+    0: reserved
+
+and finally the encoded data, which we now know is just 7 bits ``1011111`` ::
+
+    1: prefix count
+    0: end of prefix => q = 1
+    11111: r = 31
+
+There is a single 1 bit before the first 0 bit, so the count of these bits gives us ``q=1``.
+
+After the 0 bit we read the next ``k`` bits to get the unsigned integer ``r=31``.
+
+This gives us a decoded gap of ``gap = q * 2**k + r = 1 * 2**5 + 31 = 63``.
+
+The ``sparse_bit`` is a ``1``, so the gaps are made of ``0`` bits. And the ``final_bit`` is a ``1``, so
+we just have 63 zero bits followed by a one bit and the decoded sequence is ::
+
+    00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000001
 
 
 ----
 
 For a final example let's encode rather than decode. Let's say we have a 50 bit MSB0 sequence of all ``1``.
+This could be efficiently coded with Rice encoding, but let's use Raw just to demonstrate.
+
 First the header byte is::
 
     0: single_byte_flag
@@ -270,4 +315,4 @@ But why is it called tibs?
 
 Because 'tibs' is (almost) 'bits' backwards. It's also distinctive, and the name was available on PyPI.
 
-It's got nothing to do with Ethiopian stew.
+It's got nothing to do with Ethiopian stew. Or cats.

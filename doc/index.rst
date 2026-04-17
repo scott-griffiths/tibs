@@ -12,10 +12,10 @@
 
 .. raw:: html
 
-   <div style="display: flex; justify-content: center; margin: 0 0 1rem 0; transform: translateX(-60px);">
+   <div style="display: flex; justify-content: left; margin: 0 0 1rem 0;">
      <div style="display: flex; align-items: flex-end; gap: 1rem;">
-       <img src="_static/tibbs_black.png" alt="tibbs" class="only-light" style="width: 120px; height: auto;"/>
-       <img src="_static/tibbs_white.png" alt="tibbs" class="only-dark pst-js-only" style="width: 120px; height: auto;"/>
+       <img src="_static/tibs_cat_black.png" alt="tibbs" class="only-light" style="width: 120px; height: auto;"/>
+       <img src="_static/tibs_cat_white.png" alt="tibbs" class="only-dark pst-js-only" style="width: 120px; height: auto;"/>
        <div style="display: flex; flex-direction: column; align-items: center;">
          <img src="_static/tibs.png" alt="tibs" style="width: 240px; height: auto;"/>
          <div>A sleek Python library for binary data</div>
@@ -70,6 +70,7 @@ This is all explained in the documentation and API docs that follow. ::
 Credits
 ^^^^^^^
 
-The tibs library is copyright 2025 Scott Griffiths and is released under the MIT license.
+``tibs`` was created by Scott Griffiths and is released under the MIT License.
 
-The Tibbs cat logo is copyright 2026 Ada Griffiths, all rights reserved.
+The Tibs cat artwork was created by Ada Griffiths and is not covered by the software license.
+All rights reserved.

@@ -52,4 +52,5 @@ pub enum Codec {
     Auto,
     Raw,
     Rice,
+    Zstd,
 }

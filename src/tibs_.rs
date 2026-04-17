@@ -98,6 +98,30 @@ impl Tibs {
         Ok((value, pos))
     }
 
+    fn encode_as_zstd(&self) -> BV {
+        let bit_length = self.len();
+        let data_byte_length = bit_length.div_ceil(8);
+        let raw_bit_padding = data_byte_length * 8 - bit_length;
+
+        let mut raw = self.to_bitvec();
+        for _ in 0..raw_bit_padding {
+            raw.push(false);
+        }
+
+        let compressed = zstd::bulk::compress(&raw.into_vec(), 0)
+            .expect("zstd compression failed"); // TODO
+
+        let mut bv = BV::new();
+        bv.push(true); // codec bit 0
+        bv.push(false); // codec bit 1
+        for shift in (0..3).rev() {
+            bv.push((raw_bit_padding >> shift) & 1 == 1);
+        }
+        bv.extend(Self::encode_varint(compressed.len() as u64));
+        bv.extend(BV::from_vec(compressed));
+        bv
+    }
+
     fn encode_as_raw(&self) -> BV {
         let bit_length = self.len();
         let data_byte_length = bit_length.div_ceil(8);
@@ -1815,6 +1839,9 @@ impl Tibs {
                     Codec::Rice => {
                         let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
                         bv.extend(self.encode_as_rice(sparse_bit));
+                    },
+                    Codec::Zstd => {
+                        bv.extend(self.encode_as_zstd());
                     },
                 }
                 bv.into_vec()
