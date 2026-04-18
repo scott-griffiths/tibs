@@ -50,6 +50,11 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
+    fn raw_encoded_bit_length(bit_length: usize) -> usize {
+        let data_byte_length = bit_length.div_ceil(8);
+        5 + Self::encode_varint(data_byte_length as u64).len() + data_byte_length * 8
+    }
+
     fn rice_encode_int(value: usize, k: u8) -> BV {
         let mut out = BV::new();
         let quotient = value >> k;
@@ -98,7 +103,7 @@ impl Tibs {
         Ok((value, pos))
     }
 
-    fn encode_as_zstd(&self) -> BV {
+    fn zstd_compress_bytes(&self) -> Vec<u8> {
         let bit_length = self.len();
         let data_byte_length = bit_length.div_ceil(8);
         let raw_bit_padding = data_byte_length * 8 - bit_length;
@@ -108,18 +113,22 @@ impl Tibs {
             raw.push(false);
         }
 
-        let compressed = zstd::bulk::compress(&raw.into_vec(), 0)
-            .expect("zstd compression failed"); // TODO
+        zstd::bulk::compress(&raw.into_vec(), 0)
+            .expect("zstd compression failed") // TODO
+    }
 
+    fn encode_as_zstd_from_compressed(&self, compressed: Vec<u8>) -> BV {
         let mut bv = BV::new();
         bv.push(true); // codec bit 0
         bv.push(false); // codec bit 1
-        for shift in (0..3).rev() {
-            bv.push((raw_bit_padding >> shift) & 1 == 1);
-        }
+        bv.extend_from_bitslice(bits![0, 0, 0]);
         bv.extend(Self::encode_varint(compressed.len() as u64));
         bv.extend(BV::from_vec(compressed));
         bv
+    }
+
+    fn encode_as_zstd(&self) -> BV {
+        self.encode_as_zstd_from_compressed(Self::zstd_compress_bytes(self))
     }
 
     fn encode_as_raw(&self) -> BV {
@@ -183,6 +192,14 @@ impl Tibs {
 
     fn rice_payload_bit_length(gaps: &[usize], k: u8) -> usize {
         gaps.iter().map(|gap| (gap >> k) + 1 + k as usize).sum()
+    }
+
+    fn rice_encoded_bit_length(&self, sparse_bit: bool) -> usize {
+        let gaps = Self::rice_encoded_gaps(self.to_bitslice(), sparse_bit);
+        let estimated_k = Self::estimated_rice_k(&gaps);
+        let payload_bit_length = Self::rice_payload_bit_length(&gaps, estimated_k);
+        let payload_byte_length = payload_bit_length.div_ceil(8);
+        5 + Self::encode_varint(payload_byte_length as u64).len() + 8 + payload_byte_length * 8
     }
 
     fn encode_as_rice(&self, sparse_bit: bool) -> BV {
@@ -1819,18 +1836,33 @@ impl Tibs {
                 bv.push(false);  // short_form_flag
                 match codec.unwrap_or(Codec::Auto) {
                     Codec::Auto => {
-                        // Choose the best codec
-                        let data_byte_length = bit_length.div_ceil(8);
-                        let raw_bit_length =
-                            5 + Self::encode_varint(data_byte_length as u64).len() + data_byte_length * 8;
+                        let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
+                        let mut best_codec = Codec::Raw;
+                        let mut best_bit_length = raw_bit_length;
+                        let mut sparse_bit = false;
 
-                        let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
-                        let rice_payload = self.encode_as_rice(sparse_bit);
+                        if bit_length <= 128 {
+                            let ones_count = <Tibs as BitCollection>::count(self, true);
+                            sparse_bit = ones_count < bit_length / 2;
+                            let rice_bit_length = self.rice_encoded_bit_length(sparse_bit);
+                            if rice_bit_length < best_bit_length {
+                                best_codec = Codec::Rice;
+                                best_bit_length = rice_bit_length;
+                            }
+                        }
 
-                        if rice_payload.len() < raw_bit_length {
-                            bv.extend(rice_payload);
+                        let zstd_compressed = Self::zstd_compress_bytes(self);
+                        let zstd_bit_length =
+                            5 + Self::encode_varint(zstd_compressed.len() as u64).len() + zstd_compressed.len() * 8;
+
+                        if zstd_bit_length < best_bit_length {
+                            bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed));
                         } else {
-                            bv.extend(self.encode_as_raw());
+                            match best_codec {
+                                Codec::Raw => bv.extend(self.encode_as_raw()),
+                                Codec::Rice => bv.extend(self.encode_as_rice(sparse_bit)),
+                                Codec::Auto | Codec::Zstd => unreachable!(),
+                            }
                         }
                     },
                     Codec::Raw => {
