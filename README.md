@@ -1,12 +1,13 @@
 <p>
-  <span style="display: inline-block; text-align: center; vertical-align: bottom;">
-    <a href="https://github.com/scott-griffiths/tibs">
-      <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs.png" alt="tibs" height="110" />
-    </a><br />
-    A sleek Python library for your binary data
-  </span>
-  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs_white.png" alt="Tibs cat" height="130" />
+  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs_white.png" alt="Tibs cat" height="130" align="left" />
+  <a href="https://github.com/scott-griffiths/tibs">
+    <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs.png" alt="tibs" height="110" />
+  </a><br />
+  A sleek Python library for your binary data
 </p>
+
+<br clear="left" />
+
 
 [![PyPI - Version](https://img.shields.io/pypi/v/tibs?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/tibs/)
 [![CI badge](https://github.com/scott-griffiths/tibs/actions/workflows/.github/workflows/new_ci.yaml/badge.svg)](https://github.com/scott-griffiths/tibs/actions/workflows/new_ci.yaml)
