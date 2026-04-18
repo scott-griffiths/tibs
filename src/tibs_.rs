@@ -1833,41 +1833,42 @@ impl Tibs {
     pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
         let bit_length = self.len();
         let mut bv: BV = BV::new();
-        match bit_length {
-            0..=5 => {
-                bv.push(true);  // single_byte_flag
-                bv.push(self.msb0);
-                let leading_zeros = 5 - bit_length;
-                for _ in 0..leading_zeros {
-                    bv.push(false);
-                }
-                bv.push(true);
-                bv.extend_from_bitslice(self.to_bitslice());
-                bv.into_vec()
-            },
-            6..=37 => {
-                bv.push(false);  // single_byte_flag
-                bv.push(self.msb0);
-                bv.push(true);  // short_form_flag
-                let length_minus_6 = (bit_length - 6) as u8;
-                for shift in (0..5).rev() {
-                    bv.push((length_minus_6 >> shift) & 1 == 1);
-                }
-                bv.extend(self.to_bitvec());
-                let padding_bits = 8 - bv.len() % 8;
-                if padding_bits != 8 {
-                    for _ in 0..padding_bits {
-                        bv.push(false);
-                    }
-                }
-                bv.into_vec()
-            },
-            38.. => {
-                bv.push(false);  // single_byte_flag
-                bv.push(self.msb0);
-                bv.push(false);  // short_form_flag
-                match codec.unwrap_or(Codec::Auto) {
-                    Codec::Auto => {
+
+        match codec.unwrap_or(Codec::Auto) {
+            Codec::Auto => {
+                match bit_length {
+                    0..=5 => {
+                        bv.push(true);  // single_byte_flag
+                        bv.push(self.msb0);
+                        let leading_zeros = 5 - bit_length;
+                        for _ in 0..leading_zeros {
+                            bv.push(false);
+                        }
+                        bv.push(true);
+                        bv.extend_from_bitslice(self.to_bitslice());
+                    },
+                    6..=37 => {
+                        bv.push(false);  // single_byte_flag
+                        bv.push(self.msb0);
+                        bv.push(true);  // short_form_flag
+                        let length_minus_6 = (bit_length - 6) as u8;
+                        for shift in (0..5).rev() {
+                            bv.push((length_minus_6 >> shift) & 1 == 1);
+                        }
+                        bv.extend(self.to_bitvec());
+                        let padding_bits = 8 - bv.len() % 8;
+                        if padding_bits != 8 {
+                            for _ in 0..padding_bits {
+                                bv.push(false);
+                            }
+                        }
+                    },
+                    38.. => {
+                        bv.push(false);  // single_byte_flag
+                        bv.push(self.msb0);
+                        bv.push(false);  // short_form_flag
+
+                        // Now pick the best long codec.
                         let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
                         let mut best_codec = Codec::Raw;
                         let mut best_bit_length = raw_bit_length;
@@ -1896,21 +1897,32 @@ impl Tibs {
                             Codec::Zstd => bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed)),
                             Codec::Auto => unreachable!(),
                         }
-
-                    },
-                    Codec::Raw => {
-                        bv.extend(self.encode_as_raw());
-                    },
-                    Codec::Rice => {
-                        let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
-                        bv.extend(self.encode_as_rice(sparse_bit));
-                    },
-                    Codec::Zstd => {
-                        bv.extend(self.encode_as_zstd());
-                    },
+                    }
                 }
                 bv.into_vec()
             }
+            Codec::Raw => {
+                bv.push(false);  // single_byte_flag
+                bv.push(self.msb0);
+                bv.push(false);  // short_form_flag
+                bv.extend(self.encode_as_raw());
+                bv.into_vec()
+            },
+            Codec::Rice => {
+                bv.push(false);  // single_byte_flag
+                bv.push(self.msb0);
+                bv.push(false);  // short_form_flag
+                let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
+                bv.extend(self.encode_as_rice(sparse_bit));
+                bv.into_vec()
+            },
+            Codec::Zstd => {
+                bv.push(false);  // single_byte_flag
+                bv.push(self.msb0);
+                bv.push(false);  // short_form_flag
+                bv.extend(self.encode_as_zstd());
+                bv.into_vec()
+            },
         }
     }
 

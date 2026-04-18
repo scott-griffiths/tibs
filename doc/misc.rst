@@ -152,16 +152,15 @@ The first byte's format will be::
     bit3..bit4: codec
     bit5..bit7: bit_padding
 
-There are 2 bits to specify the codec. Currently ``00`` is used for the implemented 'raw'
-encoding and ``01`` is assigned to Rice encoding for a future implementation.
+There are 2 bits to specify the codec.
 
 .. csv-table::
    :header: "``codec``", "Byte codec"
 
-   ``00``, raw
-   ``01``, rice
-   ``10``, reserved
-   ``11``, reserved
+   ``00``, Raw
+   ``01``, Rice
+   ``10``, Zstd
+   ``11``, Reserved
 
 The ``bit_padding`` decodes as an unsigned integer in the range 0..7. This gives the number
 of bits to truncate from the end of the decoded bytes, so allows all bit lengths to be stored.
@@ -267,6 +266,14 @@ we just have 63 zero bits followed by a one bit and the decoded sequence is ::
 
     00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000001
 
+----
+
+Zstd decoding
+"""""""""""""
+
+Larger chunks of binary data are often best compressed with a more general algorithm, and the Zstandard is a
+modern, effective and fast option. The main byte payload is compressed, and the extra metadata needed for
+the Tibs is still stored in the header.
 
 ----
 

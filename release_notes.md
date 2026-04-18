@@ -5,6 +5,8 @@
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
   unset_at methods.
 * Added Tibs.rchunks method.
+* Added encode and decode methods to Tibs and Mutibs. These store/compress the full
+  instance as a bytes object.
 
 
 ### April 3rd 2026: version 0.6.0.
