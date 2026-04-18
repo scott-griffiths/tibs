@@ -153,3 +153,9 @@ You can do everything you'd expect with these classes - slicing, boolean operati
 replacing, setting, reversing etc.
 
 For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
+
+# Credits
+
+The `tibs` library was created by Scott Griffiths and is released under the MIT License.
+
+The Tibs cat artwork was created by Ada Griffiths and is not covered by the software license. All rights reserved.
