@@ -121,8 +121,10 @@ impl Tibs {
         let mut bv = BV::new();
         bv.push(true); // codec bit 0
         bv.push(false); // codec bit 1
-        bv.extend_from_bitslice(bits![0, 0, 0]);
-        bv.extend(Self::encode_varint(compressed.len() as u64));
+        let bit_padding = if self.len() % 8 == 0 { 0 } else { 8 - self.len() % 8 };
+        for shift in (0..3).rev() {
+            bv.push((bit_padding >> shift) & 1 == 1);
+        }        bv.extend(Self::encode_varint(compressed.len() as u64));
         bv.extend(BV::from_vec(compressed));
         bv
     }
@@ -239,7 +241,7 @@ impl Tibs {
         encoded
     }
 
-    fn decode_raw_long(
+    fn decode_raw_payload(
         bv: &BS,
         msb0_flag: bool,
         bit_padding: usize,
@@ -263,7 +265,7 @@ impl Tibs {
         Ok(Tibs::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
     }
 
-    fn decode_rice_long(
+    fn decode_rice_payload(
         bv: &BS,
         msb0_flag: bool,
         bit_padding: usize,
@@ -320,6 +322,35 @@ impl Tibs {
         let final_pos = decoded.len() - 1;
         decoded.set(final_pos, final_bit);
         Ok(Tibs::from_bv(decoded, msb0_flag))
+    }
+
+    fn decode_zstd_payload(
+        bv: &BS,
+        msb0_flag: bool,
+        bit_padding: usize,
+        data_start: usize,
+        payload_bits: usize,
+    ) -> PyResult<Tibs> {
+        let payload_end = data_start + payload_bits;
+        if bv.len() < payload_end {
+            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+        }
+        if bv.len() != payload_end {
+            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+        }
+
+        let compressed = bv[data_start..payload_end].to_bitvec().into_vec();
+        let decompressed_size = zstd::zstd_safe::get_frame_content_size(&compressed)
+            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be decoded: {e}")))?
+            .ok_or_else(|| PyValueError::new_err("The zstd payload did not include its decompressed size."))?;
+
+        let decompressed = zstd::bulk::decompress(&compressed, decompressed_size as usize)
+            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be decoded: {e}")))?;
+
+        let data_bits = decompressed.len() * 8;
+        let out_end = data_bits - bit_padding;
+        let decompressed = BV::from_vec(decompressed);
+        Ok(Tibs::from_bv(decompressed[..out_end].to_bitvec(), msb0_flag))
     }
 
     fn encode_varint(mut u: u64) -> BV {
@@ -1774,8 +1805,9 @@ impl Tibs {
             .checked_mul(8)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         match codec {
-            0 => Self::decode_raw_long(&bv, msb0_flag, bit_padding, data_start, data_bits),
-            1 => Self::decode_rice_long(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            0b00 => Self::decode_raw_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            0b01 => Self::decode_rice_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            0b10 => Self::decode_zstd_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
             _ => Err(PyValueError::new_err("The codec value is reserved.")),
         }
     }
@@ -1856,14 +1888,15 @@ impl Tibs {
                             5 + Self::encode_varint(zstd_compressed.len() as u64).len() + zstd_compressed.len() * 8;
 
                         if zstd_bit_length < best_bit_length {
-                            bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed));
-                        } else {
-                            match best_codec {
-                                Codec::Raw => bv.extend(self.encode_as_raw()),
-                                Codec::Rice => bv.extend(self.encode_as_rice(sparse_bit)),
-                                Codec::Auto | Codec::Zstd => unreachable!(),
-                            }
+                            best_codec = Codec::Zstd;
                         }
+                        match best_codec {
+                            Codec::Raw => bv.extend(self.encode_as_raw()),
+                            Codec::Rice => bv.extend(self.encode_as_rice(sparse_bit)),
+                            Codec::Zstd => bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed)),
+                            Codec::Auto => unreachable!(),
+                        }
+
                     },
                     Codec::Raw => {
                         bv.extend(self.encode_as_raw());

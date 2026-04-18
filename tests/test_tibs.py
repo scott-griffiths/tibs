@@ -556,9 +556,24 @@ def test_encoding():
             assert t.bit_indexing is t3.bit_indexing
 
 def test_more_encoding():
-    t = Tibs.from_ones(100) + [0] + Tibs.from_ones(99)
+    t = Tibs.from_ones(50) + [0] + Tibs.from_ones(50)
     b1 = t.encode()
     b2 = t.encode(Codec.Raw)
+    rice = t.encode(Codec.Rice)
+    assert b1 == rice
     assert len(b2) > len(b1)
     assert Tibs.decode(b1) == t
     assert Tibs.decode(b2) == t
+
+    t2 = Tibs.from_random(8191, seed=b'x') & Tibs.from_random(8191, seed=b'y')
+    b_auto = t2.encode(Codec.Auto)
+    b_zstd = t2.encode(Codec.Zstd)
+    b_raw = t2.encode(Codec.Raw)
+    b_rice = t2.encode(Codec.Rice)
+
+    temp = Tibs.decode(b_zstd)
+    assert len(temp) == 8191
+
+    assert b_auto == b_zstd
+    assert Tibs.decode(b_zstd) == Tibs.decode(b_raw) == Tibs.decode(b_rice)
+
