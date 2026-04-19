@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing, Endianness
+from tibs import Tibs, Mutibs, BitIndexing, Endianness, Codec
 
 
 def test_creation():
@@ -1376,4 +1376,15 @@ def test_encode_decode():
     m1 = Mutibs.decode(b1)
     assert m == m1
     assert m.bit_indexing is BitIndexing.Lsb0
-    
+
+def test_empty_encode():
+    m = Mutibs()
+    a = m.encode(Codec.Auto)
+    z = m.encode(Codec.Zstd)
+    w = m.encode(Codec.Raw)
+    r = m.encode(Codec.Rice)
+
+    assert Mutibs.decode(a) == m
+    assert Mutibs.decode(z) == m
+    assert Mutibs.decode(r) == m
+    assert Mutibs.decode(w) == m

@@ -736,7 +736,8 @@ pub(crate) trait BitCollection: Sized + Clone {
         let bits = self.as_bitslice();
 
         let gaps = Self::rice_encoded_gaps(bits, sparse_bit);
-        let final_bit = *bits.last().unwrap();
+        debug_assert!(bits.len() > 0);
+        let final_bit = *bits.last().expect("Rice encoding not supported for empty Tibs.");
         let estimated_k = Self::estimated_rice_k(&gaps);
 
         let payload_bit_length = Self::rice_payload_bit_length(&gaps, estimated_k);
@@ -1015,6 +1016,18 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
         let bit_length = self.len();
         let mut bv: BV = BV::new();
+
+        // Length of zero treated as a special case and ignores the codec.
+        // Uses the Auto codec, and encodes as a single byte.
+        if bit_length == 0 {
+            bv.push(true);
+            bv.push(self.msb0());
+            for _ in 0..5 {
+                bv.push(false);
+            }
+            bv.push(true);
+            return bv.into_vec();
+        }
 
         match codec.unwrap_or(Codec::Auto) {
             Codec::Auto => match bit_length {
