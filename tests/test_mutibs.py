@@ -1366,3 +1366,14 @@ def test_float_endianness():
     assert m4.to_f(Endianness.Little) == 3.5
     assert m3.to_f(Endianness.Big) == 3.5
     assert m3.byte_swapped() == m4
+
+def test_encode_decode():
+    m = Mutibs.from_zeros(1000, BitIndexing.Lsb0)
+    m[56] = 1
+    b1 = m.encode()
+    t = Tibs.decode(b1)
+    assert t == m
+    m1 = Mutibs.decode(b1)
+    assert m == m1
+    assert m.bit_indexing is BitIndexing.Lsb0
+    

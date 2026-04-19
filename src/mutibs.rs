@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{BitIndexing, Endianness};
+use crate::enums::{BitIndexing, Codec, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
@@ -1523,6 +1523,24 @@ impl Mutibs {
         let mut out = self.clone();
         out.apply_rotation(n, start, end, false)?;
         Ok(out)
+    }
+
+    /// Create a Mutibs by decoding bytes created via `encode()`.
+    ///
+    /// :return: A new Mutibs.
+    /// :raises ValueError: for badly formed, truncated or extended input bytes.
+    #[classmethod]
+    #[pyo3(signature = (b, /), text_signature = "(cls, b)")]
+    pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Self> {
+        <Mutibs as BitCollection>::decode_bytes(b)
+    }
+
+    /// Encode the Mutibs as a bytes instance.
+    ///
+    /// The bytes instance can be used to recreate the Mutibs exactly with :meth:`decode`.
+    #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
+    pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
+        <Mutibs as BitCollection>::encode(self, codec)
     }
 
     /// Set one or many bits set to 1.
