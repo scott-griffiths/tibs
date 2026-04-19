@@ -682,24 +682,24 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn rice_encoded_gaps(bits: &BS, sparse_bit: bool) -> Vec<usize> {
         let mut gaps = Vec::new();
-        let mut gap = 0usize;
-        let opposite_bit = !sparse_bit;
 
-        for bit in bits {
-            if *bit == sparse_bit {
-                gaps.push(gap);
-                gap = 0;
-            } else {
-                debug_assert_eq!(*bit, opposite_bit);
-                gap += 1;
+        let mut previous = 0;
+        if sparse_bit {
+            for p in bits.iter_ones() {
+                gaps.push(p - previous);
+                previous = p + 1;
+            }
+        } else {
+            for p in bits.iter_zeros() {
+                gaps.push(p - previous);
+                previous = p + 1;
             }
         }
 
-        if let Some(last) = bits.last()
-            && *last != sparse_bit
-        {
-            debug_assert!(gap > 0);
-            gaps.push(gap - 1);
+        if let Some(last) = bits.last() {
+            if *last != sparse_bit {
+                gaps.push(bits.len() - previous - 1);
+            }
         }
 
         gaps
@@ -1065,11 +1065,11 @@ pub(crate) trait BitCollection: Sized + Clone {
                     let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
                     let mut best_codec = Codec::Raw;
                     let mut best_bit_length = raw_bit_length;
-                    let mut sparse_bit = false;
 
-                    if bit_length <= 128 {
-                        let ones_count = self.count(true);
-                        sparse_bit = ones_count < bit_length / 2;
+                    let ones_count = self.count(true);
+                    let sparse_bit = ones_count < bit_length / 2;
+                    let sparseness = if sparse_bit { ones_count as f64 / self.len() as f64} else { (self.len() - ones_count) as f64 / self.len() as f64 };
+                    if bit_length <= 128 || sparseness < 0.25 {
                         let rice_bit_length = self.rice_encoded_bit_length(sparse_bit);
                         if rice_bit_length < best_bit_length {
                             best_codec = Codec::Rice;
