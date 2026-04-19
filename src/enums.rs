@@ -31,16 +31,20 @@ impl Endianness {
         match optional_endianness {
             Some(Endianness::Big) => {
                 if length % 8 != 0 {
-                    return Err(PyValueError::new_err(format!("Cannot create a big byte-endian value with a length of {length} bits. It must be a whole number of bytes long.")));
+                    return Err(PyValueError::new_err(format!(
+                        "Cannot create a big byte-endian value with a length of {length} bits. It must be a whole number of bytes long."
+                    )));
                 }
                 Ok(false)
-            },
+            }
             Some(Endianness::Little) => {
                 if length % 8 != 0 {
-                    return Err(PyValueError::new_err(format!("Cannot create a little byte-endian value with a length of {length} bits. It must be a whole number of bytes long.")));
+                    return Err(PyValueError::new_err(format!(
+                        "Cannot create a little byte-endian value with a length of {length} bits. It must be a whole number of bytes long."
+                    )));
                 }
                 Ok(true)
-            },
+            }
             _ => Ok(false),
         }
     }

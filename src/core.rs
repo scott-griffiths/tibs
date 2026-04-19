@@ -1,3 +1,4 @@
+use crate::enums::Codec;
 use crate::helpers::{BS, BV, bv_from_zeros, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -581,12 +582,12 @@ impl BitCollection for Tibs {
 
     #[inline]
     fn to_bitvec(&self) -> BV {
-        self.to_bitslice().to_bitvec()
+        Tibs::to_bitvec(self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        Tibs::to_bitslice(self)
+        Tibs::as_bitslice(self)
     }
 
     #[inline]
@@ -611,12 +612,12 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn to_bitvec(&self) -> BV {
-        Mutibs::as_bitvec_ref(self).to_bitvec()
+        Mutibs::to_bitvec(self)
     }
 
     #[inline]
     fn as_bitslice(&self) -> &BS {
-        Mutibs::as_bitvec_ref(self).as_bitslice()
+        Mutibs::as_bitslice(self)
     }
 
     #[inline]
@@ -667,14 +668,14 @@ impl fmt::Debug for Tibs {
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.to_bitslice() == other.to_bitslice()
+        self.as_bitslice() == other.as_bitslice()
     }
 }
 
 impl PartialEq<Mutibs> for Tibs {
     #[inline]
     fn eq(&self, other: &Mutibs) -> bool {
-        self.to_bitslice() == other.as_bitvec_ref()
+        self.as_bitslice() == other.as_bitvec_ref()
     }
 }
 
@@ -688,6 +689,6 @@ impl PartialEq for Mutibs {
 impl PartialEq<Tibs> for Mutibs {
     #[inline]
     fn eq(&self, other: &Tibs) -> bool {
-        self.as_bitvec_ref() == other.to_bitslice()
+        self.as_bitvec_ref() == other.as_bitslice()
     }
 }

@@ -30,7 +30,6 @@ This is equivalent to ``Endianness.Big`` if it is whole-byte, but can be used fo
 Floats and integer values can be constructed and interpreted as big or little endian by using the appropriate
 enum value when construct with ``from_`` and ``to_`` methods, for example see :meth:`Tibs.from_f` and :meth:`Mutibs.to_u`.
 
-
 ----
 
 .. autoclass:: tibs.Codec

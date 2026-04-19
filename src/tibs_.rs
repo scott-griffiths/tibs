@@ -78,14 +78,18 @@ impl Tibs {
             pos += 1;
         }
         if pos >= bits.len() {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         let quotient = pos - start;
         pos += 1; // separator bit
 
         let k_usize = k as usize;
         if bits.len() - pos < k_usize {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         let remainder = if k == 0 {
             0
@@ -113,18 +117,22 @@ impl Tibs {
             raw.push(false);
         }
 
-        zstd::bulk::compress(&raw.into_vec(), 0)
-            .expect("zstd compression failed") // TODO
+        zstd::bulk::compress(&raw.into_vec(), 0).expect("zstd compression failed") // TODO
     }
 
     fn encode_as_zstd_from_compressed(&self, compressed: Vec<u8>) -> BV {
         let mut bv = BV::new();
         bv.push(true); // codec bit 0
         bv.push(false); // codec bit 1
-        let bit_padding = if self.len() % 8 == 0 { 0 } else { 8 - self.len() % 8 };
+        let bit_padding = if self.len() % 8 == 0 {
+            0
+        } else {
+            8 - self.len() % 8
+        };
         for shift in (0..3).rev() {
             bv.push((bit_padding >> shift) & 1 == 1);
-        }        bv.extend(Self::encode_varint(compressed.len() as u64));
+        }
+        bv.extend(Self::encode_varint(compressed.len() as u64));
         bv.extend(BV::from_vec(compressed));
         bv
     }
@@ -252,17 +260,24 @@ impl Tibs {
             .checked_add(data_bits)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         if bv.len() < data_end {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         if bv.len() != data_end {
-            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence has unexpected trailing bytes.",
+            ));
         }
         if bit_padding > data_bits {
             return Err(PyValueError::new_err("The encoded sequence is reserved."));
         }
 
         let out_end = data_end - bit_padding;
-        Ok(Tibs::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
+        Ok(Tibs::from_bv(
+            bv[data_start..out_end].to_bitvec(),
+            msb0_flag,
+        ))
     }
 
     fn decode_rice_payload(
@@ -276,7 +291,9 @@ impl Tibs {
             .checked_add(8)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         if bv.len() < config_end {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
 
         let payload_start = config_end;
@@ -284,10 +301,14 @@ impl Tibs {
             .checked_add(payload_bits)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         if bv.len() < payload_end {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         if bv.len() != payload_end {
-            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence has unexpected trailing bytes.",
+            ));
         }
         if bit_padding > payload_bits {
             return Err(PyValueError::new_err("The encoded sequence is reserved."));
@@ -333,24 +354,37 @@ impl Tibs {
     ) -> PyResult<Tibs> {
         let payload_end = data_start + payload_bits;
         if bv.len() < payload_end {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         if bv.len() != payload_end {
-            return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence has unexpected trailing bytes.",
+            ));
         }
 
         let compressed = bv[data_start..payload_end].to_bitvec().into_vec();
         let decompressed_size = zstd::zstd_safe::get_frame_content_size(&compressed)
-            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be decoded: {e}")))?
-            .ok_or_else(|| PyValueError::new_err("The zstd payload did not include its decompressed size."))?;
+            .map_err(|e| {
+                PyValueError::new_err(format!("The zstd payload could not be decoded: {e}"))
+            })?
+            .ok_or_else(|| {
+                PyValueError::new_err("The zstd payload did not include its decompressed size.")
+            })?;
 
         let decompressed = zstd::bulk::decompress(&compressed, decompressed_size as usize)
-            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be decoded: {e}")))?;
+            .map_err(|e| {
+                PyValueError::new_err(format!("The zstd payload could not be decoded: {e}"))
+            })?;
 
         let data_bits = decompressed.len() * 8;
         let out_end = data_bits - bit_padding;
         let decompressed = BV::from_vec(decompressed);
-        Ok(Tibs::from_bv(decompressed[..out_end].to_bitvec(), msb0_flag))
+        Ok(Tibs::from_bv(
+            decompressed[..out_end].to_bitvec(),
+            msb0_flag,
+        ))
     }
 
     fn encode_varint(mut u: u64) -> BV {
@@ -392,7 +426,9 @@ impl Tibs {
                 return Err(PyValueError::new_err("The encoded sequence is reserved."));
             }
             if value > (usize::MAX >> 7) {
-                return Err(PyValueError::new_err("The encoded sequence is too large to decode."));
+                return Err(PyValueError::new_err(
+                    "The encoded sequence is too large to decode.",
+                ));
             }
             value = (value << 7) | payload;
             bits_consumed += 8;
@@ -404,7 +440,9 @@ impl Tibs {
         }
 
         if !saw_final {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         Ok((value, bits_consumed))
     }
@@ -429,7 +467,7 @@ impl Tibs {
     }
 
     #[inline]
-    pub(crate) fn to_bitslice(&self) -> &BS {
+    pub(crate) fn as_bitslice(&self) -> &BS {
         if self.msb0 {
             &self.data[self.offset..self.offset + self.length]
         } else {
@@ -440,7 +478,13 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
-        self.to_bitslice().to_bitvec()
+        // Materialize a single owned copy of the current logical view.
+        self.as_bitslice().to_bitvec()
+    }
+
+    #[inline]
+    pub(crate) fn to_bitslice(&self) -> &BS {
+        self.as_bitslice()
     }
 
     #[inline]
@@ -1037,7 +1081,10 @@ impl Tibs {
     ) -> PyResult<Self> {
         let is_msb0 = BitIndexing::is_msb0(bit_indexing);
         let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
-        Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?, is_msb0))
+        Ok(Tibs::from_bv(
+            bv_from_u128(u, length, is_little_endian)?,
+            is_msb0,
+        ))
     }
 
     /// Return the unsigned integer representation of the Tibs.
@@ -1069,7 +1116,10 @@ impl Tibs {
     ) -> PyResult<Self> {
         let is_msb0 = BitIndexing::is_msb0(bit_indexing);
         let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
-        Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?, is_msb0))
+        Ok(Tibs::from_bv(
+            bv_from_i128(i, length, is_little_endian)?,
+            is_msb0,
+        ))
     }
 
     /// Return the signed integer representation of the Tibs.
@@ -1614,7 +1664,7 @@ impl Tibs {
                 isize::try_from(indices.start)?,
                 isize::try_from(indices.stop)?,
                 isize::try_from(indices.step)?,
-                );
+            );
 
             let result = if step == 1 {
                 if start < stop {
@@ -1747,7 +1797,12 @@ impl Tibs {
     /// This is the immutable equivalent of :meth:`Mutibs.rotate_right`.
     ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_right(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
+    pub fn rotated_right(
+        &self,
+        n: i64,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         out.apply_rotation(n, start, end, false)?;
         Ok(out.to_tibs())
@@ -1769,7 +1824,9 @@ impl Tibs {
         let msb0_flag = bv[1];
         if single_byte_flag {
             if bv.len() != 8 {
-                return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+                return Err(PyValueError::new_err(
+                    "The encoded sequence has unexpected trailing bytes.",
+                ));
             }
             for bit_pos in 2..7 {
                 if bv[bit_pos] == true {
@@ -1786,14 +1843,17 @@ impl Tibs {
             let length_minus_6 = bv[3..8].load_be::<u8>() as usize;
             let bit_length = length_minus_6 + 6;
             if bv.len() < bit_length + 8 {
-                return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+                return Err(PyValueError::new_err(
+                    "The encoded sequence ended unexpectedly.",
+                ));
             }
             if bv.len() != (1 + (bit_length + 7) / 8) * 8 {
-                return Err(PyValueError::new_err("The encoded sequence has unexpected trailing bytes."));
+                return Err(PyValueError::new_err(
+                    "The encoded sequence has unexpected trailing bytes.",
+                ));
             }
             // TODO: Should we check that padding bits are all zeros?
             return Ok(Tibs::from_bv(bv[8..8 + bit_length].to_bitvec(), msb0_flag));
-
         }
 
         let codec = bv[3..5].load_be::<u8>();
@@ -1811,7 +1871,6 @@ impl Tibs {
             _ => Err(PyValueError::new_err("The codec value is reserved.")),
         }
     }
-
 
     /// Encode the tibs as a bytes instance.
     ///
@@ -1838,7 +1897,7 @@ impl Tibs {
             Codec::Auto => {
                 match bit_length {
                     0..=5 => {
-                        bv.push(true);  // single_byte_flag
+                        bv.push(true); // single_byte_flag
                         bv.push(self.msb0);
                         let leading_zeros = 5 - bit_length;
                         for _ in 0..leading_zeros {
@@ -1846,11 +1905,11 @@ impl Tibs {
                         }
                         bv.push(true);
                         bv.extend_from_bitslice(self.to_bitslice());
-                    },
+                    }
                     6..=37 => {
-                        bv.push(false);  // single_byte_flag
+                        bv.push(false); // single_byte_flag
                         bv.push(self.msb0);
-                        bv.push(true);  // short_form_flag
+                        bv.push(true); // short_form_flag
                         let length_minus_6 = (bit_length - 6) as u8;
                         for shift in (0..5).rev() {
                             bv.push((length_minus_6 >> shift) & 1 == 1);
@@ -1862,11 +1921,11 @@ impl Tibs {
                                 bv.push(false);
                             }
                         }
-                    },
+                    }
                     38.. => {
-                        bv.push(false);  // single_byte_flag
+                        bv.push(false); // single_byte_flag
                         bv.push(self.msb0);
-                        bv.push(false);  // short_form_flag
+                        bv.push(false); // short_form_flag
 
                         // Now pick the best long codec.
                         let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
@@ -1885,8 +1944,9 @@ impl Tibs {
                         }
 
                         let zstd_compressed = Self::zstd_compress_bytes(self);
-                        let zstd_bit_length =
-                            5 + Self::encode_varint(zstd_compressed.len() as u64).len() + zstd_compressed.len() * 8;
+                        let zstd_bit_length = 5
+                            + Self::encode_varint(zstd_compressed.len() as u64).len()
+                            + zstd_compressed.len() * 8;
 
                         if zstd_bit_length < best_bit_length {
                             best_codec = Codec::Zstd;
@@ -1894,7 +1954,9 @@ impl Tibs {
                         match best_codec {
                             Codec::Raw => bv.extend(self.encode_as_raw()),
                             Codec::Rice => bv.extend(self.encode_as_rice(sparse_bit)),
-                            Codec::Zstd => bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed)),
+                            Codec::Zstd => {
+                                bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed))
+                            }
                             Codec::Auto => unreachable!(),
                         }
                     }
@@ -1902,30 +1964,29 @@ impl Tibs {
                 bv.into_vec()
             }
             Codec::Raw => {
-                bv.push(false);  // single_byte_flag
+                bv.push(false); // single_byte_flag
                 bv.push(self.msb0);
-                bv.push(false);  // short_form_flag
+                bv.push(false); // short_form_flag
                 bv.extend(self.encode_as_raw());
                 bv.into_vec()
-            },
+            }
             Codec::Rice => {
-                bv.push(false);  // single_byte_flag
+                bv.push(false); // single_byte_flag
                 bv.push(self.msb0);
-                bv.push(false);  // short_form_flag
+                bv.push(false); // short_form_flag
                 let sparse_bit = <Tibs as BitCollection>::count(self, true) < self.len() / 2;
                 bv.extend(self.encode_as_rice(sparse_bit));
                 bv.into_vec()
-            },
+            }
             Codec::Zstd => {
-                bv.push(false);  // single_byte_flag
+                bv.push(false); // single_byte_flag
                 bv.push(self.msb0);
-                bv.push(false);  // short_form_flag
+                bv.push(false); // short_form_flag
                 bv.extend(self.encode_as_zstd());
                 bv.into_vec()
-            },
+            }
         }
     }
-
 
     /// Return the instance with every bit inverted.
     ///

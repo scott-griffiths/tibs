@@ -53,6 +53,17 @@ impl Mutibs {
     }
 
     #[inline]
+    pub(crate) fn as_bitslice(&self) -> &BS {
+        self.as_bitvec_ref().as_bitslice()
+    }
+
+    #[inline]
+    pub(crate) fn to_bitvec(&self) -> BV {
+        // Materialize a single owned copy of the current logical view.
+        self.as_bitvec_ref().to_bitvec()
+    }
+
+    #[inline]
     pub(crate) fn as_mut_bitvec_ref(&mut self) -> &mut BV {
         &mut self.data
     }
@@ -118,7 +129,11 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn apply_set_positions(&mut self, value: bool, pos: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub(crate) fn apply_set_positions(
+        &mut self,
+        value: bool,
+        pos: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
         if let Ok(index) = pos.extract::<isize>() {
             if value {
                 self.set_index(index)?;
@@ -126,9 +141,15 @@ impl Mutibs {
                 self.unset_index(index)?;
             }
         } else if pos.is_instance_of::<pyo3::types::PyRange>() {
-            let start = pos.getattr("start")?.extract::<Option<isize>>()?.unwrap_or(0);
+            let start = pos
+                .getattr("start")?
+                .extract::<Option<isize>>()?
+                .unwrap_or(0);
             let stop = pos.getattr("stop")?.extract::<isize>()?;
-            let step = pos.getattr("step")?.extract::<Option<isize>>()?.unwrap_or(1);
+            let step = pos
+                .getattr("step")?
+                .extract::<Option<isize>>()?
+                .unwrap_or(1);
             self.set_from_slice(value, start, stop, step)?;
         } else {
             let indices = pos.extract::<Vec<isize>>()?;
@@ -164,7 +185,10 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn apply_invert_positions(&mut self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+    pub(crate) fn apply_invert_positions(
+        &mut self,
+        pos: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
         match pos {
             None => {
                 *self.as_mut_bitvec_ref() = std::mem::take(&mut *self.as_mut_bitvec_ref()).not();
@@ -301,7 +325,8 @@ impl Mutibs {
             return Ok(());
         }
         let tail = self.as_mut_bitvec_ref().split_off(insert_pos);
-        self.as_mut_bitvec_ref().extend_from_bitslice(bs.as_bitslice());
+        self.as_mut_bitvec_ref()
+            .extend_from_bitslice(bs.as_bitslice());
         self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         Ok(())
     }
@@ -817,7 +842,6 @@ impl Mutibs {
         let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
         let bv = bv_from_u128(u, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv, msb0))
-
     }
 
     /// Return the unsigned integer representation of the Mutibs.
@@ -1059,7 +1083,8 @@ impl Mutibs {
         for part in parts {
             bv.extend_from_bitslice(part.as_bitslice());
         }
-        Ok(Mutibs::from_bv(bv, msb0))    }
+        Ok(Mutibs::from_bv(bv, msb0))
+    }
 
     /// The bit length of the Mutibs.
     pub fn __len__(&self) -> usize {
@@ -1489,7 +1514,12 @@ impl Mutibs {
     ///
     /// This is the non-inplace version of :meth:`rotate_right`.
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
-    pub fn rotated_right(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
+    pub fn rotated_right(
+        &self,
+        n: i64,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_rotation(n, start, end, false)?;
         Ok(out)
@@ -2233,10 +2263,13 @@ impl Mutibs {
 
     pub fn __getattr__(&self, name: String) -> PyResult<()> {
         if name == "find_all" || name == "rfind_all" || name == "chunks" {
-            Err(PyAttributeError::new_err(format!("'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead.")))
+            Err(PyAttributeError::new_err(format!(
+                "'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead."
+            )))
         } else {
-            Err(PyAttributeError::new_err(format!("'Mutibs' object has no attribute '{name}'")))
+            Err(PyAttributeError::new_err(format!(
+                "'Mutibs' object has no attribute '{name}'"
+            )))
         }
     }
-
 }
