@@ -6,32 +6,156 @@ Miscellaneous
 Endianness
 ^^^^^^^^^^
 
-TODO
+Byte-wise endianness is available for constructing and interpreting various whole-byte values.
+The endianness isn't a property of the ``Tibs``, but affect both how it's constructed from a value
+and how it's reinterpreted as a value. ::
+
+    >>> Tibs.from_u(511, 32, Endianness.Big)
+    Tibs('0x000001ff')
+    >>> Tibs.from_u(511, 32, Endianness.Little)
+    Tibs('0xff010000')
+
+The default is ``Endianness.Unspecified`` which is bit-wise big endian. The difference between ``Unspecified``
+and ``Big`` is that the latter will complain if it tries to construct or interpret a non whole-byte value. ::
+
+
+    >>> m = Mutibs.from_f(1984, 64)
+    >>> m.to_f()
+    1984.0
+    >>> m.to_f(Endianness.Little)
+    2.0142e-319
+    >>> m.byte_swap()
+    >>> m.to_f(Endianness.Little)
+    1984.0
+
 
 Bit indexing
 ^^^^^^^^^^^^
 
-TODO
+Two bit indexing methods are supported, MSB0 (most significant bit 0) and LSB0 (least significant bit 0).
+
+The default MSB0 bit numbering is done from 'left' to 'right'.
+That is, from bit ``0`` at the start of the data to bit ``n - 1`` at the end.
+This allows a ``Tibs`` to be treated like an ordinary Python container that is only allowed to contain single bits.
+
+The LSB0 bit numbering means the right-most bit in the bitstring will
+be bit 0, and the left-most bit will be bit (n-1), rather than the
+other way around. LSB0 is a more natural numbering
+system in some fields.
+
+The ``bit_indexing`` parameter on creation methods sets which numbering is used.
+It is a property of the ``Tibs`` or ``Mutibs``, and can be changed after creation only for a ``Mutibs`` instance.
+It does not affect equality operations. ::
+
+    >>> t = Tibs('0xabc', bit_indexing=BitIndexing.Lsb0)
+    >>> t
+    Tibs('0xabc', BitIndexing.Lsb0)
+    >>> m = Mutibs('0xabc')
+    >>> m == t
+    True
+    >>> m.bit_indexing == t.bit_indexing
+    False
+
+
+For example, if you set a ``Tibs`` to be the binary ``010001111`` it will be stored in the same way for MSB0 and LSB0,
+but slicing, reading, unpacking etc. will all behave differently.
+
+.. list-table:: MSB0 →
+   :header-rows: 1
+
+   * - bit index
+     - 0
+     - 1
+     - 2
+     - 3
+     - 4
+     - 5
+     - 6
+     - 7
+     - 8
+   * - value
+     - ``0``
+     - ``1``
+     - ``0``
+     - ``0``
+     - ``0``
+     - ``1``
+     - ``1``
+     - ``1``
+     - ``1``
+
+In MSB0 everything behaves like an ordinary Python container.
+Bit zero is the left-most bit and reads/slices happen from left to right.
+
+.. list-table:: ← LSB0
+   :header-rows: 1
+
+   * - bit index
+     - 8
+     - 7
+     - 6
+     - 5
+     - 4
+     - 3
+     - 2
+     - 1
+     - 0
+   * - value
+     - ``0``
+     - ``1``
+     - ``0``
+     - ``0``
+     - ``0``
+     - ``1``
+     - ``1``
+     - ``1``
+     - ``1``
+
+In LSB0 the final, right-most bit is labelled as bit zero. Reads and slices happen from right to left.
+
+When ``Tibs`` are interpreted as integers and other types the left-most bit is always considered as the most significant bit.
+It's important to note that this is the case irrespective of whether the first or last bit is considered the bit zero,
+so for example if you were to interpret a whole ``Tibs`` as an integer, its value would be the same irrespective
+of the ``bit_indexing`` value.
+
+To illustrate this, for the example above this means that the bin and int representations would be ``010001111`` and ``143`` respectively
+for both MSB0 and LSB0 bit numbering.
+
+Slicing is still done with the start bit smaller than the end bit.
+For example:
+
+    >>> s = Tibs('0b010001111', bit_indexing=BitIndexing.Lsb0)
+    >>> s[0:5]  # LSB0 so this is the right-most five bits
+    Tibs('0b01111')
+    >>> s[0]
+    True
+
+
+Negative indices work as you'd expect, with the first stored
+bit being ``s[-1]`` and the final stored bit being ``s[-n]``.
+
 
 
 Byte encoding format
 ^^^^^^^^^^^^^^^^^^^^
 
 
-The :meth:`~Tibs.encode` method stores an arbitrary Tibs as a sequence of bytes which can
+The :meth:`Tibs.encode` method stores an arbitrary Tibs as a sequence of bytes which can
 be used to reconstruct the Tibs via :meth:`~Tibs.decode`.
 
-The raw encoding is very efficient, and the encoded sequence contains the bit length, which
+There are different codec that are used to compress the data, both a general use Zstandard codec
+and a Rice codec, which is particularly good at sparse data.
+
+The raw encoding is also very efficient, and all the encoded sequences contains the bit length, which
 means that they can be safely concatenated without losing any information.
 
-It is planned that extra codecs will be added that can compress the data at a later date,
-but the base raw implementation does a good job at the smaller bit sequences that compression
-algorithms would be very inefficient at storing. For longer sequences the raw codec overhead
-is still small.
+The base implementation does a good job at the smaller bit sequences that compression
+algorithms would be very inefficient at storing, for example all bit sequences up to 5 bits long are encoded
+into a single byte. For longer sequences the raw codec overhead is still small.
 
 The mutable nature of ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
-``Mutibs.decode(t.encode())`` is equivalent to ``t.to_mutibs()`` for example, though of
-course the more efficient :meth:`Tibs.to_mutibs` method is preferred in this case.
+if a ``Tibs`` and ``Mutibs`` are equal (and have the same ``BitIndexing``) they will encode
+to the same ``bytes``.
 
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
@@ -43,13 +167,26 @@ course the more efficient :meth:`Tibs.to_mutibs` method is preferred in this cas
    ... , ...
    1 MiB, +4 bytes
 
+As an example of using the Rice codec, which is very good at sparse data, let's compress the sparsest data possible -
+ten billion zero bits::
+
+    >>> b = Tibs.from_zeros(10_000_000_000).encode(Codec.Rice)
+    >>> b
+    b'L\x05\xfc\xf5@\xbe?\xf0'
+    >>> t = Tibs.decode(b)
+    >>> t.count(0)
+    10000000000
+
+Obviously compressing ten billion bits into eight bytes is an edge case, but for comparison the Zstandard compression
+(with default parameters) would use 38 kB for this sequence.
+
 This section gives a format specification, and although it isn't a formal spec, it should
 allow other implementations to encode and decode.
 
 Overview
 """"""""
 
-In this section the notation a..b include both endpoints a and b.
+In this section the notation ``a..b`` include both endpoints ``a`` and ``b``.
 
 Each encoded Tibs is in one of three forms, determined by its bit length:
 
@@ -59,13 +196,12 @@ Each encoded Tibs is in one of three forms, determined by its bit length:
 
 The single byte and short forms can only be used to encode 0..5 bits and 6..37 bits respectively.
 
-The long form can be used for any length, but is required for lengths >37 bits. It is not
-recommended to use the long form for lengths <=37 bits as it will be less efficient.
+The long form can be used for any length, but is required for lengths >37 bits.
 
 The encoding and decoding methods are symmetric.
 Note that when decoding, any illegal or reserved values encountered are considered errors.
 
-The bit length of the Tibs determines which of the three encodings to use:
+The bit length of the Tibs determines which of the three encodings can be used:
 
 1. Single byte (0..5 bits)
 """"""""""""""""""""""""""
