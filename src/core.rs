@@ -737,7 +737,9 @@ pub(crate) trait BitCollection: Sized + Clone {
 
         let gaps = Self::rice_encoded_gaps(bits, sparse_bit);
         debug_assert!(bits.len() > 0);
-        let final_bit = *bits.last().expect("Rice encoding not supported for empty Tibs.");
+        let final_bit = *bits
+            .last()
+            .expect("Rice encoding not supported for empty Tibs.");
         let estimated_k = Self::estimated_rice_k(&gaps);
 
         let payload_bit_length = Self::rice_payload_bit_length(&gaps, estimated_k);
@@ -795,7 +797,10 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         let out_end = data_end - bit_padding;
-        Ok(Self::from_bv(bv[data_start..out_end].to_bitvec(), msb0_flag))
+        Ok(Self::from_bv(
+            bv[data_start..out_end].to_bitvec(),
+            msb0_flag,
+        ))
     }
 
     fn decode_rice_payload(
@@ -899,7 +904,10 @@ pub(crate) trait BitCollection: Sized + Clone {
         let data_bits = decompressed.len() * 8;
         let out_end = data_bits - bit_padding;
         let decompressed = BV::from_vec(decompressed);
-        Ok(Self::from_bv(decompressed[..out_end].to_bitvec(), msb0_flag))
+        Ok(Self::from_bv(
+            decompressed[..out_end].to_bitvec(),
+            msb0_flag,
+        ))
     }
 
     fn encode_varint(mut u: u64) -> BV {
@@ -940,7 +948,9 @@ pub(crate) trait BitCollection: Sized + Clone {
                 return Err(PyValueError::new_err("The encoded sequence is reserved."));
             }
             if value > (usize::MAX >> 7) {
-                return Err(PyValueError::new_err("The encoded sequence is too large to decode."));
+                return Err(PyValueError::new_err(
+                    "The encoded sequence is too large to decode.",
+                ));
             }
             value = (value << 7) | payload;
             bits_consumed += 8;
@@ -952,7 +962,9 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         if !saw_final {
-            return Err(PyValueError::new_err("The encoded sequence ended unexpectedly."));
+            return Err(PyValueError::new_err(
+                "The encoded sequence ended unexpectedly.",
+            ));
         }
         Ok((value, bits_consumed))
     }
@@ -1068,7 +1080,11 @@ pub(crate) trait BitCollection: Sized + Clone {
 
                     let ones_count = self.count(true);
                     let sparse_bit = ones_count < bit_length / 2;
-                    let sparseness = if sparse_bit { ones_count as f64 / self.len() as f64} else { (self.len() - ones_count) as f64 / self.len() as f64 };
+                    let sparseness = if sparse_bit {
+                        ones_count as f64 / self.len() as f64
+                    } else {
+                        (self.len() - ones_count) as f64 / self.len() as f64
+                    };
                     if bit_length <= 128 || sparseness < 0.25 {
                         let rice_bit_length = self.rice_encoded_bit_length(sparse_bit);
                         if rice_bit_length < best_bit_length {
