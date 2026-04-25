@@ -39,6 +39,20 @@ def test_findall_bitarray():
     pattern = bitarray('101010111100')
     x = list(b.search(pattern))
 
+def test_findall_bytes_tibs():
+    t = Tibs.from_bytes(some_bytes)
+    x = list(t.find_all('0xabcd', byte_aligned=True))
+    assert len(x) == 21
+
+
+def test_findall_bytes_bitarray():
+    b = bitarray()
+    b.frombytes(some_bytes)
+    pattern = bitarray('1010101111001101')
+    # bitarray doesn't have a byte-aligned find method, but this is a reasonable use-case,
+    # so I think this is a justified test.
+    x = list(v for v in b.search(pattern) if v % 8 == 0)
+    assert len(x) == 21
 
 def test_bitops_tibs():
     t1 = Tibs.from_bytes(some_bytes)
@@ -215,6 +229,7 @@ def main():
         FunctionPairs("Random Generation", test_rand_bitarray, test_rand_tibs),
         FunctionPairs("Construction", test_construction_bitarray, test_construction_tibs),
         FunctionPairs("Find all", test_findall_bitarray, test_findall_tibs),
+        FunctionPairs("Find all bytes", test_findall_bytes_bitarray, test_findall_bytes_tibs),
         FunctionPairs("Find all reversed", test_reverse_find_bitarray, test_reverse_find_tibs),
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
         FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),
