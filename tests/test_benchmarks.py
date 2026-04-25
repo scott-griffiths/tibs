@@ -51,7 +51,7 @@ def test_find_all(benchmark):
             "0xabcdef1234, 0b000101111010101010011010100100101010101",
             "0x4321"
         ]:
-            x = len(list(s.find_all(ss)))
+            x = len(s.find_all(ss))
         return x
 
     c = benchmark(finding)
@@ -68,7 +68,7 @@ def test_primes(benchmark):
         for i in range(2, math.ceil(math.sqrt(limit))):
             if is_prime[i]:
                 is_prime.unset(range(i * i, limit, i))
-        twin_primes = len(list(is_prime.to_tibs().find_all("0b101")))
+        twin_primes = len(is_prime.find_all("0b101"))
         return twin_primes
 
     c = benchmark(primes)

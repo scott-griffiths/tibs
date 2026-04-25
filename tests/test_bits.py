@@ -40,10 +40,10 @@ class TestInitialisation:
 
     def test_find_all(self):
         a = Tibs("0b0010011")
-        b = list(a.find_all('0b1'))
+        b = a.find_all('0b1')
         assert b == [2, 5, 6]
         t = Tibs("0b10")
-        tp = list(t.find_all("0b1"))
+        tp = t.find_all("0b1")
         assert tp == [0]
 
 
@@ -200,7 +200,7 @@ def test_bool_conversion():
 
 def test_find_all():
     a = Tibs(' 0 B 0 0 01011')
-    g = a.find_all('0b1')
+    g = a.find_all_iter('0b1')
     assert next(g) == 3
     assert next(g) == 5
     assert next(g) == 6

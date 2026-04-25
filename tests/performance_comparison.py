@@ -30,7 +30,7 @@ bit_list = list(t[:10_000_000])
 
 def test_findall_tibs():
     t = Tibs.from_bytes(some_bytes)
-    x = list(t.find_all('0xabc'))
+    x = t.find_all('0xabc')
 
 
 def test_findall_bitarray():
@@ -41,7 +41,7 @@ def test_findall_bitarray():
 
 def test_findall_bytes_tibs():
     t = Tibs.from_bytes(some_bytes)
-    x = list(t.find_all('0xabcd', byte_aligned=True))
+    x = t.find_all('0xabcd', byte_aligned=True)
     assert len(x) == 21
 
 
@@ -139,7 +139,7 @@ def test_reverse_find_bitarray():
 
 def test_reverse_find_tibs():
     t = Tibs.from_bytes(some_bytes)
-    l = len(list(t.find_all('0xdeade')))
+    l = len(t.find_all('0xdeade'))
     assert l == 8
 
 

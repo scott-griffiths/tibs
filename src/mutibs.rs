@@ -1353,6 +1353,54 @@ impl Mutibs {
         self.find_impl(needle, start, end, byte_aligned, false)
     }
 
+    /// Find all occurrences of a bit sequence.
+    ///
+    /// :param Tibs needle: The Tibs to find.
+    /// :param int | None start: The starting bit position. Defaults to 0.
+    /// :param int | None end: The end position. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :return: A list of bit positions.
+    ///
+    /// All occurrences of needle are found, even if they overlap.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///      >>> Mutibs('0xc3e').find_all('0b1111')
+    ///      [6]
+    ///
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    pub fn find_all(
+        &self,
+        needle: Tibs,
+        start: Option<isize>,
+        end: Option<isize>,
+        byte_aligned: bool,
+    ) -> PyResult<Vec<u64>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
+
+        let haystack_len = self.len();
+        let haystack_msb0 = self.msb0;
+        let (start, end) = validate_slice(haystack_len, start, end)?;
+        let needle = if haystack_msb0 {
+            needle
+        } else {
+            BitCollection::reverse_copy(&needle)
+        };
+        let (start, end) = logical_range_to_physical(haystack_len, start, end, haystack_msb0);
+
+        Ok(helpers::collect_find_all_positions(
+            self.as_bitslice(),
+            needle.as_bitslice(),
+            haystack_len,
+            haystack_msb0,
+            start,
+            end,
+            byte_aligned,
+        ))
+    }
+
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.

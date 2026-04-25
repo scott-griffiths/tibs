@@ -433,6 +433,56 @@ impl Tibs {
         hasher.finish() as isize
     }
 
+    /// Find all occurrences of a bit sequence.
+    ///
+    /// :param Tibs needle: The bit sequence to find.
+    /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
+    /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
+    /// :return: A list of bit positions.
+    ///
+    /// :raises ValueError: if needle is empty, if start or end are out of range or if end is before start.
+    ///
+    /// All occurrences of needle are found, even if they overlap.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b10111011').find_all('0b11')
+    ///     [2, 3, 6]
+    ///
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    pub fn find_all(
+        slf: PyRef<'_, Self>,
+        needle: Tibs,
+        start: Option<isize>,
+        end: Option<isize>,
+        byte_aligned: bool,
+    ) -> PyResult<Vec<u64>> {
+        if needle.is_empty() {
+            return Err(PyValueError::new_err("No bits were provided to find."));
+        }
+
+        let haystack_len = slf.len();
+        let haystack_msb0 = slf.msb0;
+        let (start, end) = validate_slice(haystack_len, start, end)?;
+        let needle = if haystack_msb0 {
+            needle
+        } else {
+            needle.reversed()
+        };
+        let (start, end) = logical_range_to_physical(haystack_len, start, end, haystack_msb0);
+
+        Ok(helpers::collect_find_all_positions(
+            slf.as_bitslice(),
+            needle.as_bitslice(),
+            haystack_len,
+            haystack_msb0,
+            start,
+            end,
+            byte_aligned,
+        ))
+    }
+
     /// Find all occurrences of a bit sequence. Return generator of bit positions.
     ///
     /// :param Tibs needle: The bit sequence to find.
@@ -454,7 +504,7 @@ impl Tibs {
     ///     [2, 3, 6]
     ///
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
-    pub fn find_all(
+    pub fn find_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
         start: Option<isize>,

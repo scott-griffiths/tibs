@@ -77,7 +77,7 @@ class TestNoPosAttribute:
 
 def test_not_byte_aligned():
     a = Tibs.from_string("0x00 ff 0f f")
-    li = list(a.find_all("0xff"))
+    li = a.find_all("0xff")
     assert li == [8, 20]
     p = a.find("0x0f")
     assert p == 4

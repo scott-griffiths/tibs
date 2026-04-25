@@ -220,6 +220,21 @@ def test_inplace_mul():
     assert a == '0b1010101010'
 
 
+def test_find_all():
+    a = Mutibs('0b11111')
+    assert a.find_all('0b1') == [0, 1, 2, 3, 4]
+    assert a.find_all('0b11') == [0, 1, 2, 3]
+    assert a.find_all('0b10') == []
+
+    b = Mutibs('0b1001001001001001001')
+    assert b.find_all('0b1001') == [0, 3, 6, 9, 12, 15]
+
+
+def test_find_all_lsb0():
+    a = Mutibs('0b110100', bit_indexing=BitIndexing.Lsb0)
+    assert a.find_all('0b1') == [2, 4, 5]
+
+
 def test_or():
     a = Mutibs('0x0f')
     b = Mutibs('0xf0')

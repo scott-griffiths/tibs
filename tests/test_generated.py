@@ -214,7 +214,7 @@ class TestIterators:
 
     def test_find_all_iterator(self):
         t = Tibs("0b101101")
-        assert list(t.find_all("0b101")) == [0, 3]
+        assert list(t.find_all_iter("0b101")) == [0, 3]
 
     def test_chunks_iterator(self):
         t = Tibs("0b101101")
@@ -286,7 +286,7 @@ class TestAdvancedFeatures:
 
     def test_find_all_byte_aligned(self):
         a = Tibs("0x00ff00ff")
-        assert list(a.find_all("0xff", byte_aligned=True)) == [8, 24]
+        assert a.find_all("0xff", byte_aligned=True) == [8, 24]
 
 
 class TestComplexInteractions:
@@ -297,7 +297,7 @@ class TestComplexInteractions:
 
     def test_find_all_overlapping(self):
         s = Tibs("0b1010101")
-        assert list(s.find_all("0b101")) == [0, 2, 4]
+        assert s.find_all("0b101") == [0, 2, 4]
 
     def test_chunks_with_remainder(self):
         s = Tibs.from_zeros(10)
