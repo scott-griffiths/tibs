@@ -326,11 +326,11 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0b110011').chunks(2))
+    ///     >>> list(Tibs('0b110011').chunks_iter(2))
     ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
     ///
     #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
-    pub fn chunks(
+    pub fn chunks_iter(
         slf: PyRef<'_, Self>,
         chunk_size: i64,
         count: Option<i64>,
@@ -374,11 +374,11 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0b1100111').rchunks(3))
+    ///     >>> list(Tibs('0b1100111').rchunks_iter(3))
     ///     [Tibs('0b111'), Tibs('0b100'), Tibs('0b11')]
     ///
     #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
-    pub fn rchunks(
+    pub fn rchunks_iter(
         slf: PyRef<'_, Self>,
         chunk_size: i64,
         count: Option<i64>,
