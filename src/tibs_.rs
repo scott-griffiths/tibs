@@ -581,11 +581,11 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0b10111011').rfind_all('0b11'))
+    ///     >>> list(Tibs('0b10111011').rfind_all_iter('0b11'))
     ///     [6, 3, 2]
     ///
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
-    pub fn rfind_all(
+    pub fn rfind_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
         start: Option<isize>,

@@ -2293,7 +2293,7 @@ impl Mutibs {
     }
 
     pub fn __getattr__(&self, name: String) -> PyResult<()> {
-        if name == "find_all" || name == "rfind_all" || name == "chunks" {
+        if name == "find_all_iter" || name == "rfind_all_iter" || name == "chunks_iter" {
             Err(PyAttributeError::new_err(format!(
                 "'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead."
             )))

@@ -57,8 +57,8 @@ Counting should be fast, especially when just counting the number ``1`` or ``0``
 find / rfind
 ============
 
-find_all / rfind_all
-====================
+find_all / find_all_iter
+========================
 
 starts_with / ends_with
 =======================
