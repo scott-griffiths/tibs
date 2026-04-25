@@ -4,9 +4,9 @@ use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    compute_lps, find_bitvec, logical_range_to_physical, physical_match_to_logical_start,
-    promote_to_bv, rfind_bitvec, str_to_bv, validate_logical_op_lengths, validate_shift,
-    validate_slice,
+    byte_aligned_physical_offset, compute_lps, find_bitvec_aligned, logical_range_to_physical,
+    physical_match_to_logical_start, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
+    validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
@@ -50,7 +50,6 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
-
     pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
         let length = bv.len();
         Tibs {
@@ -117,64 +116,28 @@ impl Tibs {
         let (start, end) = validate_slice(len, start, end)?;
         let needle = if self.msb0 { needle } else { needle.reversed() };
         let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
+        let alignment_mod8 = if byte_aligned {
+            Some(byte_aligned_physical_offset(len, needle.len(), self.msb0))
+        } else {
+            None
+        };
 
         let use_find = self.msb0 ^ reverse;
-        let found = if !self.msb0 && byte_aligned {
-            let mut search_start = start;
-            let mut search_end = end;
-            let needle_len = needle.len();
-            loop {
-                let candidate = if use_find {
-                    find_bitvec(
-                        self.to_bitslice(),
-                        needle.as_bitslice(),
-                        search_start,
-                        search_end,
-                        false,
-                    )
-                } else {
-                    rfind_bitvec(
-                        self.to_bitslice(),
-                        needle.as_bitslice(),
-                        search_start,
-                        search_end,
-                        false,
-                    )
-                };
-                let Some(pos) = candidate else {
-                    break None;
-                };
-                let logical = physical_match_to_logical_start(len, needle_len, pos, self.msb0);
-                if logical % 8 == 0 {
-                    break Some(pos);
-                }
-                if use_find {
-                    search_start = pos.saturating_add(1);
-                    if search_start >= search_end {
-                        break None;
-                    }
-                } else {
-                    search_end = pos.saturating_add(needle_len.saturating_sub(1));
-                    if search_end <= search_start {
-                        break None;
-                    }
-                }
-            }
-        } else if use_find {
-            find_bitvec(
+        let found = if use_find {
+            find_bitvec_aligned(
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
-                byte_aligned,
+                alignment_mod8,
             )
         } else {
-            rfind_bitvec(
+            rfind_bitvec_aligned(
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
-                byte_aligned,
+                alignment_mod8,
             )
         };
         Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))
@@ -505,13 +468,36 @@ impl Tibs {
         // See https://docs.rs/bitvec/1.0.1/bitvec/slice/struct.BitSlice.html#method.iter_ones
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let needle = if slf.msb0 { needle } else { needle.reversed() };
-        let (start, end) = logical_range_to_physical(slf.len(), start, end, slf.msb0);
+        let haystack_len = slf.len();
+        let haystack_msb0 = slf.msb0;
+        let (start, end) = logical_range_to_physical(haystack_len, start, end, haystack_msb0);
         let is_reverse = !slf.msb0;
         let step = if byte_aligned { 8 } else { 1 };
+        let alignment_mod8 = if byte_aligned {
+            Some(byte_aligned_physical_offset(
+                haystack_len,
+                needle.len(),
+                haystack_msb0,
+            ))
+        } else {
+            None
+        };
+        let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
+            slf.as_bitslice(),
+            needle.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+        )
+        .map_or((None, None, 0), |(haystack, needle, base)| {
+            (Some(haystack), Some(needle), base)
+        });
         let py = slf.py();
         let lps = { compute_lps(needle.to_bitslice()) };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
+            haystack_len,
+            haystack_msb0,
             needle,
             lps,
             start,
@@ -520,6 +506,10 @@ impl Tibs {
             step,
             current_pos: if is_reverse { end } else { start },
             is_reverse,
+            byte_haystack,
+            byte_needle,
+            byte_base,
+            byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
         };
         Py::new(py, iter_obj)
     }
@@ -557,13 +547,36 @@ impl Tibs {
         }
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let needle = if slf.msb0 { needle } else { needle.reversed() };
-        let (start, end) = logical_range_to_physical(slf.len(), start, end, slf.msb0);
+        let haystack_len = slf.len();
+        let haystack_msb0 = slf.msb0;
+        let (start, end) = logical_range_to_physical(haystack_len, start, end, haystack_msb0);
         let is_reverse = slf.msb0;
         let step = if byte_aligned { 8 } else { 1 };
+        let alignment_mod8 = if byte_aligned {
+            Some(byte_aligned_physical_offset(
+                haystack_len,
+                needle.len(),
+                haystack_msb0,
+            ))
+        } else {
+            None
+        };
+        let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
+            slf.as_bitslice(),
+            needle.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+        )
+        .map_or((None, None, 0), |(haystack, needle, base)| {
+            (Some(haystack), Some(needle), base)
+        });
         let py = slf.py();
         let lps = { compute_lps(needle.to_bitslice()) };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
+            haystack_len,
+            haystack_msb0,
             needle,
             lps,
             start,
@@ -572,6 +585,10 @@ impl Tibs {
             step,
             current_pos: if is_reverse { end } else { start },
             is_reverse,
+            byte_haystack,
+            byte_needle,
+            byte_base,
+            byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
         };
         Py::new(py, iter_obj)
     }

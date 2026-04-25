@@ -725,6 +725,11 @@ class TestManyDifferentThings:
         with pytest.raises(StopIteration):
             _ = next(p)
 
+    def test_find_all_byte_aligned_on_unaligned_slice(self):
+        a = Tibs("0b1" + "00000001" + "00000010" + "00000001")[1:]
+        assert a.find("0x02", byte_aligned=True) == 8
+        assert list(a.find_all("0x01", byte_aligned=True)) == [0, 16]
+
     def test_contains(self):
         a = Tibs("0b1") + "0x0001dead0001"
         assert "0xdead" in a

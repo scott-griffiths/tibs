@@ -3,8 +3,9 @@ use crate::enums::{BitIndexing, Codec, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, logical_range_to_physical, physical_match_to_logical_start, promote_to_bv,
-    str_to_bv, validate_index, validate_logical_op_lengths, validate_shift, validate_slice,
+    byte_aligned_physical_offset, find_bitvec, find_bitvec_aligned, logical_range_to_physical,
+    physical_match_to_logical_start, promote_to_bv, str_to_bv, validate_index,
+    validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::Tibs;
 
@@ -350,64 +351,28 @@ impl Mutibs {
             BitCollection::reverse_copy(&needle)
         };
         let (start, end) = logical_range_to_physical(len, start, end, self.msb0);
+        let alignment_mod8 = if byte_aligned {
+            Some(byte_aligned_physical_offset(len, needle.len(), self.msb0))
+        } else {
+            None
+        };
 
         let use_find = self.msb0 ^ reverse;
-        let found = if !self.msb0 && byte_aligned {
-            let mut search_start = start;
-            let mut search_end = end;
-            let needle_len = needle.len();
-            loop {
-                let candidate = if use_find {
-                    find_bitvec(
-                        self.as_bitvec_ref(),
-                        needle.as_bitslice(),
-                        search_start,
-                        search_end,
-                        false,
-                    )
-                } else {
-                    helpers::rfind_bitvec(
-                        self.as_bitvec_ref(),
-                        needle.as_bitslice(),
-                        search_start,
-                        search_end,
-                        false,
-                    )
-                };
-                let Some(pos) = candidate else {
-                    break None;
-                };
-                let logical = physical_match_to_logical_start(len, needle_len, pos, self.msb0);
-                if logical % 8 == 0 {
-                    break Some(pos);
-                }
-                if use_find {
-                    search_start = pos.saturating_add(1);
-                    if search_start >= search_end {
-                        break None;
-                    }
-                } else {
-                    search_end = pos.saturating_add(needle_len.saturating_sub(1));
-                    if search_end <= search_start {
-                        break None;
-                    }
-                }
-            }
-        } else if use_find {
-            find_bitvec(
+        let found = if use_find {
+            find_bitvec_aligned(
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
-                byte_aligned,
+                alignment_mod8,
             )
         } else {
-            helpers::rfind_bitvec(
+            helpers::rfind_bitvec_aligned(
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
-                byte_aligned,
+                alignment_mod8,
             )
         };
         Ok(found.map(|pos| physical_match_to_logical_start(len, needle.len(), pos, self.msb0)))

@@ -52,6 +52,12 @@ def test_rfind():
     assert b == 6
 
 
+def test_mutibs_find_byte_aligned_whole_bytes():
+    a = Mutibs.from_bytes(b"\x11\x22\x33\x22")
+    assert a.find("0x22", byte_aligned=True) == 8
+    assert a.rfind("0x22", byte_aligned=True) == 24
+
+
 def test_count_large():
     a = Tibs('0b' + '1' * 72)
     b = a[:65]
@@ -576,4 +582,3 @@ def test_more_encoding():
 
     assert b_auto == b_zstd
     assert Tibs.decode(b_zstd) == Tibs.decode(b_raw) == Tibs.decode(b_rice)
-

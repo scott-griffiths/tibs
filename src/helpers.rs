@@ -2,6 +2,7 @@ use crate::core::BitCollection;
 use bitvec::prelude::*;
 use half::f16;
 use lru::LruCache;
+use memchr::memmem;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -78,28 +79,8 @@ pub(crate) fn find_bitvec(
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     let lps = compute_lps(needle);
-    if byte_aligned {
-        find_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
-    } else {
-        find_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
-    }
-}
-
-pub(crate) fn find_bitvec_with_lps(
-    haystack: &BS,
-    needle: &BS,
-    lps: &[usize],
-    start: usize,
-    end: usize,
-    byte_aligned: bool,
-) -> Option<usize> {
-    debug_assert!(end >= start);
-    debug_assert!(end <= haystack.len());
-    if byte_aligned {
-        find_bitvec_impl_with_lps::<true>(haystack, needle, &lps, start, end)
-    } else {
-        find_bitvec_impl_with_lps::<false>(haystack, needle, &lps, start, end)
-    }
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+    find_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn rfind_bitvec(
@@ -112,36 +93,139 @@ pub(crate) fn rfind_bitvec(
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     let lps = compute_lps(needle);
-    if byte_aligned {
-        rfind_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+    rfind_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
+}
+
+#[inline]
+pub(crate) fn byte_aligned_physical_offset(length: usize, needle_len: usize, msb0: bool) -> usize {
+    if msb0 {
+        0
     } else {
-        rfind_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
+        length.saturating_sub(needle_len) & 7
     }
 }
 
-pub(crate) fn rfind_bitvec_with_lps(
+pub(crate) fn find_bitvec_aligned(
     haystack: &BS,
     needle: &BS,
-    lps: &[usize],
     start: usize,
     end: usize,
-    byte_aligned: bool,
+    alignment_mod8: Option<usize>,
 ) -> Option<usize> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    if byte_aligned {
-        rfind_bitvec_impl_with_lps::<true>(&haystack, &needle, &lps, start, end)
-    } else {
-        rfind_bitvec_impl_with_lps::<false>(&haystack, &needle, &lps, start, end)
-    }
+    let lps = compute_lps(needle);
+    find_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
 }
 
-fn rfind_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
+pub(crate) fn find_bitvec_with_lps_aligned(
     haystack: &BS,
     needle: &BS,
     lps: &[usize],
     start: usize,
     end: usize,
+    alignment_mod8: Option<usize>,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
+        return found;
+    }
+    find_bitvec_impl_with_lps_aligned(haystack, needle, lps, start, end, alignment_mod8)
+}
+
+pub(crate) fn rfind_bitvec_aligned(
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    let lps = compute_lps(needle);
+    rfind_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
+}
+
+pub(crate) fn rfind_bitvec_with_lps_aligned(
+    haystack: &BS,
+    needle: &BS,
+    lps: &[usize],
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> Option<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+    if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
+        return found;
+    }
+    rfind_bitvec_impl_with_lps_aligned(haystack, needle, lps, start, end, alignment_mod8)
+}
+
+#[inline]
+pub(crate) fn bits_to_bytes(bits: &BS) -> Vec<u8> {
+    debug_assert!(bits.len().is_multiple_of(8));
+    bits.chunks_exact(8)
+        .map(|chunk| chunk.load_be::<u8>())
+        .collect()
+}
+
+pub(crate) fn byte_search_prep(
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> Option<(Vec<u8>, Vec<u8>, usize)> {
+    if alignment_mod8 != Some(0) || !needle.len().is_multiple_of(8) {
+        return None;
+    }
+
+    let start_byte = start.div_ceil(8);
+    let end_byte = end / 8;
+    let haystack_bytes = bits_to_bytes(&haystack[start_byte * 8..end_byte * 8]);
+    let needle_bytes = bits_to_bytes(needle);
+    Some((haystack_bytes, needle_bytes, start_byte))
+}
+
+#[inline]
+fn matches_alignment(match_pos: usize, alignment_mod8: Option<usize>) -> bool {
+    match alignment_mod8 {
+        Some(required) => (match_pos & 7) == required,
+        None => true,
+    }
+}
+
+fn try_find_byte_search(
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+    reverse: bool,
+) -> Option<Option<usize>> {
+    let Some((search_bytes, needle_bytes, start_byte)) =
+        byte_search_prep(haystack, needle, start, end, alignment_mod8)
+    else {
+        return None;
+    };
+    let found = if reverse {
+        memmem::rfind(&search_bytes, &needle_bytes)
+    } else {
+        memmem::find(&search_bytes, &needle_bytes)
+    };
+    Some(found.map(|index| (start_byte + index) * 8))
+}
+
+fn rfind_bitvec_impl_with_lps_aligned(
+    haystack: &BS,
+    needle: &BS,
+    lps: &[usize],
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
 ) -> Option<usize> {
     if needle.is_empty() || needle.len() > end - start {
         return None;
@@ -164,7 +248,7 @@ fn rfind_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
 
             if j == needle_len {
                 // Found a match starting at i
-                if !BYTE_ALIGNED || (i & 7) == 0 {
+                if matches_alignment(i, alignment_mod8) {
                     return Some(i);
                 }
                 // Mismatch due to alignment, slide using the table
@@ -182,12 +266,13 @@ fn rfind_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
     None
 }
 
-fn find_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
+fn find_bitvec_impl_with_lps_aligned(
     haystack: &BS,
     needle: &BS,
     lps: &[usize],
     start: usize,
     end: usize,
+    alignment_mod8: Option<usize>,
 ) -> Option<usize> {
     if needle.is_empty() || needle.len() > end - start {
         return None;
@@ -203,7 +288,7 @@ fn find_bitvec_impl_with_lps<const BYTE_ALIGNED: bool>(
 
             if j == needle_len {
                 let match_pos = i - j;
-                if !BYTE_ALIGNED || (match_pos & 7) == 0 {
+                if matches_alignment(match_pos, alignment_mod8) {
                     return Some(match_pos);
                 }
                 // Continue searching for a byte-aligned match
