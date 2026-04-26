@@ -729,3 +729,43 @@ def test_lsb0_find_rfind_match_python_reference(needle, start, end, byte_aligned
 
     assert t.find(needle, start=start, end=end, byte_aligned=byte_aligned) == expected_find
     assert t.rfind(needle, start=start, end=end, byte_aligned=byte_aligned) == expected_rfind
+
+
+def _rotate_left_expected(bits: list[bool], start: int, end: int, n: int) -> list[bool]:
+    expected = bits.copy()
+    segment = expected[start:end]
+    if not segment:
+        return expected
+    n %= len(segment)
+    expected[start:end] = segment[n:] + segment[:n]
+    return expected
+
+
+class TestConcreteRegressionCases:
+    def test_find_byte_aligned_empty_subrange_returns_none(self):
+        t = Tibs("0x11223344")
+        assert t.find("0x11", start=1, end=1, byte_aligned=True) is None
+
+    def test_find_all_byte_aligned_empty_subrange_returns_empty_list(self):
+        t = Tibs("0x11223344")
+        assert t.find_all("0x11", start=1, end=1, byte_aligned=True) == []
+
+    def test_rfind_reverse_search_finds_prefix_match(self):
+        t = Tibs("0b0111")
+        assert t.rfind("0b011") == 0
+
+    def test_mutibs_rotate_left_partial_slice_lsb0_matches_logical_rotation(self):
+        m = Mutibs("0b10110010", bit_indexing=BitIndexing.Lsb0)
+        expected = _rotate_left_expected(list(m.to_tibs()), 1, 7, 2)
+
+        m.rotate_left(2, start=1, end=7)
+
+        assert list(m.to_tibs()) == expected
+
+    def test_tibs_rotated_left_partial_slice_lsb0_matches_logical_rotation(self):
+        t = Tibs("0b10110010", bit_indexing=BitIndexing.Lsb0)
+        expected = _rotate_left_expected(list(t), 1, 7, 2)
+
+        rotated = t.rotated_left(2, start=1, end=7)
+
+        assert list(rotated) == expected

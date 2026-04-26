@@ -175,8 +175,10 @@ impl Mutibs {
         }
 
         let (start, end) = validate_slice(self.len(), start, end)?;
+        let (start, end) = logical_range_to_physical(self.len(), start, end, self.msb0);
         if start != end {
             let n = (n % (end as i64 - start as i64)) as usize;
+            let rotate_left = if self.msb0 { rotate_left } else { !rotate_left };
             if rotate_left {
                 self.as_mut_bitvec_ref()[start..end].rotate_left(n);
             } else {

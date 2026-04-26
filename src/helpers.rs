@@ -292,6 +292,9 @@ pub(crate) fn byte_search_prep(
 
     let start_byte = start.div_ceil(8);
     let end_byte = end / 8;
+    if start_byte > end_byte {
+        return None;
+    }
     let haystack_bytes = bits_to_bytes(&haystack[start_byte * 8..end_byte * 8]);
     let needle_bytes = bits_to_bytes(needle);
     Some((haystack_bytes, needle_bytes, start_byte))
@@ -334,42 +337,18 @@ fn rfind_bitvec_impl_with_lps_aligned(
     end: usize,
     alignment_mod8: Option<usize>,
 ) -> Option<usize> {
+    let _ = lps;
     if needle.is_empty() || needle.len() > end - start {
         return None;
     }
     let needle_len = needle.len();
-
-    // 2. Search backwards in haystack
-    // i is the current index in haystack (moving backwards)
-    // j is the length of the current match (matched from right to left)
-    // The visual index in haystack for comparison is (i - j).
-    let mut i = end;
-    let mut j = 0;
-
-    while i > start {
-        // We compare haystack[i - 1] (char to left of cursor)
-        // with needle[needle_len - 1 - j] (char to left of match-cursor in needle)
-        if haystack[i - 1] == needle[needle_len - 1 - j] {
-            i -= 1;
-            j += 1;
-
-            if j == needle_len {
-                // Found a match starting at i
-                if matches_alignment(i, alignment_mod8) {
-                    return Some(i);
-                }
-                // Mismatch due to alignment, slide using the table
-                j = lps[j - 1];
-            }
-        } else if j != 0 {
-            // Mismatch, but we have some progress `j`.
-            // Jump to the longest suffix that is also a prefix (in reverse logic)
-            j = lps[j - 1];
-        } else {
-            i -= 1;
+    for match_pos in (start..=end - needle_len).rev() {
+        if matches_alignment(match_pos, alignment_mod8)
+            && haystack[match_pos..match_pos + needle_len] == *needle
+        {
+            return Some(match_pos);
         }
     }
-
     None
 }
 
