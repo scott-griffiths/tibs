@@ -218,7 +218,7 @@ class TestIterators:
 
     def test_chunks_iterator(self):
         t = Tibs("0b101101")
-        chunks = list(t.chunks(3))
+        chunks = list(t.chunks_iter(3))
         assert len(chunks) == 2
         assert chunks[0] == "0b101"
         assert chunks[1] == "0b101"

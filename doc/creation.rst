@@ -171,15 +171,17 @@ In this simple case it's better to use the :meth:`Tibs.reversed` method, which c
 only) or return a new instance.
 
 There are also some methods that are only available on ``Tibs``, which take advantage of its immutable nature.
-For example the :meth:`Tibs.chunks` method, which returns an iterator over equal sized chunks of the data, is
-not available for ``Mutibs`` as its data could change while the iterator is active. Here we can use
+For example the :meth:`Tibs.chunks_iter` method, which returns an iterator over equal sized chunks of the data, is
+not available for ``Mutibs`` as its data could change while the iterator is active. The list-returning
+:meth:`Mutibs.chunks` method is available for both types, while for the iterator form we can use
 :meth:`Mutibs.to_tibs`::
 
     >>> m = Mutibs('0xb2')
     >>> m *= 3
     >>> for c in m.chunks(12): print(c.hex)
-    AttributeError: 'Mutibs' has no 'chunks' method, but 'Tibs' does. You could use '.to_tibs().chunks()' instead.
-    >>> for c in m.to_tibs().chunks(12): print(c.hex)
+    b2b
+    2b2
+    >>> for c in m.to_tibs().chunks_iter(12): print(c.hex)
     ...
     b2b
     2b2

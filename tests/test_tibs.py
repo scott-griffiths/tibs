@@ -404,7 +404,7 @@ def test_rchunks():
     t = Tibs('0b111')
     for i in range(5):
         t += Tibs.from_u(i, 7)
-    c = list(t.rchunks(7))
+    c = list(t.rchunks_iter(7))
     assert c[-1] == '0b111'
     for i in range(5):
         assert c[i].to_u() == 4 - i
@@ -415,11 +415,11 @@ def test_rchunks_remainder_and_count():
     t = Tibs('0b1010110010')
 
     # Reverse chunks are yielded from the end of the bitstring.
-    all_chunks = list(t.rchunks(4))
+    all_chunks = list(t.rchunks_iter(4))
     assert [chunk.bin for chunk in all_chunks] == ['0010', '1011', '10']
 
     # count limits the number of yielded chunks, even in reverse mode.
-    limited_chunks = list(t.rchunks(4, count=2))
+    limited_chunks = list(t.rchunks_iter(4, count=2))
     assert [chunk.bin for chunk in limited_chunks] == ['0010', '1011']
 
 
@@ -431,7 +431,7 @@ def encode_long_int(u: int) -> Tibs:
     t = Tibs.from_u(u, 64)
     t = t[t.find([1]):]
     # For each non-final chunk of 7, we want a continuation bit and then the data
-    chunks = list(t.rchunks(7))[::-1]
+    chunks = list(t.rchunks_iter(7))[::-1]
     if len(chunks[0]) < 7:
         chunks[0] = [0]*(7 - len(chunks[0])) + chunks[0]
     m = Mutibs()

@@ -315,6 +315,48 @@ pub(crate) trait BitCollection: Sized + Clone {
         Self::from_bv(bv, self.msb0())
     }
 
+    fn collect_chunks(
+        &self,
+        chunk_size: i64,
+        count: Option<i64>,
+    ) -> PyResult<Vec<Self>> {
+        if chunk_size <= 0 {
+            return Err(PyValueError::new_err(format!(
+                "Cannot create chunk list - chunk_size of {chunk_size} given, but it must be > 0."
+            )));
+        }
+        let max_chunks = match count {
+            Some(c) => {
+                if c < 0 {
+                    return Err(PyValueError::new_err(format!(
+                        "Cannot create chunk list - count of {c} given, but it must be > 0."
+                    )));
+                }
+                c as usize
+            }
+            None => usize::MAX,
+        };
+
+        let bits_len = self.len();
+        let chunk_size = chunk_size as usize;
+        let mut current_pos = 0;
+        let mut chunks_generated = 0;
+        let mut chunks = Vec::new();
+
+        while chunks_generated < max_chunks {
+            if current_pos >= bits_len {
+                break;
+            }
+            let take = std::cmp::min(chunk_size, bits_len - current_pos);
+            let start = current_pos;
+            chunks.push(self.get_slice_unchecked(start, take));
+            current_pos += take;
+            chunks_generated += 1;
+        }
+
+        Ok(chunks)
+    }
+
     fn lshift(&self, n: usize) -> Self {
         if n == 0 {
             return self.clone();

@@ -318,6 +318,22 @@ impl Tibs {
         )
     }
 
+    /// Return a list of Tibs by cutting into chunks.
+    ///
+    /// :param int chunk_size: The size in bits of the chunks to create.
+    /// :param int | None count: If specified, at most count items are created. Default is to cut as many times as possible.
+    /// :return: A list of Tibs chunks.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b110011').chunks(2)
+    ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
+    ///
+    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
+        BitCollection::collect_chunks(self, chunk_size, count)
+    }
+
     /// Return Tibs generator by cutting into chunks.
     ///
     /// :param int chunk_size: The size in bits of the chunks to generate.

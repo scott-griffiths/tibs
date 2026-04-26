@@ -1401,6 +1401,22 @@ impl Mutibs {
         ))
     }
 
+    /// Return a list of Mutibs by cutting into chunks.
+    ///
+    /// :param int chunk_size: The size in bits of the chunks to create.
+    /// :param int | None count: If specified, at most count items are created. Default is to cut as many times as possible.
+    /// :return: A list of Mutibs chunks.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b110011').chunks(2)
+    ///     [Mutibs('0b11'), Mutibs('0b00'), Mutibs('0b11')]
+    ///
+    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
+        BitCollection::collect_chunks(self, chunk_size, count)
+    }
+
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
     /// :raises ValueError: if the two Mutibs have differing lengths.

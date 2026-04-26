@@ -235,6 +235,14 @@ def test_find_all_lsb0():
     assert a.find_all('0b1') == [2, 4, 5]
 
 
+def test_chunks():
+    a = Mutibs('0x00112233445')
+    assert a.chunks(8) == ["0x00", "0x11", "0x22", "0x33", "0x44", "0x5"]
+    assert a[8:16].chunks(4) == ["0x1", "0x1"]
+    assert a[0:44].chunks(4, 4) == ["0x0", "0x0", "0x1", "0x1"]
+    assert Mutibs().chunks(10) == []
+
+
 def test_or():
     a = Mutibs('0x0f')
     b = Mutibs('0xf0')
