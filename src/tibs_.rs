@@ -516,7 +516,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0b10111011').find_all('0b11'))
+    ///     >>> list(Tibs('0b10111011').find_all_iter('0b11'))
     ///     [2, 3, 6]
     ///
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]

@@ -332,23 +332,42 @@ fn try_find_byte_search(
 fn rfind_bitvec_impl_with_lps_aligned(
     haystack: &BS,
     needle: &BS,
-    lps: &[usize],
+    _lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
 ) -> Option<usize> {
-    let _ = lps;
     if needle.is_empty() || needle.len() > end - start {
         return None;
     }
+
     let needle_len = needle.len();
-    for match_pos in (start..=end - needle_len).rev() {
-        if matches_alignment(match_pos, alignment_mod8)
-            && haystack[match_pos..match_pos + needle_len] == *needle
-        {
-            return Some(match_pos);
+    let reversed_needle: BV = needle.iter().by_vals().rev().collect();
+    let reversed_lps = compute_lps(reversed_needle.as_bitslice());
+    let search_len = end - start;
+    let mut i = 0;
+    let mut j = 0;
+
+    while i < search_len {
+        if reversed_needle[j] == haystack[end - 1 - i] {
+            i += 1;
+            j += 1;
+
+            if j == needle_len {
+                let reversed_match_pos = i - j;
+                let match_pos = end - needle_len - reversed_match_pos;
+                if matches_alignment(match_pos, alignment_mod8) {
+                    return Some(match_pos);
+                }
+                j = reversed_lps[j - 1];
+            }
+        } else if j != 0 {
+            j = reversed_lps[j - 1];
+        } else {
+            i += 1;
         }
     }
+
     None
 }
 

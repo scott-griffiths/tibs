@@ -412,7 +412,6 @@ impl Mutibs {
         if step == 0 {
             return Err(PyValueError::new_err("Step cannot be zero."));
         }
-        // after your existing start/stop/step validation:
         let len_isize = self.len() as isize;
         let len_usize = self.len();
         let msb0 = self.msb0;
@@ -2311,7 +2310,7 @@ impl Mutibs {
     }
 
     pub fn __getattr__(&self, name: String) -> PyResult<()> {
-        if name == "find_all_iter" || name == "rfind_all_iter" || name == "chunks_iter" {
+        if name == "find_all_iter" || name == "rfind_all_iter" || name == "chunks_iter" || name == "rchunks_iter" {
             Err(PyAttributeError::new_err(format!(
                 "'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead."
             )))

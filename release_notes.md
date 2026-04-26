@@ -4,10 +4,14 @@
 
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
   unset_at methods.
-* Added Tibs.rchunks method.
 * Added encode and decode methods to Tibs and Mutibs. These store/compress the full
   instance as a bytes object.
-
+* Renamed:
+  Tibs.chunks -> Tibs.chunks_iter
+  Tibs.find_all -> Tibs.find_all_iter
+  Tibs.rfind_all -> Tibs.rfind_all_iter
+* Added new Tibs/Mutibs chunks/find_all methods that return a list.
+* Added Tibs.rchunks_iter method.
 
 ### April 3rd 2026: version 0.6.0.
 
