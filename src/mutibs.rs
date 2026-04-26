@@ -1570,7 +1570,7 @@ impl Mutibs {
     ///
     /// The bytes instance can be used to recreate the Mutibs exactly with :meth:`decode`.
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
-    pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
+    pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
         <Mutibs as BitCollection>::encode(self, codec)
     }
 

@@ -669,7 +669,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         Ok((value, pos))
     }
 
-    fn zstd_compress_bytes(&self) -> Vec<u8> {
+    fn zstd_compress_bytes(&self) -> PyResult<Vec<u8>> {
         let bit_length = self.len();
         let data_byte_length = bit_length.div_ceil(8);
         let raw_bit_padding = data_byte_length * 8 - bit_length;
@@ -679,7 +679,8 @@ pub(crate) trait BitCollection: Sized + Clone {
             raw.push(false);
         }
 
-        zstd::bulk::compress(&raw.into_vec(), 0).expect("zstd compression failed")
+        zstd::bulk::compress(&raw.into_vec(), 0)
+            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be encoded: {e}")))
     }
 
     fn encode_as_zstd_from_compressed(&self, compressed: Vec<u8>) -> BV {
@@ -699,8 +700,8 @@ pub(crate) trait BitCollection: Sized + Clone {
         bv
     }
 
-    fn encode_as_zstd(&self) -> BV {
-        self.encode_as_zstd_from_compressed(Self::zstd_compress_bytes(self))
+    fn encode_as_zstd(&self) -> PyResult<BV> {
+        Ok(self.encode_as_zstd_from_compressed(Self::zstd_compress_bytes(self)?))
     }
 
     fn encode_as_raw(&self) -> BV {
@@ -917,7 +918,9 @@ pub(crate) trait BitCollection: Sized + Clone {
         data_start: usize,
         payload_bits: usize,
     ) -> PyResult<Self> {
-        let payload_end = data_start + payload_bits;
+        let payload_end = data_start
+            .checked_add(payload_bits)
+            .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         if bv.len() < payload_end {
             return Err(PyValueError::new_err(
                 "The encoded sequence ended unexpectedly.",
@@ -944,6 +947,9 @@ pub(crate) trait BitCollection: Sized + Clone {
             })?;
 
         let data_bits = decompressed.len() * 8;
+        if bit_padding > data_bits {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
         let out_end = data_bits - bit_padding;
         let decompressed = BV::from_vec(decompressed);
         Ok(Self::from_bv(
@@ -1067,7 +1073,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
-    fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
+    fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
         let bit_length = self.len();
         let mut bv: BV = BV::new();
 
@@ -1080,7 +1086,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                 bv.push(false);
             }
             bv.push(true);
-            return bv.into_vec();
+            return Ok(bv.into_vec());
         }
 
         match codec.unwrap_or(Codec::Auto) {
@@ -1119,6 +1125,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                     let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
                     let mut best_codec = Codec::Raw;
                     let mut best_bit_length = raw_bit_length;
+                    let mut zstd_encoded: Option<BV> = None;
 
                     let ones_count = self.count(true);
                     let sparse_bit = ones_count < bit_length / 2;
@@ -1135,20 +1142,23 @@ pub(crate) trait BitCollection: Sized + Clone {
                         }
                     }
 
-                    let zstd_compressed = Self::zstd_compress_bytes(self);
-                    let zstd_bit_length = 5
-                        + Self::encode_varint(zstd_compressed.len() as u64).len()
-                        + zstd_compressed.len() * 8;
+                    if let Ok(zstd_compressed) = Self::zstd_compress_bytes(self) {
+                        let zstd_bit_length = 5
+                            + Self::encode_varint(zstd_compressed.len() as u64).len()
+                            + zstd_compressed.len() * 8;
 
-                    if zstd_bit_length < best_bit_length {
-                        best_codec = Codec::Zstd;
+                        if zstd_bit_length < best_bit_length {
+                            best_codec = Codec::Zstd;
+                            zstd_encoded =
+                                Some(self.encode_as_zstd_from_compressed(zstd_compressed));
+                        }
                     }
                     match best_codec {
                         Codec::Raw => bv.extend(self.encode_as_raw()),
                         Codec::Rice => bv.extend(self.encode_as_rice(sparse_bit)),
-                        Codec::Zstd => {
-                            bv.extend(self.encode_as_zstd_from_compressed(zstd_compressed))
-                        }
+                        Codec::Zstd => bv.extend(
+                            zstd_encoded.expect("zstd encoding should be available when selected"),
+                        ),
                         Codec::Auto => unreachable!(),
                     }
                 }
@@ -1170,11 +1180,11 @@ pub(crate) trait BitCollection: Sized + Clone {
                 bv.push(false);
                 bv.push(self.msb0());
                 bv.push(false);
-                bv.extend(self.encode_as_zstd());
+                bv.extend(self.encode_as_zstd()?);
             }
         }
 
-        bv.into_vec()
+        Ok(bv.into_vec())
     }
 }
 

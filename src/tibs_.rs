@@ -1523,7 +1523,7 @@ impl Tibs {
     ///     Tibs('0b10111', BitIndexing.Lsb0)
     ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
-    pub fn encode(&self, codec: Option<Codec>) -> Vec<u8> {
+    pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
         <Tibs as BitCollection>::encode(self, codec)
     }
 
