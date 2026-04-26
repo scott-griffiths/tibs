@@ -843,7 +843,10 @@ pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     // Check if it's already in the cache
     {
-        let mut cache = BITS_CACHE.lock().unwrap();
+        let mut cache =
+            BITS_CACHE.
+                lock().
+                map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
         if let Some(cached_data) = cache.get(&s) {
             return Ok(cached_data.clone());
         }
@@ -874,7 +877,10 @@ pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     };
     // Update cache with new result
     {
-        let mut cache = BITS_CACHE.lock().unwrap();
+        let mut cache =
+            BITS_CACHE.
+                lock().
+                map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
         cache.put(s, result.clone());
     }
     Ok(result)
