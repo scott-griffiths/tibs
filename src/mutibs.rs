@@ -509,6 +509,14 @@ impl Mutibs {
     /// Whether the bits are indexed from the most significant bit (BitIndexing.Msb0, the default) or from the
     /// least significant bit (BitIndexing.Lsb0). This doesn't affect the actual data stored, just how it's
     /// accessed.
+    ///
+    /// :return: The current bit indexing mode.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b101').bit_indexing
+    ///     BitIndexing.Msb0
+    ///
     #[getter]
     pub fn bit_indexing(&self) -> BitIndexing {
         if self.msb0 {
@@ -597,6 +605,7 @@ impl Mutibs {
     ///
     /// :param str s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
     ///
@@ -638,6 +647,13 @@ impl Mutibs {
     ///
     /// :param str s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_oct("17")
+    ///     Mutibs('0b001111')
+    ///
     #[classmethod]
     #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing=BitIndexing.Msb0)"
     )]
@@ -678,6 +694,13 @@ impl Mutibs {
     ///
     /// :param str s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_hex("0f")
+    ///     Mutibs('0x0f')
+    ///
     #[classmethod]
     #[pyo3(signature = (s, /, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, s, /, bit_indexing=BitIndexing.Msb0)"
     )]
@@ -792,8 +815,14 @@ impl Mutibs {
     /// :param int length: The bit length to create. Can be up to 128.
     /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_u(15, length=8)
+    ///     Mutibs('0x0f')
     ///
     #[classmethod]
     #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, u, /, length, endianness=Endianness.Unspecified, bit_indexing=BitIndexing.Msb0)")]
@@ -813,6 +842,13 @@ impl Mutibs {
     /// Return the unsigned integer representation of the Mutibs.
     ///
     /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
+    /// :return: The value as an unsigned integer.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0x0f').to_u()
+    ///     15
+    ///
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
     pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
@@ -825,8 +861,14 @@ impl Mutibs {
     /// :param int length: The bit length to create. Can be up to 128.
     /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_i(-2, length=4)
+    ///     Mutibs('0xe')
     ///
     #[classmethod]
     #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, i, /, length, endianness=Endianness.Unspecified, bit_indexing=BitIndexing.Msb0)")]
@@ -846,6 +888,13 @@ impl Mutibs {
     /// Return the signed integer representation of the Mutibs.
     ///
     /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
+    /// :return: The value as a signed integer.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0xe').to_i()
+    ///     -2
+    ///
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
     pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
@@ -858,6 +907,13 @@ impl Mutibs {
     /// :param int length: The bit length to create. Must be 16, 32 or 64.
     /// :param Endianness endianness: The byte endianness used to store the float. Defaults to Endianness.Unspecified.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_f(1.5, length=32)
+    ///     Mutibs('0x3fc00000')
+    ///
     #[classmethod]
     #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified, bit_indexing = BitIndexing::Msb0), text_signature = "(cls, f, /, length, endianness=Endianness.Unspecified, bit_indexing=BitIndexing.Msb0)")]
     pub fn from_f(
@@ -878,6 +934,13 @@ impl Mutibs {
     /// The length must be 16, 32 or 64.
     ///
     /// :param Endianness endianness: The byte endianness used to interpret the float. Defaults to Endianness.Unspecified.
+    /// :return: The value as a Python float.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0x3fc00000').to_f()
+    ///     1.5
+    ///
     #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
     pub fn to_f(&self, endianness: Option<Endianness>) -> PyResult<f64> {
         let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
@@ -915,6 +978,7 @@ impl Mutibs {
     ///
     /// :param int length: The number of bits to set.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A Mutibs object with all bits set to one.
     ///
     /// .. code-block:: pycon
     ///
@@ -942,6 +1006,7 @@ impl Mutibs {
     ///
     /// :param Iterable iterable: The iterable to convert to a :class:`Mutibs`.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
     ///
@@ -995,6 +1060,7 @@ impl Mutibs {
     /// :param int | None offset: The bit offset from the start. Defaults to zero.
     /// :param int | None length: The bit length to use. Defaults to the whole of the data.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
     ///
@@ -1021,6 +1087,7 @@ impl Mutibs {
     ///
     /// :param Iterable iterable: An iterable to concatenate. Items can be anything that can be promoted to a :class:`Mutibs`.
     /// :param BitIndexing bit_indexing: The bit indexing mode. Defaults to BitIndexing.Msb0.
+    /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: python
     ///
@@ -1062,6 +1129,15 @@ impl Mutibs {
     /// :param int | slice key: The index or slice to get.
     /// :return: A bool for a single index, or a new Mutibs for a slice.
     /// :raises IndexError: If the index is out of range.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b101100')
+    ///     >>> m[0]
+    ///     True
+    ///     >>> m[1:4]
+    ///     Mutibs('0b011')
+    ///
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
@@ -1111,7 +1187,8 @@ impl Mutibs {
     /// :raises ValueError: If the slice step is 0, or if the length of the value doesn't match an extended slice.
     /// :raises IndexError: If the index is out of range.
     ///
-    /// Examples:
+    /// .. code-block:: pycon
+    ///
     ///     >>> b = Mutibs('0b0000')
     ///     >>> b[1] = True
     ///     >>> b.to_bin()
@@ -1216,6 +1293,14 @@ impl Mutibs {
     ///
     /// :raises IndexError: If the index is out of range.
     /// :raises TypeError: If the key is not an int or slice.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> b = Mutibs('0b1011001')
+    ///     >>> del b[1:3]
+    ///     >>> b
+    ///     Mutibs('0b11001')
+    ///
     pub fn __delitem__(&mut self, key: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
         if let Ok(mut index) = key.extract::<i64>() {
@@ -1337,6 +1422,7 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
+    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
     ///
     /// .. code-block:: pycon
     ///
@@ -1361,6 +1447,7 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
     /// :return: A list of bit positions.
+    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
     ///
     /// All occurrences of needle are found, even if they overlap.
     ///
@@ -1420,6 +1507,8 @@ impl Mutibs {
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
+    /// :param Tibs other: The other bits.
+    /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
@@ -1430,6 +1519,8 @@ impl Mutibs {
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
+    /// :param Tibs other: The other bits.
+    /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
@@ -1440,6 +1531,8 @@ impl Mutibs {
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
+    /// :param Tibs other: The other bits.
+    /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
     pub fn __xor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
@@ -1489,10 +1582,10 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = Mutibs('0b1011')
+    ///     >>> a = Mutibs('0b10110')
     ///     >>> a.rotate_left(2)
     ///     >>> a
-    ///     Mutibs('0b1110')
+    ///     Mutibs('0b11010')
     ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotate_left(
@@ -1515,10 +1608,10 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = Mutibs('0b1011')
+    ///     >>> a = Mutibs('0b10110')
     ///     >>> a.rotate_right(1)
     ///     >>> a
-    ///     Mutibs('0b1101')
+    ///     Mutibs('0b01011')
     ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotate_right(
@@ -1533,6 +1626,18 @@ impl Mutibs {
     /// Return a new Mutibs with the bits rotated to the left.
     ///
     /// This is the non-inplace version of :meth:`rotate_left`.
+    ///
+    /// :param int n: The number of bits to rotate by.
+    /// :param int | None start: Start of slice to rotate. Defaults to 0.
+    /// :param int | None end: End of slice to rotate. Defaults to len(self).
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b10110').rotated_left(2)
+    ///     Mutibs('0b11010')
+    ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.clone();
@@ -1543,6 +1648,18 @@ impl Mutibs {
     /// Return a new Mutibs with the bits rotated to the right.
     ///
     /// This is the non-inplace version of :meth:`rotate_right`.
+    ///
+    /// :param int n: The number of bits to rotate by.
+    /// :param int | None start: Start of slice to rotate. Defaults to 0.
+    /// :param int | None end: End of slice to rotate. Defaults to len(self).
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b10110').rotated_right(1)
+    ///     Mutibs('0b01011')
+    ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotated_right(
         &self,
@@ -1557,8 +1674,15 @@ impl Mutibs {
 
     /// Create a Mutibs by decoding bytes created via `encode()`.
     ///
+    /// :param bytes | bytearray b: The encoded bytes to decode.
     /// :return: A new Mutibs.
     /// :raises ValueError: for badly formed, truncated or extended input bytes.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.decode(Mutibs('0b101').encode())
+    ///     Mutibs('0b101')
+    ///
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Self> {
@@ -1568,6 +1692,15 @@ impl Mutibs {
     /// Encode the Mutibs as a bytes instance.
     ///
     /// The bytes instance can be used to recreate the Mutibs exactly with :meth:`decode`.
+    ///
+    /// :param Codec codec: The codec to use. Defaults to Codec.Auto.
+    /// :return: The encoded bytes.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.decode(Mutibs('0b101').encode())
+    ///     Mutibs('0b101')
+    ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
     pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
         <Mutibs as BitCollection>::encode(self, codec)
@@ -1624,6 +1757,12 @@ impl Mutibs {
     /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
     /// :return: A new Mutibs.
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_zeros(5).set_at([1, 3])
+    ///     Mutibs('0b01010')
+    ///
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_set_positions(true, pos)?;
@@ -1637,6 +1776,12 @@ impl Mutibs {
     /// :param int | Iterable[int] pos: Either a single bit position or an iterable of bit positions.
     /// :return: A new Mutibs.
     /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_ones(5).unset_at([1, 3])
+    ///     Mutibs('0b10101')
+    ///
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_set_positions(false, pos)?;
@@ -1716,6 +1861,13 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
     /// :return: The bit position if found, or None if not found.
+    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///      >>> Mutibs('0b10111011').rfind('0b11')
+    ///      6
+    ///
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn rfind(
         &self,
@@ -1755,6 +1907,17 @@ impl Mutibs {
     /// Return a new Mutibs with selected bits inverted.
     ///
     /// This is the non-inplace version of :meth:`invert`.
+    ///
+    /// :param int | Iterable[int] | None pos: Either a single bit position, an iterable of bit positions,
+    ///   or None to invert every bit. Defaults to None.
+    /// :return: A new Mutibs.
+    /// :raises IndexError: if pos < -len(self) or pos >= len(self).
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b10110').inverted([0, 2])
+    ///     Mutibs('0b00010')
+    ///
     #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let mut out = self.clone();
@@ -1768,10 +1931,10 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = Mutibs('0b1011')
+    ///     >>> a = Mutibs('0b10110')
     ///     >>> a.reverse()
     ///     >>> a
-    ///     Mutibs('0b1101')
+    ///     Mutibs('0b01101')
     ///
     pub fn reverse(mut slf: PyRefMut<'_, Self>) {
         slf.as_mut_bitvec_ref().reverse();
@@ -1785,7 +1948,7 @@ impl Mutibs {
     ///
     ///     >>> a = Mutibs('0b00011')
     ///     >>> a.reversed()
-    ///     >>> Mutibs('0b11000')
+    ///     Mutibs('0b11000')
     ///
     pub fn reversed(&self) -> Self {
         BitCollection::reverse_copy(self)
@@ -1838,7 +2001,13 @@ impl Mutibs {
 
     /// Return the instance with every bit inverted.
     ///
+    /// :return: A new Mutibs.
     /// :raises ValueError: if the Mutibs is empty.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> ~Mutibs('0b10110')
+    ///     Mutibs('0b01001')
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
         if self.as_bitvec_ref().is_empty() {
@@ -1849,7 +2018,9 @@ impl Mutibs {
 
     /// Return new Mutibs shifted by n to the left.
     ///
-    /// n -- the number of bits to shift. Must be >= 0.
+    /// :param int n: The number of bits to shift. Must be >= 0.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
@@ -1858,7 +2029,9 @@ impl Mutibs {
 
     /// Return new Mutibs shifted by n to the right.
     ///
-    /// n -- the number of bits to shift. Must be >= 0.
+    /// :param int n: The number of bits to shift. Must be >= 0.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
@@ -1879,12 +2052,12 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = Mutibs('0b1011')
+    ///     >>> a = Mutibs('0b10110')
     ///     >>> b = a.to_tibs()
     ///     >>> a
-    ///     Mutibs('0b1011')
+    ///     Mutibs('0b10110')
     ///     >>> b
-    ///     Tibs('0b1011')
+    ///     Tibs('0b10110')
     ///
     pub fn to_tibs(&self) -> Tibs {
         Tibs::from_bv(self.to_bitvec(), self.msb0)
@@ -1901,12 +2074,12 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> a = Mutibs('0b1011')
+    ///     >>> a = Mutibs('0b10110')
     ///     >>> b = a.as_tibs()
     ///     >>> a
     ///     Mutibs()
     ///     >>> b
-    ///     Tibs('0b1011')
+    ///     Tibs('0b10110')
     ///
     pub fn as_tibs(&mut self) -> Tibs {
         let mut data = std::mem::take(&mut *self.as_mut_bitvec_ref());
@@ -1919,6 +2092,13 @@ impl Mutibs {
     /// This doesn't change the allocated capacity, so won't free up any memory.
     ///
     /// :return: None.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b1011')
+    ///     >>> m.clear()
+    ///     >>> m
+    ///     Mutibs()
     ///
     pub fn clear(&mut self) {
         self.as_mut_bitvec_ref().clear();
@@ -1935,6 +2115,12 @@ impl Mutibs {
     ///
     /// :return: The current capacity in bits.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs()
+    ///     >>> m.capacity() >= len(m)
+    ///     True
+    ///
     pub fn capacity(&self) -> usize {
         self.as_bitvec_ref().capacity()
     }
@@ -1948,11 +2134,20 @@ impl Mutibs {
     /// :param int additional: The number of bits that can be appended without any further memory reallocations.
     /// :return: None.
     ///
+    /// .. code-block:: python
+    ///
+    ///     m = Mutibs()
+    ///     m.reserve(1000)
+    ///
     pub fn reserve(&mut self, additional: usize) {
         self.as_mut_bitvec_ref().reserve(additional);
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
+    ///
+    /// :param Tibs other: The bits to append.
+    /// :return: A new Mutibs.
+    ///
     pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // We accept the PyAny and convert manually here because if we instead
         // accept a Tibs, then correct types with wrong values (e.g. a malformed string)
@@ -1965,6 +2160,10 @@ impl Mutibs {
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
+    ///
+    /// :param Tibs other: The bits to prepend.
+    /// :return: A new Mutibs.
+    ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
         let mut data = BV::with_capacity(self.len() + other.len());
@@ -1974,6 +2173,10 @@ impl Mutibs {
     }
 
     /// Concatenate in-place.
+    ///
+    /// :param Tibs other: The bits to append.
+    /// :return: None
+    ///
     pub fn __iadd__(slf: PyRefMut<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<()> {
         Self::extend(slf, other)?;
         Ok(())
@@ -2007,6 +2210,14 @@ impl Mutibs {
     ///
     /// :return: bool
     /// :raises IndexError: if the Mutibs is empty.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> a = Mutibs('0b101')
+    ///     >>> a.pop()
+    ///     True
+    ///     >>> a
+    ///     Mutibs('0b10')
     ///
     pub fn pop<'a>(mut slf: PyRefMut<'a, Self>) -> PyResult<bool> {
         match slf.as_mut_bitvec_ref().pop() {
@@ -2125,6 +2336,21 @@ impl Mutibs {
     /// Search and replace and return a new Mutibs.
     ///
     /// This is the non-inplace version of :meth:`replace`.
+    ///
+    /// :param Tibs old: The bits to search for.
+    /// :param Tibs new: The bits to replace with.
+    /// :param int | None start: The starting bit position. Defaults to 0.
+    /// :param int | None end: The end position. Defaults to len(self).
+    /// :param int | None count: If present, the maximum number of replacements to make.
+    /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if old is empty, count is negative or the slice parameters are invalid.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b00010010').replaced([0, 1], [1, 1, 1])
+    ///     Mutibs('0b0011101110')
+    ///
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
     pub fn replaced(
         &self,
@@ -2175,6 +2401,16 @@ impl Mutibs {
     /// Insert bits at position pos and return a new Mutibs.
     ///
     /// This is the non-inplace version of :meth:`insert`.
+    ///
+    /// :param int pos: The bit position to insert at. Clips to the start or end if out of range.
+    /// :param Tibs bs: The bits to insert.
+    /// :return: A new Mutibs.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1011').inserted(2, '0b00')
+    ///     Mutibs('0b100011')
+    ///
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
@@ -2225,6 +2461,7 @@ impl Mutibs {
 
     /// Return the Mutibs as a bytes object.
     ///
+    /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
@@ -2234,7 +2471,9 @@ impl Mutibs {
     ///
     /// Called for expression of the form 'a = b*3'.
     ///
-    /// n -- The number of concatenations. Must be >= 0.
+    /// :param int n: The number of concatenations. Must be >= 0.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
     ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
         if n < 0 {
@@ -2249,28 +2488,50 @@ impl Mutibs {
     ///
     /// Called for expressions of the form 'a = 3*b'.
     ///
-    /// n -- The number of concatenations. Must be >= 0.
+    /// :param int n: The number of concatenations. Must be >= 0.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if n < 0.
     ///
     pub fn __rmul__(&self, n: i64) -> PyResult<Self> {
         self.__mul__(n)
     }
 
     /// In-place bit-wise 'and'.
+    ///
+    /// :param Tibs other: The other bits.
+    /// :return: None
+    /// :raises ValueError: if the two bit sequences have differing lengths.
+    ///
     pub fn __iand__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.iand(other.as_bitslice())
     }
 
     /// In-place bit-wise 'or'.
+    ///
+    /// :param Tibs other: The other bits.
+    /// :return: None
+    /// :raises ValueError: if the two bit sequences have differing lengths.
+    ///
     pub fn __ior__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.ior(other.as_bitslice())
     }
 
     /// In-place bit-wise 'xor'.
+    ///
+    /// :param Tibs other: The other bits.
+    /// :return: None
+    /// :raises ValueError: if the two bit sequences have differing lengths.
+    ///
     pub fn __ixor__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
         slf.ixor(other.as_bitslice())
     }
 
     /// In-place multiplication by a non-negative integer.
+    ///
+    /// :param int n: The number of concatenations. Must be >= 0.
+    /// :return: None
+    /// :raises ValueError: if n < 0.
+    ///
     pub fn __imul__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         match n {
             i if i < 0 => Err(PyValueError::new_err(
@@ -2310,7 +2571,11 @@ impl Mutibs {
     }
 
     pub fn __getattr__(&self, name: String) -> PyResult<()> {
-        if name == "find_all_iter" || name == "rfind_all_iter" || name == "chunks_iter" || name == "rchunks_iter" {
+        if name == "find_all_iter"
+            || name == "rfind_all_iter"
+            || name == "chunks_iter"
+            || name == "rchunks_iter"
+        {
             Err(PyAttributeError::new_err(format!(
                 "'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead."
             )))
