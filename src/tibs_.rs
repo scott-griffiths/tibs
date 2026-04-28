@@ -70,6 +70,14 @@ impl Tibs {
     }
 
     #[inline]
+    fn shares_view_with(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.data, &other.data)
+            && self.offset == other.offset
+            && self.length == other.length
+            && self.msb0 == other.msb0
+    }
+
+    #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
         if self.msb0 {
             &self.data[self.offset..self.offset + self.length]
@@ -1411,7 +1419,9 @@ impl Tibs {
     ///
     pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        // TODO: Return early `if other is self`.
+        if self.shares_view_with(&other) {
+            return Ok(self.clone());
+        }
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_and(self, &other))
     }
@@ -1422,7 +1432,9 @@ impl Tibs {
     ///
     pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        // TODO: Return early `if other is self`.
+        if self.shares_view_with(&other) {
+            return Ok(self.clone());
+        }
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(BitCollection::logical_or(self, &other))
     }

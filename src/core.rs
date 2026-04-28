@@ -308,9 +308,16 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let mut bv = BV::with_capacity(len * n);
         bv.extend_from_bitslice(self.as_bitslice());
-        // TODO: This could be done more efficiently with doubling.
-        for _ in 1..n {
+
+        let mut copies = 1;
+        while copies <= n / 2 {
+            let current = bv.clone();
+            bv.extend_from_bitslice(&current);
+            copies *= 2;
+        }
+        while copies < n {
             bv.extend_from_bitslice(self.as_bitslice());
+            copies += 1;
         }
         Self::from_bv(bv, self.msb0())
     }
