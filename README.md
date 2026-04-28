@@ -3,7 +3,7 @@
   <a href="https://github.com/scott-griffiths/tibs">
     <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs.png" alt="tibs" height="110" />
   </a><br />
-  A sleek Python library for your binary data
+  A sleek Python library for binary data
 </p>
 
 <br clear="left" />
@@ -14,7 +14,8 @@
 [![Docs](https://img.shields.io/readthedocs/mutibs?logo=readthedocs&logoColor=white)](https://mutibs.readthedocs.io/en/latest/)
 ![PyPI - License](https://img.shields.io/pypi/l/tibs)
 &nbsp; &nbsp;
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/tibs?&labelColor=blue&color=blue)](https://pypistats.org/packages/tibs)
+[![Pepy Total Downlods](https://img.shields.io/pepy/dt/tibs?logo=python&logoColor=white&labelColor=blue&color=blue)](https://www.pepy.tech/projects/tibs)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/tibs?label=%40&logoColor=white&labelColor=blue&color=blue)](https://pypistats.org/packages/tibs)
 
 
 ----
@@ -38,119 +39,54 @@ pip install tibs
 There are pre-built wheels for most configurations - if there are issues then please let me know.
 Tibs works with Python 3.8 and later.
 
-One way to get to know the library is to start a Python interactive session, import the two main
-classes, and experiment with some of the example code in the rest of this document.
 
-```python
+## A taster
+
+One way to get to know the library is to start a Python interactive session and try a
+small binary record. `Tibs` is immutable, like `bytes`; `Mutibs` is the mutable version
+for in-place editing.
+
+```pycon
 >>> from tibs import Tibs, Mutibs
+
+>>> # Four flag bits, a 12-bit integer field, then two payload bytes.
+>>> packet = Tibs.from_joined(["0b1010", Tibs.from_u(3200, 12), b"OK"])
+>>> packet
+Tibs('0xac804f4b')
+>>> len(packet)
+32
+
+>>> # Slice at bit positions, then interpret each slice however you need.
+>>> packet[:4].bin
+'1010'
+>>> packet[4:16].to_u()
+3200
+>>> packet[16:].bytes
+b'OK'
+
+>>> # Search and test using strings, bytes, booleans or other Tibs values.
+>>> packet.find("0x4f", byte_aligned=True)
+16
+>>> packet.find_all("0b10")
+[0, 2, 5, 8, 17, 23, 25, 28]
+
+>>> # Convert to Mutibs when you want to patch the data in-place.
+>>> patched = packet.to_mutibs()
+>>> patched[4:16] = Tibs.from_u(2047, 12)
+>>> patched[-8:] = b"!"
+>>> patched
+Mutibs('0xa7ff4f21')
+>>> patched[4:16].to_u(), patched[-16:].bytes
+(2047, b'O!')
+
+>>> # The same operations are designed to scale to large bit sequences.
+>>> Tibs.from_random(1_000_000, seed=b"readme").count(1)
+500480
 ```
 
-## A quick tour
-
-There are two classes:
-
-* `Tibs`: An immutable sequence of bits.
-* `Mutibs`: A mutable sequence of bits (pronounced 'mew-tibs').
-
-They are created by class methods starting with ``from_``, for example
-
-```python
->>> a = Tibs.from_bin('0110')
->>> b = Tibs.from_hex('abc')
->>> c = Tibs.from_string('0xfee, 0b11001')
->>> d = Tibs.from_bytes(b'some_byte_data')
->>> e = Tibs.from_random(1000)  # 1000 random bits
->>> f = Tibs.from_u(76, 25)  # Unsigned int stored in 25 bits
->>> g = Tibs.from_f(-0.125, 16)  # A float stored in 16 bits
->>> h = Tibs.from_bools([1, 0, 0])
->>> i = Tibs.from_joined([a, b, c, d, e, f, g, h])
-```
-
-Once created they are just binary data, stored efficiently, and they don't retain any information about how they were
-created.
-
-The `Tibs` constructor can also be used to create new instances, and it will delegate to `from_string`, `from_bytes` or
-`from_bools`.
-This is often more convenient:
-
-```python
->>> a = Tibs('0b0110')
->>> b = Tibs('0xabc')
->>> c = Tibs('0xfee, 0b11001')
->>> d = Tibs(b'some_byte_data')
->>> h = Tibs([1, 0, 0])
-```
-
-Anything that works in the constructor can also be used in other places where a `Tibs` is needed.
-For example, instead of writing
-
-```python
-x = b & Tibs.from_hex('0xff0')
-if x.starts_with(Tibs.from_bin('0b11')):
-    x += Tibs.from_bools([0, 1, 1])
-```
-
-you can write just
-
-```python
-x = b & '0xff0'
-if x.starts_with('0b11'):
-    x += [0, 1, 1]
-```
-
-Note that the binary and hex strings need the `0b` and `0x` prefixes when not called via `from_bin` and `from_hex`.
-
-To get the data out of the `Tibs` there are similar methods starting with ``to_``
-
-```python
->>> a.to_bin()
-'0110'
->>> b.to_hex()
-'abc'
->>> d.to_bytes()
-b'some_byte_data'
->>> f.to_u()
-76
->>> g.to_f()
--0.125
-```
-
-There isn't a `to_bools` method, but creating a `list` from the `Tibs` instance will have the same effect.
-You can also use `Tibs` instances as iterators of bits.
-
-Instances of `Tibs` are immutable. Once created they can't change in value, much like the Python `bytes` and `str`
-types.
-This allows them to be hashed, stored in sets, used as dictionary keys etc., and also allows various optimizations to be
-used to make them more efficient. They should be used by default if values don't need to be changed.
-
-This does mean that the standard pieces of advice for working with things like Python strings does apply, and why
-something like this line:
-
-```python
-i = Tibs()
-for t in [a, b, c, d, e, f, g, h]:
-    i += t  # NOT RECOMMENDED!
-```
-
-is an anti-pattern to avoid as it will create a new instance every time it appends. Use `from_joined` instead.
-
-For the times when you do need a mutable container use `Mutibs`.
-This can do everything that `Tibs` can do, except that it's not hashable, so can't be used as a dictionary key, in sets
-etc.
-It also has several extra methods that will mutate the value in-place.
-
-```python
->>> m = Mutibs()
->>> m.extend('0xabde')
->>> m
-Mutibs('0xabde')
->>> m.replace([1], [0, 1, 0])
->>> m
-Mutibs('0b01000100010001001001001000100100100100')
-```
-
-You can do everything you'd expect with these classes - slicing, boolean operations, shifting, rotating, finding,
-replacing, setting, reversing etc.
+This only scratches the surface: the docs cover construction from ints, floats, bytes
+and strings; endianness; searching and replacing; rotations; bit indexing; and more
+worked examples.
 
 For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
 

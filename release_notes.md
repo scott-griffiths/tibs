@@ -12,6 +12,7 @@
   Tibs.rfind_all -> Tibs.rfind_all_iter
 * Added new Tibs/Mutibs chunks/find_all methods that return a list.
 * Added Tibs.rchunks_iter method.
+* Added 'Tibs' cat mascot to the documentation. Thanks to Ada Griffiths.
 
 ### April 3rd 2026: version 0.6.0.
 
