@@ -903,12 +903,8 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     }
 
     // Is it an iterable that we can convert each element to a bool?
-    if let Ok(iter) = any.try_iter() {
-        let mut bv = BV::new();
-        for item in iter {
-            bv.push(item?.is_truthy()?);
-        }
-        return Ok(bv);
+    if any.try_iter().is_ok() {
+        return bv_from_bools(any);
     }
     let type_name = match any.get_type().name() {
         Ok(name) => name.to_string(),
