@@ -14,7 +14,7 @@
 [![Docs](https://img.shields.io/readthedocs/mutibs?logo=readthedocs&logoColor=white)](https://mutibs.readthedocs.io/en/latest/)
 ![PyPI - License](https://img.shields.io/pypi/l/tibs)
 &nbsp; &nbsp;
-[![Pepy Total Downlods](https://img.shields.io/pepy/dt/tibs?logo=python&logoColor=white&labelColor=blue&color=blue)](https://www.pepy.tech/projects/tibs)
+[![Pepy Total Downloads](https://img.shields.io/pepy/dt/tibs?logo=python&logoColor=white&labelColor=blue&color=blue)](https://www.pepy.tech/projects/tibs)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/tibs?label=%40&logoColor=white&labelColor=blue&color=blue)](https://pypistats.org/packages/tibs)
 
 
@@ -95,3 +95,7 @@ For more information see the full [documentation](https://mutibs.readthedocs.io/
 The `tibs` library was created by Scott Griffiths and is released under the MIT License.
 
 The Tibs cat artwork was created by Ada Griffiths and is not covered by the software license. All rights reserved.
+
+<p>
+  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs_white.png" alt="Tibs cat" height="130" align="left" />
+</p>
