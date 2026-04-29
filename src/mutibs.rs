@@ -42,6 +42,14 @@ pub struct Mutibs {
     pub msb0: bool,
 }
 
+enum JoinedPart<'py> {
+    // Keep existing bit containers borrowed during a join. Promoted Python
+    // values still need owned storage because their BitVec is created here.
+    Tibs(PyRef<'py, Tibs>),
+    Mutibs(PyRef<'py, Mutibs>),
+    Owned(BV),
+}
+
 // Internal methods, not exported to Python
 impl Mutibs {
     pub(crate) fn from_bv(bv: BV, msb0: bool) -> Self {
@@ -72,6 +80,55 @@ impl Mutibs {
     #[inline]
     pub(crate) fn raw_bytes(&self) -> Vec<u8> {
         self.data.as_raw_slice().to_vec()
+    }
+
+    pub(crate) fn joined_bv_from_iterable(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
+        // Walk the iterable once to collect bit views and compute the final
+        // length, so the destination BitVec can be allocated exactly once.
+        let iter = iterable.try_iter()?;
+        let mut parts = Vec::new();
+        let mut total_len: usize = 0;
+        for item in iter {
+            Self::push_joined_part(&mut parts, &mut total_len, item?)?;
+        }
+        Self::join_parts(parts, total_len)
+    }
+
+    fn push_joined_part<'py>(
+        parts: &mut Vec<JoinedPart<'py>>,
+        total_len: &mut usize,
+        obj: Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        if let Ok(tibs) = obj.extract::<PyRef<Tibs>>() {
+            *total_len += tibs.len();
+            parts.push(JoinedPart::Tibs(tibs));
+        } else if let Ok(mutibs) = obj.extract::<PyRef<Mutibs>>() {
+            *total_len += mutibs.len();
+            parts.push(JoinedPart::Mutibs(mutibs));
+        } else {
+            let bv = promote_to_bv(&obj)?;
+            *total_len += bv.len();
+            parts.push(JoinedPart::Owned(bv));
+        }
+        Ok(())
+    }
+
+    fn join_parts(parts: Vec<JoinedPart<'_>>, total_len: usize) -> PyResult<BV> {
+        // Copy into pre-sized storage instead of repeatedly growing the
+        // BitVec. This matters when joining many small bit containers.
+        let mut bv = bv_from_zeros(total_len);
+        let mut bit_index = 0;
+        for part in parts {
+            let bits = match &part {
+                JoinedPart::Tibs(tibs) => tibs.as_bitslice(),
+                JoinedPart::Mutibs(mutibs) => mutibs.as_bitslice(),
+                JoinedPart::Owned(bv) => bv.as_bitslice(),
+            };
+            let next_index = bit_index + bits.len();
+            bv[bit_index..next_index].copy_from_bitslice(bits);
+            bit_index = next_index;
+        }
+        Ok(bv)
     }
 
     #[inline]
@@ -1101,21 +1158,7 @@ impl Mutibs {
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
         let msb0 = BitIndexing::is_msb0(bit_indexing);
-        // Collect Tibs handles first so we can preallocate once without BV temporaries.
-        let iter = iterable.try_iter()?;
-        let mut parts: Vec<Tibs> = Vec::new();
-        let mut total_len: usize = 0;
-        for item in iter {
-            let obj = item?;
-            let tibs = Tibs::extract(obj.as_borrowed())?;
-            total_len += tibs.len();
-            parts.push(tibs);
-        }
-
-        let mut bv = BV::with_capacity(total_len);
-        for part in parts {
-            bv.extend_from_bitslice(part.as_bitslice());
-        }
+        let bv = Self::joined_bv_from_iterable(iterable)?;
         Ok(Mutibs::from_bv(bv, msb0))
     }
 
@@ -2245,10 +2288,25 @@ impl Mutibs {
             // If bs is slf, clone inner bits first then extend
             let bits_clone = slf.to_bitvec();
             slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
-        } else {
-            let bs = Tibs::extract(bs.as_borrowed())?;
+        } else if let Ok(tibs) = bs.extract::<PyRef<Tibs>>() {
+            // Existing tibs containers can be borrowed directly; avoid
+            // materializing a temporary Tibs through the generic converter.
             slf.as_mut_bitvec_ref()
-                .extend_from_bitslice(bs.as_bitslice());
+                .extend_from_bitslice(tibs.as_bitslice());
+        } else if let Ok(mutibs) = bs.extract::<PyRef<Mutibs>>() {
+            // Mutibs inputs also expose a stable bit slice while we hold the
+            // Python reference.
+            slf.as_mut_bitvec_ref()
+                .extend_from_bitslice(mutibs.as_bitslice());
+        } else {
+            let bits = promote_to_bv(bs)?;
+            if slf.is_empty() {
+                // For an empty receiver, move the promoted BitVec into place
+                // rather than copying it into another allocation.
+                *slf.as_mut_bitvec_ref() = bits;
+            } else {
+                slf.as_mut_bitvec_ref().extend_from_bitslice(&bits);
+            }
         }
         Ok(())
     }

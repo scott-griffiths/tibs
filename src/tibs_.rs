@@ -1178,7 +1178,13 @@ impl Tibs {
         iterable: &Bound<'_, PyAny>,
         bit_indexing: Option<BitIndexing>,
     ) -> PyResult<Self> {
-        Ok(Mutibs::from_joined(_cls, iterable, bit_indexing)?.as_tibs())
+        let msb0 = BitIndexing::is_msb0(bit_indexing);
+        // Build the immutable result directly; going through Mutibs::as_tibs
+        // would move through an unnecessary mutable wrapper.
+        Ok(Tibs::from_bv(
+            Mutibs::joined_bv_from_iterable(iterable)?,
+            msb0,
+        ))
     }
 
     /// Return the Tibs as a bytes object.

@@ -6,7 +6,8 @@ use memchr::memmem;
 use once_cell::sync::Lazy;
 use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyMemoryView};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PyTuple};
+use pyo3::{PyErr, ffi};
 use rand::rngs::{StdRng, SysRng};
 use rand::{Rng, SeedableRng, TryRng};
 use sha2::{Digest, Sha256};
@@ -808,6 +809,23 @@ pub(crate) fn bv_from_f64(value: f64, length: i64, is_little_endian: bool) -> Py
 }
 
 pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
+    // Lists and tuples are the common bulk path. Reading their items through
+    // the C API avoids creating a Bound<PyAny> wrapper for every bit.
+    if let Ok(list) = iterable.cast::<PyList>() {
+        return unsafe {
+            bv_from_py_sequence_items(iterable.py(), list.len(), |index| {
+                ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t)
+            })
+        };
+    }
+    if let Ok(tuple) = iterable.cast::<PyTuple>() {
+        return unsafe {
+            bv_from_py_sequence_items(iterable.py(), tuple.len(), |index| {
+                ffi::PyTuple_GetItem(tuple.as_ptr(), index as ffi::Py_ssize_t)
+            })
+        };
+    }
+
     // For sequences, we can pre-allocate the capacity.
     let capacity = iterable.len().ok().unwrap_or(64);
     let mut bv = BV::with_capacity(capacity);
@@ -815,6 +833,43 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     for value in iterable.try_iter()? {
         bv.push(value?.is_truthy()?);
     }
+    Ok(bv)
+}
+
+unsafe fn bv_from_py_sequence_items(
+    py: Python<'_>,
+    len: usize,
+    mut get_item: impl FnMut(usize) -> *mut ffi::PyObject,
+) -> PyResult<BV> {
+    // The callers pass list/tuple indices in bounds, so borrowed item pointers
+    // are valid while the GIL is held. Pack directly into Msb0 bytes to avoid
+    // BitVec::push overhead for large Python bool sequences.
+    let mut bytes = vec![0u8; len.div_ceil(8)];
+    let py_true = unsafe { ffi::Py_True() };
+    let py_false = unsafe { ffi::Py_False() };
+
+    for index in 0..len {
+        let item = get_item(index);
+        // Python bools are singletons, so pointer comparison handles the
+        // benchmark path cheaply. Other objects keep normal truthiness.
+        let bit = if item == py_true {
+            true
+        } else if item == py_false {
+            false
+        } else {
+            match unsafe { ffi::PyObject_IsTrue(item) } {
+                0 => false,
+                1 => true,
+                -1 => return Err(PyErr::fetch(py)),
+                _ => unreachable!("PyObject_IsTrue only returns -1, 0, or 1"),
+            }
+        };
+        if bit {
+            bytes[index / 8] |= 0x80 >> (index & 7);
+        }
+    }
+    let mut bv = BV::from_vec(bytes);
+    bv.truncate(len);
     Ok(bv)
 }
 
