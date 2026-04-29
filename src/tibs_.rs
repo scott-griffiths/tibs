@@ -100,13 +100,49 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn raw_bytes(&self) -> Vec<u8> {
-        // Given the bit offset self._offset and the bit length self._length
-        // return the byte data from the bitvec self._data. The data should cover just
-        // enough bytes and should not realign them in any way.
-        let byte_offset = self.offset / 8;
-        let final_byte = (self.offset + self.length).div_ceil(8);
-        let full_bytes = self.data.as_raw_slice();
-        full_bytes[byte_offset..final_byte].to_vec()
+        let bit_offset = match self.as_bitslice().domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem), ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        let physical_start = if self.msb0 {
+            self.offset
+        } else {
+            self.data.len() - self.length - self.offset
+        };
+        let byte_start = physical_start / 8;
+        let byte_len = (bit_offset + self.length).div_ceil(8);
+        self.data.as_raw_slice()[byte_start..byte_start + byte_len].to_vec()
+    }
+
+    #[inline]
+    pub(crate) fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+        let data_head_offset = match self.data.as_bitslice().domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem), ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        if data_head_offset != 0 {
+            return None;
+        }
+
+        let physical_start = if self.msb0 {
+            self.offset
+        } else {
+            self.data.len() - self.length - self.offset
+        };
+        let byte_start = physical_start / 8;
+        let bit_offset = physical_start % 8;
+        let byte_len = (bit_offset + self.length).div_ceil(8);
+        Some((
+            &self.data.as_raw_slice()[byte_start..byte_start + byte_len],
+            bit_offset,
+            self.length,
+        ))
     }
 
     pub(crate) fn find_impl(

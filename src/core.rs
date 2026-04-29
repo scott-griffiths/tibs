@@ -8,6 +8,48 @@ use pyo3::PyResult;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use std::fmt;
 
+#[inline]
+fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
+    debug_assert!((-7..=7).contains(&bit_shift));
+    match bit_shift.cmp(&0) {
+        std::cmp::Ordering::Equal => bytes.get(byte_index).copied().unwrap_or(0),
+        std::cmp::Ordering::Greater => {
+            let shift = bit_shift as u32;
+            let current = bytes.get(byte_index).copied().unwrap_or(0);
+            let next = bytes.get(byte_index + 1).copied().unwrap_or(0);
+            (current << shift) | (next >> (8 - shift))
+        }
+        std::cmp::Ordering::Less => {
+            let shift = (-bit_shift) as u32;
+            let previous = byte_index
+                .checked_sub(1)
+                .and_then(|index| bytes.get(index))
+                .copied()
+                .unwrap_or(0);
+            let current = bytes.get(byte_index).copied().unwrap_or(0);
+            (current >> shift) | (previous << (8 - shift))
+        }
+    }
+}
+
+#[inline]
+fn logical_op_with_aligned_bytes(
+    lhs: &[u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    op: impl Fn(u8, u8) -> u8,
+) -> Vec<u8> {
+    debug_assert!(lhs_offset < 8);
+    debug_assert!(rhs_offset < 8);
+
+    let rhs_shift = rhs_offset as isize - lhs_offset as isize;
+    lhs.iter()
+        .enumerate()
+        .map(|(index, &left)| op(left, align_byte(rhs, index, rhs_shift)))
+        .collect()
+}
+
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized + Clone {
     fn from_bv(bv: BV, msb0: bool) -> Self;
@@ -17,6 +59,10 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
     fn get_raw_bytes(&self) -> Vec<u8>;
+
+    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+        None
+    }
 
     fn raw_data(&self) -> (Vec<u8>, usize, usize) {
         let raw_bytes = self.get_raw_bytes();
@@ -35,12 +81,21 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn logical_or(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
 
-        // TODO: We only have the 150x speedup when both offsets are zero.
-        let (lhs, lhs_offset, _) = self.raw_data();
-        let (rhs, rhs_offset, _) = other.raw_data();
+        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
+            (self.raw_data_ref(), other.raw_data_ref())
+        else {
+            let mut result = self.to_bitvec();
+            result |= other.as_bitslice();
+            return Self::from_bv(result, self.msb0());
+        };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
+            let bv = BV::from_vec(data);
+            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
+        } else if self.msb0() && other.msb0() {
+            let data =
+                logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a | b);
             let bv = BV::from_vec(data);
             Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
         } else {
@@ -54,11 +109,21 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn logical_and(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
 
-        let (lhs, lhs_offset, _) = self.raw_data();
-        let (rhs, rhs_offset, _) = other.raw_data();
+        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
+            (self.raw_data_ref(), other.raw_data_ref())
+        else {
+            let mut result = self.to_bitvec();
+            result &= other.as_bitslice();
+            return Self::from_bv(result, self.msb0());
+        };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a & b).collect();
+            let bv = BV::from_vec(data);
+            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
+        } else if self.msb0() && other.msb0() {
+            let data =
+                logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a & b);
             let bv = BV::from_vec(data);
             Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
         } else {
@@ -68,58 +133,25 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
-    // This doesn't work for Mutibs. Not sure why yet.
-    // #[inline]
-    // fn logical_and(&self, other: &impl BitCollection) -> Self {
-    //     debug_assert!(self.len() == other.len());
-    //
-    //     let (lhs, lhs_offset, _) = self.raw_data();
-    //     let (rhs, rhs_offset, _) = other.raw_data();
-    //     debug_assert!(lhs_offset < 8);
-    //     debug_assert!(rhs_offset < 8);
-    //     debug_assert_eq!(lhs.len(), (lhs_offset + self.len() + 7) / 8);
-    //     debug_assert_eq!(rhs.len(), (rhs_offset + other.len() + 7) / 8);
-    //
-    //     let (lhs_byte_data, rhs_byte_data, new_offset) = match lhs_offset.cmp(&rhs_offset) {
-    //         Ordering::Equal => (lhs, rhs, lhs_offset),
-    //         Ordering::Less => {
-    //             // Shift rhs to the left
-    //             let mut bv = BV::from_vec(rhs);
-    //             bv.shift_left(rhs_offset - lhs_offset);
-    //             bv.set_uninitialized(false);
-    //             (lhs, bv.into_vec(), lhs_offset)
-    //         }
-    //         Ordering::Greater => {
-    //             let mut bv = BV::from_vec(lhs);
-    //             bv.shift_left(lhs_offset - rhs_offset);
-    //             bv.set_uninitialized(false);
-    //             (bv.into_vec(), rhs, rhs_offset)
-    //         }
-    //     };
-    //
-    //     let data: Vec<u8> = lhs_byte_data
-    //         .iter()
-    //         .zip(rhs_byte_data.iter())
-    //         .map(|(&a, &b)| a & b)
-    //         .collect();
-    //     debug_assert!(new_offset < 8);
-    //     let data_length = data.len();
-    //     debug_assert_eq!((self.len() + new_offset + 7) / 8, data.len());
-    //     debug_assert!(data_length * 8 >= self.len());
-    //     let bv = BV::from_vec(data);
-    //     debug_assert!(bv.len() == data_length * 8);
-    //     Self::from_bv(bv).get_slice_unchecked(new_offset, self.len())
-    // }
-
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
         debug_assert!(self.len() == other.len());
 
-        let (lhs, lhs_offset, _) = self.raw_data();
-        let (rhs, rhs_offset, _) = other.raw_data();
+        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
+            (self.raw_data_ref(), other.raw_data_ref())
+        else {
+            let mut result = self.to_bitvec();
+            result ^= other.as_bitslice();
+            return Self::from_bv(result, self.msb0());
+        };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
+            let bv = BV::from_vec(data);
+            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
+        } else if self.msb0() && other.msb0() {
+            let data =
+                logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a ^ b);
             let bv = BV::from_vec(data);
             Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
         } else {
@@ -1223,6 +1255,11 @@ impl BitCollection for Tibs {
     fn get_raw_bytes(&self) -> Vec<u8> {
         Tibs::raw_bytes(self)
     }
+
+    #[inline]
+    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+        Tibs::raw_data_ref(self)
+    }
 }
 
 impl BitCollection for Mutibs {
@@ -1262,7 +1299,24 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn get_raw_bytes(&self) -> Vec<u8> {
-        self.raw_bytes()
+        Mutibs::raw_bytes(self)
+    }
+
+    #[inline]
+    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+        let slice = self.as_bitslice();
+        let offset = match slice.domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem), ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        };
+        if offset == 0 {
+            Some((self.data.as_raw_slice(), offset, slice.len()))
+        } else {
+            None
+        }
     }
 }
 

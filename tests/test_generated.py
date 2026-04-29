@@ -784,3 +784,18 @@ def test_decode_malformed_zstd_with_impossible_padding_raises_value_error():
     malformed = bytes.fromhex("510d28b52ffd240001000099e9d851")
     with pytest.raises(ValueError):
         Tibs.decode(malformed)
+
+
+def test_bit_ops_unequal_offsets():
+    a = Tibs('0b11001010_01110100_10111100')
+    b = Tibs('0b10110101_11001001_00101110')
+    left = a[3:21]
+    right = b[5:23]
+
+    expected_or = [x or y for x, y in zip(left, right)]
+    expected_and = [x and y for x, y in zip(left, right)]
+    expected_xor = [x != y for x, y in zip(left, right)]
+
+    assert list(left | right) == expected_or
+    assert list(left & right) == expected_and
+    assert list(left ^ right) == expected_xor
