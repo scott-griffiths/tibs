@@ -180,10 +180,18 @@ jobs:
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
+      - name: pytest
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/Scripts/activate
+          pip install tibs[dev] --find-links dist --force-reinstall
+          pytest
 
-  # Keep this separate from the regular Windows wheel job because setup-python
-  # currently breaks when installing regular and free-threaded Python together
-  # on windows-11-arm.
+  # Keep this separate from the regular Windows wheel job. Use the official
+  # NuGet packages because setup-python currently fails while installing the
+  # Windows ARM free-threaded archive into the hosted toolcache.
   windows-free-threaded:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -192,23 +200,30 @@ jobs:
           - runner: windows-latest
             target: x64
             python_arch: x64
+            nuget_package: python-freethreaded
           - runner: windows-latest
             target: x86
             python_arch: x86
+            nuget_package: pythonx86-freethreaded
           - runner: windows-11-arm
             target: aarch64
             python_arch: arm64
+            nuget_package: pythonarm64-freethreaded
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: 3.14t
-          architecture: ${{ matrix.platform.python_arch }}
+      - name: Install free-threaded Python
+        shell: pwsh
+        run: |
+          nuget install ${{ matrix.platform.nuget_package }} -Version 3.14.4 -OutputDirectory $env:RUNNER_TEMP\python-ft
+          $pythonPath = Join-Path $env:RUNNER_TEMP "python-ft\${{ matrix.platform.nuget_package }}.3.14.4\tools"
+          Add-Content $env:GITHUB_PATH $pythonPath
+          & "$pythonPath\python3.14t.exe" --version
+          & "$pythonPath\python3.14t.exe" -m ensurepip --upgrade
       - name: Build free-threaded wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist -i python3.14t
+          args: --release --out dist -i python3.14t.exe
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
         uses: actions/upload-artifact@v6
@@ -219,7 +234,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          python3 -m venv .venv
+          python3.14t.exe -m venv .venv
           source .venv/Scripts/activate
           pip install tibs[dev] --find-links dist --force-reinstall
           pytest
