@@ -1167,6 +1167,11 @@ impl Mutibs {
         self.len()
     }
 
+    /// Whether the Mutibs has any bits.
+    pub fn __bool__(&self) -> bool {
+        !self.as_bitvec_ref().is_empty()
+    }
+
     /// Get a bit or a slice of bits.
     ///
     /// :param int | slice key: The index or slice to get.
@@ -2262,9 +2267,9 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b10')
     ///
-    pub fn pop<'a>(mut slf: PyRefMut<'a, Self>) -> PyResult<bool> {
-        match slf.as_mut_bitvec_ref().pop() {
-            Some(bit) => Ok(bit),
+    pub fn pop<'py>(&mut self, py: Python<'py>) -> PyResult<pyo3::Borrowed<'py, 'py, PyBool>> {
+        match self.as_mut_bitvec_ref().pop() {
+            Some(bit) => Ok(PyBool::new(py, bit)),
             None => Err(PyIndexError::new_err("pop from empty Mutibs.")),
         }
     }
