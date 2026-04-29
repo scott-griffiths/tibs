@@ -1,5 +1,9 @@
 .. currentmodule:: tibs
 
+.. note::
+
+    This part of the documentation is under construction.
+    For now, see the API docs for the most complete information.
 
 Manipulations
 -------------
