@@ -97,5 +97,5 @@ The `tibs` library was created by Scott Griffiths and is released under the MIT 
 The Tibs cat artwork was created by Ada Griffiths and is not covered by the software license. All rights reserved.
 
 <p>
-  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs_white.png" alt="Tibs cat" height="130" align="left" />
+  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/_static/tibs_white_sleeping.png" alt="Tibs cat" height="110" align="left" />
 </p>
