@@ -35,7 +35,6 @@ impl BoolIterator {
 pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
     pub haystack_len: usize,
-    pub haystack_msb0: bool,
     pub needle: Tibs,
     pub start: usize,
     pub end: usize,
@@ -62,8 +61,6 @@ impl FindAllIterator {
             return Ok(None);
         }
         let haystack_len = slf.haystack_len;
-        let haystack_msb0 = slf.haystack_msb0;
-
         if let (Some(byte_haystack), Some(byte_needle)) = (&slf.byte_haystack, &slf.byte_needle) {
             let found = if slf.is_reverse {
                 if slf.byte_current == 0 {
@@ -86,12 +83,7 @@ impl FindAllIterator {
                     } else {
                         slf.byte_current = byte_pos + 1;
                     }
-                    Ok(Some(helpers::physical_match_to_logical_start(
-                        haystack_len,
-                        needle_len,
-                        absolute_byte_pos * 8,
-                        haystack_msb0,
-                    )))
+                    Ok(Some(absolute_byte_pos * 8))
                 }
                 None => Ok(None),
             };
@@ -111,15 +103,7 @@ impl FindAllIterator {
         let find_result = {
             let haystack_rs = slf.haystack.borrow(py);
             let lps = &slf.lps;
-            let alignment_mod8 = if byte_aligned {
-                Some(helpers::byte_aligned_physical_offset(
-                    haystack_len,
-                    needle_len,
-                    haystack_msb0,
-                ))
-            } else {
-                None
-            };
+            let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
             let result = if slf.is_reverse {
                 if current_pos <= slf.start || current_pos > slf.end {
@@ -159,12 +143,7 @@ impl FindAllIterator {
                 } else {
                     slf.current_pos = pos + step;
                 }
-                Ok(Some(helpers::physical_match_to_logical_start(
-                    haystack_len,
-                    needle_len,
-                    pos,
-                    haystack_msb0,
-                )))
+                Ok(Some(pos))
             }
             None => Ok(None),
         }

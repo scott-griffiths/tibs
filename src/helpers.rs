@@ -84,29 +84,6 @@ pub(crate) fn find_bitvec(
     find_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
 }
 
-pub(crate) fn rfind_bitvec(
-    haystack: &BS,
-    needle: &BS,
-    start: usize,
-    end: usize,
-    byte_aligned: bool,
-) -> Option<usize> {
-    debug_assert!(end >= start);
-    debug_assert!(end <= haystack.len());
-    let lps = compute_lps(needle);
-    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-    rfind_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
-}
-
-#[inline]
-pub(crate) fn byte_aligned_physical_offset(length: usize, needle_len: usize, msb0: bool) -> usize {
-    if msb0 {
-        0
-    } else {
-        length.saturating_sub(needle_len) & 7
-    }
-}
-
 pub(crate) fn find_bitvec_aligned(
     haystack: &BS,
     needle: &BS,
@@ -169,7 +146,6 @@ pub(crate) fn collect_find_all_positions(
     haystack: &BS,
     needle: &BS,
     haystack_len: usize,
-    haystack_msb0: bool,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -179,17 +155,9 @@ pub(crate) fn collect_find_all_positions(
     debug_assert!(end <= haystack.len());
 
     let needle_len = needle.len();
-    let is_reverse = !haystack_msb0;
+    let is_reverse = false;
     let step = if byte_aligned { 8 } else { 1 };
-    let alignment_mod8 = if byte_aligned {
-        Some(byte_aligned_physical_offset(
-            haystack_len,
-            needle_len,
-            haystack_msb0,
-        ))
-    } else {
-        None
-    };
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
     if let Some((byte_haystack, byte_needle, byte_base)) =
         byte_search_prep(haystack, needle, start, end, alignment_mod8)
@@ -214,14 +182,7 @@ pub(crate) fn collect_find_all_positions(
             let Some(byte_pos) = found else {
                 break;
             };
-            matches.push(
-                physical_match_to_logical_start(
-                    haystack_len,
-                    needle_len,
-                    (byte_base + byte_pos) * 8,
-                    haystack_msb0,
-                ) as u64,
-            );
+            matches.push(((byte_base + byte_pos) * 8) as u64);
             if is_reverse {
                 byte_current = byte_pos + byte_needle.len().saturating_sub(1);
             } else {
@@ -259,9 +220,7 @@ pub(crate) fn collect_find_all_positions(
         let Some(pos) = found else {
             break;
         };
-        matches.push(
-            physical_match_to_logical_start(haystack_len, needle_len, pos, haystack_msb0) as u64,
-        );
+        matches.push(pos as u64);
         if is_reverse {
             current_pos = pos + needle_len.saturating_sub(step);
         } else {
@@ -439,8 +398,8 @@ pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
     count
 }
 
-/// Validates the index is in range and returns an absolute MSB0 index.
-pub(crate) fn validate_index(index: isize, length: usize, is_msb0: bool) -> PyResult<usize> {
+/// Validates the index is in range and returns an absolute bit index.
+pub(crate) fn validate_index(index: isize, length: usize) -> PyResult<usize> {
     let index_p = if index < 0 {
         length as isize + index
     } else {
@@ -451,11 +410,7 @@ pub(crate) fn validate_index(index: isize, length: usize, is_msb0: bool) -> PyRe
             "Index of {index} is out of range for length of {length}"
         )));
     }
-    if is_msb0 {
-        Ok(index_p as usize)
-    } else {
-        Ok((length as isize - index_p - 1) as usize)
-    }
+    Ok(index_p as usize)
 }
 
 pub(crate) fn validate_shift(s: &impl BitCollection, n: i64) -> PyResult<usize> {
@@ -493,34 +448,6 @@ pub(crate) fn validate_slice(
         )));
     }
     Ok((start as usize, end as usize))
-}
-
-#[inline]
-pub(crate) fn logical_range_to_physical(
-    length: usize,
-    start: usize,
-    end: usize,
-    msb0: bool,
-) -> (usize, usize) {
-    if msb0 {
-        (start, end)
-    } else {
-        (length - end, length - start)
-    }
-}
-
-#[inline]
-pub(crate) fn physical_match_to_logical_start(
-    length: usize,
-    needle_len: usize,
-    physical_start: usize,
-    msb0: bool,
-) -> usize {
-    if msb0 {
-        physical_start
-    } else {
-        length - needle_len - physical_start
-    }
 }
 
 pub(crate) fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
@@ -898,10 +825,9 @@ pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     // Check if it's already in the cache
     {
-        let mut cache =
-            BITS_CACHE.
-                lock().
-                map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
+        let mut cache = BITS_CACHE
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
         if let Some(cached_data) = cache.get(&s) {
             return Ok(cached_data.clone());
         }
@@ -932,10 +858,9 @@ pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     };
     // Update cache with new result
     {
-        let mut cache =
-            BITS_CACHE.
-                lock().
-                map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
+        let mut cache = BITS_CACHE
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("Internal bits cache mutex poisoned?"))?;
         cache.put(s, result.clone());
     }
     Ok(result)

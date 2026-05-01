@@ -11,7 +11,6 @@ use pyo3::prelude::*;
 fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tibs_::Tibs>()?;
     m.add_class::<mutibs::Mutibs>()?;
-    m.add_class::<enums::BitIndexing>()?;
     m.add_class::<enums::Endianness>()?;
     m.add_class::<enums::Codec>()?;
     Ok(())

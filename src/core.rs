@@ -52,8 +52,7 @@ fn logical_op_with_aligned_bytes(
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized + Clone {
-    fn from_bv(bv: BV, msb0: bool) -> Self;
-    fn msb0(&self) -> bool;
+    fn from_bv(bv: BV) -> Self;
     fn to_bitvec(&self) -> BV;
     fn as_bitslice(&self) -> &BS;
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
@@ -86,22 +85,18 @@ pub(crate) trait BitCollection: Sized + Clone {
         else {
             let mut result = self.to_bitvec();
             result |= other.as_bitslice();
-            return Self::from_bv(result, self.msb0());
+            return Self::from_bv(result);
         };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else if self.msb0() && other.msb0() {
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
+        } else {
             let data =
                 logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a | b);
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else {
-            let mut result = self.to_bitvec();
-            result |= other.as_bitslice();
-            Self::from_bv(result, self.msb0())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         }
     }
 
@@ -114,22 +109,18 @@ pub(crate) trait BitCollection: Sized + Clone {
         else {
             let mut result = self.to_bitvec();
             result &= other.as_bitslice();
-            return Self::from_bv(result, self.msb0());
+            return Self::from_bv(result);
         };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a & b).collect();
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else if self.msb0() && other.msb0() {
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
+        } else {
             let data =
                 logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a & b);
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else {
-            let mut result = self.to_bitvec();
-            result &= other.as_bitslice();
-            Self::from_bv(result, self.msb0())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         }
     }
 
@@ -142,22 +133,18 @@ pub(crate) trait BitCollection: Sized + Clone {
         else {
             let mut result = self.to_bitvec();
             result ^= other.as_bitslice();
-            return Self::from_bv(result, self.msb0());
+            return Self::from_bv(result);
         };
 
         if lhs_offset == rhs_offset {
             let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else if self.msb0() && other.msb0() {
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
+        } else {
             let data =
                 logical_op_with_aligned_bytes(&lhs, lhs_offset, &rhs, rhs_offset, |a, b| a ^ b);
             let bv = BV::from_vec(data);
-            Self::from_bv(bv, self.msb0()).get_slice_unchecked(lhs_offset, self.len())
-        } else {
-            let mut result = self.to_bitvec();
-            result ^= other.as_bitslice();
-            Self::from_bv(result, self.msb0())
+            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
         }
     }
 
@@ -188,29 +175,21 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn starts_with(&self, prefix: impl BitCollection) -> bool {
         let n = prefix.len();
         if n <= self.len() {
-            if self.msb0() {
-                *prefix.as_bitslice() == self.as_bitslice()[..n]
-            } else {
-                *prefix.as_bitslice() == self.as_bitslice()[self.len() - n..]
-            }
+            *prefix.as_bitslice() == self.as_bitslice()[..n]
         } else {
             false
         }
     }
 
     #[inline]
-    fn empty(msb0: bool) -> Self {
-        Self::from_bv(BV::new(), msb0)
+    fn empty() -> Self {
+        Self::from_bv(BV::new())
     }
 
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
         let n = suffix.len();
         if n <= self.len() {
-            if self.msb0() {
-                *suffix.as_bitslice() == self.as_bitslice()[self.len() - n..]
-            } else {
-                *suffix.as_bitslice() == self.as_bitslice()[..n]
-            }
+            *suffix.as_bitslice() == self.as_bitslice()[self.len() - n..]
         } else {
             false
         }
@@ -219,7 +198,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     /// Returns the bool value at a given bit index.
     #[inline]
     fn get_index(&self, bit_index: isize) -> PyResult<bool> {
-        let index = validate_index(bit_index, self.len(), self.msb0())?;
+        let index = validate_index(bit_index, self.len())?;
         Ok(self.as_bitslice()[index])
     }
 
@@ -241,41 +220,22 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         if step > 0 {
             if start_bit >= end_bit {
-                return Ok(BitCollection::empty(self.msb0()));
+                return Ok(BitCollection::empty());
             }
             if end_bit as usize > self.len() {
                 return Err(PyValueError::new_err(
                     "Slice end goes past the end of the container.".to_string(),
                 ));
             }
-            if self.msb0() {
-                Ok(Self::from_bv(
-                    self.as_bitslice()[start_bit as usize..end_bit as usize]
-                        .iter()
-                        .step_by(step as usize)
-                        .collect(),
-                    true,
-                ))
-            } else {
-                // For lsb0 we step in reverse and then reverse the
-                // collected bits.
-                let lsb0_start = self.len() - end_bit as usize;
-                let lsb0_end = self.len() - start_bit as usize;
-                Ok(Self::from_bv(
-                    self.as_bitslice()[lsb0_start..lsb0_end]
-                        .iter()
-                        .rev()
-                        .step_by(step as usize)
-                        .collect::<BV>()
-                        .into_iter()
-                        .rev()
-                        .collect(),
-                    false,
-                ))
-            }
+            Ok(Self::from_bv(
+                self.as_bitslice()[start_bit as usize..end_bit as usize]
+                    .iter()
+                    .step_by(step as usize)
+                    .collect(),
+            ))
         } else {
             if start_bit <= end_bit || start_bit == -1 {
-                return Ok(BitCollection::empty(self.msb0()));
+                return Ok(BitCollection::empty());
             }
             if start_bit as usize > self.len() {
                 return Err(PyValueError::new_err(
@@ -291,7 +251,6 @@ pub(crate) trait BitCollection: Sized + Clone {
                     .rev()
                     .step_by(-step as usize)
                     .collect(),
-                self.msb0(),
             ))
         }
     }
@@ -336,7 +295,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn multiply(&self, n: usize) -> Self {
         let len = self.len();
         if n == 0 || len == 0 {
-            return BitCollection::empty(self.msb0());
+            return BitCollection::empty();
         }
         let mut bv = BV::with_capacity(len * n);
         bv.extend_from_bitslice(self.as_bitslice());
@@ -351,14 +310,10 @@ pub(crate) trait BitCollection: Sized + Clone {
             bv.extend_from_bitslice(self.as_bitslice());
             copies += 1;
         }
-        Self::from_bv(bv, self.msb0())
+        Self::from_bv(bv)
     }
 
-    fn collect_chunks(
-        &self,
-        chunk_size: i64,
-        count: Option<i64>,
-    ) -> PyResult<Vec<Self>> {
+    fn collect_chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
         if chunk_size <= 0 {
             return Err(PyValueError::new_err(format!(
                 "Cannot create chunk list - chunk_size of {chunk_size} given, but it must be > 0."
@@ -402,12 +357,12 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let len = self.len();
         if n >= len {
-            return Self::from_bv(bv_from_zeros(len), self.msb0());
+            return Self::from_bv(bv_from_zeros(len));
         }
         let mut result_data = BV::with_capacity(len);
         result_data.extend_from_bitslice(&self.as_bitslice()[n..]);
         result_data.resize(len, false);
-        Self::from_bv(result_data, self.msb0())
+        Self::from_bv(result_data)
     }
 
     fn rshift(&self, n: usize) -> Self {
@@ -416,18 +371,18 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let len = self.len();
         if n >= len {
-            return Self::from_bv(bv_from_zeros(len), self.msb0());
+            return Self::from_bv(bv_from_zeros(len));
         }
         let mut result_data = BV::repeat(false, n);
         result_data.extend_from_bitslice(&self.as_bitslice()[..len - n]);
-        Self::from_bv(result_data, self.msb0())
+        Self::from_bv(result_data)
     }
 
     /// Return a bit reversed copy
     fn reverse_copy(&self) -> Self {
         let mut bv = self.to_bitvec();
         bv.reverse();
-        Self::from_bv(bv, self.msb0())
+        Self::from_bv(bv)
     }
 
     /// Return a byte swapped copy
@@ -440,7 +395,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let byte_length = byte_length.unwrap_or((len as i64) / 8);
         if byte_length == 0 && len == 0 {
-            return Ok(BitCollection::empty(self.msb0()));
+            return Ok(BitCollection::empty());
         }
         if byte_length <= 0 {
             return Err(PyValueError::new_err(format!(
@@ -459,7 +414,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         for chunk in bytes.chunks_mut(byte_length) {
             chunk.reverse();
         }
-        Ok(BitCollection::from_bv(BV::from_vec(bytes), self.msb0()))
+        Ok(BitCollection::from_bv(BV::from_vec(bytes)))
     }
 
     #[inline]
@@ -641,7 +596,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     #[inline]
     fn get_slice(&self, start_bit: usize, length: usize) -> PyResult<Self> {
         if length == 0 {
-            return Ok(BitCollection::empty(self.msb0()));
+            return Ok(BitCollection::empty());
         }
         if start_bit + length > self.len() {
             return Err(PyIndexError::new_err(
@@ -718,8 +673,9 @@ pub(crate) trait BitCollection: Sized + Clone {
             raw.push(false);
         }
 
-        zstd::bulk::compress(&raw.into_vec(), 0)
-            .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be encoded: {e}")))
+        zstd::bulk::compress(&raw.into_vec(), 0).map_err(|e| {
+            PyValueError::new_err(format!("The zstd payload could not be encoded: {e}"))
+        })
     }
 
     fn encode_as_zstd_from_compressed(&self, compressed: Vec<u8>) -> BV {
@@ -856,7 +812,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn decode_raw_payload(
         bv: &BS,
-        msb0_flag: bool,
+        _msb0_flag: bool,
         bit_padding: usize,
         data_start: usize,
         data_bits: usize,
@@ -879,15 +835,12 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         let out_end = data_end - bit_padding;
-        Ok(Self::from_bv(
-            bv[data_start..out_end].to_bitvec(),
-            msb0_flag,
-        ))
+        Ok(Self::from_bv(bv[data_start..out_end].to_bitvec()))
     }
 
     fn decode_rice_payload(
         bv: &BS,
-        msb0_flag: bool,
+        _msb0_flag: bool,
         bit_padding: usize,
         data_start: usize,
         payload_bits: usize,
@@ -947,12 +900,12 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let final_pos = decoded.len() - 1;
         decoded.set(final_pos, final_bit);
-        Ok(Self::from_bv(decoded, msb0_flag))
+        Ok(Self::from_bv(decoded))
     }
 
     fn decode_zstd_payload(
         bv: &BS,
-        msb0_flag: bool,
+        _msb0_flag: bool,
         bit_padding: usize,
         data_start: usize,
         payload_bits: usize,
@@ -991,10 +944,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let out_end = data_bits - bit_padding;
         let decompressed = BV::from_vec(decompressed);
-        Ok(Self::from_bv(
-            decompressed[..out_end].to_bitvec(),
-            msb0_flag,
-        ))
+        Ok(Self::from_bv(decompressed[..out_end].to_bitvec()))
     }
 
     fn encode_varint(mut u: u64) -> BV {
@@ -1071,13 +1021,13 @@ pub(crate) trait BitCollection: Sized + Clone {
             }
             for bit_pos in 2..7 {
                 if bv[bit_pos] {
-                    return Ok(Self::from_bv(bv[bit_pos + 1..].to_bitvec(), msb0_flag));
+                    return Ok(Self::from_bv(bv[bit_pos + 1..].to_bitvec()));
                 }
             }
             if !bv[7] {
                 return Err(PyValueError::new_err("The encoded sequence is reserved."));
             }
-            return Ok(Self::empty(msb0_flag));
+            return Ok(Self::empty());
         }
         let short_form_flag = bv[2];
         if short_form_flag {
@@ -1093,7 +1043,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                     "The encoded sequence has unexpected trailing bytes.",
                 ));
             }
-            return Ok(Self::from_bv(bv[8..8 + bit_length].to_bitvec(), msb0_flag));
+            return Ok(Self::from_bv(bv[8..8 + bit_length].to_bitvec()));
         }
 
         let codec = bv[3..5].load_be::<u8>();
@@ -1120,7 +1070,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         // Uses the Auto codec, and encodes as a single byte.
         if bit_length == 0 {
             bv.push(true);
-            bv.push(self.msb0());
+            bv.push(true);
             for _ in 0..5 {
                 bv.push(false);
             }
@@ -1132,7 +1082,7 @@ pub(crate) trait BitCollection: Sized + Clone {
             Codec::Auto => match bit_length {
                 0..=5 => {
                     bv.push(true);
-                    bv.push(self.msb0());
+                    bv.push(true);
                     let leading_zeros = 5 - bit_length;
                     for _ in 0..leading_zeros {
                         bv.push(false);
@@ -1142,7 +1092,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                 }
                 6..=37 => {
                     bv.push(false);
-                    bv.push(self.msb0());
+                    bv.push(true);
                     bv.push(true);
                     let length_minus_6 = (bit_length - 6) as u8;
                     for shift in (0..5).rev() {
@@ -1158,7 +1108,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                 }
                 38.. => {
                     bv.push(false);
-                    bv.push(self.msb0());
+                    bv.push(true);
                     bv.push(false);
 
                     let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
@@ -1204,20 +1154,20 @@ pub(crate) trait BitCollection: Sized + Clone {
             },
             Codec::Raw => {
                 bv.push(false);
-                bv.push(self.msb0());
+                bv.push(true);
                 bv.push(false);
                 bv.extend(self.encode_as_raw());
             }
             Codec::Rice => {
                 bv.push(false);
-                bv.push(self.msb0());
+                bv.push(true);
                 bv.push(false);
                 let sparse_bit = self.count(true) < self.len() / 2;
                 bv.extend(self.encode_as_rice(sparse_bit));
             }
             Codec::Zstd => {
                 bv.push(false);
-                bv.push(self.msb0());
+                bv.push(true);
                 bv.push(false);
                 bv.extend(self.encode_as_zstd()?);
             }
@@ -1228,12 +1178,8 @@ pub(crate) trait BitCollection: Sized + Clone {
 }
 
 impl BitCollection for Tibs {
-    fn from_bv(bv: BV, msb0: bool) -> Self {
-        Tibs::from_bv(bv, msb0)
-    }
-
-    fn msb0(&self) -> bool {
-        self.msb0
+    fn from_bv(bv: BV) -> Self {
+        Tibs::from_bv(bv)
     }
 
     #[inline]
@@ -1263,12 +1209,8 @@ impl BitCollection for Tibs {
 }
 
 impl BitCollection for Mutibs {
-    fn from_bv(bv: BV, msb0: bool) -> Self {
-        Mutibs::from_bv(bv, msb0)
-    }
-
-    fn msb0(&self) -> bool {
-        self.msb0
+    fn from_bv(bv: BV) -> Self {
+        Mutibs::from_bv(bv)
     }
 
     #[inline]
@@ -1283,18 +1225,7 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        if self.msb0() {
-            Self::from_bv(
-                self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
-                true,
-            )
-        } else {
-            let start_bit = self.data.len() - length - start_bit;
-            Self::from_bv(
-                self.as_bitslice()[start_bit..start_bit + length].to_bitvec(),
-                false,
-            )
-        }
+        Self::from_bv(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
     }
 
     #[inline]

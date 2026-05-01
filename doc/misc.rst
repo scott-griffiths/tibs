@@ -29,113 +29,6 @@ and ``Big`` is that the latter will complain if it tries to construct or interpr
     1984.0
 
 
-Bit indexing
-^^^^^^^^^^^^
-
-Two bit indexing methods are supported, MSB0 (most significant bit 0) and LSB0 (least significant bit 0).
-
-The default MSB0 bit numbering is done from 'left' to 'right'.
-That is, from bit ``0`` at the start of the data to bit ``n - 1`` at the end.
-This allows a ``Tibs`` to be treated like an ordinary Python container that is only allowed to contain single bits.
-
-The LSB0 bit numbering means the right-most bit in the bitstring will
-be bit 0, and the left-most bit will be bit (n-1), rather than the
-other way around. LSB0 is a more natural numbering
-system in some fields.
-
-The ``bit_indexing`` parameter on creation methods sets which numbering is used.
-It is a property of the ``Tibs`` or ``Mutibs``, and can be changed after creation only for a ``Mutibs`` instance.
-It does not affect equality operations. ::
-
-    >>> t = Tibs('0xabc', bit_indexing=BitIndexing.Lsb0)
-    >>> t
-    Tibs('0xabc', BitIndexing.Lsb0)
-    >>> m = Mutibs('0xabc')
-    >>> m == t
-    True
-    >>> m.bit_indexing == t.bit_indexing
-    False
-
-
-For example, if you set a ``Tibs`` to be the binary ``010001111`` it will be stored in the same way for MSB0 and LSB0,
-but slicing, reading, unpacking etc. will all behave differently.
-
-.. list-table:: MSB0 →
-   :header-rows: 1
-
-   * - bit index
-     - 0
-     - 1
-     - 2
-     - 3
-     - 4
-     - 5
-     - 6
-     - 7
-     - 8
-   * - value
-     - ``0``
-     - ``1``
-     - ``0``
-     - ``0``
-     - ``0``
-     - ``1``
-     - ``1``
-     - ``1``
-     - ``1``
-
-In MSB0 everything behaves like an ordinary Python container.
-Bit zero is the left-most bit and reads/slices happen from left to right.
-
-.. list-table:: ← LSB0
-   :header-rows: 1
-
-   * - bit index
-     - 8
-     - 7
-     - 6
-     - 5
-     - 4
-     - 3
-     - 2
-     - 1
-     - 0
-   * - value
-     - ``0``
-     - ``1``
-     - ``0``
-     - ``0``
-     - ``0``
-     - ``1``
-     - ``1``
-     - ``1``
-     - ``1``
-
-In LSB0 the final, right-most bit is labelled as bit zero. Reads and slices happen from right to left.
-
-When ``Tibs`` are interpreted as integers and other types the left-most bit is always considered as the most significant bit.
-It's important to note that this is the case irrespective of whether the first or last bit is considered the bit zero,
-so for example if you were to interpret a whole ``Tibs`` as an integer, its value would be the same irrespective
-of the ``bit_indexing`` value.
-
-To illustrate this, for the example above this means that the bin and int representations would be ``010001111`` and ``143`` respectively
-for both MSB0 and LSB0 bit numbering.
-
-Slicing is still done with the start bit smaller than the end bit.
-For example:
-
-    >>> s = Tibs('0b010001111', bit_indexing=BitIndexing.Lsb0)
-    >>> s[0:5]  # LSB0 so this is the right-most five bits
-    Tibs('0b01111')
-    >>> s[0]
-    True
-
-
-Negative indices work as you'd expect, with the first stored
-bit being ``s[-1]`` and the final stored bit being ``s[-n]``.
-
-
-
 Byte encoding format
 ^^^^^^^^^^^^^^^^^^^^
 
@@ -154,8 +47,7 @@ algorithms would be very inefficient at storing, for example all bit sequences u
 into a single byte. For longer sequences the raw codec overhead is still small.
 
 The mutable nature of ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
-if a ``Tibs`` and ``Mutibs`` are equal (and have the same ``BitIndexing``) they will encode
-to the same ``bytes``.
+if a ``Tibs`` and ``Mutibs`` are equal they will encode to the same ``bytes``.
 
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
@@ -206,11 +98,12 @@ The bit length of the Tibs determines which of the three encodings can be used:
 1. Single byte (0..5 bits)
 """"""""""""""""""""""""""
 
-The first bit must be set. The second bit records the MSB0 flag from the Tibs.
+The first bit must be set. The second bit is a reserved indexing bit; current encoders set it,
+and decoders ignore it.
 The remaining bits of the byte decode the data as follows::
 
     bit0: single_byte_flag = 1
-    bit1: msb0_flag
+    bit1: reserved_indexing_bit
     bit2: is_five_bits_flag
     if is_five_bits_flag:
         bit3..bit7: bit_data
@@ -240,13 +133,13 @@ The values of ``10000000`` and ``11000000`` do not correspond to a valid encodin
 As an example, the byte ``11001110`` would be decoded as::
 
     1: single_byte_flag
-    1: msb0_flag
+    1: reserved_indexing_bit
     0: is_five_bits_flag
     0: is_four_bits_flag
     1: is_three_bits_flag
     110: bit_data
 
-so this represents a 3-bit MSB0 sequence with the value ``110``.
+so this represents a 3-bit sequence with the value ``110``.
 
 2. Short form (6..37 bits)
 """"""""""""""""""""""""""
@@ -255,7 +148,7 @@ For short bit sequences ``bit0`` will be unset and ``bit2`` will be set.
 The rest of the byte gives the bit length::
 
     bit0: single_byte_flag = 0
-    bit1: msb0_flag
+    bit1: reserved_indexing_bit
     bit2: short_form_flag = 1
     bit3..bit7: length_minus_6
 
@@ -265,13 +158,13 @@ The data for this is then stored in the next 1 to 5 bytes, left aligned.
 For example, the byte ``00100011`` would be decoded as::
 
     0: single_byte_flag
-    0: msb0_flag
+    0: reserved_indexing_bit
     1: short_form_flag
     00011: length_minus_6
 
 ``length_minus_6`` is ``3``, so this will be followed by 9 bits of data, padded to the next byte,
 so including the header byte the sequence ``00100011_11100011_10000000`` represents a 9-bit
-LSB0 sequence with the value ``111000111``.
+sequence with the value ``111000111``.
 
 3. Long form (38+ bits)
 """""""""""""""""""""""
@@ -283,7 +176,7 @@ For long form sequences, both ``bit0`` and ``bit2`` will be unset.
 The first byte's format will be::
 
     bit0: single_byte_flag = 0
-    bit1: msb0_flag
+    bit1: reserved_indexing_bit
     bit2: short_form_flag = 0
     bit3..bit4: codec
     bit5..bit7: bit_padding
@@ -366,7 +259,7 @@ This corresponds to the binary ``01001001_00000001_00101110_10111110``
 byte ``01001001`` ::
 
     0: single_byte_flag
-    1: msb0_flag
+    1: reserved_indexing_bit
     0: short_form_flag
     01: codec (rice)
     001: bit_padding (=1)
@@ -413,13 +306,13 @@ the Tibs is still stored in the header.
 
 ----
 
-For a final example let's encode rather than decode. Let's say we have a 50 bit MSB0 sequence of all ``1``.
+For a final example let's encode rather than decode. Let's say we have a 50 bit sequence of all ``1``.
 This could be efficiently coded with Rice encoding, but let's use Raw just to demonstrate.
 
 First the header byte is::
 
     0: single_byte_flag
-    1: msb0_flag
+    1: reserved_indexing_bit
     0: short_form_flag
     00: codec (raw)
     110: bit_padding (6)

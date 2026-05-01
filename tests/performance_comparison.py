@@ -181,6 +181,9 @@ def test_pop_bitarray():
 
 def test_pop_tibs():
     t = Mutibs.from_bytes(some_bytes)
+    # About half the time here is in the method lookup, which isn't cached
+    # in the same way as with the bitarray C extension. Using `pop = t.pop` outside
+    # the loop will speed it up a lot.
     while (t):
         _ = t.pop()
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing, Endianness, Codec
+from tibs import Tibs, Mutibs, Endianness, Codec
 import random
 
 def test_from_bin():
@@ -303,16 +303,14 @@ def test_tibs_rotated_right_with_slice():
     assert b == '0b10111000'
 
 
-def test_lsb0_start_and_ends_with():
-    a = Tibs.from_bytes(b'xyz', bit_indexing=BitIndexing.Lsb0)
-    assert a.starts_with(b'z')
-    assert a.ends_with(b'x')
+def test_start_and_ends_with():
+    a = Tibs.from_bytes(b'xyz')
+    assert a.starts_with(b'x')
+    assert a.ends_with(b'z')
 
     b = Mutibs.from_bytes(b'abcde')
     assert b.starts_with(b'a')
-    b.bit_indexing = BitIndexing.Lsb0
-    assert b.starts_with(b'e')
-    assert b.ends_with(b'a')
+    assert b.ends_with(b'e')
 
 
 def test_special_method_creation_fails():
@@ -337,43 +335,6 @@ def test_rfind_all():
     a = t.to_tibs().rfind_all_iter([1, 0])
     assert list(a) == [14, 8, 4]
 
-
-def test_rfind_all_lsb0():
-    t = Mutibs.from_zeros(100, bit_indexing=BitIndexing.Lsb0)
-    t.set([0, 1, 10, 11, 80])
-    t = t.as_tibs()
-    a = t.find_all([1])
-    a.reverse()
-    assert a == [80, 11, 10, 1, 0]
-    a = t.find_all([1, 1])
-    a.reverse()
-    assert a == [10, 0]
-
-
-def test_find_methods_lsb0_logical_indices():
-    t = Tibs("0b110100", bit_indexing=BitIndexing.Lsb0)
-    assert t.find("0b1") == 2
-    assert t.rfind("0b1") == 5
-    assert list(t.find_all_iter("0b1")) == [2, 4, 5]
-    assert list(t.rfind_all_iter("0b1")) == [5, 4, 2]
-
-
-def test_lsb0_find_all():
-    t = Tibs.from_random(10_000)
-    a1 = list(t.find_all([1, 0, 1]))  # The needle looks the same forward and backwards.
-    t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
-    assert t == t2.reversed()
-    a2 = list(t2.find_all([1, 0, 1]))
-    assert a1 == a2
-
-
-def test_lsb0_find():
-    t = Tibs.from_random(10_000)
-    a1 = t.find([1, 0, 1])  # The needle looks the same forward and backwards.
-    t2 = Tibs(t.reversed(), bit_indexing=BitIndexing.Lsb0)
-    assert t == t2.reversed()
-    a2 = t2.find([1, 0, 1])
-    assert a1 == a2
 
 def test_endianness_i():
     t1 = Tibs.from_i(3, 16, endianness=Endianness.Big)
@@ -464,7 +425,7 @@ def test_encoding_ints():
 
 
 def encode_tibs(t: Tibs) -> bytes:
-    msb0_flag = t.bit_indexing is BitIndexing.Msb0
+    msb0_flag = True
     n = len(t)
 
     # Single-byte form: bit0=1, bit1=msb0_flag, then prefix-coded length/data for 0..5 bits.
@@ -523,13 +484,11 @@ def decode_tibs(b: bytes) -> Tibs:
             m_out = m[7:8]
         else:
             m_out = Mutibs()
-        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
         return m_out.as_tibs()
 
     if short_form_flag:
         short_length = m[3:8].to_u() + 6
         m_out = m[8:8 + short_length]
-        m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
         return m_out.as_tibs()
 
     codec = m[3:5].to_u()
@@ -545,15 +504,14 @@ def decode_tibs(b: bytes) -> Tibs:
     m_out = m[data_start: data_start + byte_length * 8]
     if bit_padding:
         m_out = m_out[:-bit_padding]
-    m_out.bit_indexing = BitIndexing.Msb0 if msb0_flag else BitIndexing.Lsb0
     return m_out.as_tibs()
 
 
 def test_encoding():
-    for indexing_mode in [BitIndexing.Msb0, BitIndexing.Lsb0]:
+    for _ in [None]:
         for length in range(400):
             # value = random.randint(0, (1 << length) - 1)
-            t = Tibs.from_zeros(length, bit_indexing = indexing_mode)
+            t = Tibs.from_zeros(length)
             # b = encode_tibs(t)
             b2 = t.encode()
             # assert b == b2
@@ -561,7 +519,6 @@ def test_encoding():
             t3 = Tibs.decode(b2)
             # assert t == t2
             assert t == t3
-            assert t.bit_indexing is t3.bit_indexing
 
 def test_more_encoding():
     t = Tibs.from_ones(50) + [0] + Tibs.from_ones(50)

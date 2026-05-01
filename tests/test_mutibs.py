@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, BitIndexing, Endianness, Codec
+from tibs import Tibs, Mutibs, Endianness, Codec
 
 
 def test_creation():
@@ -228,11 +228,6 @@ def test_find_all():
 
     b = Mutibs('0b1001001001001001001')
     assert b.find_all('0b1001') == [0, 3, 6, 9, 12, 15]
-
-
-def test_find_all_lsb0():
-    a = Mutibs('0b110100', bit_indexing=BitIndexing.Lsb0)
-    assert a.find_all('0b1') == [2, 4, 5]
 
 
 def test_chunks():
@@ -1309,7 +1304,7 @@ def test_set_bug():
 
 
 def test_convenience_properties():
-    m = Mutibs('0x123', BitIndexing.Lsb0)
+    m = Mutibs('0x123')
     assert m.to_hex() == m.hex
     assert m.to_oct() == m.oct
     assert m.to_bin() == m.bin
@@ -1322,12 +1317,11 @@ def test_byte_swapped():
     assert b == b'hello!'
 
 
-def test_bit_indexing():
+def test_from_u_bad_endianness_type():
     with pytest.raises(TypeError):
         a = Mutibs.from_u(101, 16, "asdf")
-    a = Mutibs.from_u(101, 16, Endianness.Unspecified, BitIndexing.Lsb0)
+    a = Mutibs.from_u(101, 16, Endianness.Unspecified)
     assert a.to_u() == 101
-    assert a.bit_indexing is BitIndexing.Lsb0
 
 
 def test_contains():
@@ -1356,23 +1350,8 @@ def test_special_method_creation_fails():
         m &= 'grebditch'
 
 
-def test_lsb0_set_slice():
-    m = Mutibs('0x0000', bit_indexing=BitIndexing.Lsb0)
-    m[0] = 1
-    assert m == '0x0001'
-    m[-8:] = '0xab'
-    assert m == '0xab01'
-
-
-def test_lsb0_del_slice():
-    m = Mutibs.from_hex("abcdef", bit_indexing=BitIndexing.Lsb0)
-    t = m.to_tibs()
-    del m[:8]
-    assert m == '0xabcd'
-
-
 def test_replace_negative_count():
-    m = Mutibs.from_random(1_000_000, bit_indexing=BitIndexing.Lsb0)
+    m = Mutibs.from_random(1_000_000)
     t = m.to_tibs()
     m.replace('0b1', '0b0', count=0)
     assert m == t
@@ -1391,14 +1370,13 @@ def test_float_endianness():
     assert m3.byte_swapped() == m4
 
 def test_encode_decode():
-    m = Mutibs.from_zeros(1000, BitIndexing.Lsb0)
+    m = Mutibs.from_zeros(1000)
     m[56] = 1
     b1 = m.encode()
     t = Tibs.decode(b1)
     assert t == m
     m1 = Mutibs.decode(b1)
     assert m == m1
-    assert m.bit_indexing is BitIndexing.Lsb0
 
 def test_empty_encode():
     m = Mutibs()
