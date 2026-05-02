@@ -508,16 +508,16 @@ impl Mutibs {
         }
     }
 
-    #[pyo3(signature = (byte_order = Endianness::Unspecified, byte_bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, byte_bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
     pub fn view(
         slf: PyRef<'_, Self>,
         byte_order: Option<Endianness>,
-        byte_bit_order: Option<BitOrder>,
+        bit_order: Option<BitOrder>,
     ) -> View {
         View::from_mutibs(
             slf.into(),
             byte_order.unwrap_or(Endianness::Unspecified),
-            byte_bit_order.unwrap_or(BitOrder::Msb0),
+            bit_order.unwrap_or(BitOrder::Msb0),
         )
     }
 

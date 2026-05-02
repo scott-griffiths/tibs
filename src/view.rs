@@ -46,50 +46,41 @@ impl ViewSource {
 pub struct View {
     pub(crate) source: ViewSource,
     pub(crate) byte_order: Endianness,
-    pub(crate) byte_bit_order: BitOrder,
+    pub(crate) bit_order: BitOrder,
 }
 
 impl View {
-    pub(crate) fn from_tibs(
-        tibs: Py<Tibs>,
-        byte_order: Endianness,
-        byte_bit_order: BitOrder,
-    ) -> Self {
+    pub(crate) fn from_tibs(tibs: Py<Tibs>, byte_order: Endianness, bit_order: BitOrder) -> Self {
         View {
             source: ViewSource::Tibs(tibs),
             byte_order,
-            byte_bit_order,
+            bit_order,
         }
     }
 
     pub(crate) fn from_mutibs(
         mutibs: Py<Mutibs>,
         byte_order: Endianness,
-        byte_bit_order: BitOrder,
+        bit_order: BitOrder,
     ) -> Self {
         View {
             source: ViewSource::Mutibs(mutibs),
             byte_order,
-            byte_bit_order,
+            bit_order,
         }
     }
 
-    fn with_layout(
-        &self,
-        py: Python<'_>,
-        byte_order: Endianness,
-        byte_bit_order: BitOrder,
-    ) -> Self {
+    fn with_layout(&self, py: Python<'_>, byte_order: Endianness, bit_order: BitOrder) -> Self {
         View {
             source: self.source.clone_ref(py),
             byte_order,
-            byte_bit_order,
+            bit_order,
         }
     }
 
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
         let bv = self.source.to_bitvec(py);
-        let tibs = if self.byte_bit_order == BitOrder::Msb0 {
+        let tibs = if self.bit_order == BitOrder::Msb0 {
             Tibs::from_bv(bv)
         } else {
             let mut viewed = BV::with_capacity(bv.len());
@@ -111,28 +102,28 @@ impl View {
 
 #[pymethods]
 impl View {
-    #[pyo3(signature = (byte_order = None, byte_bit_order = None), text_signature = "($self, byte_order=None, byte_bit_order=None)")]
+    #[pyo3(signature = (byte_order = None, bit_order = None), text_signature = "($self, byte_order=None, bit_order=None)")]
     pub fn view(
         &self,
         py: Python<'_>,
         byte_order: Option<Endianness>,
-        byte_bit_order: Option<BitOrder>,
+        bit_order: Option<BitOrder>,
     ) -> Self {
         self.with_layout(
             py,
             byte_order.unwrap_or(self.byte_order),
-            byte_bit_order.unwrap_or(self.byte_bit_order),
+            bit_order.unwrap_or(self.bit_order),
         )
     }
 
     #[getter]
     pub fn le(&self, py: Python<'_>) -> Self {
-        self.with_layout(py, Endianness::Little, self.byte_bit_order)
+        self.with_layout(py, Endianness::Little, self.bit_order)
     }
 
     #[getter]
     pub fn be(&self, py: Python<'_>) -> Self {
-        self.with_layout(py, Endianness::Big, self.byte_bit_order)
+        self.with_layout(py, Endianness::Big, self.bit_order)
     }
 
     #[getter]
@@ -269,11 +260,8 @@ impl View {
         if self.byte_order != Endianness::Unspecified {
             parts.push(format!("byte_order={}", self.byte_order.repr_name()));
         }
-        if self.byte_bit_order != BitOrder::Msb0 {
-            parts.push(format!(
-                "byte_bit_order={}",
-                self.byte_bit_order.repr_name()
-            ));
+        if self.bit_order != BitOrder::Msb0 {
+            parts.push(format!("bit_order={}", self.bit_order.repr_name()));
         }
         format!("View({})", parts.join(", "))
     }

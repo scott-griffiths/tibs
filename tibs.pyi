@@ -26,7 +26,7 @@ class View:
     def view(
             self,
             byte_order: Endianness | None = None,
-            byte_bit_order: BitOrder | None = None
+            bit_order: BitOrder | None = None
     ) -> View: ...
 
     @property
@@ -107,7 +107,7 @@ class Tibs:
     def view(
             self,
             byte_order: Endianness = Endianness.Unspecified,
-            byte_bit_order: BitOrder = BitOrder.Msb0
+            bit_order: BitOrder = BitOrder.Msb0
     ) -> View: ...
 
     @property
@@ -319,7 +319,7 @@ class Mutibs:
     def view(
             self,
             byte_order: Endianness = Endianness.Unspecified,
-            byte_bit_order: BitOrder = BitOrder.Msb0
+            bit_order: BitOrder = BitOrder.Msb0
     ) -> View: ...
 
     @property
