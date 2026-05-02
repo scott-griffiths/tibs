@@ -3,7 +3,7 @@ use crate::enums::{BitOrder, Endianness};
 use crate::helpers::BV;
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice};
 
@@ -50,6 +50,20 @@ pub struct View {
 }
 
 impl View {
+    pub(crate) fn validate_layout(
+        len: usize,
+        byte_order: Endianness,
+        bit_order: BitOrder,
+    ) -> PyResult<()> {
+        let is_byte_oriented = byte_order != Endianness::Unspecified || bit_order != BitOrder::Msb0;
+        if is_byte_oriented && !len.is_multiple_of(8) {
+            return Err(PyValueError::new_err(format!(
+                "Cannot create a byte-oriented view with a length of {len} bits. It must be a whole number of bytes long."
+            )));
+        }
+        Ok(())
+    }
+
     pub(crate) fn from_tibs(tibs: Py<Tibs>, byte_order: Endianness, bit_order: BitOrder) -> Self {
         View {
             source: ViewSource::Tibs(tibs),
@@ -70,12 +84,18 @@ impl View {
         }
     }
 
-    fn with_layout(&self, py: Python<'_>, byte_order: Endianness, bit_order: BitOrder) -> Self {
-        View {
+    fn with_layout(
+        &self,
+        py: Python<'_>,
+        byte_order: Endianness,
+        bit_order: BitOrder,
+    ) -> PyResult<Self> {
+        Self::validate_layout(self.source.len(py), byte_order, bit_order)?;
+        Ok(View {
             source: self.source.clone_ref(py),
             byte_order,
             bit_order,
-        }
+        })
     }
 
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
@@ -98,6 +118,13 @@ impl View {
             Ok(tibs)
         }
     }
+
+    fn physical_index_for_label(&self, label: usize) -> usize {
+        match self.bit_order {
+            BitOrder::Msb0 => label,
+            BitOrder::Lsb0 => (label / 8) * 8 + (7 - (label % 8)),
+        }
+    }
 }
 
 #[pymethods]
@@ -108,7 +135,7 @@ impl View {
         py: Python<'_>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
-    ) -> Self {
+    ) -> PyResult<Self> {
         self.with_layout(
             py,
             byte_order.unwrap_or(self.byte_order),
@@ -117,22 +144,22 @@ impl View {
     }
 
     #[getter]
-    pub fn le(&self, py: Python<'_>) -> Self {
+    pub fn le(&self, py: Python<'_>) -> PyResult<Self> {
         self.with_layout(py, Endianness::Little, self.bit_order)
     }
 
     #[getter]
-    pub fn be(&self, py: Python<'_>) -> Self {
+    pub fn be(&self, py: Python<'_>) -> PyResult<Self> {
         self.with_layout(py, Endianness::Big, self.bit_order)
     }
 
     #[getter]
-    pub fn lsb0(&self, py: Python<'_>) -> Self {
+    pub fn lsb0(&self, py: Python<'_>) -> PyResult<Self> {
         self.with_layout(py, self.byte_order, BitOrder::Lsb0)
     }
 
     #[getter]
-    pub fn msb0(&self, py: Python<'_>) -> Self {
+    pub fn msb0(&self, py: Python<'_>) -> PyResult<Self> {
         self.with_layout(py, self.byte_order, BitOrder::Msb0)
     }
 
@@ -253,6 +280,43 @@ impl View {
         }
 
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
+    }
+
+    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<Self> {
+        let len = self.source.len(py);
+        if a >= len || b >= len {
+            return Err(PyValueError::new_err(format!(
+                "Field labels must be in the range 0..{}. Received {a} and {b}.",
+                len.saturating_sub(1)
+            )));
+        }
+
+        let high = a.max(b);
+        let low = a.min(b);
+        let field_len = high - low + 1;
+        Self::validate_layout(field_len, self.byte_order, BitOrder::Msb0)?;
+
+        let source = self.source.to_bitvec(py);
+        let mut field = BV::with_capacity(field_len);
+
+        match self.bit_order {
+            BitOrder::Msb0 => {
+                for label in low..=high {
+                    field.push(source[self.physical_index_for_label(label)]);
+                }
+            }
+            BitOrder::Lsb0 => {
+                for label in (low..=high).rev() {
+                    field.push(source[self.physical_index_for_label(label)]);
+                }
+            }
+        }
+
+        Ok(View::from_tibs(
+            Py::new(py, Tibs::from_bv(field))?,
+            self.byte_order,
+            BitOrder::Msb0,
+        ))
     }
 
     pub fn __repr__(&self, py: Python<'_>) -> String {

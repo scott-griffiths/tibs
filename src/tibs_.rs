@@ -299,32 +299,46 @@ impl Tibs {
         slf: PyRef<'_, Self>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
-    ) -> View {
-        View::from_tibs(
+    ) -> PyResult<View> {
+        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        View::validate_layout(slf.len(), byte_order, bit_order)?;
+        Ok(View::from_tibs(slf.into(), byte_order, bit_order))
+    }
+
+    #[getter]
+    pub fn le(slf: PyRef<'_, Self>) -> PyResult<View> {
+        View::validate_layout(slf.len(), Endianness::Little, BitOrder::Msb0)?;
+        Ok(View::from_tibs(
             slf.into(),
-            byte_order.unwrap_or(Endianness::Unspecified),
-            bit_order.unwrap_or(BitOrder::Msb0),
-        )
+            Endianness::Little,
+            BitOrder::Msb0,
+        ))
     }
 
     #[getter]
-    pub fn le(slf: PyRef<'_, Self>) -> View {
-        View::from_tibs(slf.into(), Endianness::Little, BitOrder::Msb0)
+    pub fn be(slf: PyRef<'_, Self>) -> PyResult<View> {
+        View::validate_layout(slf.len(), Endianness::Big, BitOrder::Msb0)?;
+        Ok(View::from_tibs(slf.into(), Endianness::Big, BitOrder::Msb0))
     }
 
     #[getter]
-    pub fn be(slf: PyRef<'_, Self>) -> View {
-        View::from_tibs(slf.into(), Endianness::Big, BitOrder::Msb0)
+    pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<View> {
+        View::validate_layout(slf.len(), Endianness::Unspecified, BitOrder::Lsb0)?;
+        Ok(View::from_tibs(
+            slf.into(),
+            Endianness::Unspecified,
+            BitOrder::Lsb0,
+        ))
     }
 
     #[getter]
-    pub fn lsb0(slf: PyRef<'_, Self>) -> View {
-        View::from_tibs(slf.into(), Endianness::Unspecified, BitOrder::Lsb0)
-    }
-
-    #[getter]
-    pub fn msb0(slf: PyRef<'_, Self>) -> View {
-        View::from_tibs(slf.into(), Endianness::Unspecified, BitOrder::Msb0)
+    pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
+        Ok(View::from_tibs(
+            slf.into(),
+            Endianness::Unspecified,
+            BitOrder::Msb0,
+        ))
     }
 
     /// Iterate over the bits of the Tibs, yielding each bit as a boolean.
