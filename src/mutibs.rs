@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{Codec, Endianness};
+use crate::enums::{BitOrder, Codec, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
@@ -7,6 +7,7 @@ use crate::helpers::{
     validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::Tibs;
+use crate::view::View;
 
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
@@ -505,6 +506,39 @@ impl Mutibs {
         } else {
             format!("Mutibs('{}')", self.__str__())
         }
+    }
+
+    #[pyo3(signature = (byte_order = Endianness::Unspecified, byte_bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, byte_bit_order=BitOrder.Msb0)")]
+    pub fn view(
+        slf: PyRef<'_, Self>,
+        byte_order: Option<Endianness>,
+        byte_bit_order: Option<BitOrder>,
+    ) -> View {
+        View::from_mutibs(
+            slf.into(),
+            byte_order.unwrap_or(Endianness::Unspecified),
+            byte_bit_order.unwrap_or(BitOrder::Msb0),
+        )
+    }
+
+    #[getter]
+    pub fn le(slf: PyRef<'_, Self>) -> View {
+        View::from_mutibs(slf.into(), Endianness::Little, BitOrder::Msb0)
+    }
+
+    #[getter]
+    pub fn be(slf: PyRef<'_, Self>) -> View {
+        View::from_mutibs(slf.into(), Endianness::Big, BitOrder::Msb0)
+    }
+
+    #[getter]
+    pub fn lsb0(slf: PyRef<'_, Self>) -> View {
+        View::from_mutibs(slf.into(), Endianness::Unspecified, BitOrder::Lsb0)
+    }
+
+    #[getter]
+    pub fn msb0(slf: PyRef<'_, Self>) -> View {
+        View::from_mutibs(slf.into(), Endianness::Unspecified, BitOrder::Msb0)
     }
 
     /// Create a new instance from a formatted string.

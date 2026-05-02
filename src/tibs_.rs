@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{Codec, Endianness};
+use crate::enums::{BitOrder, Codec, Endianness};
 use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -9,6 +9,7 @@ use crate::helpers::{
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
+use crate::view::View;
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -291,6 +292,39 @@ impl Tibs {
         } else {
             format!("Tibs('{}')", self.__str__())
         }
+    }
+
+    #[pyo3(signature = (byte_order = Endianness::Unspecified, byte_bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, byte_bit_order=BitOrder.Msb0)")]
+    pub fn view(
+        slf: PyRef<'_, Self>,
+        byte_order: Option<Endianness>,
+        byte_bit_order: Option<BitOrder>,
+    ) -> View {
+        View::from_tibs(
+            slf.into(),
+            byte_order.unwrap_or(Endianness::Unspecified),
+            byte_bit_order.unwrap_or(BitOrder::Msb0),
+        )
+    }
+
+    #[getter]
+    pub fn le(slf: PyRef<'_, Self>) -> View {
+        View::from_tibs(slf.into(), Endianness::Little, BitOrder::Msb0)
+    }
+
+    #[getter]
+    pub fn be(slf: PyRef<'_, Self>) -> View {
+        View::from_tibs(slf.into(), Endianness::Big, BitOrder::Msb0)
+    }
+
+    #[getter]
+    pub fn lsb0(slf: PyRef<'_, Self>) -> View {
+        View::from_tibs(slf.into(), Endianness::Unspecified, BitOrder::Lsb0)
+    }
+
+    #[getter]
+    pub fn msb0(slf: PyRef<'_, Self>) -> View {
+        View::from_tibs(slf.into(), Endianness::Unspecified, BitOrder::Msb0)
     }
 
     /// Iterate over the bits of the Tibs, yielding each bit as a boolean.

@@ -2,7 +2,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 #[pyclass(from_py_object, module = "tibs")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Endianness {
     Unspecified,
     Big,
@@ -10,6 +10,14 @@ pub enum Endianness {
 }
 
 impl Endianness {
+    pub(crate) fn repr_name(self) -> &'static str {
+        match self {
+            Endianness::Unspecified => "Endianness.Unspecified",
+            Endianness::Big => "Endianness.Big",
+            Endianness::Little => "Endianness.Little",
+        }
+    }
+
     pub fn is_little_endian(optional_endianness: Option<Self>, length: usize) -> PyResult<bool> {
         match optional_endianness {
             Some(Endianness::Big) => {
@@ -29,6 +37,22 @@ impl Endianness {
                 Ok(true)
             }
             _ => Ok(false),
+        }
+    }
+}
+
+#[pyclass(from_py_object, module = "tibs")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum BitOrder {
+    Msb0,
+    Lsb0,
+}
+
+impl BitOrder {
+    pub(crate) fn repr_name(self) -> &'static str {
+        match self {
+            BitOrder::Msb0 => "BitOrder.Msb0",
+            BitOrder::Lsb0 => "BitOrder.Lsb0",
         }
     }
 }
