@@ -1365,8 +1365,8 @@ def test_float_endianness():
     m3 = Mutibs.from_f(3.5, 32, Endianness.Big)
     m4 = Mutibs.from_f(3.5, 32, Endianness.Little)
     assert m1.to_f() == m2.to_f() == 3.5
-    assert m4.to_f(Endianness.Little) == 3.5
-    assert m3.to_f(Endianness.Big) == 3.5
+    assert m4.le.f == 3.5
+    assert m3.be.to_f() == 3.5
     assert m3.byte_swapped() == m4
 
 def test_encode_decode():

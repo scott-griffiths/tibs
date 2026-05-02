@@ -786,7 +786,6 @@ impl Mutibs {
 
     /// Return the unsigned integer representation of the Mutibs.
     ///
-    /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
     /// :return: The value as an unsigned integer.
     ///
     /// .. code-block:: pycon
@@ -794,10 +793,18 @@ impl Mutibs {
     ///     >>> Mutibs('0x0f').to_u()
     ///     15
     ///
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
-    pub fn to_u(&self, endianness: Option<Endianness>) -> PyResult<u128> {
-        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
-        BitCollection::to_u128(self, is_little_endian)
+    pub fn to_u(&self) -> PyResult<u128> {
+        BitCollection::to_u128(self, false)
+    }
+
+    /// Read-only property of the unsigned integer representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_u`.
+    ///
+    /// :return: The value as an unsigned integer.
+    #[getter]
+    fn u(&self) -> PyResult<u128> {
+        self.to_u()
     }
 
     /// Create a new instance from a signed integer.
@@ -829,7 +836,6 @@ impl Mutibs {
 
     /// Return the signed integer representation of the Mutibs.
     ///
-    /// :param Endianness endianness: The byte endianness used to interpret the integer. Defaults to Endianness.Unspecified.
     /// :return: The value as a signed integer.
     ///
     /// .. code-block:: pycon
@@ -837,10 +843,18 @@ impl Mutibs {
     ///     >>> Mutibs('0xe').to_i()
     ///     -2
     ///
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
-    pub fn to_i(&self, endianness: Option<Endianness>) -> PyResult<i128> {
-        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
-        BitCollection::to_i128(self, is_little_endian)
+    pub fn to_i(&self) -> PyResult<i128> {
+        BitCollection::to_i128(self, false)
+    }
+
+    /// Read-only property of the signed integer representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_i`.
+    ///
+    /// :return: The value as a signed integer.
+    #[getter]
+    fn i(&self) -> PyResult<i128> {
+        self.to_i()
     }
 
     /// Create a new instance from a floating point number.
@@ -872,7 +886,6 @@ impl Mutibs {
     ///
     /// The length must be 16, 32 or 64.
     ///
-    /// :param Endianness endianness: The byte endianness used to interpret the float. Defaults to Endianness.Unspecified.
     /// :return: The value as a Python float.
     ///
     /// .. code-block:: pycon
@@ -880,10 +893,18 @@ impl Mutibs {
     ///     >>> Mutibs('0x3fc00000').to_f()
     ///     1.5
     ///
-    #[pyo3(signature = (endianness = Endianness::Unspecified), text_signature = "($self, endianness=Endianness.Unspecified)")]
-    pub fn to_f(&self, endianness: Option<Endianness>) -> PyResult<f64> {
-        let is_little_endian = Endianness::is_little_endian(endianness, self.len())?;
-        BitCollection::to_f64(self, is_little_endian)
+    pub fn to_f(&self) -> PyResult<f64> {
+        BitCollection::to_f64(self, false)
+    }
+
+    /// Read-only property of the floating point representation of the Mutibs.
+    ///
+    /// Equivalent to using :meth:`~to_f`.
+    ///
+    /// :return: The value as a Python float.
+    #[getter]
+    fn f(&self) -> PyResult<f64> {
+        self.to_f()
     }
 
     /// Create a new instance with all bits set to zero.

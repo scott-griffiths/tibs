@@ -342,8 +342,8 @@ def test_endianness_i():
     t2 = Tibs.from_i(3, 16, endianness=Endianness.Little)
     assert t2.bin == '0000001100000000'
     assert t1.to_i() == 3
-    assert t1.to_i(Endianness.Big) == 3
-    assert t2.to_i(Endianness.Little) == 3
+    assert t1.be.i == 3
+    assert t2.le.i == 3
     assert t2.to_i() == 3 << 8
 
 def test_endianness_u():
@@ -354,11 +354,11 @@ def test_endianness_u():
     assert t1 != t3
     assert t2.to_u() == 10001
     assert t3.to_u() != 10001
-    assert t3.to_u(Endianness.Little) == 10001
+    assert t3.le.to_u() == 10001
     with pytest.raises(ValueError):
         _ = Tibs.from_u(999, 31, Endianness.Big)
     with pytest.raises(ValueError):
-        _ = Tibs('0x123').to_u(Endianness.Big)
+        _ = Tibs('0x123').be.u
 
 
 def test_rchunks():
