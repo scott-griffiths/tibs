@@ -67,20 +67,24 @@ impl View {
     }
 
     fn to_tibs_view(&self) -> PyResult<Tibs> {
-        let bv = self.source.to_bitvec();
-        let tibs = if self.bit_order == BitOrder::Msb0 {
-            Tibs::from_bv(bv)
-        } else {
-            let mut viewed = BV::with_capacity(bv.len());
-            for byte in bv.chunks(8) {
+        if self.bit_order == BitOrder::Msb0 && self.byte_order != Endianness::Little {
+            return Ok(self.source.clone());
+        }
+
+        let tibs = if self.bit_order == BitOrder::Lsb0 {
+            let source = self.source.to_bitslice();
+            let mut viewed = BV::with_capacity(source.len());
+            for byte in source.chunks(8) {
                 for bit in byte.iter().rev() {
                     viewed.push(*bit);
                 }
             }
             Tibs::from_bv(viewed)
+        } else {
+            self.source.clone()
         };
 
-        if Endianness::is_little_endian(Some(self.byte_order), tibs.len())? {
+        if self.byte_order == Endianness::Little {
             BitCollection::byte_swap_copy(&tibs, None)
         } else {
             Ok(tibs)
@@ -402,10 +406,15 @@ impl View {
     ///
     pub fn field(&self, a: usize, b: usize) -> PyResult<Self> {
         let len = self.source.len();
+        if len == 0 {
+            return Err(PyValueError::new_err(
+                "Cannot extract a field from an empty view.",
+            ));
+        }
         if a >= len || b >= len {
             return Err(PyValueError::new_err(format!(
                 "Field labels must be in the range 0..{}. Received {a} and {b}.",
-                len.saturating_sub(1)
+                len - 1
             )));
         }
 
@@ -414,7 +423,7 @@ impl View {
         let field_len = high - low + 1;
         Self::validate_layout(field_len, self.byte_order, BitOrder::Msb0)?;
 
-        let source = self.source.to_bitvec();
+        let source = self.source.to_bitslice();
         let mut field = BV::with_capacity(field_len);
 
         match self.bit_order {

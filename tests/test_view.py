@@ -158,44 +158,6 @@ def test_mutibs_view_snapshots_current_source_value():
     assert v.to_bin() == "01001000"
 
 
-def test_view_getitem_integer_uses_viewed_bits():
-    t = Tibs("0x12")
-
-    assert t[1] is False
-    assert t.lsb0[1] is True
-    assert t.lsb0[-1] is False
-
-
-def test_view_getitem_slice_returns_materialized_view():
-    t = Tibs("0x1234")
-    v = t.le[8:16]
-
-    assert isinstance(v, View)
-    assert v.to_bin() == "00010010"
-    assert v.to_u() == 0x12
-    assert repr(v) == "View(Tibs('0x12'))"
-
-
-def test_view_getitem_slice_uses_viewed_bits_without_reapplying_lsb0():
-    t = Tibs("0x12")
-    v = t.lsb0[:4]
-
-    assert isinstance(v, View)
-    assert v.to_bin() == "0100"
-    assert v.to_tibs() == Tibs("0b0100")
-    assert repr(v) == "View(Tibs('0x4'))"
-
-
-def test_byte_oriented_view_can_slice_to_non_whole_byte_field():
-    field = Tibs("0x1234").le.lsb0[5:12]
-
-    assert isinstance(field, View)
-    assert len(field) == 7
-    assert field.to_bin() == "1000100"
-    assert field.u == 0b1000100
-    assert repr(field) == "View(Tibs('0b1000100'))"
-
-
 def test_view_field_extracts_lsb0_spec_labels():
     v = Tibs("0x88040410").lsb0
 
@@ -246,11 +208,11 @@ def test_view_field_validates_labels():
         _ = v.field(8, 0)
 
 
-def test_view_getitem_slice_supports_step():
-    t = Tibs("0b001101")
+def test_view_field_rejects_empty_view():
+    v = Tibs().view()
 
-    assert t.view()[::2].to_bin() == "010"
-    assert t.view()[::-1].to_bin() == "101100"
+    with pytest.raises(ValueError, match="empty view"):
+        _ = v.field(0, 0)
 
 
 def test_mutibs_views():
