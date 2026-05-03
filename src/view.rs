@@ -5,7 +5,6 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PySlice};
 
 ///     A view of a :class:`Tibs` with different interpretation settings.
 ///
@@ -28,7 +27,7 @@ use pyo3::types::{PyBool, PySlice};
 ///         >>> t.lsb0.hex
 ///         '8000'
 ///
-#[pyclass(module = "tibs")]
+#[pyclass(module = "tibs", frozen)]
 pub struct View {
     pub(crate) source: Tibs,
     pub(crate) byte_order: Endianness,
@@ -260,7 +259,7 @@ impl View {
 
     /// Return the viewed bits as a binary string.
     ///
-    /// :return: A string beginning with ``0b``.
+    /// :return: The binary representation as a string.
     ///
     pub fn to_bin(&self) -> PyResult<String> {
         Ok(BitCollection::to_binary(&self.to_tibs_view()?))
@@ -268,7 +267,7 @@ impl View {
 
     /// Return the viewed bits as an octal string.
     ///
-    /// :return: A string beginning with ``0o``.
+    /// :return: The octal representation as a string.
     ///
     pub fn to_oct(&self) -> PyResult<String> {
         BitCollection::to_octal(&self.to_tibs_view()?)
@@ -276,7 +275,7 @@ impl View {
 
     /// Return the viewed bits as a hexadecimal string.
     ///
-    /// :return: A string beginning with ``0x``.
+    /// :return: The hexadecimal representation as a string.
     ///
     /// .. code-block:: pycon
     ///
@@ -374,47 +373,6 @@ impl View {
     #[getter]
     fn bytes(&self) -> PyResult<Vec<u8>> {
         self.to_bytes()
-    }
-
-    /// Return a bit or slice from the materialized view.
-    ///
-    /// Indexing with an integer returns a ``bool``. Slicing returns a new ``View``
-    /// with default interpretation settings over the sliced bits.
-    ///
-    /// :param key: An integer index or slice.
-    /// :return: A ``bool`` or ``View``.
-    ///
-    pub fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let tibs = self.to_tibs_view()?;
-
-        if let Ok(index) = key.extract::<isize>() {
-            let value = tibs.get_index(index)?;
-            let py_value = PyBool::new(py, value);
-            return Ok(py_value.to_owned().into());
-        }
-
-        if let Ok(slice) = key.cast::<PySlice>() {
-            let indices = slice.indices(tibs.len() as isize)?;
-            let (start, stop, step) = (
-                isize::try_from(indices.start)?,
-                isize::try_from(indices.stop)?,
-                isize::try_from(indices.step)?,
-            );
-
-            let result = if step == 1 {
-                if start < stop {
-                    tibs.get_slice(start as usize, (stop - start) as usize)?
-                } else {
-                    Tibs::empty()
-                }
-            } else {
-                tibs.get_slice_with_step(start, stop, step)?
-            };
-            let result = View::from_tibs(result, Endianness::Unspecified, BitOrder::Msb0);
-            return Ok(Py::new(py, result)?.into_pyobject(py)?.into());
-        }
-
-        Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
     /// Extract a field using inclusive bit labels.
