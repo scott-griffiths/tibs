@@ -96,7 +96,7 @@ A subset of these methods are simple views of the binary data, and they either c
 These ``to_`` methods don't accept any parameters, so read-only properties are provided as a convenient alias.
 So instead of using ``t.to_bin()`` you can use just ``t.bin`` as there is no ambiguity.
 
-Except for ``bin``, the views all need the data to have a length that's a correct multiple, for example ``bytes``
+Many of the views need the data to have a length that's a correct multiple, for example ``bytes``
 needs the data length to be a multiple of 8::
 
     >>> t = Tibs('0x4145c')
@@ -128,13 +128,11 @@ Data interpretations
 
 There are also a number of data interpretations that complement the data views:
 
-* :meth:`Tibs.to_u()`. Interprets as an unsigned integer.
-* :meth:`Tibs.to_i()`. Interprets as a signed integer.
-* :meth:`Tibs.to_f()`. Converts to Python float. Length must be 16, 32 or 64.
+* :meth:`Tibs.to_u()` / :attr:`Tibs.u`. Interprets as an unsigned integer.
+* :meth:`Tibs.to_i()` / :attr:`Tibs.i`. Interprets as a signed integer.
+* :meth:`Tibs.to_f()` / :attr:`Tibs.f`. Converts to Python float. Length must be 16, 32 or 64.
 
-
-
-Unlike the data views, the interpretations can have many-to-one relationships in both directions.
+Unlike the data views, the interpretations can have a many-to-one relationship.
 For example there are many ways for a ``Tibs`` to be constructed from the unsigned integer 3::
 
     u1 = Tibs.from_u(3, 5)   # binary 00011
@@ -145,8 +143,10 @@ These are three different ``Tibs``, but they all can have equal interpretations:
 
     >>> set([u1, u2, u3])
     {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
-    >>> set([u1.to_u(), u2.to_u(), u3.to_u(Endianness.Little)])
+    >>> set([u1.u, u2.u, u3.le.u])
     {3}
+
+For the value stored in ``u3`` a little-endian :class:`View` was used - we'll cover that later.
 
 
 Switching between Tibs and Mutibs

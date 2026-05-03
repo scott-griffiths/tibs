@@ -3,14 +3,7 @@
 View
 ----
 
-
-The View class wraps a Tibs with different interpretation settings.
-
-It records how operations such as integer conversion, byte conversion and
-field extraction should interpret those bits.
-
-A view created from a Mutibs stores a Tibs snapshot. Later
-changes to the original Mutibs are not reflected in the view.
+A View can be created from a Tibs or a Mutibs and it wraps it with a different interpretation.
 
 .. autoclass:: tibs.View
    :members:

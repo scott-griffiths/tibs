@@ -3,31 +3,6 @@
 Miscellaneous
 -------------
 
-Endianness
-^^^^^^^^^^
-
-Byte-wise endianness is available for constructing and interpreting various whole-byte values.
-The endianness isn't a property of the ``Tibs``, but affect both how it's constructed from a value
-and how it's reinterpreted as a value. ::
-
-    >>> Tibs.from_u(511, 32, Endianness.Big)
-    Tibs('0x000001ff')
-    >>> Tibs.from_u(511, 32, Endianness.Little)
-    Tibs('0xff010000')
-
-The default is ``Endianness.Unspecified`` which is bit-wise big endian. The difference between ``Unspecified``
-and ``Big`` is that the latter will complain if it tries to construct or interpret a non whole-byte value. ::
-
-
-    >>> m = Mutibs.from_f(1984, 64)
-    >>> m.to_f()
-    1984.0
-    >>> m.to_f(Endianness.Little)
-    2.0142e-319
-    >>> m.byte_swap()
-    >>> m.to_f(Endianness.Little)
-    1984.0
-
 
 Byte encoding format
 ^^^^^^^^^^^^^^^^^^^^

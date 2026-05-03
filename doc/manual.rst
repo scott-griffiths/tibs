@@ -90,5 +90,6 @@ All rights reserved.
     creation
     inspection
     manipulation
+    views
     tibs_vs_mutibs
     misc
