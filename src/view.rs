@@ -390,9 +390,8 @@ impl View {
     /// positions.
     ///
     /// The returned view has ``BitOrder.Msb0`` because the field has been
-    /// materialized into normal value order. The current byte order is kept, so
-    /// extracting a non-whole-byte field from a little-endian or big-endian view is
-    /// an error.
+    /// materialized into normal value order. The current byte order is kept for
+    /// whole-byte fields and dropped for non-whole-byte fields.
     ///
     /// :param int a: One inclusive field endpoint.
     /// :param int b: The other inclusive field endpoint.
@@ -421,7 +420,11 @@ impl View {
         let high = a.max(b);
         let low = a.min(b);
         let field_len = high - low + 1;
-        Self::validate_layout(field_len, self.byte_order, BitOrder::Msb0)?;
+        let byte_order = if field_len.is_multiple_of(8) {
+            self.byte_order
+        } else {
+            Endianness::Unspecified
+        };
 
         let source = self.source.to_bitslice();
         let mut field = BV::with_capacity(field_len);
@@ -441,7 +444,7 @@ impl View {
 
         Ok(View::from_tibs(
             Tibs::from_bv(field),
-            self.byte_order,
+            byte_order,
             BitOrder::Msb0,
         ))
     }

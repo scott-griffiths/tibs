@@ -185,13 +185,13 @@ def test_view_field_preserves_byte_order_for_whole_byte_fields():
     assert field.u == Tibs("0x0102").lsb0.field(15, 0).le.u
 
 
-def test_view_field_rejects_non_whole_byte_fields_with_byte_order():
+def test_view_field_drops_byte_order_for_non_whole_byte_fields():
     v = Tibs("0x88040410").lsb0.le
+    field = v.field(31, 26)
 
-    with pytest.raises(ValueError):
-        _ = v.field(31, 26)
-
-    assert Tibs("0x88040410").lsb0.field(31, 26).u == 4
+    assert repr(field) == "View(Tibs('0b000100'))"
+    assert field.u == 4
+    assert field.u == Tibs("0x88040410").lsb0.field(31, 26).u
 
 
 def test_view_field_uses_msb0_labels_by_default():
