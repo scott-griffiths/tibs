@@ -224,18 +224,6 @@ impl View {
         self.source.len()
     }
 
-    /// Return a copy of the raw byte information after applying the view.
-    ///
-    /// This returns the underlying byte data for the materialized viewed value and
-    /// can contain leading and trailing bits that are not considered part of the
-    /// viewed data. Usually using :meth:`~to_bytes` is what you really need.
-    ///
-    /// :return: A tuple of the raw bytes, the bit offset and the bit length.
-    ///
-    pub fn to_raw_data(&self) -> PyResult<(Vec<u8>, usize, usize)> {
-        Ok(self.to_tibs_view()?.raw_data())
-    }
-
     /// Interpret the viewed bits as an unsigned integer.
     ///
     /// :return: The unsigned integer value.

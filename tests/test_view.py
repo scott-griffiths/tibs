@@ -148,12 +148,6 @@ def test_view_to_methods_use_bit_order_for_materialized_bits():
     assert Tibs("0x123456").lsb0.oct == Tibs("0x482c6a").oct
 
 
-def test_view_to_raw_data_round_trips_materialized_view():
-    raw_bytes, offset, length = Tibs("0x12").lsb0.to_raw_data()
-
-    assert Tibs.from_bytes(raw_bytes)[offset:offset + length] == Tibs("0x48")
-
-
 def test_mutibs_view_snapshots_current_source_value():
     m = Mutibs("0x12")
     v = m.lsb0
