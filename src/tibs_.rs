@@ -294,6 +294,24 @@ impl Tibs {
         }
     }
 
+    /// Return a view with interpretation settings.
+    ///
+    /// A view does not change the underlying bits. It changes how operations such
+    /// as integer conversion, byte conversion and field extraction interpret those
+    /// bits.
+    ///
+    /// Byte-oriented views must have a whole-byte length. This applies when using
+    /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
+    ///
+    /// :param Endianness byte_order: The byte order used when interpreting whole-byte values. Defaults to ``Endianness.Unspecified``.
+    /// :param BitOrder bit_order: The bit numbering order used for field labels. Defaults to ``BitOrder.Msb0``.
+    /// :return: A new :class:`View`.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0x0100').view(byte_order=Endianness.Little).u
+    ///     1
+    ///
     #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
     pub fn view(
         slf: PyRef<'_, Self>,
@@ -306,6 +324,12 @@ impl Tibs {
         Ok(View::from_tibs(slf.clone(), byte_order, bit_order))
     }
 
+    /// Return a little-endian byte-order view.
+    ///
+    /// Equivalent to ``view(byte_order=Endianness.Little)``.
+    ///
+    /// The ``Tibs`` length must be a whole number of bytes.
+    ///
     #[getter]
     pub fn le(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Little, BitOrder::Msb0)?;
@@ -316,6 +340,12 @@ impl Tibs {
         ))
     }
 
+    /// Return a big-endian byte-order view.
+    ///
+    /// Equivalent to ``view(byte_order=Endianness.Big)``.
+    ///
+    /// The ``Tibs`` length must be a whole number of bytes.
+    ///
     #[getter]
     pub fn be(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Big, BitOrder::Msb0)?;
@@ -326,6 +356,14 @@ impl Tibs {
         ))
     }
 
+    /// Return an LSB0 bit-order view.
+    ///
+    /// ``BitOrder.Lsb0`` means that field labels are counted from the least
+    /// significant bit of each byte. The ``Tibs`` length must be a whole number of
+    /// bytes.
+    ///
+    /// Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
+    ///
     #[getter]
     pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Unspecified, BitOrder::Lsb0)?;
@@ -336,6 +374,13 @@ impl Tibs {
         ))
     }
 
+    /// Return an MSB0 bit-order view.
+    ///
+    /// ``BitOrder.Msb0`` means that field labels are counted from the most
+    /// significant bit of each byte. This is the default bit order.
+    ///
+    /// Equivalent to ``view(bit_order=BitOrder.Msb0)``.
+    ///
     #[getter]
     pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
         Ok(View::from_tibs(

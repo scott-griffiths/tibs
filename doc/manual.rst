@@ -38,7 +38,7 @@ User Manual
 ``tibs`` is a Python library for creating, manipulating and interpreting binary data.
 It's designed to be light-weight and easy to use, and is written in Rust for efficiency.
 
-The two classes available in the tibs module are:
+The two most important classes available in the tibs module are:
 
 * :doc:`tibs` — An immutable sequence of bits.
 * :doc:`mutibs` — A mutable sequence of bits.

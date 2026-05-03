@@ -6,7 +6,7 @@ API
 The API docs are generated from the docs strings, so are also available via the ``help()``
 function in a Python interpreted session.
 
-The two classes available in the tibs module are:
+The most important classes available in the tibs module are:
 
 * :doc:`tibs` — An immutable sequence of bits.
 * :doc:`mutibs` — A mutable sequence of bits.
@@ -17,4 +17,5 @@ The two classes available in the tibs module are:
 
     tibs
     mutibs
+    view
     other
