@@ -18,7 +18,7 @@ The raw encoding is also very efficient, and all the encoded sequences contains 
 means that they can be safely concatenated without losing any information.
 
 The base implementation does a good job at the smaller bit sequences that compression
-algorithms would be very inefficient at storing, for example all bit sequences up to 5 bits long are encoded
+algorithms would be very inefficient at storing, for example all bit sequences up to 6 bits long are encoded
 into a single byte. For longer sequences the raw codec overhead is still small.
 
 The mutable nature of ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
@@ -27,9 +27,9 @@ if a ``Tibs`` and ``Mutibs`` are equal they will encode to the same ``bytes``.
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
 
-   0 to 5 bits, +0 bytes
-   6 to 37 bits, +1 byte
-   38 to 1016 bits, +2 bytes
+   0 to 6 bits, +0 bytes
+   7 to 64 bits, +1 byte
+   65 to 1016 bits, +2 bytes
    1017 to 131064 bits, +3 bytes
    ... , ...
    1 MiB, +4 bytes
@@ -39,7 +39,7 @@ ten billion zero bits::
 
     >>> b = Tibs.from_zeros(10_000_000_000).encode(Codec.Rice)
     >>> b
-    b'L\x05\xfc\xf5@\xbe?\xf0'
+    b'\x0c\x05\xfc\xf5@\xbe?\xf0'
     >>> t = Tibs.decode(b)
     >>> t.count(0)
     10000000000
@@ -55,60 +55,61 @@ Overview
 
 In this section the notation ``a..b`` include both endpoints ``a`` and ``b``.
 
-Each encoded Tibs is in one of three forms, determined by its bit length:
+Each encoded Tibs is in one of three forms:
 
-1. Single byte form (only 0..5 bits)
-2. Short form (only 6..37 bits)
+1. Single byte form (only 0..6 bits)
+2. Short form (only 7..64 bits)
 3. Long form (any length)
 
-The single byte and short forms can only be used to encode 0..5 bits and 6..37 bits respectively.
+The single byte and short forms can only be used to encode 0..6 bits and 7..64 bits respectively.
 
-The long form can be used for any length, but is required for lengths >37 bits.
+The long form can be used for any length, but is required for lengths >64 bits.
 
 The encoding and decoding methods are symmetric.
 Note that when decoding, any illegal or reserved values encountered are considered errors.
 
 The bit length of the Tibs determines which of the three encodings can be used:
 
-1. Single byte (0..5 bits)
+1. Single byte (0..6 bits)
 """"""""""""""""""""""""""
 
-The first bit must be set. The second bit is a reserved indexing bit; current encoders set it,
-and decoders ignore it.
-The remaining bits of the byte decode the data as follows::
+The first bit must be set. The remaining bits of the byte decode the data as follows::
 
     bit0: single_byte_flag = 1
-    bit1: reserved_indexing_bit
-    bit2: is_five_bits_flag
-    if is_five_bits_flag:
-        bit3..bit7: bit_data
+    bit1: is_six_bits_flag
+    if is_six_bits_flag:
+        bit2..bit7: bit_data
     else:
-        bit3: is_four_bits_flag
-        if is_four_bits_flag:
-            bit4..bit7: bit_data
+        bit2: is_five_bits_flag
+        if is_five_bits_flag:
+            bit3..bit7: bit_data
         else:
-            bit4: is_three_bits_flag:
-            if is_three_bits_flag:
-                bit5..bit7: bit_data
+            bit3: is_four_bits_flag
+            if is_four_bits_flag:
+                bit4..bit7: bit_data
             else:
-                bit5: is_two_bits_flag:
-                if is_two_bits_flag:
-                    bit6..bit7: bit_data
+                bit4: is_three_bits_flag:
+                if is_three_bits_flag:
+                    bit5..bit7: bit_data
                 else:
-                    bit6: is_one_bit_flag:
-                    if is_one_bit_flag:
-                        bit7: bit_data
+                    bit5: is_two_bits_flag:
+                    if is_two_bits_flag:
+                        bit6..bit7: bit_data
                     else:
-                        bit7: 1  # Zero bit length
+                        bit6: is_one_bit_flag:
+                        if is_one_bit_flag:
+                            bit7: bit_data
+                        else:
+                            bit7: 1  # Zero bit length
 
-For this single byte, decoding the ``bit_data`` will give a sequences of zero to five bits.
+For this single byte, decoding the ``bit_data`` will give a sequence of zero to six bits.
 
-The values of ``10000000`` and ``11000000`` do not correspond to a valid encoding and are reserved.
+The value ``10000000`` does not correspond to a valid encoding and is reserved.
 
-As an example, the byte ``11001110`` would be decoded as::
+As an example, the byte ``10001110`` would be decoded as::
 
     1: single_byte_flag
-    1: reserved_indexing_bit
+    0: is_six_bits_flag
     0: is_five_bits_flag
     0: is_four_bits_flag
     1: is_three_bits_flag
@@ -116,55 +117,57 @@ As an example, the byte ``11001110`` would be decoded as::
 
 so this represents a 3-bit sequence with the value ``110``.
 
-2. Short form (6..37 bits)
+2. Short form (7..64 bits)
 """"""""""""""""""""""""""
 
-For short bit sequences ``bit0`` will be unset and ``bit2`` will be set.
-The rest of the byte gives the bit length::
+For short bit sequences ``bit0`` will be unset and ``bit1`` will be set.
+The rest of the byte gives the byte length and padding::
 
     bit0: single_byte_flag = 0
-    bit1: reserved_indexing_bit
-    bit2: short_form_flag = 1
-    bit3..bit7: length_minus_6
+    bit1: short_form_flag = 1
+    bit2..bit4: byte_length_minus_1
+    bit5..bit7: bit_padding
 
-The ``length_minus_6`` will be in the range 0..31, and so will be used for bit lengths of 6 to 37.
-The data for this is then stored in the next 1 to 5 bytes, left aligned.
+The ``byte_length_minus_1`` will be in the range 0..7, and so will be used for data lengths of
+1 to 8 bytes. The ``bit_padding`` value is the number of bits to truncate from the end of the
+data bytes, and bit lengths of 1 to 6 are reserved because they must use the single byte form.
+The data for this is then stored in the next 1 to 8 bytes, left aligned.
 
-For example, the byte ``00100011`` would be decoded as::
+For example, the byte ``01001111`` would be decoded as::
 
     0: single_byte_flag
-    0: reserved_indexing_bit
     1: short_form_flag
-    00011: length_minus_6
+    001: byte_length_minus_1
+    111: bit_padding
 
-``length_minus_6`` is ``3``, so this will be followed by 9 bits of data, padded to the next byte,
-so including the header byte the sequence ``00100011_11100011_10000000`` represents a 9-bit
+``byte_length_minus_1`` is ``1`` and ``bit_padding`` is ``7``, so this will be followed by two
+bytes of data with the final seven bits ignored. Including the header byte, the sequence
+``01001111_11100011_10000000`` represents a 9-bit
 sequence with the value ``111000111``.
 
-3. Long form (38+ bits)
+3. Long form (65+ bits)
 """""""""""""""""""""""
 
-The long form is required for encoding 38 bits or greater. Although it can be used on shorter
+The long form is required for encoding 65 bits or greater. Although it can be used on shorter
 sequences it is not recommended as it will be less efficient than the specialised encodings.
 
-For long form sequences, both ``bit0`` and ``bit2`` will be unset.
+For long form sequences, both ``bit0`` and ``bit1`` will be unset.
 The first byte's format will be::
 
     bit0: single_byte_flag = 0
-    bit1: reserved_indexing_bit
-    bit2: short_form_flag = 0
-    bit3..bit4: codec
+    bit1: short_form_flag = 0
+    bit2..bit4: codec
     bit5..bit7: bit_padding
 
-There are 2 bits to specify the codec.
+There are 3 bits to specify the codec.
 
 .. csv-table::
    :header: "``codec``", "Byte codec"
 
-   ``00``, Raw
-   ``01``, Rice
-   ``10``, Zstd
-   ``11``, Reserved
+   ``000``, Raw
+   ``001``, Rice
+   ``010``, Zstd
+   ``011`` to ``111``, Reserved
 
 The ``bit_padding`` decodes as an unsigned integer in the range 0..7. This gives the number
 of bits to truncate from the end of the decoded bytes, so allows all bit lengths to be stored.
@@ -187,14 +190,14 @@ A first varint byte equal to ``10000000`` is not permitted and is reserved.
 Raw decoding
 """"""""""""
 
-If the ``codec`` is 'raw', this is then followed by ``byte_length`` bytes. The raw bit sequence are these bytes with ``bit_padding`` bits at the end removed.
+If the ``codec`` is 'Raw', this is then followed by ``byte_length`` bytes. The raw bit sequence are these bytes with ``bit_padding`` bits at the end removed.
 
 This bit sequence is just the bits of the Tibs.
 
 Rice decoding
 """""""""""""
 
-If the ``codec`` is 'rice', next comes a configuration byte::
+If the ``codec`` is 'Rice', next comes a configuration byte::
 
     bit0..4: k (unsigned int, range 0 - 31)
     bit5: sparse_bit
@@ -228,15 +231,14 @@ either bit value.
 
 ----
 
-For example, let's decode the four byte sequence ``b'I\x01.\xbe'``.
-This corresponds to the binary ``01001001_00000001_00101110_10111110``
+For example, let's decode the four byte sequence ``b'\x09\x01.\xbe'``.
+This corresponds to the binary ``00001001_00000001_00101110_10111110``
 
-byte ``01001001`` ::
+byte ``00001001`` ::
 
     0: single_byte_flag
-    1: reserved_indexing_bit
     0: short_form_flag
-    01: codec (rice)
+    001: codec (Rice)
     001: bit_padding (=1)
 
 byte ``00000001`` ::
@@ -287,9 +289,8 @@ This could be efficiently coded with Rice encoding, but let's use Raw just to de
 First the header byte is::
 
     0: single_byte_flag
-    1: reserved_indexing_bit
     0: short_form_flag
-    00: codec (raw)
+    000: codec (Raw)
     110: bit_padding (6)
 
 Then we encode the byte length. We need 7 bytes to store our 50 bits, so we encode the number 7::
@@ -300,13 +301,13 @@ Then we encode the byte length. We need 7 bytes to store our 50 bits, so we enco
 We don't need any further bytes to store the byte length, so the ``length_continuation_flag`` is set to ``0`` and
 no further length bytes are encoded.
 
-Finally we pad the data with ``0`` bits up the the byte boundary and store it::
+Finally we pad the data with ``0`` bits up to the byte boundary and store it::
 
     11111111_11111111_11111111_11111111_11111111_11111111_11000000
 
 so the final sequence is ::
 
-    01000110_00000111_11111111_11111111_11111111_11111111_11111111_11111111_11000000
+    00000110_00000111_11111111_11111111_11111111_11111111_11111111_11111111_11000000
     header   byte_len bit_data                                                padding
 
 Notes

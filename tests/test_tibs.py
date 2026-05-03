@@ -425,40 +425,45 @@ def test_encoding_ints():
 
 
 def encode_tibs(t: Tibs) -> bytes:
-    msb0_flag = True
     n = len(t)
 
-    # Single-byte form: bit0=1, bit1=msb0_flag, then prefix-coded length/data for 0..5 bits.
-    if n <= 5:
-        if n == 5:
-            e = Mutibs.from_joined([[1, msb0_flag, 1], t])
+    # Single-byte form: bit0=1, then prefix-coded length/data for 0..6 bits.
+    if n <= 6:
+        if n == 6:
+            e = Mutibs.from_joined([[1, 1], t])
+        elif n == 5:
+            e = Mutibs.from_joined([[1, 0, 1], t])
         elif n == 4:
-            e = Mutibs.from_joined([[1, msb0_flag, 0, 1], t])
+            e = Mutibs.from_joined([[1, 0, 0, 1], t])
         elif n == 3:
-            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 1], t])
+            e = Mutibs.from_joined([[1, 0, 0, 0, 1], t])
         elif n == 2:
-            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 0, 1], t])
+            e = Mutibs.from_joined([[1, 0, 0, 0, 0, 1], t])
         elif n == 1:
-            e = Mutibs.from_joined([[1, msb0_flag, 0, 0, 0, 0, 1], t])
+            e = Mutibs.from_joined([[1, 0, 0, 0, 0, 0, 1], t])
         else:
-            # Canonical empty representation sets final bit to one.
-            e = Mutibs([1, msb0_flag, 0, 0, 0, 0, 0, 1])
+            e = Mutibs([1, 0, 0, 0, 0, 0, 0, 1])
         assert len(e) == 8
         return e.to_bytes()
 
-    # Short form: bit0=0, bit1=msb0_flag, bit2=1, bit3..bit7 = length_minus_6.
-    if n <= 37:
-        header = Mutibs.from_joined([[0, msb0_flag, 1], Tibs.from_u(n - 6, 5)])
+    # Short form: bit0=0, bit1=1, bit2..bit4 = byte_length_minus_1, bit5..bit7 = bit_padding.
+    if n <= 64:
+        byte_length = (n + 7) // 8
+        bit_padding = byte_length * 8 - n
+        header = Mutibs.from_joined([
+            [0, 1],
+            Tibs.from_u(byte_length - 1, 3),
+            Tibs.from_u(bit_padding, 3),
+        ])
         e = Mutibs.from_joined([header, t])
-        padding = (-len(e)) % 8
-        if padding:
-            e += [0] * padding
+        if bit_padding:
+            e += [0] * bit_padding
         return e.to_bytes()
 
-    # Long form: bit0=0, bit1=msb0_flag, bit2=0, codec=00(raw), bit_padding(3).
+    # Long form: bit0=0, bit1=0, codec=000(raw), bit_padding(3).
     byte_length = (n + 7) // 8
     bit_padding = byte_length * 8 - n
-    header = Mutibs.from_joined([[0, msb0_flag, 0, 0, 0], Tibs.from_u(bit_padding, 3)])
+    header = Mutibs.from_joined([[0, 0, 0, 0, 0], Tibs.from_u(bit_padding, 3)])
     var_length = encode_long_int(byte_length)
     e = Mutibs.from_joined([header, var_length, t])
     if bit_padding:
@@ -469,10 +474,12 @@ def encode_tibs(t: Tibs) -> bytes:
 
 def decode_tibs(b: bytes) -> Tibs:
     m = Mutibs.from_bytes(b)
-    single_byte_flag, msb0_flag, short_form_flag = m[0], m[1], m[2]
+    single_byte_flag, short_form_flag = m[0], m[1]
 
     if single_byte_flag:
-        if m[2] == 1:
+        if m[1] == 1:
+            m_out = m[2:8]
+        elif m[2] == 1:
             m_out = m[3:8]
         elif m[3] == 1:
             m_out = m[4:8]
@@ -487,11 +494,13 @@ def decode_tibs(b: bytes) -> Tibs:
         return m_out.as_tibs()
 
     if short_form_flag:
-        short_length = m[3:8].to_u() + 6
+        byte_length = m[2:5].to_u() + 1
+        bit_padding = m[5:8].to_u()
+        short_length = byte_length * 8 - bit_padding
         m_out = m[8:8 + short_length]
         return m_out.as_tibs()
 
-    codec = m[3:5].to_u()
+    codec = m[2:5].to_u()
     assert codec == 0
     bit_padding = m[5:8].to_u()
     u = Mutibs()
@@ -519,6 +528,15 @@ def test_encoding():
             t3 = Tibs.decode(b2)
             # assert t == t2
             assert t == t3
+
+
+def test_encoding_boundaries():
+    assert Tibs.from_zeros(0).encode() == bytes.fromhex("81")
+    assert Tibs.from_zeros(6).encode() == bytes.fromhex("c0")
+    assert Tibs.from_zeros(7).encode() == bytes.fromhex("4100")
+    assert Tibs.from_zeros(24).encode() == bytes.fromhex("50000000")
+    assert Tibs.from_zeros(25).encode() == bytes.fromhex("0a0124a0")
+
 
 def test_more_encoding():
     t = Tibs.from_ones(50) + [0] + Tibs.from_ones(50)

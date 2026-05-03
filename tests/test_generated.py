@@ -711,7 +711,7 @@ class TestConcreteRegressionCases:
 
 
 def test_decode_malformed_zstd_with_impossible_padding_raises_value_error():
-    malformed = bytes.fromhex("510d28b52ffd240001000099e9d851")
+    malformed = bytes.fromhex("110d28b52ffd240001000099e9d851")
     with pytest.raises(ValueError):
         Mutibs.decode(malformed)
 
@@ -720,7 +720,7 @@ def test_decode_malformed_zstd_with_impossible_padding_raises_value_error():
 def test_decode_malformed_zstd_with_impossible_padding_raises_value_error():
     # Valid zstd frame for empty bytes, wrapped in the tibs zstd container
     # with an impossible bit_padding of 1 for zero decompressed bits.
-    malformed = bytes.fromhex("510d28b52ffd240001000099e9d851")
+    malformed = bytes.fromhex("110d28b52ffd240001000099e9d851")
     with pytest.raises(ValueError):
         Tibs.decode(malformed)
 

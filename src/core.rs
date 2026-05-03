@@ -608,7 +608,11 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn raw_encoded_bit_length(bit_length: usize) -> usize {
         let data_byte_length = bit_length.div_ceil(8);
-        5 + Self::encode_varint(data_byte_length as u64).len() + data_byte_length * 8
+        8 + Self::encode_varint(data_byte_length as u64).len() + data_byte_length * 8
+    }
+
+    fn short_raw_encoded_bit_length(bit_length: usize) -> usize {
+        8 + bit_length.div_ceil(8) * 8
     }
 
     fn rice_encode_int(value: usize, k: u8) -> BV {
@@ -680,6 +684,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn encode_as_zstd_from_compressed(&self, compressed: Vec<u8>) -> BV {
         let mut bv = BV::new();
+        bv.push(false);
         bv.push(true);
         bv.push(false);
         let bit_padding = if self.len() % 8 == 0 {
@@ -705,6 +710,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         let bit_padding = data_byte_length * 8 - bit_length;
 
         let mut bv = BV::new();
+        bv.push(false);
         bv.push(false);
         bv.push(false);
         for shift in (0..3).rev() {
@@ -767,7 +773,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         let estimated_k = Self::estimated_rice_k(&gaps);
         let payload_bit_length = Self::rice_payload_bit_length(&gaps, estimated_k);
         let payload_byte_length = payload_bit_length.div_ceil(8);
-        5 + Self::encode_varint(payload_byte_length as u64).len() + 8 + payload_byte_length * 8
+        8 + Self::encode_varint(payload_byte_length as u64).len() + 8 + payload_byte_length * 8
     }
 
     fn encode_as_rice(&self, sparse_bit: bool) -> BV {
@@ -793,6 +799,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         let mut encoded = BV::new();
+        encoded.push(false);
         encoded.push(false);
         encoded.push(true);
         for shift in (0..3).rev() {
@@ -1012,33 +1019,34 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let bv = BV::from_vec(b);
         let single_byte_flag = bv[0];
-        let msb0_flag = bv[1];
         if single_byte_flag {
             if bv.len() != 8 {
                 return Err(PyValueError::new_err(
                     "The encoded sequence has unexpected trailing bytes.",
                 ));
             }
-            for bit_pos in 2..7 {
+            for bit_pos in 1..8 {
                 if bv[bit_pos] {
                     return Ok(Self::from_bv(bv[bit_pos + 1..].to_bitvec()));
                 }
             }
-            if !bv[7] {
+            return Err(PyValueError::new_err("The encoded sequence is reserved."));
+        }
+        let short_form_flag = bv[1];
+        if short_form_flag {
+            let byte_length = bv[2..5].load_be::<u8>() as usize + 1;
+            let bit_padding = bv[5..8].load_be::<u8>() as usize;
+            let data_bits = byte_length * 8;
+            let bit_length = data_bits - bit_padding;
+            if bit_length <= 6 {
                 return Err(PyValueError::new_err("The encoded sequence is reserved."));
             }
-            return Ok(Self::empty());
-        }
-        let short_form_flag = bv[2];
-        if short_form_flag {
-            let length_minus_6 = bv[3..8].load_be::<u8>() as usize;
-            let bit_length = length_minus_6 + 6;
-            if bv.len() < bit_length + 8 {
+            if bv.len() < data_bits + 8 {
                 return Err(PyValueError::new_err(
                     "The encoded sequence ended unexpectedly.",
                 ));
             }
-            if bv.len() != (1 + (bit_length + 7) / 8) * 8 {
+            if bv.len() != data_bits + 8 {
                 return Err(PyValueError::new_err(
                     "The encoded sequence has unexpected trailing bytes.",
                 ));
@@ -1046,7 +1054,7 @@ pub(crate) trait BitCollection: Sized + Clone {
             return Ok(Self::from_bv(bv[8..8 + bit_length].to_bitvec()));
         }
 
-        let codec = bv[3..5].load_be::<u8>();
+        let codec = bv[2..5].load_be::<u8>();
         let bit_padding = bv[5..8].load_be::<u8>() as usize;
 
         let (byte_length, varint_bits) = Self::decode_varint(&bv[8..])?;
@@ -1055,9 +1063,9 @@ pub(crate) trait BitCollection: Sized + Clone {
             .checked_mul(8)
             .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
         match codec {
-            0b00 => Self::decode_raw_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
-            0b01 => Self::decode_rice_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
-            0b10 => Self::decode_zstd_payload(&bv, msb0_flag, bit_padding, data_start, data_bits),
+            0b000 => Self::decode_raw_payload(&bv, true, bit_padding, data_start, data_bits),
+            0b001 => Self::decode_rice_payload(&bv, true, bit_padding, data_start, data_bits),
+            0b010 => Self::decode_zstd_payload(&bv, true, bit_padding, data_start, data_bits),
             _ => Err(PyValueError::new_err("The codec value is reserved.")),
         }
     }
@@ -1070,8 +1078,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         // Uses the Auto codec, and encodes as a single byte.
         if bit_length == 0 {
             bv.push(true);
-            bv.push(true);
-            for _ in 0..5 {
+            for _ in 0..6 {
                 bv.push(false);
             }
             bv.push(true);
@@ -1080,35 +1087,51 @@ pub(crate) trait BitCollection: Sized + Clone {
 
         match codec.unwrap_or(Codec::Auto) {
             Codec::Auto => match bit_length {
-                0..=5 => {
+                0..=6 => {
                     bv.push(true);
-                    bv.push(true);
-                    let leading_zeros = 5 - bit_length;
+                    let leading_zeros = 6 - bit_length;
                     for _ in 0..leading_zeros {
                         bv.push(false);
                     }
                     bv.push(true);
                     bv.extend_from_bitslice(self.as_bitslice());
                 }
-                6..=37 => {
+                7..=64 => {
                     bv.push(false);
                     bv.push(true);
-                    bv.push(true);
-                    let length_minus_6 = (bit_length - 6) as u8;
-                    for shift in (0..5).rev() {
-                        bv.push((length_minus_6 >> shift) & 1 == 1);
+                    let byte_length = bit_length.div_ceil(8);
+                    let bit_padding = byte_length * 8 - bit_length;
+                    let byte_length_minus_1 = (byte_length - 1) as u8;
+                    for shift in (0..3).rev() {
+                        bv.push((byte_length_minus_1 >> shift) & 1 == 1);
                     }
-                    bv.extend(self.to_bitvec());
-                    let padding_bits = 8 - bv.len() % 8;
-                    if padding_bits != 8 {
-                        for _ in 0..padding_bits {
+                    for shift in (0..3).rev() {
+                        bv.push((bit_padding >> shift) & 1 == 1);
+                    }
+                    let mut short_encoded = bv.clone();
+                    short_encoded.extend(self.to_bitvec());
+                    for _ in 0..bit_padding {
+                        short_encoded.push(false);
+                    }
+
+                    if bit_length > 24 {
+                        let ones_count = self.count(true);
+                        let sparse_bit = ones_count < bit_length / 2;
+                        let rice_bit_length = self.rice_encoded_bit_length(sparse_bit);
+                        if rice_bit_length < Self::short_raw_encoded_bit_length(bit_length) {
+                            bv.clear();
                             bv.push(false);
+                            bv.push(false);
+                            bv.extend(self.encode_as_rice(sparse_bit));
+                        } else {
+                            bv = short_encoded;
                         }
+                    } else {
+                        bv = short_encoded;
                     }
                 }
-                38.. => {
+                65.. => {
                     bv.push(false);
-                    bv.push(true);
                     bv.push(false);
 
                     let raw_bit_length = Self::raw_encoded_bit_length(bit_length);
@@ -1123,7 +1146,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                     } else {
                         (self.len() - ones_count) as f64 / self.len() as f64
                     };
-                    if bit_length <= 128 || sparseness < 0.25 {
+                    if bit_length > 24 && (bit_length <= 128 || sparseness < 0.25) {
                         let rice_bit_length = self.rice_encoded_bit_length(sparse_bit);
                         if rice_bit_length < best_bit_length {
                             best_codec = Codec::Rice;
@@ -1132,7 +1155,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                     }
 
                     if let Ok(zstd_compressed) = Self::zstd_compress_bytes(self) {
-                        let zstd_bit_length = 5
+                        let zstd_bit_length = 8
                             + Self::encode_varint(zstd_compressed.len() as u64).len()
                             + zstd_compressed.len() * 8;
 
@@ -1154,20 +1177,17 @@ pub(crate) trait BitCollection: Sized + Clone {
             },
             Codec::Raw => {
                 bv.push(false);
-                bv.push(true);
                 bv.push(false);
                 bv.extend(self.encode_as_raw());
             }
             Codec::Rice => {
                 bv.push(false);
-                bv.push(true);
                 bv.push(false);
                 let sparse_bit = self.count(true) < self.len() / 2;
                 bv.extend(self.encode_as_rice(sparse_bit));
             }
             Codec::Zstd => {
                 bv.push(false);
-                bv.push(true);
                 bv.push(false);
                 bv.extend(self.encode_as_zstd()?);
             }
