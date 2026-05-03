@@ -23,6 +23,13 @@ class Codec:
 
 
 class View:
+    def __init__(
+            self,
+            source: Tibs | Mutibs,
+            byte_order: Endianness = Endianness.Unspecified,
+            bit_order: BitOrder = BitOrder.Msb0
+    ) -> None: ...
+
     def view(
             self,
             byte_order: Endianness | None = None,

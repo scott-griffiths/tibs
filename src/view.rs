@@ -7,44 +7,9 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice};
 
-pub(crate) enum ViewSource {
-    Tibs(Py<Tibs>),
-    Mutibs(Py<Mutibs>),
-}
-
-impl ViewSource {
-    fn clone_ref(&self, py: Python<'_>) -> Self {
-        match self {
-            ViewSource::Tibs(tibs) => ViewSource::Tibs(tibs.clone_ref(py)),
-            ViewSource::Mutibs(mutibs) => ViewSource::Mutibs(mutibs.clone_ref(py)),
-        }
-    }
-
-    fn repr(&self, py: Python<'_>) -> String {
-        match self {
-            ViewSource::Tibs(tibs) => tibs.borrow(py).__repr__(),
-            ViewSource::Mutibs(mutibs) => mutibs.borrow(py).__repr__(),
-        }
-    }
-
-    fn len(&self, py: Python<'_>) -> usize {
-        match self {
-            ViewSource::Tibs(tibs) => tibs.borrow(py).len(),
-            ViewSource::Mutibs(mutibs) => mutibs.borrow(py).len(),
-        }
-    }
-
-    fn to_bitvec(&self, py: Python<'_>) -> BV {
-        match self {
-            ViewSource::Tibs(tibs) => tibs.borrow(py).to_bitvec(),
-            ViewSource::Mutibs(mutibs) => mutibs.borrow(py).to_bitvec(),
-        }
-    }
-}
-
 #[pyclass(module = "tibs")]
 pub struct View {
-    pub(crate) source: ViewSource,
+    pub(crate) source: Tibs,
     pub(crate) byte_order: Endianness,
     pub(crate) bit_order: BitOrder,
 }
@@ -64,42 +29,25 @@ impl View {
         Ok(())
     }
 
-    pub(crate) fn from_tibs(tibs: Py<Tibs>, byte_order: Endianness, bit_order: BitOrder) -> Self {
+    pub(crate) fn from_tibs(tibs: Tibs, byte_order: Endianness, bit_order: BitOrder) -> Self {
         View {
-            source: ViewSource::Tibs(tibs),
+            source: tibs,
             byte_order,
             bit_order,
         }
     }
 
-    pub(crate) fn from_mutibs(
-        mutibs: Py<Mutibs>,
-        byte_order: Endianness,
-        bit_order: BitOrder,
-    ) -> Self {
-        View {
-            source: ViewSource::Mutibs(mutibs),
-            byte_order,
-            bit_order,
-        }
-    }
-
-    fn with_layout(
-        &self,
-        py: Python<'_>,
-        byte_order: Endianness,
-        bit_order: BitOrder,
-    ) -> PyResult<Self> {
-        Self::validate_layout(self.source.len(py), byte_order, bit_order)?;
+    fn with_layout(&self, byte_order: Endianness, bit_order: BitOrder) -> PyResult<Self> {
+        Self::validate_layout(self.source.len(), byte_order, bit_order)?;
         Ok(View {
-            source: self.source.clone_ref(py),
+            source: self.source.clone(),
             byte_order,
             bit_order,
         })
     }
 
-    fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
-        let bv = self.source.to_bitvec(py);
+    fn to_tibs_view(&self) -> PyResult<Tibs> {
+        let bv = self.source.to_bitvec();
         let tibs = if self.bit_order == BitOrder::Msb0 {
             Tibs::from_bv(bv)
         } else {
@@ -129,124 +77,147 @@ impl View {
 
 #[pymethods]
 impl View {
+    #[new]
+    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    pub fn py_new(
+        source: &Bound<'_, PyAny>,
+        byte_order: Option<Endianness>,
+        bit_order: Option<BitOrder>,
+    ) -> PyResult<Self> {
+        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+
+        if let Ok(tibs) = source.extract::<PyRef<'_, Tibs>>() {
+            Self::validate_layout(tibs.len(), byte_order, bit_order)?;
+            return Ok(View::from_tibs(tibs.clone(), byte_order, bit_order));
+        }
+
+        if let Ok(mutibs) = source.extract::<PyRef<'_, Mutibs>>() {
+            Self::validate_layout(mutibs.len(), byte_order, bit_order)?;
+            return Ok(View::from_tibs(mutibs.to_tibs(), byte_order, bit_order));
+        }
+
+        Err(PyTypeError::new_err(
+            "View source must be a Tibs or Mutibs instance.",
+        ))
+    }
+
     #[pyo3(signature = (byte_order = None, bit_order = None), text_signature = "($self, byte_order=None, bit_order=None)")]
     pub fn view(
         &self,
-        py: Python<'_>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
     ) -> PyResult<Self> {
         self.with_layout(
-            py,
             byte_order.unwrap_or(self.byte_order),
             bit_order.unwrap_or(self.bit_order),
         )
     }
 
     #[getter]
-    pub fn le(&self, py: Python<'_>) -> PyResult<Self> {
-        self.with_layout(py, Endianness::Little, self.bit_order)
+    pub fn le(&self) -> PyResult<Self> {
+        self.with_layout(Endianness::Little, self.bit_order)
     }
 
     #[getter]
-    pub fn be(&self, py: Python<'_>) -> PyResult<Self> {
-        self.with_layout(py, Endianness::Big, self.bit_order)
+    pub fn be(&self) -> PyResult<Self> {
+        self.with_layout(Endianness::Big, self.bit_order)
     }
 
     #[getter]
-    pub fn lsb0(&self, py: Python<'_>) -> PyResult<Self> {
-        self.with_layout(py, self.byte_order, BitOrder::Lsb0)
+    pub fn lsb0(&self) -> PyResult<Self> {
+        self.with_layout(self.byte_order, BitOrder::Lsb0)
     }
 
     #[getter]
-    pub fn msb0(&self, py: Python<'_>) -> PyResult<Self> {
-        self.with_layout(py, self.byte_order, BitOrder::Msb0)
+    pub fn msb0(&self) -> PyResult<Self> {
+        self.with_layout(self.byte_order, BitOrder::Msb0)
     }
 
-    pub fn __len__(&self, py: Python<'_>) -> usize {
-        self.source.len(py)
+    pub fn __len__(&self) -> usize {
+        self.source.len()
     }
 
-    pub fn to_raw_data(&self, py: Python<'_>) -> PyResult<(Vec<u8>, usize, usize)> {
-        Ok(self.to_tibs_view(py)?.raw_data())
+    pub fn to_raw_data(&self) -> PyResult<(Vec<u8>, usize, usize)> {
+        Ok(self.to_tibs_view()?.raw_data())
     }
 
-    pub fn to_u(&self, py: Python<'_>) -> PyResult<u128> {
-        let tibs = self.to_tibs_view(py)?;
+    pub fn to_u(&self) -> PyResult<u128> {
+        let tibs = self.to_tibs_view()?;
         BitCollection::to_u128(&tibs, false)
     }
 
-    pub fn to_i(&self, py: Python<'_>) -> PyResult<i128> {
-        let tibs = self.to_tibs_view(py)?;
+    pub fn to_i(&self) -> PyResult<i128> {
+        let tibs = self.to_tibs_view()?;
         BitCollection::to_i128(&tibs, false)
     }
 
-    pub fn to_f(&self, py: Python<'_>) -> PyResult<f64> {
-        let tibs = self.to_tibs_view(py)?;
+    pub fn to_f(&self) -> PyResult<f64> {
+        let tibs = self.to_tibs_view()?;
         BitCollection::to_f64(&tibs, false)
     }
 
-    pub fn to_bin(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(BitCollection::to_binary(&self.to_tibs_view(py)?))
+    pub fn to_bin(&self) -> PyResult<String> {
+        Ok(BitCollection::to_binary(&self.to_tibs_view()?))
     }
 
-    pub fn to_oct(&self, py: Python<'_>) -> PyResult<String> {
-        BitCollection::to_octal(&self.to_tibs_view(py)?)
+    pub fn to_oct(&self) -> PyResult<String> {
+        BitCollection::to_octal(&self.to_tibs_view()?)
     }
 
-    pub fn to_hex(&self, py: Python<'_>) -> PyResult<String> {
-        BitCollection::to_hexadecimal(&self.to_tibs_view(py)?)
+    pub fn to_hex(&self) -> PyResult<String> {
+        BitCollection::to_hexadecimal(&self.to_tibs_view()?)
     }
 
-    pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(&self.to_tibs_view(py)?)
+    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(&self.to_tibs_view()?)
     }
 
-    pub fn to_tibs(&self, py: Python<'_>) -> PyResult<Tibs> {
-        self.to_tibs_view(py)
+    pub fn to_tibs(&self) -> PyResult<Tibs> {
+        self.to_tibs_view()
     }
 
-    pub fn to_mutibs(&self, py: Python<'_>) -> PyResult<Mutibs> {
-        Ok(Mutibs::from_bv(self.to_tibs_view(py)?.to_bitvec()))
-    }
-
-    #[getter]
-    fn u(&self, py: Python<'_>) -> PyResult<u128> {
-        self.to_u(py)
+    pub fn to_mutibs(&self) -> PyResult<Mutibs> {
+        Ok(Mutibs::from_bv(self.to_tibs_view()?.to_bitvec()))
     }
 
     #[getter]
-    fn i(&self, py: Python<'_>) -> PyResult<i128> {
-        self.to_i(py)
+    fn u(&self) -> PyResult<u128> {
+        self.to_u()
     }
 
     #[getter]
-    fn f(&self, py: Python<'_>) -> PyResult<f64> {
-        self.to_f(py)
+    fn i(&self) -> PyResult<i128> {
+        self.to_i()
     }
 
     #[getter]
-    fn bin(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_bin(py)
+    fn f(&self) -> PyResult<f64> {
+        self.to_f()
     }
 
     #[getter]
-    fn oct(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_oct(py)
+    fn bin(&self) -> PyResult<String> {
+        self.to_bin()
     }
 
     #[getter]
-    fn hex(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_hex(py)
+    fn oct(&self) -> PyResult<String> {
+        self.to_oct()
     }
 
     #[getter]
-    fn bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
-        self.to_bytes(py)
+    fn hex(&self) -> PyResult<String> {
+        self.to_hex()
+    }
+
+    #[getter]
+    fn bytes(&self) -> PyResult<Vec<u8>> {
+        self.to_bytes()
     }
 
     pub fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let tibs = self.to_tibs_view(py)?;
+        let tibs = self.to_tibs_view()?;
 
         if let Ok(index) = key.extract::<isize>() {
             let value = tibs.get_index(index)?;
@@ -271,19 +242,15 @@ impl View {
             } else {
                 tibs.get_slice_with_step(start, stop, step)?
             };
-            let result = View::from_tibs(
-                Py::new(py, result)?,
-                Endianness::Unspecified,
-                BitOrder::Msb0,
-            );
+            let result = View::from_tibs(result, Endianness::Unspecified, BitOrder::Msb0);
             return Ok(Py::new(py, result)?.into_pyobject(py)?.into());
         }
 
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
-    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<Self> {
-        let len = self.source.len(py);
+    pub fn field(&self, a: usize, b: usize) -> PyResult<Self> {
+        let len = self.source.len();
         if a >= len || b >= len {
             return Err(PyValueError::new_err(format!(
                 "Field labels must be in the range 0..{}. Received {a} and {b}.",
@@ -296,7 +263,7 @@ impl View {
         let field_len = high - low + 1;
         Self::validate_layout(field_len, self.byte_order, BitOrder::Msb0)?;
 
-        let source = self.source.to_bitvec(py);
+        let source = self.source.to_bitvec();
         let mut field = BV::with_capacity(field_len);
 
         match self.bit_order {
@@ -313,14 +280,14 @@ impl View {
         }
 
         Ok(View::from_tibs(
-            Py::new(py, Tibs::from_bv(field))?,
+            Tibs::from_bv(field),
             self.byte_order,
             BitOrder::Msb0,
         ))
     }
 
-    pub fn __repr__(&self, py: Python<'_>) -> String {
-        let mut parts = vec![self.source.repr(py)];
+    pub fn __repr__(&self) -> String {
+        let mut parts = vec![self.source.__repr__()];
         if self.byte_order != Endianness::Unspecified {
             parts.push(format!("byte_order={}", self.byte_order.repr_name()));
         }

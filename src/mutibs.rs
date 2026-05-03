@@ -517,14 +517,14 @@ impl Mutibs {
         let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
         View::validate_layout(slf.len(), byte_order, bit_order)?;
-        Ok(View::from_mutibs(slf.into(), byte_order, bit_order))
+        Ok(View::from_tibs(slf.to_tibs(), byte_order, bit_order))
     }
 
     #[getter]
     pub fn le(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Little, BitOrder::Msb0)?;
-        Ok(View::from_mutibs(
-            slf.into(),
+        Ok(View::from_tibs(
+            slf.to_tibs(),
             Endianness::Little,
             BitOrder::Msb0,
         ))
@@ -533,8 +533,8 @@ impl Mutibs {
     #[getter]
     pub fn be(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Big, BitOrder::Msb0)?;
-        Ok(View::from_mutibs(
-            slf.into(),
+        Ok(View::from_tibs(
+            slf.to_tibs(),
             Endianness::Big,
             BitOrder::Msb0,
         ))
@@ -543,8 +543,8 @@ impl Mutibs {
     #[getter]
     pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<View> {
         View::validate_layout(slf.len(), Endianness::Unspecified, BitOrder::Lsb0)?;
-        Ok(View::from_mutibs(
-            slf.into(),
+        Ok(View::from_tibs(
+            slf.to_tibs(),
             Endianness::Unspecified,
             BitOrder::Lsb0,
         ))
@@ -552,8 +552,8 @@ impl Mutibs {
 
     #[getter]
     pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
-        Ok(View::from_mutibs(
-            slf.into(),
+        Ok(View::from_tibs(
+            slf.to_tibs(),
             Endianness::Unspecified,
             BitOrder::Msb0,
         ))

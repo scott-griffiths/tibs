@@ -3,6 +3,40 @@ import pytest
 from tibs import BitOrder, Endianness, Mutibs, Tibs, View
 
 
+def test_view_constructor_accepts_tibs_and_mutibs():
+    t = Tibs("0x1234")
+    m = Mutibs("0x1234")
+
+    assert repr(View(t)) == "View(Tibs('0x1234'))"
+    assert repr(View(m)) == "View(Tibs('0x1234'))"
+    assert repr(View(t, byte_order=Endianness.Little)) == (
+        "View(Tibs('0x1234'), byte_order=Endianness.Little)"
+    )
+    assert repr(View(t, bit_order=BitOrder.Lsb0)) == (
+        "View(Tibs('0x1234'), bit_order=BitOrder.Lsb0)"
+    )
+
+
+def test_view_constructor_rejects_promotable_non_tibs_sources():
+    with pytest.raises(TypeError):
+        _ = View("0xff")
+    with pytest.raises(TypeError):
+        _ = View(b"\xff")
+    with pytest.raises(TypeError):
+        _ = View([1, 0, 1])
+
+
+def test_view_constructor_validates_byte_oriented_layout():
+    t = Tibs("0b101")
+
+    assert isinstance(View(t), View)
+
+    with pytest.raises(ValueError):
+        _ = View(t, byte_order=Endianness.Little)
+    with pytest.raises(ValueError):
+        _ = View(t, bit_order=BitOrder.Lsb0)
+
+
 def test_tibs_view_aliases_create_views():
     t = Tibs("0x1234")
 
@@ -19,8 +53,8 @@ def test_mutibs_view_aliases_create_views():
     m = Mutibs("0xaa")
 
     assert isinstance(m.view(), View)
-    assert repr(m.le) == "View(Mutibs('0xaa'), byte_order=Endianness.Little)"
-    assert repr(m.lsb0) == "View(Mutibs('0xaa'), bit_order=BitOrder.Lsb0)"
+    assert repr(m.le) == "View(Tibs('0xaa'), byte_order=Endianness.Little)"
+    assert repr(m.lsb0) == "View(Tibs('0xaa'), bit_order=BitOrder.Lsb0)"
     assert len(m.lsb0) == len(m)
 
 
@@ -120,14 +154,14 @@ def test_view_to_raw_data_round_trips_materialized_view():
     assert Tibs.from_bytes(raw_bytes)[offset:offset + length] == Tibs("0x48")
 
 
-def test_mutibs_view_reads_current_source_value():
+def test_mutibs_view_snapshots_current_source_value():
     m = Mutibs("0x12")
     v = m.lsb0
 
     assert v.to_hex() == "48"
 
     m[0] = True
-    assert v.to_bin() == "01001001"
+    assert v.to_bin() == "01001000"
 
 
 def test_view_getitem_integer_uses_viewed_bits():
@@ -223,3 +257,11 @@ def test_view_getitem_slice_supports_step():
 
     assert t.view()[::2].to_bin() == "010"
     assert t.view()[::-1].to_bin() == "101100"
+
+
+def test_mutibs_views():
+    m = Mutibs('0x1234')
+    v = View(m, Endianness.Little)
+    assert v.hex == '3412'
+    m += '0x5'
+    assert v.hex == '3412'
