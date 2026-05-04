@@ -1,10 +1,5 @@
 .. currentmodule:: tibs
 
-.. note::
-
-    This part of the documentation is under construction.
-    For now, see the API docs for the most complete information.
-
 Inspections
 -----------
 
@@ -62,11 +57,89 @@ Counting should be fast, especially when just counting the number ``1`` or ``0``
 find / rfind
 ============
 
+Use :meth:`Tibs.find` to find the first occurrence of a bit pattern, and
+:meth:`Tibs.rfind` to search from the right. Both methods return the bit index of
+the match, or ``None`` if no match is found::
+
+    >>> t = Tibs('0b0011010101100')
+    >>> t.find('0b101')
+    3
+    >>> t.rfind('0b101')
+    7
+    >>> t.find('0b111')
+    None
+
+The pattern can be anything that can be promoted to a ``Tibs``: a binary string,
+bytes, a list of bool-like values, or another ``Tibs``.
+
+The optional ``start`` and ``end`` arguments restrict the search to a slice of
+the data, using the same half-open convention as Python slicing. If you know the
+pattern can only start on a byte boundary, set ``byte_aligned=True``. This is
+often faster for scanning binary files or network frames::
+
+    >>> capture = Tibs('0x00ffaa551122aa553344')
+    >>> capture.find('0xaa55', byte_aligned=True)
+    16
+
+The ``in`` operator is a convenient shorthand when you only care whether the
+pattern exists::
+
+    >>> '0xaa55' in capture
+    True
+
 find_all / find_all_iter
 ========================
+
+Use :meth:`Tibs.find_all` to get every matching start position::
+
+    >>> t = Tibs('0b10100101')
+    >>> t.find_all('0b101')
+    [0, 5]
+
+Matches may overlap. This is useful when searching for bit patterns rather than
+tokens::
+
+    >>> Tibs('0b1111').find_all('0b11')
+    [0, 1, 2]
+
+For large inputs, :meth:`Tibs.find_all_iter` avoids building the whole list up
+front::
+
+    >>> t = Tibs('0b10100101')
+    >>> for pos in t.find_all_iter('0b101'):
+    ...     print(pos)
+    0
+    5
+
+There is also :meth:`Tibs.rfind_all_iter`, which yields matches from right to
+left. Iterator forms are only available on ``Tibs``; convert a ``Mutibs`` with
+:meth:`Mutibs.to_tibs` first if you need them.
 
 starts_with / ends_with
 =======================
 
+The :meth:`Tibs.starts_with` and :meth:`Tibs.ends_with` methods test prefixes and
+suffixes without spelling out slice boundaries::
+
+    >>> packet = Tibs('0xaa551234')
+    >>> packet.starts_with('0xaa55')
+    True
+    >>> packet.ends_with('0x1234')
+    True
+
 any / all
 =========
+
+The :meth:`Tibs.any` and :meth:`Tibs.all` methods mirror Python's built-in
+``any()`` and ``all()``, but operate directly on the stored bits::
+
+    >>> Tibs('0b0001').any()
+    True
+    >>> Tibs('0b0001').all()
+    False
+    >>> Tibs.from_ones(8).all()
+    True
+
+They are most useful when the bit sequence itself is the data, for example when
+checking whether a mask has any flags set, or whether every flag in a required
+set is present.
