@@ -1,6 +1,6 @@
 # Release Notes
 
-### Unreleased: version 0.7.
+### May 4th 20206: version 0.7.
 
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
   unset_at methods.
@@ -12,6 +12,9 @@
   Tibs.rfind_all -> Tibs.rfind_all_iter
 * Added new Tibs/Mutibs chunks/find_all methods that return a list.
 * Added Tibs.rchunks_iter method.
+* New View class that replaces both the endianness and the lsb0 mode.
+* New Tibs.view() method and be / le / msb0 / lsb0 properties to create views.
+* Various performance improvements.
 * Added 'Tibs' cat mascot to the documentation. Thanks to Ada Griffiths.
 
 ### April 3rd 2026: version 0.6.0.
