@@ -3,26 +3,37 @@
 Views
 -----
 
-A ``Tibs`` stores a sequence of bits. A :class:`View` doesn't change those stored
-bits, but changes how they are interpreted.
+A :class:`View` wraps a ``Tibs`` to allow the bits inside it to be interpreted in
+a different way. This allows different endiannesses to be used, as well as different
+bit numbering methods when interpreting the data.
 
 The most common reason to create a view is that a file format or protocol specifies
-values using a byte order or bit numbering convention. In those cases the same
-stored bits might need to be read as a little-endian integer, or decoded using
-LSB0 field labels from a standard.
+values using a different byte order or bit numbering convention to the Python default.
 
-Views are usually created with properties on ``Tibs`` and ``Mutibs``::
+For example, let's create a four-byte ``Tibs`` and interpret it as an unsigned int::
 
     >>> t = Tibs('0x01000000')
-    >>> t.le.u
+    >>> t.to_u()
+    16777216
+
+This is the byte-wise and bit-wise big-endian interpretation, which corresponds to
+the standard Python indexing convention where bit zero is the most significant bit.
+
+As this is a whole number of bytes long we can also consider its byte endianness.
+A little-endian interpretation essentially reverses the byte order, so the least
+significant byte is the first one. Without changing the data at all, we can create
+a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
+
+    >>> v = View(t, Endianness.Little)
+    >>> v
+    View(Tibs('0x01000000'), byte_order=Endianness.Little)
+    >>> v.to_hex()
+    '00000001'
+    >>> v.to_u()
     1
 
-The properties are just short-cuts for :meth:`Tibs.view`::
-
-    >>> t.view(byte_order=Endianness.Little).u
-    1
-
-The available view properties are:
+This is all quite a lot of typing, so a more convenient way to create the ``View`` from a
+``Tibs`` or ``Mutibs`` is to use properties. The available view properties are:
 
 * :attr:`Tibs.le` / :attr:`Mutibs.le`: little-endian byte order.
 * :attr:`Tibs.be` / :attr:`Mutibs.be`: big-endian byte order.
@@ -32,28 +43,25 @@ The available view properties are:
 These can be combined. For example ``t.lsb0.le`` means that bit labels are LSB0,
 and whole-byte values should be interpreted as little-endian.
 
+So for the above example, if we also use the :attr:`Tibs.u` property instead of ``.to_u()``, we
+get the much more convenient ::
+
+    >>> t.le.u
+    1
+
+
 Views and data
 ^^^^^^^^^^^^^^
 
 A view created from a ``Tibs`` is cheap: it keeps the same immutable data and adds
 interpretation settings. A view created from a ``Mutibs`` stores an immutable
-snapshot, so later changes to the ``Mutibs`` won't affect the view::
-
-    >>> m = Mutibs('0x0100')
-    >>> v = m.le
-    >>> m[0] = True
-    >>> v.u
-    1
-    >>> m
-    Mutibs('0x8100')
+snapshot, so later changes to the ``Mutibs`` won't affect the view.
 
 The direct :class:`View` constructor is intentionally stricter than ``Tibs``.
-It accepts a ``Tibs`` or ``Mutibs`` object, but not strings or bytes::
+It accepts a ``Tibs`` or ``Mutibs`` object, but not other types that could be
+promoted.
 
-    >>> View(Tibs('0x0100'), Endianness.Little).u
-    1
-
-This keeps ``View`` as an interpretation wrapper rather than another way to
+This emphasises that a ``View`` is an interpretation wrapper rather than another way to
 construct binary data.
 
 Byte order
@@ -62,29 +70,27 @@ Byte order
 Byte order only applies to whole-byte values. When you construct a value from an
 integer or float you can choose the byte order used to store it::
 
-    >>> Tibs.from_u(1, 32, Endianness.Big)
-    Tibs('0x00000001')
-    >>> Tibs.from_u(1, 32, Endianness.Little)
-    Tibs('0x01000000')
+    >>> t = Tibs.from_u(666, 16, Endianness.Little)
+    >>> t
+    Tibs('0x9a02')
 
 If we read the little-endian bytes with the default interpretation, we don't get
-the original value::
+the value we created it with::
 
-    >>> t = Tibs('0x01000000')
     >>> t.u
-    16777216
+    39426
 
 The little-endian view gives the intended interpretation::
 
     >>> t.le.u
-    1
+    666
 
 This works for floats and bytes too::
 
-    >>> f = Tibs.from_f(1984.3, 64, Endianness.Little)
-    >>> f.f
+    >>> x = Tibs.from_f(1984.3, 64, Endianness.Little)
+    >>> x.f
     4.667261455589845e-62
-    >>> f.le.f
+    >>> x.le.f
     1984.3
 
 The default byte order is ``Endianness.Unspecified``. For whole-byte data this is
@@ -98,18 +104,41 @@ Bit order
 The ``msb0`` and ``lsb0`` views control how bit labels are interpreted within
 each byte.
 
-``msb0`` is the default convention used by normal indexing and slicing. In a byte,
-label 0 is the most significant bit. ``lsb0`` is common in some specifications:
-label 0 is the least significant bit of each byte.
+``msb0`` is the default convention used by normal indexing and slicing, where
+the most significant bit of the byte (the left-most bit) is bit 0, with the right-most
+bit being bit 7. For ``lsb0``, which is used in some specifications, the least significant
+bit of the byte (the right-most bit) is bit 0, and the left-most bit is bit 7.
 
 One way to see the difference is to materialize the view::
 
-    >>> Tibs('0x12').bin
-    '00010010'
-    >>> Tibs('0x12').lsb0.bin
-    '01001000'
+    >>> t = Tibs('0x0100')
+    >>> t.bin
+    '0000000100000000'
+    >>> t.le.bin
+    '0000000000000001'
+    >>> t.lsb0.bin
+    '1000000000000000'
+    >>> t.lsb0.le.bin
+    '0000000010000000'
 
-This is mostly useful when the view is used for interpreting field labels.
+Let's go through these one at a time:
+
+* ``t.bin`` -> ``00000001_00000000``. This is the standard Python indexing view. The bit
+  indices are just counting up from 0 on the LHS to 15 on the RHS.
+* ``t.le.bin`` -> ``00000000_00000001``. The byte-wise little-endian view. The byte
+  order is swapped by the view, so the right-most byte has the most significant bits and the
+  left-most byte as the least significant bits, but
+  the bits within each byte are unchanged.
+* ``t.lsb0.bin`` -> ``10000000_00000000``. The Least Significant Bit Zero (LSB0) view. Here
+  bit zero of each byte (the left-most bit) is the least significant bit, rather than the
+  more usual most significant bit. Note that this view doesn't change the byte order - it's
+  like traversing the bytes from left to right, but taking the bits in each byte from
+  right to left.
+* ``t.lsb0.le.bin`` -> ``00000000_10000000``. Finally we can combine them (in either order)
+  to both traverse the bytes from right to left and the bits in the byte from right to left.
+  The overall effect is to reverse the bit order.
+
+
 For ordinary Python indexing and slicing, use the ``Tibs`` or ``Mutibs`` directly.
 Views don't provide their own slicing interface, as that would make it too easy
 to confuse normal Python slices with specification field labels.
@@ -122,7 +151,7 @@ In Python slicing that would usually be written as ``[28:32]``, but for LSB0
 formats that still doesn't describe the right physical bits. The important detail
 is that the specification is giving bit labels, not Python slice positions.
 
-Use :meth:`View.field` for this case. The two endpoints are inclusive, and can be
+For this case we can use :meth:`View.field`. The two endpoints are inclusive, and can be
 given in either order::
 
     >>> t = Tibs('0x23a11234')
@@ -148,8 +177,8 @@ the standard uses LSB0 bit labels and the whole-byte values are little-endian::
     >>> header = Tibs('0x23a11234').lsb0.le
     >>> header.field(31, 16).u  # message_id
     4660
-    >>> header.field(15, 12).u  # flags
-    10
+    >>> header.field(15, 12).bin  # flags
+    '1010'
     >>> header.field(11, 0).u   # payload_length
     291
 
