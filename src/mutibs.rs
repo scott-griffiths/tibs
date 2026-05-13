@@ -25,7 +25,7 @@ use std::ops::{Deref, Not};
 ///     * ``Mutibs.from_u(u, length, [endianness])`` - Create from an unsigned int to a given length.
 ///     * ``Mutibs.from_i(i, length, [endianness])`` - Create from a signed int to a given length.
 ///     * ``Mutibs.from_f(f, length, [endianness])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
-///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
+///     * ``Mutibs.from_bytes(b)`` - Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
 ///     * ``Mutibs.from_string(s)`` - Use a formatted string.
 ///     * ``Mutibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
 ///     * ``Mutibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.

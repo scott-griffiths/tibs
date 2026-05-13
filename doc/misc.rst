@@ -11,17 +11,17 @@ Byte encoding format
 The :meth:`Tibs.encode` method stores an arbitrary Tibs as a sequence of bytes which can
 be used to reconstruct the Tibs via :meth:`~Tibs.decode`.
 
-There are different codec that are used to compress the data, both a general use Zstandard codec
+There are different codecs that are used to compress the data, both a general use Zstandard codec
 and a Rice codec, which is particularly good at sparse data.
 
-The raw encoding is also very efficient, and all the encoded sequences contains the bit length, which
+The raw encoding is also very efficient, and all the encoded sequences contain the bit length, which
 means that they can be safely concatenated without losing any information.
 
 The base implementation does a good job at the smaller bit sequences that compression
 algorithms would be very inefficient at storing, for example all bit sequences up to 6 bits long are encoded
 into a single byte. For longer sequences the raw codec overhead is still small.
 
-The mutable nature of ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
+The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
 if a ``Tibs`` and ``Mutibs`` are equal they will encode to the same ``bytes``.
 
 .. csv-table::
@@ -53,7 +53,7 @@ allow other implementations to encode and decode.
 Overview
 """"""""
 
-In this section the notation ``a..b`` include both endpoints ``a`` and ``b``.
+In this section the notation ``a..b`` includes both endpoints ``a`` and ``b``.
 
 Each encoded Tibs is in one of three forms:
 
@@ -180,7 +180,7 @@ or more bytes::
 
 Varint rules:
 
-- Each varint byte contribute 7 data bits (``length_data``).
+- Each varint byte contributes 7 data bits (``length_data``).
 - These are concatenated in the order they are encountered.
 - ``continuation_flag == 1`` means another varint byte follows.
 - ``continuation_flag == 0`` marks the final varint byte.
@@ -190,7 +190,7 @@ A first varint byte equal to ``10000000`` is not permitted and is reserved.
 Raw decoding
 """"""""""""
 
-If the ``codec`` is 'Raw', this is then followed by ``byte_length`` bytes. The raw bit sequence are these bytes with ``bit_padding`` bits at the end removed.
+If the ``codec`` is 'Raw', this is then followed by ``byte_length`` bytes. The raw bit sequence is formed from these bytes with ``bit_padding`` bits at the end removed.
 
 This bit sequence is just the bits of the Tibs.
 
@@ -277,7 +277,7 @@ we just have 63 zero bits followed by a one bit and the decoded sequence is ::
 Zstd decoding
 """""""""""""
 
-Larger chunks of binary data are often best compressed with a more general algorithm, and the Zstandard is a
+Larger chunks of binary data are often best compressed with a more general algorithm, and Zstandard is a
 modern, effective and fast option. The main byte payload is compressed, and the extra metadata needed for
 the Tibs is still stored in the header.
 

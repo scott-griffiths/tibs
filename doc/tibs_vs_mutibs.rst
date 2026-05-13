@@ -31,11 +31,11 @@ copy any data::
     t = Tibs.from_bytes(b'a_large_amount_of_data')
     first_half = t[:len(t)//2]
 
-The ``first_half`` doesn't contain any data here - it is just a view into ``t``.
+The ``first_half`` doesn't own a separate copy of the data here - it shares storage with ``t``.
 If we had used a ``Mutibs`` then a data copy would have had to happen.
 
-For another example of data views, in the following code each chunk just holds a view
-on the data in ``t``::
+For another example of shared storage, in the following code each chunk reuses
+the data in ``t``::
 
     t = Tibs.from_random(8_000_000_000)
     for chunk in t.chunks(8000):

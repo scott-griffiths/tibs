@@ -11,7 +11,7 @@ A wide range of ``from_`` constructor methods are provided:
 * :meth:`Tibs.from_bin`: Create from a binary string, optionally starting with '0b'.
 * :meth:`Tibs.from_oct`: Create from an octal string, optionally starting with '0o'.
 * :meth:`Tibs.from_hex`: Create from a hex string, optionally starting with '0x'.
-* :meth:`Tibs.from_bytes`: Create directly from a ``bytes`` or ``bytearray`` object.
+* :meth:`Tibs.from_bytes`: Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
 * :meth:`Tibs.from_string`: Create from a formatted string.
 * :meth:`Tibs.from_bools`: Convert each element in an iterable to a bool.
 * :meth:`Tibs.from_zeros`: Initialise with ``0`` bits.
@@ -27,7 +27,7 @@ Some examples::
     # Five bits from a binary string
     a = Tibs.from_bin('11001')
 
-    # Directly from bytes or a bytearray. Useful if creating from a file.
+    # Directly from bytes, bytearray or a memoryview. Useful if creating from a file.
     b = Tibs.from_bytes(b'some_bytes')
 
     # Create bits from the truthiness of any iterator.
@@ -56,14 +56,14 @@ Promotion to Tibs
 
 The ``__init__`` method can also be called directly, which is often more convenient, if ever so slightly slower.
 This will look at the type of object it's been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`,
-:meth:`Tibs.from_bools` or :meth:`Tibs.from_bytes` for strings, iterables and bytes types respectively.
+:meth:`Tibs.from_bools` or :meth:`Tibs.from_bytes` for strings, iterables and bytes-like types respectively.
 So for example ::
 
     s = Tibs('0xabc')     # Same as Tibs.from_string('0xabc')
     t = Tibs([1, 0, 1])   # Same as Tibs.from_bools([1, 0, 1])
     u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
 
-These types (string, iterables and bytes/bytearray) can also be automatically promoted to ``Tibs``.
+These types (string, iterables and bytes/bytearray/memoryview) can also be automatically promoted to ``Tibs``.
 Roughly speaking, anywhere that
 requires a ``Tibs`` or ``Mutibs`` will also accept another type it can promote in this way. So, for example, if you want to count
 how many times the bit pattern ``101`` appears in a random bit sequence you could write::
@@ -173,7 +173,7 @@ only) or return a new instance.
 There are also some methods that are only available on ``Tibs``, which take advantage of its immutable nature.
 For example the :meth:`Tibs.chunks_iter` method, which returns an iterator over equal sized chunks of the data, is
 not available for ``Mutibs`` as its data could change while the iterator is active. The list-returning
-:meth:`Mutibs.chunks` method is available for both types, while for the iterator form we can use
+``chunks`` method is available on both ``Tibs`` and ``Mutibs``, while for the iterator form we can use
 :meth:`Mutibs.to_tibs`::
 
     >>> m = Mutibs('0xb2')

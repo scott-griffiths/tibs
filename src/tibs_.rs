@@ -181,7 +181,7 @@ impl Tibs {
 ///     * ``Tibs.from_u(u, length, [endianness])`` - Create from an unsigned int to a given length.
 ///     * ``Tibs.from_i(i, length, [endianness])`` - Create from a signed int to a given length.
 ///     * ``Tibs.from_f(f, length, [endianness])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
-///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes`` or ``bytearray`` object.
+///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
 ///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.
@@ -428,7 +428,7 @@ impl Tibs {
         BitCollection::collect_chunks(self, chunk_size, count)
     }
 
-    /// Return Tibs generator by cutting into chunks.
+    /// Return an iterator by cutting into Tibs chunks.
     ///
     /// :param int chunk_size: The size in bits of the chunks to generate.
     /// :param int | None count: If specified, at most count items are generated. Default is to cut as many times as possible.
@@ -476,7 +476,7 @@ impl Tibs {
         Py::new(py, iter)
     }
 
-    /// Return reverse Tibs generator by cutting into chunks, starting from the end.
+    /// Return a reverse iterator by cutting into Tibs chunks, starting from the end.
     ///
     /// :param int chunk_size: The size in bits of the chunks to generate.
     /// :param int | None count: If specified, at most count items are generated. Default is to cut as many times as possible.
@@ -585,7 +585,7 @@ impl Tibs {
         ))
     }
 
-    /// Find all occurrences of a bit sequence. Return generator of bit positions.
+    /// Find all occurrences of a bit sequence, returning an iterator of bit positions.
     ///
     /// :param Tibs needle: The bit sequence to find.
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
@@ -654,7 +654,7 @@ impl Tibs {
         Py::new(py, iter_obj)
     }
 
-    /// Find all occurrences of a bit sequence, searching in reverse. Return generator of bit positions.
+    /// Find all occurrences of a bit sequence in reverse, returning an iterator of bit positions.
     ///
     /// :param Tibs needle: The bit sequence to find.
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.

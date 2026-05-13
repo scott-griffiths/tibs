@@ -1,6 +1,6 @@
 # Release Notes
 
-### May 4th 20206: version 0.7.
+### May 4th 2026: version 0.7.
 
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
   unset_at methods.
@@ -55,4 +55,3 @@ with a completed initial API.
 The original version is a cut-down and rebranded version of bitformat.
 
 Its main job is to reserve the name on PyPI.
-
