@@ -81,12 +81,12 @@ An exception is when performance is critical and not having the small overhead o
 another method is significant — in this rare case using an explicit ``from_`` method for construction is preferred.
 
 
-Data views
-^^^^^^^^^^
+Data representations
+^^^^^^^^^^^^^^^^^^^^
 
 When a Tibs has been created there are multiple ways to interpret the data. These methods start with ``to_``.
 
-A subset of these methods are simple views of the binary data, and they either convert to a string or a bytes object.
+A subset of these methods return lossless representations of the exact bit sequence, as a string or bytes.
 
 * :meth:`Tibs.to_bin()` / :attr:`Tibs.bin`. Converts to a string of ``0`` and ``1`` characters. Always available.
 * :meth:`Tibs.to_oct()` / :attr:`Tibs.oct`. Converts to an octal string. Length must be a multiple of 3.
@@ -96,7 +96,7 @@ A subset of these methods are simple views of the binary data, and they either c
 These ``to_`` methods don't accept any parameters, so read-only properties are provided as a convenient alias.
 So instead of using ``t.to_bin()`` you can use just ``t.bin`` as there is no ambiguity.
 
-Many of the views need the data to have a length that's a correct multiple, for example ``bytes``
+Many of these representations need the data to have a length that's a correct multiple, for example ``bytes``
 needs the data length to be a multiple of 8::
 
     >>> t = Tibs('0x4145c')
@@ -119,20 +119,20 @@ To convert to a ``bytes`` object we need to change the length, for example by ex
 Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
 before being used to create a 24-bit value that we could interpret as ``bytes``.
 
-When you have a view, you can always reconstruct the original Tibs - there is a 1:1 relationship.
+When you have one of these lossless representations, you can always reconstruct the original Tibs - there is a 1:1 relationship.
 So ``t == Tibs.from_bin(t.to_bin())`` will always be true.
 
 
 Data interpretations
 ^^^^^^^^^^^^^^^^^^^^
 
-There are also a number of data interpretations that complement the data views:
+There are also a number of data interpretations that complement the data representations:
 
 * :meth:`Tibs.to_u()` / :attr:`Tibs.u`. Interprets as an unsigned integer.
 * :meth:`Tibs.to_i()` / :attr:`Tibs.i`. Interprets as a signed integer.
 * :meth:`Tibs.to_f()` / :attr:`Tibs.f`. Converts to Python float. Length must be 16, 32 or 64.
 
-Unlike the data views, the interpretations can have a many-to-one relationship.
+Unlike the data representations, the interpretations can have a many-to-one relationship.
 For example there are many ways for a ``Tibs`` to be constructed from the unsigned integer 3::
 
     u1 = Tibs.from_u(3, 5)   # binary 00011
