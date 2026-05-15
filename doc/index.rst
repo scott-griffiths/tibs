@@ -7,6 +7,7 @@
     manual
     examples
     api
+    appendices
 
 .. raw:: html
 
