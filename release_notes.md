@@ -1,5 +1,9 @@
 # Release Notes
 
+### Unreleased: version 0.8.
+
+* Added Mutibs.set_u, set_i and set_f methods, and exposed as settable properties.
+
 ### May 4th 2026: version 0.7.
 
 * Added replaced, inserted, inverted, rotated_right, rotated_left, set_at,
