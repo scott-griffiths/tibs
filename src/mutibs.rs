@@ -7,7 +7,7 @@ use crate::helpers::{
     validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::Tibs;
-use crate::view::View;
+use crate::view::{MutableView, View};
 
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
@@ -539,51 +539,50 @@ impl Mutibs {
         }
     }
 
-    /// Return a view with interpretation settings.
+    /// Return a mutable view with interpretation settings.
     ///
-    /// A view does not change the source ``Mutibs``. It stores an immutable
-    /// :class:`Tibs` snapshot, so later changes to the ``Mutibs`` are not reflected
-    /// in the view.
+    /// A mutable view keeps a live reference to the source ``Mutibs``. Later
+    /// changes to the ``Mutibs`` are reflected in the view, and assignment through
+    /// the view mutates the source.
     ///
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
     /// :param Endianness byte_order: The byte order used when interpreting whole-byte values. Defaults to ``Endianness.Unspecified``.
     /// :param BitOrder bit_order: The bit numbering order used for field labels. Defaults to ``BitOrder.Msb0``.
-    /// :return: A new :class:`View`.
+    /// :return: A new :class:`MutableView`.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs('0x0100')
     ///     >>> v = m.le
-    ///     >>> m[0] = True
-    ///     >>> v.u
-    ///     1
+    ///     >>> v.set_u(2)
+    ///     >>> m
+    ///     Mutibs('0x0002')
     ///
     #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
     pub fn view(
         slf: PyRef<'_, Self>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
-    ) -> PyResult<View> {
+    ) -> PyResult<MutableView> {
         let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
         View::validate_layout(slf.len(), byte_order, bit_order)?;
-        Ok(View::from_tibs(slf.to_tibs(), byte_order, bit_order))
+        Ok(MutableView::from_mutibs(slf.into(), byte_order, bit_order))
     }
 
     /// Return a little-endian byte-order view.
     ///
     /// Equivalent to ``view(byte_order=Endianness.Little)``.
     ///
-    /// The ``Mutibs`` length must be a whole number of bytes. The returned view
-    /// contains a :class:`Tibs` snapshot.
+    /// The ``Mutibs`` length must be a whole number of bytes.
     ///
     #[getter]
-    pub fn le(slf: PyRef<'_, Self>) -> PyResult<View> {
+    pub fn le(slf: PyRef<'_, Self>) -> PyResult<MutableView> {
         View::validate_layout(slf.len(), Endianness::Little, BitOrder::Msb0)?;
-        Ok(View::from_tibs(
-            slf.to_tibs(),
+        Ok(MutableView::from_mutibs(
+            slf.into(),
             Endianness::Little,
             BitOrder::Msb0,
         ))
@@ -593,14 +592,13 @@ impl Mutibs {
     ///
     /// Equivalent to ``view(byte_order=Endianness.Big)``.
     ///
-    /// The ``Mutibs`` length must be a whole number of bytes. The returned view
-    /// contains a :class:`Tibs` snapshot.
+    /// The ``Mutibs`` length must be a whole number of bytes.
     ///
     #[getter]
-    pub fn be(slf: PyRef<'_, Self>) -> PyResult<View> {
+    pub fn be(slf: PyRef<'_, Self>) -> PyResult<MutableView> {
         View::validate_layout(slf.len(), Endianness::Big, BitOrder::Msb0)?;
-        Ok(View::from_tibs(
-            slf.to_tibs(),
+        Ok(MutableView::from_mutibs(
+            slf.into(),
             Endianness::Big,
             BitOrder::Msb0,
         ))
@@ -612,14 +610,13 @@ impl Mutibs {
     /// significant bit of each byte. The ``Mutibs`` length must be a whole number
     /// of bytes.
     ///
-    /// Equivalent to ``view(bit_order=BitOrder.Lsb0)``. The returned view contains
-    /// a :class:`Tibs` snapshot.
+    /// Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
     ///
     #[getter]
-    pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<View> {
+    pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<MutableView> {
         View::validate_layout(slf.len(), Endianness::Unspecified, BitOrder::Lsb0)?;
-        Ok(View::from_tibs(
-            slf.to_tibs(),
+        Ok(MutableView::from_mutibs(
+            slf.into(),
             Endianness::Unspecified,
             BitOrder::Lsb0,
         ))
@@ -630,13 +627,12 @@ impl Mutibs {
     /// ``BitOrder.Msb0`` means that field labels are counted from the most
     /// significant bit of each byte. This is the default bit order.
     ///
-    /// Equivalent to ``view(bit_order=BitOrder.Msb0)``. The returned view contains
-    /// a :class:`Tibs` snapshot.
+    /// Equivalent to ``view(bit_order=BitOrder.Msb0)``.
     ///
     #[getter]
-    pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
-        Ok(View::from_tibs(
-            slf.to_tibs(),
+    pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<MutableView> {
+        Ok(MutableView::from_mutibs(
+            slf.into(),
             Endianness::Unspecified,
             BitOrder::Msb0,
         ))

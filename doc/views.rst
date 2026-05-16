@@ -32,7 +32,7 @@ a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
     >>> v.to_u()
     1
 
-This is all quite a lot of typing, so a more convenient way to create the ``View`` from a
+This is all quite a lot of typing, so a more convenient way to create a view from a
 ``Tibs`` or ``Mutibs`` is to use properties. The available view properties are:
 
 * :attr:`Tibs.le` / :attr:`Mutibs.le`: little-endian byte order.
@@ -53,16 +53,47 @@ get the much more convenient ::
 Views and data
 ^^^^^^^^^^^^^^
 
-A view created from a ``Tibs`` is cheap: it keeps the same immutable data and adds
-interpretation settings. A view created from a ``Mutibs`` stores an immutable
-snapshot, so later changes to the ``Mutibs`` won't affect the view.
+A view created from a ``Tibs`` is immutable: it keeps the same immutable data and
+adds interpretation settings. A view created from a ``Mutibs`` using
+``m.view()``, ``m.le``, ``m.be``, ``m.lsb0`` or ``m.msb0`` is a
+:class:`MutableView`. It keeps a live reference to the ``Mutibs``, so later
+changes to the ``Mutibs`` are reflected in the view.
 
 The direct :class:`View` constructor is intentionally stricter than ``Tibs``.
 It accepts a ``Tibs`` or ``Mutibs`` object, but not other types that could be
 promoted.
 
-This emphasises that a ``View`` is an interpretation wrapper rather than another way to
-construct binary data.
+Passing a ``Mutibs`` to the direct :class:`View` constructor still creates an
+immutable snapshot. Use :class:`MutableView` or the ``Mutibs`` view helpers when
+you want live mutable behavior.
+
+This emphasises that views are interpretation wrappers rather than another way
+to construct binary data.
+
+Mutable views
+^^^^^^^^^^^^^
+
+A :class:`MutableView` can also write interpreted values back into the source
+``Mutibs`` without changing its length. The view supplies the layout::
+
+    >>> m = Mutibs.from_u(99, 16, Endianness.Little)
+    >>> m.le.u
+    99
+    >>> m.le.set_u(45)
+    >>> m.le.u
+    45
+    >>> m
+    Mutibs('0x2d00')
+
+The ``u``, ``i`` and ``f`` properties are settable too::
+
+    >>> m.le.u = 123
+    >>> m.le.u
+    123
+
+For default layout, the whole ``Mutibs`` also has ``set_u``, ``set_i`` and
+``set_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
+view when byte order or bit order matters.
 
 Byte order
 ^^^^^^^^^^
@@ -215,7 +246,7 @@ properties used by ``Tibs``::
     b'\x00\x01'
 
 If you need the viewed bits as a new object, use :meth:`View.to_tibs` or
-:meth:`View.to_mutibs`::
+:meth:`View.to_mutibs` (also available on :class:`MutableView`)::
 
     >>> t.le.to_tibs()
     Tibs('0x0001')

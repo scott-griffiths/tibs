@@ -16,5 +16,6 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<enums::BitOrder>()?;
     m.add_class::<enums::Codec>()?;
     m.add_class::<view::View>()?;
+    m.add_class::<view::MutableView>()?;
     Ok(())
 }

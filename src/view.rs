@@ -1,10 +1,54 @@
 use crate::core::BitCollection;
 use crate::enums::{BitOrder, Endianness};
-use crate::helpers::BV;
+use crate::helpers::{BS, BV, bv_from_f64, bv_from_i128, bv_from_u128};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
+
+fn reverse_bits_within_bytes(source: &BS) -> BV {
+    let mut viewed = BV::with_capacity(source.len());
+    for byte in source.chunks(8) {
+        for bit in byte.iter().rev() {
+            viewed.push(*bit);
+        }
+    }
+    viewed
+}
+
+fn view_bits_from_physical_bits(
+    source: &BS,
+    byte_order: Endianness,
+    bit_order: BitOrder,
+) -> PyResult<BV> {
+    let bits = match bit_order {
+        BitOrder::Msb0 => source.to_bitvec(),
+        BitOrder::Lsb0 => reverse_bits_within_bytes(source),
+    };
+
+    if byte_order == Endianness::Little {
+        BitCollection::byte_swap_copy(&Tibs::from_bv(bits), None).map(|tibs| tibs.to_bitvec())
+    } else {
+        Ok(bits)
+    }
+}
+
+fn physical_bits_from_view_bits(
+    viewed: BV,
+    byte_order: Endianness,
+    bit_order: BitOrder,
+) -> PyResult<BV> {
+    let bits = if byte_order == Endianness::Little {
+        BitCollection::byte_swap_copy(&Tibs::from_bv(viewed), None)?.to_bitvec()
+    } else {
+        viewed
+    };
+
+    Ok(match bit_order {
+        BitOrder::Msb0 => bits,
+        BitOrder::Lsb0 => reverse_bits_within_bytes(bits.as_bitslice()),
+    })
+}
 
 ///     A view of a :class:`Tibs` with different interpretation settings.
 ///
@@ -12,12 +56,13 @@ use pyo3::prelude::*;
 ///     integer conversion, byte conversion and field extraction should interpret those
 ///     bits.
 ///
-///     Views are usually created from :class:`Tibs` or :class:`Mutibs` instances using
-///     the :attr:`~Tibs.le`, :attr:`~Tibs.be`, :attr:`~Tibs.lsb0`, :attr:`~Tibs.msb0`
+///     Views are usually created from :class:`Tibs` instances using the
+///     :attr:`~Tibs.le`, :attr:`~Tibs.be`, :attr:`~Tibs.lsb0`, :attr:`~Tibs.msb0`
 ///     or :meth:`~Tibs.view` helpers.
 ///
-///     A view created from a :class:`Mutibs` stores a :class:`Tibs` snapshot. Later
-///     changes to the original :class:`Mutibs` are not reflected in the view.
+///     Passing a :class:`Mutibs` to the direct ``View`` constructor stores a
+///     :class:`Tibs` snapshot. Later changes to the original :class:`Mutibs` are
+///     not reflected in the view. Use :class:`MutableView` for a live mutable view.
 ///
 ///     .. code-block:: pycon
 ///
@@ -72,14 +117,7 @@ impl View {
         }
 
         let tibs = if self.bit_order == BitOrder::Lsb0 {
-            let source = self.source.to_bitslice();
-            let mut viewed = BV::with_capacity(source.len());
-            for byte in source.chunks(8) {
-                for bit in byte.iter().rev() {
-                    viewed.push(*bit);
-                }
-            }
-            Tibs::from_bv(viewed)
+            Tibs::from_bv(reverse_bits_within_bytes(self.source.to_bitslice()))
         } else {
             self.source.clone()
         };
@@ -96,6 +134,331 @@ impl View {
             BitOrder::Msb0 => label,
             BitOrder::Lsb0 => (label / 8) * 8 + (7 - (label % 8)),
         }
+    }
+}
+
+///     A live mutable view of a :class:`Mutibs` with different interpretation settings.
+///
+///     ``MutableView`` records how operations such as integer conversion, byte
+///     conversion and field extraction should interpret the source bits. Unlike
+///     :class:`View`, it keeps a live reference to the source ``Mutibs``.
+///
+///     Assigning through ``u``, ``i`` or ``f`` mutates the source ``Mutibs`` without
+///     changing its length.
+///
+#[pyclass(module = "tibs")]
+pub struct MutableView {
+    pub(crate) source: Py<Mutibs>,
+    pub(crate) byte_order: Endianness,
+    pub(crate) bit_order: BitOrder,
+}
+
+impl MutableView {
+    pub(crate) fn from_mutibs(
+        source: Py<Mutibs>,
+        byte_order: Endianness,
+        bit_order: BitOrder,
+    ) -> Self {
+        MutableView {
+            source,
+            byte_order,
+            bit_order,
+        }
+    }
+
+    fn with_layout(
+        &self,
+        py: Python<'_>,
+        byte_order: Endianness,
+        bit_order: BitOrder,
+    ) -> PyResult<Self> {
+        let source = self.source.borrow(py);
+        View::validate_layout(source.len(), byte_order, bit_order)?;
+        Ok(Self::from_mutibs(
+            self.source.clone_ref(py),
+            byte_order,
+            bit_order,
+        ))
+    }
+
+    fn validate_current_layout(&self, len: usize) -> PyResult<()> {
+        View::validate_layout(len, self.byte_order, self.bit_order)
+    }
+
+    fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
+        let source = self.source.borrow(py);
+        self.validate_current_layout(source.len())?;
+        if self.bit_order == BitOrder::Msb0 && self.byte_order != Endianness::Little {
+            return Ok(Tibs::from_bv(source.to_bitvec()));
+        }
+
+        Ok(Tibs::from_bv(view_bits_from_physical_bits(
+            source.as_bitslice(),
+            self.byte_order,
+            self.bit_order,
+        )?))
+    }
+
+    fn assign_from_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
+        let mut source = self.source.borrow_mut(py);
+        self.validate_current_layout(source.len())?;
+        let physical = physical_bits_from_view_bits(viewed, self.byte_order, self.bit_order)?;
+        debug_assert_eq!(source.len(), physical.len());
+        source
+            .as_mut_bitvec_ref()
+            .copy_from_bitslice(physical.as_bitslice());
+        Ok(())
+    }
+
+    fn assign_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+        let source = self.source.borrow(py);
+        let len = source.len();
+        self.validate_current_layout(len)?;
+        drop(source);
+
+        let viewed = bv_from_u128(u, len as i64, false)?;
+        self.assign_from_view_bits(py, viewed)
+    }
+
+    fn assign_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+        let source = self.source.borrow(py);
+        let len = source.len();
+        self.validate_current_layout(len)?;
+        drop(source);
+
+        let viewed = bv_from_i128(i, len as i64, false)?;
+        self.assign_from_view_bits(py, viewed)
+    }
+
+    fn assign_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
+        let source = self.source.borrow(py);
+        let len = source.len();
+        self.validate_current_layout(len)?;
+        drop(source);
+
+        let viewed = bv_from_f64(f, len as i64, false)?;
+        self.assign_from_view_bits(py, viewed)
+    }
+}
+
+#[pymethods]
+impl MutableView {
+    /// Create a live mutable view from a :class:`Mutibs`.
+    ///
+    /// ``byte_order`` controls byte-wise interpretation for whole-byte values.
+    /// ``bit_order`` controls how bit labels are interpreted within each byte.
+    ///
+    /// Byte-oriented views must have a whole-byte length. This applies when using
+    /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
+    ///
+    #[new]
+    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    pub fn py_new(
+        source: PyRef<'_, Mutibs>,
+        byte_order: Option<Endianness>,
+        bit_order: Option<BitOrder>,
+    ) -> PyResult<Self> {
+        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        View::validate_layout(source.len(), byte_order, bit_order)?;
+        Ok(Self::from_mutibs(source.into(), byte_order, bit_order))
+    }
+
+    /// Return a mutable view with updated interpretation settings.
+    ///
+    /// Any setting left as ``None`` keeps its current value.
+    ///
+    #[pyo3(signature = (byte_order = None, bit_order = None), text_signature = "($self, byte_order=None, bit_order=None)")]
+    pub fn view(
+        &self,
+        py: Python<'_>,
+        byte_order: Option<Endianness>,
+        bit_order: Option<BitOrder>,
+    ) -> PyResult<Self> {
+        self.with_layout(
+            py,
+            byte_order.unwrap_or(self.byte_order),
+            bit_order.unwrap_or(self.bit_order),
+        )
+    }
+
+    /// Return a little-endian byte-order mutable view.
+    #[getter]
+    pub fn le(&self, py: Python<'_>) -> PyResult<Self> {
+        self.with_layout(py, Endianness::Little, self.bit_order)
+    }
+
+    /// Return a big-endian byte-order mutable view.
+    #[getter]
+    pub fn be(&self, py: Python<'_>) -> PyResult<Self> {
+        self.with_layout(py, Endianness::Big, self.bit_order)
+    }
+
+    /// Return an LSB0 bit-order mutable view.
+    #[getter]
+    pub fn lsb0(&self, py: Python<'_>) -> PyResult<Self> {
+        self.with_layout(py, self.byte_order, BitOrder::Lsb0)
+    }
+
+    /// Return an MSB0 bit-order mutable view.
+    #[getter]
+    pub fn msb0(&self, py: Python<'_>) -> PyResult<Self> {
+        self.with_layout(py, self.byte_order, BitOrder::Msb0)
+    }
+
+    /// Return the current number of source bits in the view.
+    pub fn __len__(&self, py: Python<'_>) -> usize {
+        self.source.borrow(py).len()
+    }
+
+    /// Interpret the viewed bits as an unsigned integer.
+    pub fn to_u(&self, py: Python<'_>) -> PyResult<u128> {
+        let tibs = self.to_tibs_view(py)?;
+        BitCollection::to_u128(&tibs, false)
+    }
+
+    /// Interpret the viewed bits as a signed integer.
+    pub fn to_i(&self, py: Python<'_>) -> PyResult<i128> {
+        let tibs = self.to_tibs_view(py)?;
+        BitCollection::to_i128(&tibs, false)
+    }
+
+    /// Interpret the viewed bits as an IEEE floating point value.
+    pub fn to_f(&self, py: Python<'_>) -> PyResult<f64> {
+        let tibs = self.to_tibs_view(py)?;
+        BitCollection::to_f64(&tibs, false)
+    }
+
+    /// Set the viewed bits from an unsigned integer without changing the source length.
+    #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
+    pub fn set_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+        self.assign_u(py, u)
+    }
+
+    /// Set the viewed bits from a signed integer without changing the source length.
+    #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
+    pub fn set_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+        self.assign_i(py, i)
+    }
+
+    /// Set the viewed bits from a floating point number without changing the source length.
+    #[pyo3(signature = (f, /), text_signature = "($self, f, /)")]
+    pub fn set_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
+        self.assign_f(py, f)
+    }
+
+    /// Return the viewed bits as a binary string.
+    pub fn to_bin(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(BitCollection::to_binary(&self.to_tibs_view(py)?))
+    }
+
+    /// Return the viewed bits as an octal string.
+    pub fn to_oct(&self, py: Python<'_>) -> PyResult<String> {
+        BitCollection::to_octal(&self.to_tibs_view(py)?)
+    }
+
+    /// Return the viewed bits as a hexadecimal string.
+    pub fn to_hex(&self, py: Python<'_>) -> PyResult<String> {
+        BitCollection::to_hexadecimal(&self.to_tibs_view(py)?)
+    }
+
+    /// Return the viewed bits as bytes.
+    pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+        BitCollection::to_byte_data(&self.to_tibs_view(py)?)
+    }
+
+    /// Materialize the current view as a new :class:`Tibs`.
+    pub fn to_tibs(&self, py: Python<'_>) -> PyResult<Tibs> {
+        self.to_tibs_view(py)
+    }
+
+    /// Materialize the current view as a new :class:`Mutibs`.
+    pub fn to_mutibs(&self, py: Python<'_>) -> PyResult<Mutibs> {
+        Ok(Mutibs::from_bv(self.to_tibs_view(py)?.to_bitvec()))
+    }
+
+    /// Extract a field as an immutable :class:`View`.
+    ///
+    /// Mutable field views are added separately; for now this mirrors
+    /// :meth:`View.field` over the current source value.
+    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<View> {
+        let source = self.source.borrow(py);
+        self.validate_current_layout(source.len())?;
+        View::from_tibs(
+            Tibs::from_bv(source.to_bitvec()),
+            self.byte_order,
+            self.bit_order,
+        )
+        .field(a, b)
+    }
+
+    /// Interpret the viewed bits as an unsigned integer.
+    #[getter]
+    fn u(&self, py: Python<'_>) -> PyResult<u128> {
+        self.to_u(py)
+    }
+
+    #[setter(u)]
+    fn set_u_property(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+        self.assign_u(py, u)
+    }
+
+    /// Interpret the viewed bits as a signed integer.
+    #[getter]
+    fn i(&self, py: Python<'_>) -> PyResult<i128> {
+        self.to_i(py)
+    }
+
+    #[setter(i)]
+    fn set_i_property(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+        self.assign_i(py, i)
+    }
+
+    /// Interpret the viewed bits as an IEEE floating point value.
+    #[getter]
+    fn f(&self, py: Python<'_>) -> PyResult<f64> {
+        self.to_f(py)
+    }
+
+    #[setter(f)]
+    fn set_f_property(&self, py: Python<'_>, f: f64) -> PyResult<()> {
+        self.assign_f(py, f)
+    }
+
+    /// Return the viewed bits as a binary string.
+    #[getter]
+    fn bin(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_bin(py)
+    }
+
+    /// Return the viewed bits as an octal string.
+    #[getter]
+    fn oct(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_oct(py)
+    }
+
+    /// Return the viewed bits as a hexadecimal string.
+    #[getter]
+    fn hex(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_hex(py)
+    }
+
+    /// Return the viewed bits as bytes.
+    #[getter]
+    fn bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+        self.to_bytes(py)
+    }
+
+    pub fn __repr__(&self, py: Python<'_>) -> String {
+        let source = self.source.borrow(py);
+        let mut parts = vec![source.__repr__()];
+        if self.byte_order != Endianness::Unspecified {
+            parts.push(format!("byte_order={}", self.byte_order.repr_name()));
+        }
+        if self.bit_order != BitOrder::Msb0 {
+            parts.push(format!("bit_order={}", self.bit_order.repr_name()));
+        }
+        format!("MutableView({})", parts.join(", "))
     }
 }
 

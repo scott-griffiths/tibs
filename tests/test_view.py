@@ -1,6 +1,6 @@
 import pytest
 
-from tibs import BitOrder, Endianness, Mutibs, Tibs, View
+from tibs import BitOrder, Endianness, Mutibs, MutableView, Tibs, View
 
 
 def test_view_constructor_accepts_tibs_and_mutibs():
@@ -52,9 +52,9 @@ def test_tibs_view_aliases_create_views():
 def test_mutibs_view_aliases_create_views():
     m = Mutibs("0xaa")
 
-    assert isinstance(m.view(), View)
-    assert repr(m.le) == "View(Tibs('0xaa'), byte_order=Endianness.Little)"
-    assert repr(m.lsb0) == "View(Tibs('0xaa'), bit_order=BitOrder.Lsb0)"
+    assert isinstance(m.view(), MutableView)
+    assert repr(m.le) == "MutableView(Mutibs('0xaa'), byte_order=Endianness.Little)"
+    assert repr(m.lsb0) == "MutableView(Mutibs('0xaa'), bit_order=BitOrder.Lsb0)"
     assert len(m.lsb0) == len(m)
 
 
@@ -95,8 +95,8 @@ def test_byte_oriented_view_requires_whole_byte_source():
 
     assert isinstance(t.view(), View)
     assert isinstance(t.msb0, View)
-    assert isinstance(m.view(), View)
-    assert isinstance(m.msb0, View)
+    assert isinstance(m.view(), MutableView)
+    assert isinstance(m.msb0, MutableView)
 
     with pytest.raises(ValueError):
         _ = t.le
@@ -148,14 +148,103 @@ def test_view_to_methods_use_bit_order_for_materialized_bits():
     assert Tibs("0x123456").lsb0.oct == Tibs("0x482c6a").oct
 
 
-def test_mutibs_view_snapshots_current_source_value():
+def test_mutable_view_reflects_current_source_value():
     m = Mutibs("0x12")
     v = m.lsb0
 
     assert v.to_hex() == "48"
 
     m[0] = True
+    assert v.to_bin() == "01001001"
+
+
+def test_explicit_view_constructor_snapshots_mutibs_source():
+    m = Mutibs("0x12")
+    v = View(m, bit_order=BitOrder.Lsb0)
+
+    assert v.to_hex() == "48"
+
+    m[0] = True
     assert v.to_bin() == "01001000"
+
+
+def test_mutable_view_set_u_uses_view_layout():
+    m = Mutibs.from_u(99, 16, Endianness.Little)
+
+    assert m.le.u == 99
+
+    result = m.le.set_u(45)
+
+    assert result is None
+    assert len(m) == 16
+    assert m.le.u == 45
+    assert m == Mutibs.from_u(45, 16, Endianness.Little)
+
+
+def test_mutable_view_numeric_property_setters_use_view_layout():
+    m = Mutibs.from_zeros(16)
+
+    m.le.u = 0x1234
+    assert m.le.u == 0x1234
+    assert m == Mutibs.from_u(0x1234, 16, Endianness.Little)
+
+    m.le.i = -300
+    assert m.le.i == -300
+    assert m == Mutibs.from_i(-300, 16, Endianness.Little)
+
+    f = Mutibs.from_zeros(32)
+    f.le.f = 1.5
+    assert f.le.f == 1.5
+    assert f == Mutibs.from_f(1.5, 32, Endianness.Little)
+
+
+def test_mutable_view_lsb0_set_u_uses_bit_order_layout():
+    m = Mutibs.from_zeros(8)
+
+    m.lsb0.u = 0x12
+
+    assert m.lsb0.u == 0x12
+    assert m == Mutibs("0x48")
+
+
+def test_mutable_view_combined_layout_set_u_roundtrips():
+    m = Mutibs.from_zeros(16)
+
+    m.lsb0.le.u = 0x1234
+
+    assert m.lsb0.le.u == 0x1234
+    assert m == Mutibs("0x2c48")
+
+
+def test_mutable_view_set_errors_leave_value_unchanged():
+    m = Mutibs.from_zeros(4)
+    original = m.to_tibs()
+
+    with pytest.raises(OverflowError):
+        m.view().set_u(16)
+
+    assert m == original
+
+    f = Mutibs.from_zeros(24)
+    original = f.to_tibs()
+
+    with pytest.raises(ValueError):
+        f.view().set_f(1.25)
+
+    assert f == original
+
+
+def test_mutable_view_revalidates_layout_after_source_length_change():
+    m = Mutibs.from_zeros(8)
+    v = m.le
+
+    m.append(1)
+
+    with pytest.raises(ValueError):
+        _ = v.u
+
+    with pytest.raises(ValueError):
+        v.set_u(1)
 
 
 def test_view_field_extracts_lsb0_spec_labels():

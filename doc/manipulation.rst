@@ -133,6 +133,15 @@ interpretations::
 The value must fit in the current length. Floating-point assignment uses the
 current length too, so it is only available for 16, 32 and 64-bit ``Mutibs``.
 
+For little-endian or LSB0 interpretations, assign through a mutable view instead::
+
+    >>> m = Mutibs.from_u(99, 16, Endianness.Little)
+    >>> m.le.u
+    99
+    >>> m.le.u = 45
+    >>> m.le.u
+    45
+
 Reordering bits
 ===============
 
