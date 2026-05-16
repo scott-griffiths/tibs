@@ -50,6 +50,46 @@ fn physical_bits_from_view_bits(
     })
 }
 
+fn physical_index_for_label(bit_order: BitOrder, label: usize) -> usize {
+    match bit_order {
+        BitOrder::Msb0 => label,
+        BitOrder::Lsb0 => (label / 8) * 8 + (7 - (label % 8)),
+    }
+}
+
+fn validate_field_labels(len: usize, a: usize, b: usize) -> PyResult<(usize, usize)> {
+    if len == 0 {
+        return Err(PyValueError::new_err(
+            "Cannot extract a field from an empty view.",
+        ));
+    }
+    if a >= len || b >= len {
+        return Err(PyValueError::new_err(format!(
+            "Field labels must be in the range 0..{}. Received {a} and {b}.",
+            len - 1
+        )));
+    }
+
+    Ok((a.min(b), a.max(b)))
+}
+
+fn field_source_indices(bit_order: BitOrder, low: usize, high: usize) -> Vec<usize> {
+    let mut indices = Vec::with_capacity(high - low + 1);
+    match bit_order {
+        BitOrder::Msb0 => {
+            for label in low..=high {
+                indices.push(physical_index_for_label(bit_order, label));
+            }
+        }
+        BitOrder::Lsb0 => {
+            for label in (low..=high).rev() {
+                indices.push(physical_index_for_label(bit_order, label));
+            }
+        }
+    }
+    indices
+}
+
 ///     A view of a :class:`Tibs` with different interpretation settings.
 ///
 ///     A ``View`` does not change the underlying bits. It records how operations such as
@@ -128,11 +168,36 @@ impl View {
             Ok(tibs)
         }
     }
+}
 
-    fn physical_index_for_label(&self, label: usize) -> usize {
-        match self.bit_order {
-            BitOrder::Msb0 => label,
-            BitOrder::Lsb0 => (label / 8) * 8 + (7 - (label % 8)),
+#[derive(Clone)]
+enum MutableSelection {
+    Whole,
+    Field { indices: Vec<usize> },
+}
+
+impl MutableSelection {
+    fn len(&self, source_len: usize) -> PyResult<usize> {
+        match self {
+            MutableSelection::Whole => Ok(source_len),
+            MutableSelection::Field { indices } => {
+                if indices.iter().any(|&index| index >= source_len) {
+                    return Err(PyValueError::new_err(
+                        "MutableView source is too short for this field.",
+                    ));
+                }
+                Ok(indices.len())
+            }
+        }
+    }
+
+    fn source_indices(&self, source_len: usize) -> PyResult<Vec<usize>> {
+        match self {
+            MutableSelection::Whole => Ok((0..source_len).collect()),
+            MutableSelection::Field { indices } => {
+                self.len(source_len)?;
+                Ok(indices.clone())
+            }
         }
     }
 }
@@ -151,6 +216,7 @@ pub struct MutableView {
     pub(crate) source: Py<Mutibs>,
     pub(crate) byte_order: Endianness,
     pub(crate) bit_order: BitOrder,
+    selection: MutableSelection,
 }
 
 impl MutableView {
@@ -163,6 +229,21 @@ impl MutableView {
             source,
             byte_order,
             bit_order,
+            selection: MutableSelection::Whole,
+        }
+    }
+
+    fn from_parts(
+        source: Py<Mutibs>,
+        byte_order: Endianness,
+        bit_order: BitOrder,
+        selection: MutableSelection,
+    ) -> Self {
+        MutableView {
+            source,
+            byte_order,
+            bit_order,
+            selection,
         }
     }
 
@@ -173,27 +254,51 @@ impl MutableView {
         bit_order: BitOrder,
     ) -> PyResult<Self> {
         let source = self.source.borrow(py);
-        View::validate_layout(source.len(), byte_order, bit_order)?;
-        Ok(Self::from_mutibs(
+        let len = self.selection.len(source.len())?;
+        View::validate_layout(len, byte_order, bit_order)?;
+        Ok(Self::from_parts(
             self.source.clone_ref(py),
             byte_order,
             bit_order,
+            self.selection.clone(),
         ))
     }
 
-    fn validate_current_layout(&self, len: usize) -> PyResult<()> {
-        View::validate_layout(len, self.byte_order, self.bit_order)
+    fn current_len(&self, source_len: usize) -> PyResult<usize> {
+        self.selection.len(source_len)
+    }
+
+    fn validate_current_layout(&self, source_len: usize) -> PyResult<usize> {
+        let len = self.current_len(source_len)?;
+        View::validate_layout(len, self.byte_order, self.bit_order)?;
+        Ok(len)
+    }
+
+    fn selected_source_bits(&self, source: &Mutibs) -> PyResult<BV> {
+        match &self.selection {
+            MutableSelection::Whole => Ok(source.to_bitvec()),
+            MutableSelection::Field { indices } => {
+                self.selection.len(source.len())?;
+                let source_bits = source.as_bitslice();
+                let mut selected = BV::with_capacity(indices.len());
+                for &index in indices {
+                    selected.push(source_bits[index]);
+                }
+                Ok(selected)
+            }
+        }
     }
 
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
         let source = self.source.borrow(py);
         self.validate_current_layout(source.len())?;
+        let source_bits = self.selected_source_bits(&source)?;
         if self.bit_order == BitOrder::Msb0 && self.byte_order != Endianness::Little {
-            return Ok(Tibs::from_bv(source.to_bitvec()));
+            return Ok(Tibs::from_bv(source_bits));
         }
 
         Ok(Tibs::from_bv(view_bits_from_physical_bits(
-            source.as_bitslice(),
+            source_bits.as_bitslice(),
             self.byte_order,
             self.bit_order,
         )?))
@@ -201,19 +306,31 @@ impl MutableView {
 
     fn assign_from_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
         let mut source = self.source.borrow_mut(py);
-        self.validate_current_layout(source.len())?;
+        let len = self.validate_current_layout(source.len())?;
         let physical = physical_bits_from_view_bits(viewed, self.byte_order, self.bit_order)?;
-        debug_assert_eq!(source.len(), physical.len());
-        source
-            .as_mut_bitvec_ref()
-            .copy_from_bitslice(physical.as_bitslice());
+        debug_assert_eq!(len, physical.len());
+
+        match &self.selection {
+            MutableSelection::Whole => {
+                source
+                    .as_mut_bitvec_ref()
+                    .copy_from_bitslice(physical.as_bitslice());
+            }
+            MutableSelection::Field { indices } => {
+                debug_assert_eq!(indices.len(), physical.len());
+                for (bit_index, &source_index) in indices.iter().enumerate() {
+                    source
+                        .as_mut_bitvec_ref()
+                        .set(source_index, physical[bit_index]);
+                }
+            }
+        }
         Ok(())
     }
 
     fn assign_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
         let source = self.source.borrow(py);
-        let len = source.len();
-        self.validate_current_layout(len)?;
+        let len = self.validate_current_layout(source.len())?;
         drop(source);
 
         let viewed = bv_from_u128(u, len as i64, false)?;
@@ -222,8 +339,7 @@ impl MutableView {
 
     fn assign_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
         let source = self.source.borrow(py);
-        let len = source.len();
-        self.validate_current_layout(len)?;
+        let len = self.validate_current_layout(source.len())?;
         drop(source);
 
         let viewed = bv_from_i128(i, len as i64, false)?;
@@ -232,8 +348,7 @@ impl MutableView {
 
     fn assign_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
         let source = self.source.borrow(py);
-        let len = source.len();
-        self.validate_current_layout(len)?;
+        let len = self.validate_current_layout(source.len())?;
         drop(source);
 
         let viewed = bv_from_f64(f, len as i64, false)?;
@@ -307,8 +422,9 @@ impl MutableView {
     }
 
     /// Return the current number of source bits in the view.
-    pub fn __len__(&self, py: Python<'_>) -> usize {
-        self.source.borrow(py).len()
+    pub fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let source = self.source.borrow(py);
+        self.current_len(source.len())
     }
 
     /// Interpret the viewed bits as an unsigned integer.
@@ -377,19 +493,31 @@ impl MutableView {
         Ok(Mutibs::from_bv(self.to_tibs_view(py)?.to_bitvec()))
     }
 
-    /// Extract a field as an immutable :class:`View`.
+    /// Extract a field using inclusive bit labels.
     ///
-    /// Mutable field views are added separately; for now this mirrors
-    /// :meth:`View.field` over the current source value.
-    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<View> {
+    /// The returned ``MutableView`` is a live view onto the selected source bits.
+    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<Self> {
         let source = self.source.borrow(py);
-        self.validate_current_layout(source.len())?;
-        View::from_tibs(
-            Tibs::from_bv(source.to_bitvec()),
-            self.byte_order,
-            self.bit_order,
-        )
-        .field(a, b)
+        let current_len = self.validate_current_layout(source.len())?;
+        let (low, high) = validate_field_labels(current_len, a, b)?;
+        let field_len = high - low + 1;
+        let byte_order = if field_len.is_multiple_of(8) {
+            self.byte_order
+        } else {
+            Endianness::Unspecified
+        };
+        let source_indices = self.selection.source_indices(source.len())?;
+        let indices = field_source_indices(self.bit_order, low, high)
+            .into_iter()
+            .map(|index| source_indices[index])
+            .collect();
+
+        Ok(Self::from_parts(
+            self.source.clone_ref(py),
+            byte_order,
+            BitOrder::Msb0,
+            MutableSelection::Field { indices },
+        ))
     }
 
     /// Interpret the viewed bits as an unsigned integer.
@@ -768,20 +896,7 @@ impl View {
     ///
     pub fn field(&self, a: usize, b: usize) -> PyResult<Self> {
         let len = self.source.len();
-        if len == 0 {
-            return Err(PyValueError::new_err(
-                "Cannot extract a field from an empty view.",
-            ));
-        }
-        if a >= len || b >= len {
-            return Err(PyValueError::new_err(format!(
-                "Field labels must be in the range 0..{}. Received {a} and {b}.",
-                len - 1
-            )));
-        }
-
-        let high = a.max(b);
-        let low = a.min(b);
+        let (low, high) = validate_field_labels(len, a, b)?;
         let field_len = high - low + 1;
         let byte_order = if field_len.is_multiple_of(8) {
             self.byte_order
@@ -791,18 +906,8 @@ impl View {
 
         let source = self.source.to_bitslice();
         let mut field = BV::with_capacity(field_len);
-
-        match self.bit_order {
-            BitOrder::Msb0 => {
-                for label in low..=high {
-                    field.push(source[self.physical_index_for_label(label)]);
-                }
-            }
-            BitOrder::Lsb0 => {
-                for label in (low..=high).rev() {
-                    field.push(source[self.physical_index_for_label(label)]);
-                }
-            }
+        for index in field_source_indices(self.bit_order, low, high) {
+            field.push(source[index]);
         }
 
         Ok(View::from_tibs(

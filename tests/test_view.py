@@ -216,6 +216,54 @@ def test_mutable_view_combined_layout_set_u_roundtrips():
     assert m == Mutibs("0x2c48")
 
 
+def test_mutable_view_field_returns_mutable_view_and_writes_whole_byte_field():
+    m = Mutibs("0x23a11234")
+    field = m.lsb0.le.field(31, 16)
+
+    assert isinstance(field, MutableView)
+    assert len(field) == 16
+    assert field.u == 0x1234
+
+    field.u = 0x5678
+
+    assert field.u == 0x5678
+    assert m == Mutibs("0x23a15678")
+    assert m.lsb0.le.field(31, 16).u == 0x5678
+
+
+def test_mutable_view_field_endpoint_order_does_not_change_write_mapping():
+    m = Mutibs("0x23a11234")
+
+    m.lsb0.le.field(16, 31).set_u(0x5678)
+
+    assert m == Mutibs("0x23a15678")
+    assert m.lsb0.le.field(31, 16).u == 0x5678
+
+
+def test_mutable_view_field_writes_non_whole_byte_field():
+    m = Mutibs("0x88040410")
+    field = m.lsb0.field(31, 26)
+
+    assert len(field) == 6
+    assert field.u == 4
+
+    field.u = 42
+
+    assert field.u == 42
+    assert m.lsb0.field(31, 26).u == 42
+
+
+def test_mutable_view_field_write_failure_leaves_source_unchanged():
+    m = Mutibs("0x88040410")
+    original = m.to_tibs()
+    field = m.lsb0.field(31, 26)
+
+    with pytest.raises(OverflowError):
+        field.u = 64
+
+    assert m == original
+
+
 def test_mutable_view_set_errors_leave_value_unchanged():
     m = Mutibs.from_zeros(4)
     original = m.to_tibs()

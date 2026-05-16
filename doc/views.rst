@@ -191,6 +191,19 @@ given in either order::
     >>> t.lsb0.field(28, 31).u
     3
 
+When the source is mutable, :meth:`MutableView.field` returns another live
+``MutableView`` over the selected bits. Assigning through that field writes back
+to the original ``Mutibs``::
+
+    >>> m = Mutibs('0x23a11234')
+    >>> m.lsb0.le.field(31, 16).u
+    4660
+    >>> m.lsb0.le.field(31, 16).u = 0x5678
+    >>> m.lsb0.le.field(31, 16).u
+    22136
+    >>> m
+    Mutibs('0x23a15678')
+
 As a more complete example, suppose a format starts with a 32-bit little-endian
 header. The first byte in the file contains bits 7:0, the next byte contains bits
 15:8, and so on, but the standard draws the complete word with bit 31 on the
