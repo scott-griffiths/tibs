@@ -157,6 +157,37 @@ impl Mutibs {
         }
     }
 
+    #[inline]
+    fn assign_from_bv(&mut self, value: BV) {
+        debug_assert_eq!(self.len(), value.len());
+        self.as_mut_bitvec_ref()
+            .copy_from_bitslice(value.as_bitslice());
+    }
+
+    #[inline]
+    fn assign_u(&mut self, u: u128) -> PyResult<()> {
+        let length = self.len();
+        let value = bv_from_u128(u, length as i64, false)?;
+        self.assign_from_bv(value);
+        Ok(())
+    }
+
+    #[inline]
+    fn assign_i(&mut self, i: i128) -> PyResult<()> {
+        let length = self.len();
+        let value = bv_from_i128(i, length as i64, false)?;
+        self.assign_from_bv(value);
+        Ok(())
+    }
+
+    #[inline]
+    fn assign_f(&mut self, f: f64) -> PyResult<()> {
+        let length = self.len();
+        let value = bv_from_f64(f, length as i64, false)?;
+        self.assign_from_bv(value);
+        Ok(())
+    }
+
     pub(crate) fn ixor(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
         *self.as_mut_bitvec_ref() ^= other;
@@ -867,14 +898,40 @@ impl Mutibs {
         BitCollection::to_u128(self, false)
     }
 
-    /// Read-only property of the unsigned integer representation of the Mutibs.
+    /// Set the current bits from an unsigned integer without changing the length.
     ///
-    /// Equivalent to using :meth:`~to_u`.
+    /// :param int u: An unsigned integer.
+    /// :return: None
+    ///
+    /// :raises ValueError: if the current length is not between 1 and 128 bits.
+    /// :raises OverflowError: if the integer doesn't fit in the current length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs.from_zeros(8)
+    ///     >>> m.set_u(15)
+    ///     >>> m
+    ///     Mutibs('0x0f')
+    ///
+    #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
+    pub fn set_u(&mut self, u: u128) -> PyResult<()> {
+        self.assign_u(u)
+    }
+
+    /// Property of the unsigned integer representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_u`. Assigning is equivalent to
+    /// using :meth:`~set_u`.
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
     fn u(&self) -> PyResult<u128> {
         self.to_u()
+    }
+
+    #[setter(u)]
+    fn set_u_property(&mut self, u: u128) -> PyResult<()> {
+        self.assign_u(u)
     }
 
     /// Create a new instance from a signed integer.
@@ -917,14 +974,40 @@ impl Mutibs {
         BitCollection::to_i128(self, false)
     }
 
-    /// Read-only property of the signed integer representation of the Mutibs.
+    /// Set the current bits from a signed integer without changing the length.
     ///
-    /// Equivalent to using :meth:`~to_i`.
+    /// :param int i: A signed integer.
+    /// :return: None
+    ///
+    /// :raises ValueError: if the current length is not between 1 and 128 bits.
+    /// :raises OverflowError: if the integer doesn't fit in the current length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs.from_zeros(4)
+    ///     >>> m.set_i(-2)
+    ///     >>> m
+    ///     Mutibs('0xe')
+    ///
+    #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
+    pub fn set_i(&mut self, i: i128) -> PyResult<()> {
+        self.assign_i(i)
+    }
+
+    /// Property of the signed integer representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_i`. Assigning is equivalent to
+    /// using :meth:`~set_i`.
     ///
     /// :return: The value as a signed integer.
     #[getter]
     fn i(&self) -> PyResult<i128> {
         self.to_i()
+    }
+
+    #[setter(i)]
+    fn set_i_property(&mut self, i: i128) -> PyResult<()> {
+        self.assign_i(i)
     }
 
     /// Create a new instance from a floating point number.
@@ -967,14 +1050,39 @@ impl Mutibs {
         BitCollection::to_f64(self, false)
     }
 
-    /// Read-only property of the floating point representation of the Mutibs.
+    /// Set the current bits from a floating point number without changing the length.
     ///
-    /// Equivalent to using :meth:`~to_f`.
+    /// The current length must be 16, 32 or 64 bits.
+    ///
+    /// :param float f: A floating point value.
+    /// :return: None
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs.from_zeros(32)
+    ///     >>> m.set_f(1.5)
+    ///     >>> m
+    ///     Mutibs('0x3fc00000')
+    ///
+    #[pyo3(signature = (f, /), text_signature = "($self, f, /)")]
+    pub fn set_f(&mut self, f: f64) -> PyResult<()> {
+        self.assign_f(f)
+    }
+
+    /// Property of the floating point representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_f`. Assigning is equivalent to
+    /// using :meth:`~set_f`.
     ///
     /// :return: The value as a Python float.
     #[getter]
     fn f(&self) -> PyResult<f64> {
         self.to_f()
+    }
+
+    #[setter(f)]
+    fn set_f_property(&mut self, f: f64) -> PyResult<()> {
+        self.assign_f(f)
     }
 
     /// Create a new instance with all bits set to zero.

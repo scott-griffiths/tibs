@@ -1324,6 +1324,112 @@ def test_from_u_bad_endianness_type():
     assert a.to_u() == 101
 
 
+def assert_matching_exception(left, right):
+    with pytest.raises(Exception) as left_error:
+        left()
+    with pytest.raises(Exception) as right_error:
+        right()
+
+    assert type(left_error.value) is type(right_error.value)
+    assert str(left_error.value) == str(right_error.value)
+
+
+def test_set_u_preserves_length_and_matches_from_u():
+    m = Mutibs.from_ones(12)
+    result = m.set_u(0x123)
+
+    assert result is None
+    assert len(m) == 12
+    assert m == Mutibs.from_u(0x123, 12)
+    assert m.u == 0x123
+
+
+def test_set_i_preserves_length_and_matches_from_i():
+    m = Mutibs.from_zeros(5)
+    result = m.set_i(-3)
+
+    assert result is None
+    assert len(m) == 5
+    assert m == Mutibs.from_i(-3, 5)
+    assert m.i == -3
+
+
+def test_set_f_preserves_length_and_matches_from_f():
+    m = Mutibs.from_ones(32)
+    result = m.set_f(3.5)
+
+    assert result is None
+    assert len(m) == 32
+    assert m == Mutibs.from_f(3.5, 32)
+    assert m.f == 3.5
+
+
+def test_numeric_property_setters_preserve_length():
+    m = Mutibs.from_zeros(8)
+    m.u = 0x7f
+
+    assert len(m) == 8
+    assert m == Mutibs.from_u(0x7f, 8)
+
+    m.i = -1
+    assert len(m) == 8
+    assert m == Mutibs.from_i(-1, 8)
+    assert m.i == -1
+
+    f = Mutibs.from_zeros(32)
+    f.f = 1.5
+
+    assert len(f) == 32
+    assert f == Mutibs.from_f(1.5, 32)
+    assert f.f == 1.5
+
+
+def test_set_u_errors_match_from_u_and_leave_value_unchanged():
+    m = Mutibs.from_zeros(4)
+    original = m.to_tibs()
+
+    assert_matching_exception(lambda: m.set_u(16), lambda: Mutibs.from_u(16, 4))
+    assert m == original
+
+    empty = Mutibs()
+    assert_matching_exception(lambda: empty.set_u(0), lambda: Mutibs.from_u(0, 0))
+
+
+def test_set_i_errors_match_from_i_and_leave_value_unchanged():
+    m = Mutibs.from_zeros(4)
+    original = m.to_tibs()
+
+    assert_matching_exception(lambda: m.set_i(8), lambda: Mutibs.from_i(8, 4))
+    assert m == original
+
+    assert_matching_exception(lambda: m.set_i(-9), lambda: Mutibs.from_i(-9, 4))
+    assert m == original
+
+    empty = Mutibs()
+    assert_matching_exception(lambda: empty.set_i(0), lambda: Mutibs.from_i(0, 0))
+
+
+def test_set_f_errors_match_from_f_and_leave_value_unchanged():
+    m = Mutibs.from_zeros(24)
+    original = m.to_tibs()
+
+    assert_matching_exception(lambda: m.set_f(1.25), lambda: Mutibs.from_f(1.25, 24))
+    assert m == original
+
+
+def test_numeric_set_methods_do_not_accept_endianness():
+    m = Mutibs.from_zeros(16)
+
+    with pytest.raises(TypeError):
+        m.set_u(3, Endianness.Little)
+
+    with pytest.raises(TypeError):
+        m.set_i(-3, Endianness.Little)
+
+    with pytest.raises(TypeError):
+        m.set_f(1.25, Endianness.Little)
+
+
 def test_contains():
     m = Mutibs('0x12345')
     assert '0x23' in m

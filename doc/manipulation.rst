@@ -106,6 +106,33 @@ immutable ``Tibs``::
     >>> Tibs.from_zeros(8).set_at([1, 6])
     Tibs('0x42')
 
+Assigning interpreted values
+============================
+
+The ``set_u``, ``set_i`` and ``set_f`` methods replace the current bits with a
+new unsigned integer, signed integer or floating-point value while preserving
+the existing bit length::
+
+    >>> m = Mutibs.from_zeros(8)
+    >>> m.set_u(15)
+    >>> m
+    Mutibs('0x0f')
+    >>> len(m)
+    8
+
+The ``u``, ``i`` and ``f`` properties are settable shortcuts for the same default
+interpretations::
+
+    >>> m.u = 42
+    >>> m.u
+    42
+    >>> m.i = -1
+    >>> m
+    Mutibs('0xff')
+
+The value must fit in the current length. Floating-point assignment uses the
+current length too, so it is only available for 16, 32 and 64-bit ``Mutibs``.
+
 Reordering bits
 ===============
 
