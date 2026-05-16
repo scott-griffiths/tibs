@@ -10,7 +10,8 @@ The most important classes available in the tibs module are:
 
 * :doc:`tibs` — An immutable sequence of bits.
 * :doc:`mutibs` — A mutable sequence of bits.
-* :doc:`view` — An interpretation wrapper for byte order and bit order.
+* :doc:`view` — Immutable and mutable interpretation wrappers for byte order,
+  bit order and labelled fields.
 
 .. toctree::
     :maxdepth: 1

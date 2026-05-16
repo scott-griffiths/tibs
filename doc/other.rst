@@ -53,5 +53,5 @@ pick a small representation for longer sequences.
 bit value occurs much less often than the other. ``Codec.Zstd`` uses Zstandard compression and is often better for
 larger byte-like data.
 
-The encoded byte format stores enough length information to decode one value exactly. See :doc:`misc` for the
+The encoded byte format stores enough length information to decode one value exactly. See :doc:`byte_format` for the
 format details.

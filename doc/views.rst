@@ -3,9 +3,14 @@
 Views
 -----
 
-A :class:`View` wraps a ``Tibs`` to allow the bits inside it to be interpreted in
-a different way. This allows different endiannesses to be used, as well as different
-bit numbering methods when interpreting the data.
+Views wrap ``Tibs`` or ``Mutibs`` data to allow the bits inside it to be
+interpreted in a different way. This allows different endiannesses to be used,
+as well as different bit numbering methods when interpreting the data.
+
+Immutable ``Tibs`` values use :class:`View`. Mutable ``Mutibs`` values use
+:class:`MutableView` when created through ``m.view()``, ``m.le``, ``m.be``,
+``m.lsb0`` or ``m.msb0``. A mutable view reads from and writes to the original
+``Mutibs``.
 
 The most common reason to create a view is that a file format or protocol specifies
 values using a different byte order or bit numbering convention to the Python default.

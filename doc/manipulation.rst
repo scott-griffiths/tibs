@@ -142,6 +142,15 @@ For little-endian or LSB0 interpretations, assign through a mutable view instead
     >>> m.le.u
     45
 
+Mutable views can also select labelled fields and assign through the same
+properties. The field endpoints are inclusive and interpreted using the view's
+current bit order::
+
+    >>> m = Mutibs('0x23a11234')
+    >>> m.lsb0.le.field(31, 16).u = 0x5678
+    >>> m
+    Mutibs('0x23a15678')
+
 Reordering bits
 ===============
 
