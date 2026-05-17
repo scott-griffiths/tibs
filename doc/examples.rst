@@ -11,4 +11,9 @@ Some examples using the Tibs library. The code for these can be found in the ``e
 
     example_sieve
     example_construct
-
+    example_little_endian_registers
+    example_patch_config
+    example_sensor_samples
+    example_log_scan
+    example_small_ints
+    example_bloom_filter
