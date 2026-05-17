@@ -463,21 +463,21 @@ impl MutableView {
         BitCollection::to_f64(&tibs, false)
     }
 
-    /// Set the viewed bits from an unsigned integer without changing the source length.
+    /// Write the viewed bits from an unsigned integer without changing the source length.
     #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
-    pub fn set_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+    pub fn write_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
         self.assign_u(py, u)
     }
 
-    /// Set the viewed bits from a signed integer without changing the source length.
+    /// Write the viewed bits from a signed integer without changing the source length.
     #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
-    pub fn set_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+    pub fn write_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
         self.assign_i(py, i)
     }
 
-    /// Set the viewed bits from a floating point number without changing the source length.
+    /// Write the viewed bits from a floating point number without changing the source length.
     #[pyo3(signature = (f, /), text_signature = "($self, f, /)")]
-    pub fn set_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
+    pub fn write_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
         self.assign_f(py, f)
     }
 
@@ -486,9 +486,9 @@ impl MutableView {
         Ok(BitCollection::to_binary(&self.to_tibs_view(py)?))
     }
 
-    /// Set the viewed bits from a binary string without changing the view length.
+    /// Write the viewed bits from a binary string without changing the view length.
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_bin(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+    pub fn write_bin(&self, py: Python<'_>, s: &str) -> PyResult<()> {
         let viewed = bv_from_bin(s)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
@@ -498,9 +498,9 @@ impl MutableView {
         BitCollection::to_octal(&self.to_tibs_view(py)?)
     }
 
-    /// Set the viewed bits from an octal string without changing the view length.
+    /// Write the viewed bits from an octal string without changing the view length.
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_oct(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+    pub fn write_oct(&self, py: Python<'_>, s: &str) -> PyResult<()> {
         let viewed = bv_from_oct(s)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
@@ -510,9 +510,9 @@ impl MutableView {
         BitCollection::to_hexadecimal(&self.to_tibs_view(py)?)
     }
 
-    /// Set the viewed bits from a hexadecimal string without changing the view length.
+    /// Write the viewed bits from a hexadecimal string without changing the view length.
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_hex(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+    pub fn write_hex(&self, py: Python<'_>, s: &str) -> PyResult<()> {
         let viewed = bv_from_hex(s)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
@@ -522,9 +522,9 @@ impl MutableView {
         BitCollection::to_byte_data(&self.to_tibs_view(py)?)
     }
 
-    /// Set the viewed bits from a bytes-like object without changing the view length.
+    /// Write the viewed bits from a bytes-like object without changing the view length.
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
-    pub fn set_bytes(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
+    pub fn write_bytes(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
         let viewed = bv_from_bytes_slice(data, None, None)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
@@ -573,7 +573,7 @@ impl MutableView {
     }
 
     #[setter(u)]
-    fn set_u_property(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+    fn write_u_property(&self, py: Python<'_>, u: u128) -> PyResult<()> {
         self.assign_u(py, u)
     }
 
@@ -584,7 +584,7 @@ impl MutableView {
     }
 
     #[setter(i)]
-    fn set_i_property(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+    fn write_i_property(&self, py: Python<'_>, i: i128) -> PyResult<()> {
         self.assign_i(py, i)
     }
 
@@ -595,7 +595,7 @@ impl MutableView {
     }
 
     #[setter(f)]
-    fn set_f_property(&self, py: Python<'_>, f: f64) -> PyResult<()> {
+    fn write_f_property(&self, py: Python<'_>, f: f64) -> PyResult<()> {
         self.assign_f(py, f)
     }
 
@@ -606,8 +606,8 @@ impl MutableView {
     }
 
     #[setter(bin)]
-    fn set_bin_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
-        self.set_bin(py, s)
+    fn write_bin_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.write_bin(py, s)
     }
 
     /// Return the viewed bits as an octal string.
@@ -617,8 +617,8 @@ impl MutableView {
     }
 
     #[setter(oct)]
-    fn set_oct_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
-        self.set_oct(py, s)
+    fn write_oct_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.write_oct(py, s)
     }
 
     /// Return the viewed bits as a hexadecimal string.
@@ -628,8 +628,8 @@ impl MutableView {
     }
 
     #[setter(hex)]
-    fn set_hex_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
-        self.set_hex(py, s)
+    fn write_hex_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.write_hex(py, s)
     }
 
     /// Return the viewed bits as bytes.
@@ -639,8 +639,8 @@ impl MutableView {
     }
 
     #[setter(bytes)]
-    fn set_bytes_property(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
-        self.set_bytes(py, data)
+    fn write_bytes_property(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
+        self.write_bytes(py, data)
     }
 
     pub fn __repr__(&self, py: Python<'_>) -> String {

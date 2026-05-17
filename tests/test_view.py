@@ -168,12 +168,12 @@ def test_explicit_view_constructor_snapshots_mutibs_source():
     assert v.to_bin() == "01001000"
 
 
-def test_mutable_view_set_u_uses_view_layout():
+def test_mutable_view_write_u_uses_view_layout():
     m = Mutibs.from_u(99, 16, Endianness.Little)
 
     assert m.le.u == 99
 
-    result = m.le.set_u(45)
+    result = m.le.write_u(45)
 
     assert result is None
     assert len(m) == 16
@@ -198,7 +198,7 @@ def test_mutable_view_numeric_property_setters_use_view_layout():
     assert f == Mutibs.from_f(1.5, 32, Endianness.Little)
 
 
-def test_mutable_view_lsb0_set_u_uses_bit_order_layout():
+def test_mutable_view_lsb0_write_u_uses_bit_order_layout():
     m = Mutibs.from_zeros(8)
 
     m.lsb0.u = 0x12
@@ -207,7 +207,7 @@ def test_mutable_view_lsb0_set_u_uses_bit_order_layout():
     assert m == Mutibs("0x48")
 
 
-def test_mutable_view_combined_layout_set_u_roundtrips():
+def test_mutable_view_combined_layout_write_u_roundtrips():
     m = Mutibs.from_zeros(16)
 
     m.lsb0.le.u = 0x1234
@@ -219,12 +219,12 @@ def test_mutable_view_combined_layout_set_u_roundtrips():
 def test_mutable_view_representation_setters_preserve_length_and_use_layout():
     m = Mutibs.from_zeros(16)
 
-    assert m.le.set_hex("abcd") is None
+    assert m.le.write_hex("abcd") is None
     assert len(m) == 16
     assert m.le.hex == "abcd"
     assert m == Mutibs("0xcdab")
 
-    assert m.le.set_bytes(b"\x12\x34") is None
+    assert m.le.write_bytes(b"\x12\x34") is None
     assert len(m) == 16
     assert m.le.bytes == b"\x12\x34"
     assert m == Mutibs("0x3412")
@@ -296,7 +296,7 @@ def test_mutable_view_field_representation_setters_are_fixed_width():
 def test_mutable_view_field_endpoint_order_does_not_change_write_mapping():
     m = Mutibs("0x23a11234")
 
-    m.lsb0.le.field(16, 31).set_u(0x5678)
+    m.lsb0.le.field(16, 31).write_u(0x5678)
 
     assert m == Mutibs("0x23a15678")
     assert m.lsb0.le.field(31, 16).u == 0x5678
@@ -331,7 +331,7 @@ def test_mutable_view_set_errors_leave_value_unchanged():
     original = m.to_tibs()
 
     with pytest.raises(OverflowError):
-        m.view().set_u(16)
+        m.view().write_u(16)
 
     assert m == original
 
@@ -339,7 +339,7 @@ def test_mutable_view_set_errors_leave_value_unchanged():
     original = f.to_tibs()
 
     with pytest.raises(ValueError):
-        f.view().set_f(1.25)
+        f.view().write_f(1.25)
 
     assert f == original
 
@@ -354,7 +354,7 @@ def test_mutable_view_revalidates_layout_after_source_length_change():
         _ = v.u
 
     with pytest.raises(ValueError):
-        v.set_u(1)
+        v.write_u(1)
 
 
 def test_view_field_extracts_lsb0_spec_labels():

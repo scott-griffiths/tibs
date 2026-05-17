@@ -561,7 +561,7 @@ impl Mutibs {
     ///
     ///     >>> m = Mutibs('0x0100')
     ///     >>> v = m.le
-    ///     >>> v.set_u(2)
+    ///     >>> v.write_u(2)
     ///     >>> m
     ///     Mutibs('0x0002')
     ///
@@ -703,7 +703,7 @@ impl Mutibs {
     /// :return: None
     ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_bin(&mut self, s: &str) -> PyResult<()> {
+    pub fn write_bin(&mut self, s: &str) -> PyResult<()> {
         let bv = bv_from_bin(s)?;
         self.replace_with_bv(bv);
         Ok(())
@@ -712,7 +712,7 @@ impl Mutibs {
     /// Property of the binary representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_bin`. Assigning is equivalent
-    /// to using :meth:`~set_bin` and can change the length.
+    /// to using :meth:`~write_bin` and can change the length.
     ///
     /// :return: The binary representation.
     #[getter]
@@ -721,8 +721,8 @@ impl Mutibs {
     }
 
     #[setter(bin)]
-    fn set_bin_property(&mut self, s: &str) -> PyResult<()> {
-        self.set_bin(s)
+    fn write_bin_property(&mut self, s: &str) -> PyResult<()> {
+        self.write_bin(s)
     }
 
     /// Create a new instance from an octal string.
@@ -761,7 +761,7 @@ impl Mutibs {
     /// :return: None
     ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_oct(&mut self, s: &str) -> PyResult<()> {
+    pub fn write_oct(&mut self, s: &str) -> PyResult<()> {
         let bv = bv_from_oct(s)?;
         self.replace_with_bv(bv);
         Ok(())
@@ -770,7 +770,7 @@ impl Mutibs {
     /// Property of the octal representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_oct`. Assigning is equivalent
-    /// to using :meth:`~set_oct` and can change the length.
+    /// to using :meth:`~write_oct` and can change the length.
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
@@ -780,8 +780,8 @@ impl Mutibs {
     }
 
     #[setter(oct)]
-    fn set_oct_property(&mut self, s: &str) -> PyResult<()> {
-        self.set_oct(s)
+    fn write_oct_property(&mut self, s: &str) -> PyResult<()> {
+        self.write_oct(s)
     }
 
     /// Create a new instance from a hexadecimal string.
@@ -820,7 +820,7 @@ impl Mutibs {
     /// :return: None
     ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
-    pub fn set_hex(&mut self, s: &str) -> PyResult<()> {
+    pub fn write_hex(&mut self, s: &str) -> PyResult<()> {
         let bv = bv_from_hex(s)?;
         self.replace_with_bv(bv);
         Ok(())
@@ -829,7 +829,7 @@ impl Mutibs {
     /// Property of the hexadecimal representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_hex`. Assigning is equivalent
-    /// to using :meth:`~set_hex` and can change the length.
+    /// to using :meth:`~write_hex` and can change the length.
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
@@ -839,8 +839,8 @@ impl Mutibs {
     }
 
     #[setter(hex)]
-    fn set_hex_property(&mut self, s: &str) -> PyResult<()> {
-        self.set_hex(s)
+    fn write_hex_property(&mut self, s: &str) -> PyResult<()> {
+        self.write_hex(s)
     }
 
     /// Return the Mutibs as a bytes object.
@@ -859,7 +859,7 @@ impl Mutibs {
     /// :return: None
     ///
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
-    pub fn set_bytes(&mut self, data: Vec<u8>) -> PyResult<()> {
+    pub fn write_bytes(&mut self, data: Vec<u8>) -> PyResult<()> {
         let bv = bv_from_bytes_slice(data, None, None)?;
         self.replace_with_bv(bv);
         Ok(())
@@ -868,7 +868,7 @@ impl Mutibs {
     /// Property of the ``bytes`` representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_bytes`. Assigning is equivalent
-    /// to using :meth:`~set_bytes` and can change the length.
+    /// to using :meth:`~write_bytes` and can change the length.
     ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
@@ -878,8 +878,8 @@ impl Mutibs {
     }
 
     #[setter(bytes)]
-    fn set_bytes_property(&mut self, data: Vec<u8>) -> PyResult<()> {
-        self.set_bytes(data)
+    fn write_bytes_property(&mut self, data: Vec<u8>) -> PyResult<()> {
+        self.write_bytes(data)
     }
 
     /// Return a copy of the raw byte information.
@@ -979,7 +979,7 @@ impl Mutibs {
         BitCollection::to_u128(self, false)
     }
 
-    /// Set the current bits from an unsigned integer without changing the length.
+    /// Write the current bits from an unsigned integer without changing the length.
     ///
     /// :param int u: An unsigned integer.
     /// :return: None
@@ -990,19 +990,19 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs.from_zeros(8)
-    ///     >>> m.set_u(15)
+    ///     >>> m.write_u(15)
     ///     >>> m
     ///     Mutibs('0x0f')
     ///
     #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
-    pub fn set_u(&mut self, u: u128) -> PyResult<()> {
+    pub fn write_u(&mut self, u: u128) -> PyResult<()> {
         self.assign_u(u)
     }
 
     /// Property of the unsigned integer representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_u`. Assigning is equivalent to
-    /// using :meth:`~set_u`.
+    /// using :meth:`~write_u`.
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
@@ -1011,7 +1011,7 @@ impl Mutibs {
     }
 
     #[setter(u)]
-    fn set_u_property(&mut self, u: u128) -> PyResult<()> {
+    fn write_u_property(&mut self, u: u128) -> PyResult<()> {
         self.assign_u(u)
     }
 
@@ -1055,7 +1055,7 @@ impl Mutibs {
         BitCollection::to_i128(self, false)
     }
 
-    /// Set the current bits from a signed integer without changing the length.
+    /// Write the current bits from a signed integer without changing the length.
     ///
     /// :param int i: A signed integer.
     /// :return: None
@@ -1066,19 +1066,19 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs.from_zeros(4)
-    ///     >>> m.set_i(-2)
+    ///     >>> m.write_i(-2)
     ///     >>> m
     ///     Mutibs('0xe')
     ///
     #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
-    pub fn set_i(&mut self, i: i128) -> PyResult<()> {
+    pub fn write_i(&mut self, i: i128) -> PyResult<()> {
         self.assign_i(i)
     }
 
     /// Property of the signed integer representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_i`. Assigning is equivalent to
-    /// using :meth:`~set_i`.
+    /// using :meth:`~write_i`.
     ///
     /// :return: The value as a signed integer.
     #[getter]
@@ -1087,7 +1087,7 @@ impl Mutibs {
     }
 
     #[setter(i)]
-    fn set_i_property(&mut self, i: i128) -> PyResult<()> {
+    fn write_i_property(&mut self, i: i128) -> PyResult<()> {
         self.assign_i(i)
     }
 
@@ -1131,7 +1131,7 @@ impl Mutibs {
         BitCollection::to_f64(self, false)
     }
 
-    /// Set the current bits from a floating point number without changing the length.
+    /// Write the current bits from a floating point number without changing the length.
     ///
     /// The current length must be 16, 32 or 64 bits.
     ///
@@ -1141,19 +1141,19 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs.from_zeros(32)
-    ///     >>> m.set_f(1.5)
+    ///     >>> m.write_f(1.5)
     ///     >>> m
     ///     Mutibs('0x3fc00000')
     ///
     #[pyo3(signature = (f, /), text_signature = "($self, f, /)")]
-    pub fn set_f(&mut self, f: f64) -> PyResult<()> {
+    pub fn write_f(&mut self, f: f64) -> PyResult<()> {
         self.assign_f(f)
     }
 
     /// Property of the floating point representation of the Mutibs.
     ///
     /// Reading is equivalent to using :meth:`~to_f`. Assigning is equivalent to
-    /// using :meth:`~set_f`.
+    /// using :meth:`~write_f`.
     ///
     /// :return: The value as a Python float.
     #[getter]
@@ -1162,7 +1162,7 @@ impl Mutibs {
     }
 
     #[setter(f)]
-    fn set_f_property(&mut self, f: f64) -> PyResult<()> {
+    fn write_f_property(&mut self, f: f64) -> PyResult<()> {
         self.assign_f(f)
     }
 

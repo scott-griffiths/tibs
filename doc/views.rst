@@ -174,7 +174,7 @@ A :class:`MutableView` can also write interpreted values back into the source
     >>> m = Mutibs.from_u(99, 16, Endianness.Little)
     >>> m.le.u
     99
-    >>> m.le.set_u(45)
+    >>> m.le.write_u(45)
     >>> m.le.u
     45
     >>> m
@@ -186,8 +186,8 @@ The ``u``, ``i`` and ``f`` properties are settable too::
     >>> m.le.u
     123
 
-For default layout, the whole ``Mutibs`` also has ``set_u``, ``set_i`` and
-``set_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
+For default layout, the whole ``Mutibs`` also has ``write_u``, ``write_i`` and
+``write_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
 view when byte order or bit order matters.
 
 The representation properties ``bin``, ``oct``, ``hex`` and ``bytes`` are also

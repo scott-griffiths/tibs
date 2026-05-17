@@ -109,12 +109,12 @@ immutable ``Tibs``::
 Assigning interpreted values
 ============================
 
-The ``set_u``, ``set_i`` and ``set_f`` methods replace the current bits with a
+The ``write_u``, ``write_i`` and ``write_f`` methods replace the current bits with a
 new unsigned integer, signed integer or floating-point value while preserving
 the existing bit length::
 
     >>> m = Mutibs.from_zeros(8)
-    >>> m.set_u(15)
+    >>> m.write_u(15)
     >>> m
     Mutibs('0x0f')
     >>> len(m)
