@@ -19,8 +19,6 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinxcontrib.mermaid',
 ]
-autoapi_dirs = ["../tibs/"]
-autoapi_add_toctree_entry = False
 
 add_module_names = False
 
