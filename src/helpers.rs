@@ -155,7 +155,6 @@ pub(crate) fn collect_find_all_positions(
     debug_assert!(end <= haystack.len());
 
     let needle_len = needle.len();
-    let is_reverse = false;
     let step = if byte_aligned { 8 } else { 1 };
     let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
@@ -163,16 +162,10 @@ pub(crate) fn collect_find_all_positions(
         byte_search_prep(haystack, needle, start, end, alignment_mod8)
     {
         let mut matches = Vec::new();
-        let mut byte_current = if is_reverse { end / 8 - byte_base } else { 0 };
+        let mut byte_current = 0;
 
         loop {
-            let found = if is_reverse {
-                if byte_current == 0 {
-                    None
-                } else {
-                    memmem::rfind(&byte_haystack[..byte_current], &byte_needle)
-                }
-            } else if byte_current >= byte_haystack.len() {
+            let found = if byte_current >= byte_haystack.len() {
                 None
             } else {
                 memmem::find(&byte_haystack[byte_current..], &byte_needle)
@@ -183,35 +176,18 @@ pub(crate) fn collect_find_all_positions(
                 break;
             };
             matches.push(((byte_base + byte_pos) * 8) as u64);
-            if is_reverse {
-                byte_current = byte_pos + byte_needle.len().saturating_sub(1);
-            } else {
-                byte_current = byte_pos + 1;
-            }
+            byte_current = byte_pos + 1;
         }
 
         return matches;
     }
 
     let lps = compute_lps(needle);
-    let mut current_pos = if is_reverse { end } else { start };
+    let mut current_pos = start;
     let mut matches = Vec::new();
 
     loop {
-        let found = if is_reverse {
-            if current_pos <= start || current_pos > end {
-                None
-            } else {
-                rfind_bitvec_with_lps_aligned(
-                    haystack,
-                    needle,
-                    &lps,
-                    start,
-                    current_pos,
-                    alignment_mod8,
-                )
-            }
-        } else if current_pos >= haystack_len || end.saturating_sub(current_pos) < needle_len {
+        let found = if current_pos >= haystack_len || end.saturating_sub(current_pos) < needle_len {
             None
         } else {
             find_bitvec_with_lps_aligned(haystack, needle, &lps, current_pos, end, alignment_mod8)
@@ -221,11 +197,7 @@ pub(crate) fn collect_find_all_positions(
             break;
         };
         matches.push(pos as u64);
-        if is_reverse {
-            current_pos = pos + needle_len.saturating_sub(step);
-        } else {
-            current_pos = pos + step;
-        }
+        current_pos = pos + step;
     }
 
     matches
@@ -484,7 +456,6 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
     if length == 0 {
         return Ok(BV::new());
     }
-    let seed_arr = process_seed(seed);
     let num_bytes = length.div_ceil(8);
     let mut data = vec![0u8; num_bytes];
     if secure {
@@ -492,6 +463,7 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
             .try_fill_bytes(&mut data)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     } else {
+        let seed_arr = process_seed(seed);
         let mut rng = StdRng::from_seed(seed_arr);
         rng.fill_bytes(&mut data);
     }
