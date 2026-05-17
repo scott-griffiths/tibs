@@ -3,17 +3,27 @@
 Views
 -----
 
-Views wrap ``Tibs`` or ``Mutibs`` data to allow the bits inside it to be
+Views wrap a ``Tibs`` or a ``Mutibs`` to allow the bits inside it to be
 interpreted in a different way. This allows different endiannesses to be used,
 as well as different bit numbering methods when interpreting the data.
 
-Immutable ``Tibs`` values use :class:`View`. Mutable ``Mutibs`` values use
-:class:`MutableView` when created through ``m.view()``, ``m.le``, ``m.be``,
-``m.lsb0`` or ``m.msb0``. A mutable view reads from and writes to the original
-``Mutibs``.
+Both ``Tibs`` and ``Mutibs`` act like a Python container for bits - indexing and
+slicing always have the usual meaning, with indices running fron left to right.
+Interpretations of the bit data also have the usual meanings in Python::
 
-The most common reason to create a view is that a file format or protocol specifies
-values using a different byte order or bit numbering convention to the Python default.
+    >>> int.from_bytes(b'xyz')
+    7895418
+    >>> Tibs(b'xyz').u
+    7895418
+
+    >>> bytes.fromhex('abcd')
+    b'\xab\xcd'
+    >>> Tibs.from_hex('abcd').bytes
+    b'\xab\xcd'
+
+
+It's not uncommon though for a file format or protocol to specify using a different byte order or bit numbering
+convention to the Python default. For these cases we can create a ``View``  or a ``MutableView``.
 
 For example, let's create a four-byte ``Tibs`` and interpret it as an unsigned int::
 
@@ -29,7 +39,7 @@ A little-endian interpretation essentially reverses the byte order, so the least
 significant byte is the first one. Without changing the data at all, we can create
 a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
 
-    >>> v = View(t, Endianness.Little)
+    >>> v = t.view(Endianness.Little)
     >>> v
     View(Tibs('0x01000000'), byte_order=Endianness.Little)
     >>> v.to_hex()
@@ -48,10 +58,11 @@ This is all quite a lot of typing, so a more convenient way to create a view fro
 These can be combined. For example ``t.lsb0.le`` means that bit labels are LSB0,
 and whole-byte values should be interpreted as little-endian.
 
-So for the above example, if we also use the :attr:`Tibs.u` property instead of ``.to_u()``, we
-get the much more convenient ::
+So for the above example, if we also use the :attr:`Tibs.u` property instead of ``.to_u()`` to make it much more convenient ::
 
-    >>> t.le.u
+    >>> t.view(Endianness.Little).to_u()
+    1
+    >>> t.le.u  # Same thing, but using properties
     1
 
 
@@ -59,9 +70,8 @@ Views and data
 ^^^^^^^^^^^^^^
 
 A view created from a ``Tibs`` is immutable: it keeps the same immutable data and
-adds interpretation settings. A view created from a ``Mutibs`` using
-``m.view()``, ``m.le``, ``m.be``, ``m.lsb0`` or ``m.msb0`` is a
-:class:`MutableView`. It keeps a live reference to the ``Mutibs``, so later
+adds interpretation settings. A :class:`MutableView` created from a ``Mutibs``
+ keeps a live reference to the ``Mutibs``, so later
 changes to the ``Mutibs`` are reflected in the view.
 
 The direct :class:`View` constructor is intentionally stricter than ``Tibs``.
@@ -72,33 +82,8 @@ Passing a ``Mutibs`` to the direct :class:`View` constructor still creates an
 immutable snapshot. Use :class:`MutableView` or the ``Mutibs`` view helpers when
 you want live mutable behavior.
 
-This emphasises that views are interpretation wrappers rather than another way
+Views are intended as interpretation wrappers rather than as another way
 to construct binary data.
-
-Mutable views
-^^^^^^^^^^^^^
-
-A :class:`MutableView` can also write interpreted values back into the source
-``Mutibs`` without changing its length. The view supplies the layout::
-
-    >>> m = Mutibs.from_u(99, 16, Endianness.Little)
-    >>> m.le.u
-    99
-    >>> m.le.set_u(45)
-    >>> m.le.u
-    45
-    >>> m
-    Mutibs('0x2d00')
-
-The ``u``, ``i`` and ``f`` properties are settable too::
-
-    >>> m.le.u = 123
-    >>> m.le.u
-    123
-
-For default layout, the whole ``Mutibs`` also has ``set_u``, ``set_i`` and
-``set_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
-view when byte order or bit order matters.
 
 Byte order
 ^^^^^^^^^^
@@ -178,6 +163,32 @@ Let's go through these one at a time:
 For ordinary Python indexing and slicing, use the ``Tibs`` or ``Mutibs`` directly.
 Views don't provide their own slicing interface, as that would make it too easy
 to confuse normal Python slices with specification field labels.
+
+
+Mutable views
+^^^^^^^^^^^^^
+
+A :class:`MutableView` can also write interpreted values back into the source
+``Mutibs`` without changing its length. The view supplies the layout::
+
+    >>> m = Mutibs.from_u(99, 16, Endianness.Little)
+    >>> m.le.u
+    99
+    >>> m.le.set_u(45)
+    >>> m.le.u
+    45
+    >>> m
+    Mutibs('0x2d00')
+
+The ``u``, ``i`` and ``f`` properties are settable too::
+
+    >>> m.le.u = 123
+    >>> m.le.u
+    123
+
+For default layout, the whole ``Mutibs`` also has ``set_u``, ``set_i`` and
+``set_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
+view when byte order or bit order matters.
 
 Fields
 ^^^^^^

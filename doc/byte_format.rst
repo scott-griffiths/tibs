@@ -310,10 +310,5 @@ so the final sequence is ::
 Notes
 """""
 
-Encoding is self-delimiting. A decoder can return both:
-
-- The decoded Tibs value
-- The exact number of bytes consumed
-
-This enables safe concatenation of multiple encoded Tibs values in one byte stream.
-
+The public decoder expects a single complete encoded Tibs value. It raises
+``ValueError`` if additional bytes remain after that value.
