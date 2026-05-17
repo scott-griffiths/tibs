@@ -71,8 +71,8 @@ Views and data
 
 A view created from a ``Tibs`` is immutable: it keeps the same immutable data and
 adds interpretation settings. A :class:`MutableView` created from a ``Mutibs``
- keeps a live reference to the ``Mutibs``, so later
-changes to the ``Mutibs`` are reflected in the view.
+keeps a live reference to the ``Mutibs``, so later changes to the ``Mutibs`` are
+reflected in the view.
 
 The direct :class:`View` constructor is intentionally stricter than ``Tibs``.
 It accepts a ``Tibs`` or ``Mutibs`` object, but not other types that could be
@@ -189,6 +189,20 @@ The ``u``, ``i`` and ``f`` properties are settable too::
 For default layout, the whole ``Mutibs`` also has ``set_u``, ``set_i`` and
 ``set_f`` methods and settable ``u``, ``i`` and ``f`` properties. Use a mutable
 view when byte order or bit order matters.
+
+The representation properties ``bin``, ``oct``, ``hex`` and ``bytes`` are also
+settable on a :class:`MutableView`, but the assigned value must have the same bit
+length as the view::
+
+    >>> m = Mutibs('0x0000')
+    >>> m.le.hex = 'abcd'
+    >>> m.le.hex
+    'abcd'
+    >>> m
+    Mutibs('0xcdab')
+
+If you need to change the length, assign to the source ``Mutibs`` or use slice
+assignment. Views are fixed mappings onto their current source bits.
 
 Fields
 ^^^^^^

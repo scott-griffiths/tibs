@@ -93,8 +93,9 @@ A subset of these methods return lossless representations of the exact bit seque
 * :meth:`Tibs.to_hex()` / :attr:`Tibs.hex`. Converts to a hexadecimal string. Length must be a multiple of 4.
 * :meth:`Tibs.to_bytes()` / :attr:`Tibs.bytes`. Converts to a ``bytes`` object. Length must be a multiple of 8.
 
-These ``to_`` methods don't accept any parameters, so read-only properties are provided as a convenient alias.
+These ``to_`` methods don't accept any parameters, so properties are provided as a convenient alias.
 So instead of using ``t.to_bin()`` you can use just ``t.bin`` as there is no ambiguity.
+For ``Tibs`` instances these properties are read-only.
 
 Many of these representations need the data to have a length that's a correct multiple, for example ``bytes``
 needs the data length to be a multiple of 8::

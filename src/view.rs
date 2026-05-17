@@ -1,6 +1,9 @@
 use crate::core::BitCollection;
 use crate::enums::{BitOrder, Endianness};
-use crate::helpers::{BS, BV, bv_from_f64, bv_from_i128, bv_from_u128};
+use crate::helpers::{
+    BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
+    bv_from_u128,
+};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -328,6 +331,21 @@ impl MutableView {
         Ok(())
     }
 
+    fn assign_fixed_width_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
+        let source = self.source.borrow(py);
+        let len = self.validate_current_layout(source.len())?;
+        drop(source);
+
+        if viewed.len() != len {
+            return Err(PyValueError::new_err(format!(
+                "Cannot change the length of a MutableView. The current length is {len} bits, but the assigned value has {} bits. Use the source Mutibs or slice assignment when changing shape.",
+                viewed.len()
+            )));
+        }
+
+        self.assign_from_view_bits(py, viewed)
+    }
+
     fn assign_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
         let source = self.source.borrow(py);
         let len = self.validate_current_layout(source.len())?;
@@ -468,9 +486,23 @@ impl MutableView {
         Ok(BitCollection::to_binary(&self.to_tibs_view(py)?))
     }
 
+    /// Set the viewed bits from a binary string without changing the view length.
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_bin(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        let viewed = bv_from_bin(s)?;
+        self.assign_fixed_width_view_bits(py, viewed)
+    }
+
     /// Return the viewed bits as an octal string.
     pub fn to_oct(&self, py: Python<'_>) -> PyResult<String> {
         BitCollection::to_octal(&self.to_tibs_view(py)?)
+    }
+
+    /// Set the viewed bits from an octal string without changing the view length.
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_oct(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        let viewed = bv_from_oct(s)?;
+        self.assign_fixed_width_view_bits(py, viewed)
     }
 
     /// Return the viewed bits as a hexadecimal string.
@@ -478,9 +510,23 @@ impl MutableView {
         BitCollection::to_hexadecimal(&self.to_tibs_view(py)?)
     }
 
+    /// Set the viewed bits from a hexadecimal string without changing the view length.
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_hex(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        let viewed = bv_from_hex(s)?;
+        self.assign_fixed_width_view_bits(py, viewed)
+    }
+
     /// Return the viewed bits as bytes.
     pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(&self.to_tibs_view(py)?)
+    }
+
+    /// Set the viewed bits from a bytes-like object without changing the view length.
+    #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
+    pub fn set_bytes(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
+        let viewed = bv_from_bytes_slice(data, None, None)?;
+        self.assign_fixed_width_view_bits(py, viewed)
     }
 
     /// Materialize the current view as a new :class:`Tibs`.
@@ -559,10 +605,20 @@ impl MutableView {
         self.to_bin(py)
     }
 
+    #[setter(bin)]
+    fn set_bin_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.set_bin(py, s)
+    }
+
     /// Return the viewed bits as an octal string.
     #[getter]
     fn oct(&self, py: Python<'_>) -> PyResult<String> {
         self.to_oct(py)
+    }
+
+    #[setter(oct)]
+    fn set_oct_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.set_oct(py, s)
     }
 
     /// Return the viewed bits as a hexadecimal string.
@@ -571,10 +627,20 @@ impl MutableView {
         self.to_hex(py)
     }
 
+    #[setter(hex)]
+    fn set_hex_property(&self, py: Python<'_>, s: &str) -> PyResult<()> {
+        self.set_hex(py, s)
+    }
+
     /// Return the viewed bits as bytes.
     #[getter]
     fn bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
         self.to_bytes(py)
+    }
+
+    #[setter(bytes)]
+    fn set_bytes_property(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
+        self.set_bytes(py, data)
     }
 
     pub fn __repr__(&self, py: Python<'_>) -> String {

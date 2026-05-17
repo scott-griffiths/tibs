@@ -1311,6 +1311,61 @@ def test_convenience_properties():
     assert m[:8].to_bytes() == m[:8].bytes
 
 
+def test_representation_set_methods_replace_value_and_may_resize():
+    m = Mutibs('0xff')
+
+    assert m.set_bin('0b101') is None
+    assert m == Mutibs('0b101')
+    assert len(m) == 3
+
+    assert m.set_oct('17') is None
+    assert m == Mutibs('0b001111')
+    assert len(m) == 6
+
+    assert m.set_hex('123') is None
+    assert m == Mutibs('0x123')
+    assert len(m) == 12
+
+    assert m.set_bytes(b'\xab\xcd') is None
+    assert m == Mutibs('0xabcd')
+    assert len(m) == 16
+
+
+def test_representation_property_setters_replace_value_and_may_resize():
+    m = Mutibs('0xff')
+
+    m.bin = '10_1'
+    assert m == Mutibs('0b101')
+    assert len(m) == 3
+
+    m.oct = '7'
+    assert m == Mutibs('0b111')
+    assert len(m) == 3
+
+    m.hex = '0xabc'
+    assert m == Mutibs('0xabc')
+    assert len(m) == 12
+
+    m.bytes = bytearray(b'AZ')
+    assert m == Mutibs(b'AZ')
+    assert len(m) == 16
+
+
+def test_representation_setter_errors_leave_value_unchanged():
+    m = Mutibs('0xff')
+    original = m.to_tibs()
+
+    with pytest.raises(ValueError):
+        m.set_hex('not hex')
+
+    assert m == original
+
+    with pytest.raises(ValueError):
+        m.oct = '8'
+
+    assert m == original
+
+
 def test_byte_swapped():
     a = Mutibs.from_bytes(b'!olleh')
     b = a.byte_swapped()

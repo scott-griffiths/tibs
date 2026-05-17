@@ -188,6 +188,11 @@ impl Mutibs {
         Ok(())
     }
 
+    #[inline]
+    fn replace_with_bv(&mut self, value: BV) {
+        self.data = value;
+    }
+
     pub(crate) fn ixor(&mut self, other: &BS) -> PyResult<()> {
         validate_logical_op_lengths(self.len(), other.len())?;
         *self.as_mut_bitvec_ref() ^= other;
@@ -690,14 +695,34 @@ impl Mutibs {
         BitCollection::to_binary(self)
     }
 
-    /// Read-only property of the binary representation of the Mutibs.
+    /// Replace the current bits from a binary string.
     ///
-    /// Equivalent to using :meth:`~to_bin`.
+    /// This can change the length of the ``Mutibs``.
+    ///
+    /// :param str s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
+    /// :return: None
+    ///
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_bin(&mut self, s: &str) -> PyResult<()> {
+        let bv = bv_from_bin(s)?;
+        self.replace_with_bv(bv);
+        Ok(())
+    }
+
+    /// Property of the binary representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_bin`. Assigning is equivalent
+    /// to using :meth:`~set_bin` and can change the length.
     ///
     /// :return: The binary representation.
     #[getter]
     fn bin(&self) -> String {
         BitCollection::to_binary(self)
+    }
+
+    #[setter(bin)]
+    fn set_bin_property(&mut self, s: &str) -> PyResult<()> {
+        self.set_bin(s)
     }
 
     /// Create a new instance from an octal string.
@@ -728,15 +753,35 @@ impl Mutibs {
         BitCollection::to_octal(self)
     }
 
-    /// Read-only property of the octal representation of the Mutibs.
+    /// Replace the current bits from an octal string.
     ///
-    /// Equivalent to using :meth:`~to_oct`.
+    /// This can change the length of the ``Mutibs``.
+    ///
+    /// :param str s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
+    /// :return: None
+    ///
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_oct(&mut self, s: &str) -> PyResult<()> {
+        let bv = bv_from_oct(s)?;
+        self.replace_with_bv(bv);
+        Ok(())
+    }
+
+    /// Property of the octal representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_oct`. Assigning is equivalent
+    /// to using :meth:`~set_oct` and can change the length.
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
     #[getter]
     fn oct(&self) -> PyResult<String> {
         BitCollection::to_octal(self)
+    }
+
+    #[setter(oct)]
+    fn set_oct_property(&mut self, s: &str) -> PyResult<()> {
+        self.set_oct(s)
     }
 
     /// Create a new instance from a hexadecimal string.
@@ -767,15 +812,35 @@ impl Mutibs {
         BitCollection::to_hexadecimal(self)
     }
 
-    /// Read-only property of the hexadecimal representation of the Mutibs.
+    /// Replace the current bits from a hexadecimal string.
     ///
-    /// Equivalent to using :meth:`~to_hex`.
+    /// This can change the length of the ``Mutibs``.
+    ///
+    /// :param str s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
+    /// :return: None
+    ///
+    #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
+    pub fn set_hex(&mut self, s: &str) -> PyResult<()> {
+        let bv = bv_from_hex(s)?;
+        self.replace_with_bv(bv);
+        Ok(())
+    }
+
+    /// Property of the hexadecimal representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_hex`. Assigning is equivalent
+    /// to using :meth:`~set_hex` and can change the length.
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
     #[getter]
     fn hex(&self) -> PyResult<String> {
         BitCollection::to_hexadecimal(self)
+    }
+
+    #[setter(hex)]
+    fn set_hex_property(&mut self, s: &str) -> PyResult<()> {
+        self.set_hex(s)
     }
 
     /// Return the Mutibs as a bytes object.
@@ -786,15 +851,35 @@ impl Mutibs {
         BitCollection::to_byte_data(self)
     }
 
-    /// Read-only property of the ``bytes`` representation of the Mutibs.
+    /// Replace the current bits from a bytes-like object.
     ///
-    /// Equivalent to using :meth:`~to_bytes`.
+    /// This can change the length of the ``Mutibs``.
+    ///
+    /// :param bytes data: A bytes-like object.
+    /// :return: None
+    ///
+    #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
+    pub fn set_bytes(&mut self, data: Vec<u8>) -> PyResult<()> {
+        let bv = bv_from_bytes_slice(data, None, None)?;
+        self.replace_with_bv(bv);
+        Ok(())
+    }
+
+    /// Property of the ``bytes`` representation of the Mutibs.
+    ///
+    /// Reading is equivalent to using :meth:`~to_bytes`. Assigning is equivalent
+    /// to using :meth:`~set_bytes` and can change the length.
     ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     #[getter]
     fn bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(self)
+    }
+
+    #[setter(bytes)]
+    fn set_bytes_property(&mut self, data: Vec<u8>) -> PyResult<()> {
+        self.set_bytes(data)
     }
 
     /// Return a copy of the raw byte information.

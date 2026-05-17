@@ -216,6 +216,51 @@ def test_mutable_view_combined_layout_set_u_roundtrips():
     assert m == Mutibs("0x2c48")
 
 
+def test_mutable_view_representation_setters_preserve_length_and_use_layout():
+    m = Mutibs.from_zeros(16)
+
+    assert m.le.set_hex("abcd") is None
+    assert len(m) == 16
+    assert m.le.hex == "abcd"
+    assert m == Mutibs("0xcdab")
+
+    assert m.le.set_bytes(b"\x12\x34") is None
+    assert len(m) == 16
+    assert m.le.bytes == b"\x12\x34"
+    assert m == Mutibs("0x3412")
+
+    bits = Mutibs.from_zeros(8)
+    bits.lsb0.bin = "00010010"
+    assert len(bits) == 8
+    assert bits.lsb0.bin == "00010010"
+    assert bits == Mutibs("0x48")
+
+    octal = Mutibs.from_zeros(6)
+    octal.view().oct = "17"
+    assert len(octal) == 6
+    assert octal == Mutibs("0b001111")
+
+
+def test_mutable_view_representation_setters_reject_width_changes():
+    m = Mutibs("0xffff")
+    original = m.to_tibs()
+
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        m.view().bin = "101"
+
+    assert m == original
+
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        m.le.hex = "123"
+
+    assert m == original
+
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        m.lsb0.bytes = b"\x00"
+
+    assert m == original
+
+
 def test_mutable_view_field_returns_mutable_view_and_writes_whole_byte_field():
     m = Mutibs("0x23a11234")
     field = m.lsb0.le.field(31, 16)
@@ -229,6 +274,23 @@ def test_mutable_view_field_returns_mutable_view_and_writes_whole_byte_field():
     assert field.u == 0x5678
     assert m == Mutibs("0x23a15678")
     assert m.lsb0.le.field(31, 16).u == 0x5678
+
+
+def test_mutable_view_field_representation_setters_are_fixed_width():
+    m = Mutibs("0x23a11234")
+    field = m.lsb0.le.field(31, 16)
+
+    field.hex = "5678"
+
+    assert field.hex == "5678"
+    assert field.u == 0x5678
+    assert m == Mutibs("0x23a15678")
+
+    original = m.to_tibs()
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        field.hex = "123"
+
+    assert m == original
 
 
 def test_mutable_view_field_endpoint_order_does_not_change_write_mapping():

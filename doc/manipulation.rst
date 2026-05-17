@@ -151,6 +151,11 @@ current bit order::
     >>> m
     Mutibs('0x23a15678')
 
+Unlike assignment on the source ``Mutibs``, assignment through a
+:class:`MutableView` cannot change the view's length. This keeps byte-order,
+bit-order and field views as fixed mappings onto existing source bits. Use the
+source ``Mutibs`` or slice assignment when the shape needs to change.
+
 Reordering bits
 ===============
 
