@@ -18,7 +18,12 @@ impl Endianness {
         }
     }
 
-    pub fn is_little_endian(optional_endianness: Option<Self>, length: usize) -> PyResult<bool> {
+    pub fn is_little_endian(optional_endianness: Option<Self>, length: i64) -> PyResult<bool> {
+        if length < 0 {
+            return Err(PyValueError::new_err(format!(
+                "Negative bit length given: {length}."
+            )));
+        }
         match optional_endianness {
             Some(Endianness::Big) => {
                 if length % 8 != 0 {

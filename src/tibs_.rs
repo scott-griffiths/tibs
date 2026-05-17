@@ -815,7 +815,7 @@ impl Tibs {
         length: i64,
         endianness: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
+        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
         Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?))
     }
 
@@ -864,7 +864,7 @@ impl Tibs {
         length: i64,
         endianness: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
+        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
         Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?))
     }
 
@@ -911,7 +911,7 @@ impl Tibs {
         length: i64,
         endianness: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length as usize)?;
+        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
         let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Tibs::from_bv(bv))
     }
