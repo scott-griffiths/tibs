@@ -276,6 +276,19 @@ def test_mutable_view_field_returns_mutable_view_and_writes_whole_byte_field():
     assert m.lsb0.le.field(31, 16).u == 0x5678
 
 
+def test_mutable_view_field_repr_includes_source_selection():
+    m = Mutibs("0x000fff")
+    v = m.be.field(0, 11)
+    namespace = {"Mutibs": Mutibs, "MutableView": MutableView, "range": range}
+
+    assert v.hex == "000"
+    assert repr(v) == "MutableView(Mutibs('0x000fff'), source_indices=range(0, 12))"
+    recreated = eval(repr(v), namespace)
+    assert isinstance(recreated, MutableView)
+    assert recreated.hex == v.hex
+    assert len(recreated) == len(v)
+
+
 def test_mutable_view_field_representation_setters_are_fixed_width():
     m = Mutibs("0x23a11234")
     field = m.lsb0.le.field(31, 16)

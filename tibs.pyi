@@ -99,7 +99,8 @@ class MutableView:
             self,
             source: Mutibs,
             byte_order: Endianness = Endianness.Unspecified,
-            bit_order: BitOrder = BitOrder.Msb0
+            bit_order: BitOrder = BitOrder.Msb0,
+            source_indices: Iterable[int] | None = None
     ) -> None: ...
 
     def view(

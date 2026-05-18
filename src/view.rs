@@ -180,15 +180,37 @@ enum MutableSelection {
 }
 
 impl MutableSelection {
+    fn from_source_indices(indices: Vec<usize>, source_len: usize) -> PyResult<Self> {
+        let selection = MutableSelection::Field { indices };
+        selection.validate(source_len)?;
+        Ok(selection)
+    }
+
+    fn validate(&self, source_len: usize) -> PyResult<()> {
+        if let MutableSelection::Field { indices } = self {
+            if indices.iter().any(|&index| index >= source_len) {
+                return Err(PyValueError::new_err(
+                    "MutableView source is too short for this field.",
+                ));
+            }
+
+            let mut sorted = indices.clone();
+            sorted.sort_unstable();
+            if sorted.windows(2).any(|window| window[0] == window[1]) {
+                return Err(PyValueError::new_err(
+                    "MutableView source indices must not contain duplicates.",
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     fn len(&self, source_len: usize) -> PyResult<usize> {
         match self {
             MutableSelection::Whole => Ok(source_len),
             MutableSelection::Field { indices } => {
-                if indices.iter().any(|&index| index >= source_len) {
-                    return Err(PyValueError::new_err(
-                        "MutableView source is too short for this field.",
-                    ));
-                }
+                self.validate(source_len)?;
                 Ok(indices.len())
             }
         }
@@ -203,6 +225,32 @@ impl MutableSelection {
             }
         }
     }
+
+    fn repr_part(&self) -> Option<String> {
+        match self {
+            MutableSelection::Whole => None,
+            MutableSelection::Field { indices } => {
+                Some(format!("source_indices={}", format_source_indices(indices)))
+            }
+        }
+    }
+}
+
+fn format_source_indices(indices: &[usize]) -> String {
+    if indices.is_empty() {
+        return "[]".to_string();
+    }
+
+    if indices.windows(2).all(|window| window[1] == window[0] + 1) {
+        return format!("range({}, {})", indices[0], indices[0] + indices.len());
+    }
+
+    if indices.windows(2).all(|window| window[0] == window[1] + 1) {
+        let stop = *indices.last().unwrap() as isize - 1;
+        return format!("range({}, {}, -1)", indices[0], stop);
+    }
+
+    format!("{indices:?}")
 }
 
 ///     A live mutable view of a :class:`Mutibs` with different interpretation settings.
@@ -384,17 +432,30 @@ impl MutableView {
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
+    /// ``source_indices`` can be used to recreate a field view from source bit
+    /// positions. It is usually more convenient to use :meth:`~field`.
+    ///
     #[new]
-    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0, source_indices = None), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0, source_indices=None)")]
     pub fn py_new(
         source: PyRef<'_, Mutibs>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
+        source_indices: Option<Vec<usize>>,
     ) -> PyResult<Self> {
         let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
-        View::validate_layout(source.len(), byte_order, bit_order)?;
-        Ok(Self::from_mutibs(source.into(), byte_order, bit_order))
+        let selection = match source_indices {
+            Some(indices) => MutableSelection::from_source_indices(indices, source.len())?,
+            None => MutableSelection::Whole,
+        };
+        View::validate_layout(selection.len(source.len())?, byte_order, bit_order)?;
+        Ok(Self::from_parts(
+            source.into(),
+            byte_order,
+            bit_order,
+            selection,
+        ))
     }
 
     /// Return a mutable view with updated interpretation settings.
@@ -646,6 +707,9 @@ impl MutableView {
     pub fn __repr__(&self, py: Python<'_>) -> String {
         let source = self.source.borrow(py);
         let mut parts = vec![source.__repr__()];
+        if let Some(selection) = self.selection.repr_part() {
+            parts.push(selection);
+        }
         if self.byte_order != Endianness::Unspecified {
             parts.push(format!("byte_order={}", self.byte_order.repr_name()));
         }
