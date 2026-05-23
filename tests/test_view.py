@@ -37,6 +37,34 @@ def test_view_constructor_validates_byte_oriented_layout():
         _ = View(t, bit_order=BitOrder.Lsb0)
 
 
+def test_view_from_source_indices_accepts_ranges_and_iterables():
+    t = Tibs("0b01101001")
+
+    assert View.from_source_indices(t, range(0, 8, 2)).bin == "0110"
+    assert View.from_source_indices(t, range(7, -1, -2)).bin == "1001"
+    assert View.from_source_indices(t, (i for i in [1, 3, 5])).bin == "100"
+
+
+def test_view_from_source_indices_snapshots_mutibs_source():
+    m = Mutibs("0b01101001")
+    v = View.from_source_indices(m, range(0, 8, 2))
+
+    assert v.bin == "0110"
+
+    m[2] = False
+    assert v.bin == "0110"
+
+
+def test_view_from_source_indices_validates_source_indices():
+    t = Tibs("0b0110")
+
+    with pytest.raises(ValueError, match="too short"):
+        _ = View.from_source_indices(t, [4])
+
+    with pytest.raises(ValueError, match="duplicates"):
+        _ = View.from_source_indices(t, [0, 0])
+
+
 def test_tibs_view_aliases_create_views():
     t = Tibs("0x1234")
 
@@ -56,6 +84,39 @@ def test_mutibs_view_aliases_create_views():
     assert repr(m.le) == "MutableView(Mutibs('0xaa'), byte_order=Endianness.Little)"
     assert repr(m.lsb0) == "MutableView(Mutibs('0xaa'), bit_order=BitOrder.Lsb0)"
     assert len(m.lsb0) == len(m)
+
+
+def test_mutable_view_constructor_rejects_source_indices():
+    m = Mutibs("0xaa")
+
+    with pytest.raises(TypeError):
+        _ = MutableView(m, source_indices=range(0, 8))
+
+
+def test_mutable_view_from_source_indices_accepts_ranges_and_iterables():
+    m = Mutibs("0x00")
+    v = MutableView.from_source_indices(m, range(0, 8, 2))
+
+    assert repr(v) == "MutableView.from_source_indices(Mutibs('0x00'), range(0, 8, 2))"
+    assert v.bin == "0000"
+
+    v.bin = "1111"
+    assert m == Mutibs("0xaa")
+
+    reverse = MutableView.from_source_indices(m, (i for i in [7, 5, 3, 1]))
+    assert reverse.bin == "0000"
+    reverse.bin = "1111"
+    assert m == Mutibs("0xff")
+
+
+def test_mutable_view_from_source_indices_validates_source_indices():
+    m = Mutibs("0b0110")
+
+    with pytest.raises(ValueError, match="too short"):
+        _ = MutableView.from_source_indices(m, [4])
+
+    with pytest.raises(ValueError, match="duplicates"):
+        _ = MutableView.from_source_indices(m, [0, 0])
 
 
 def test_view_chaining_preserves_source_and_updates_layout():
@@ -282,7 +343,7 @@ def test_mutable_view_field_repr_includes_source_selection():
     namespace = {"Mutibs": Mutibs, "MutableView": MutableView, "range": range}
 
     assert v.hex == "000"
-    assert repr(v) == "MutableView(Mutibs('0x000fff'), source_indices=range(0, 12))"
+    assert repr(v) == "MutableView.from_source_indices(Mutibs('0x000fff'), range(0, 12))"
     recreated = eval(repr(v), namespace)
     assert isinstance(recreated, MutableView)
     assert recreated.hex == v.hex

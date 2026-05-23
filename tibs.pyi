@@ -30,6 +30,15 @@ class View:
             bit_order: BitOrder = BitOrder.Msb0
     ) -> None: ...
 
+    @classmethod
+    def from_source_indices(
+            cls,
+            source: Tibs | Mutibs,
+            source_indices: Iterable[int],
+            byte_order: Endianness = Endianness.Unspecified,
+            bit_order: BitOrder = BitOrder.Msb0
+    ) -> View: ...
+
     def view(
             self,
             byte_order: Endianness | None = None,
@@ -99,9 +108,17 @@ class MutableView:
             self,
             source: Mutibs,
             byte_order: Endianness = Endianness.Unspecified,
-            bit_order: BitOrder = BitOrder.Msb0,
-            source_indices: Iterable[int] | None = None
+            bit_order: BitOrder = BitOrder.Msb0
     ) -> None: ...
+
+    @classmethod
+    def from_source_indices(
+            cls,
+            source: Mutibs,
+            source_indices: Iterable[int],
+            byte_order: Endianness = Endianness.Unspecified,
+            bit_order: BitOrder = BitOrder.Msb0
+    ) -> MutableView: ...
 
     def view(
             self,

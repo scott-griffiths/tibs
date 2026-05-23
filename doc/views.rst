@@ -234,6 +234,12 @@ to the original ``Mutibs``::
     >>> m
     Mutibs('0x23a15678')
 
+For low-level reconstruction from physical source bit positions, use
+:meth:`View.from_source_indices` or :meth:`MutableView.from_source_indices`.
+The ``source_indices`` argument may be a ``range`` or any iterable of integers.
+For ordinary fields described by a specification, prefer :meth:`View.field` or
+:meth:`MutableView.field`.
+
 As a more complete example, suppose a format starts with a 32-bit little-endian
 header. The first byte in the file contains bits 7:0, the next byte contains bits
 15:8, and so on, but the standard draws the complete word with bit 31 on the
