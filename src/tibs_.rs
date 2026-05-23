@@ -312,7 +312,7 @@ impl Tibs {
     ///     >>> Tibs('0x0100').view(byte_order=Endianness.Little).u
     ///     1
     ///
-    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order, bit_order)")]
     pub fn view(
         slf: PyRef<'_, Self>,
         byte_order: Option<Endianness>,
@@ -808,7 +808,7 @@ impl Tibs {
     ///     Tibs('0x0f')
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, u, /, length, endianness=Endianness.Unspecified)")]
+    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, u, /, length, endianness)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
@@ -857,7 +857,7 @@ impl Tibs {
     ///     Tibs('0xe')
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, i, /, length, endianness=Endianness.Unspecified)")]
+    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, i, /, length, endianness)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
@@ -904,7 +904,7 @@ impl Tibs {
     ///     Tibs('0x3fc00000')
     ///
     #[classmethod]
-    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, f, /, length, endianness=Endianness.Unspecified)")]
+    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, f, /, length, endianness)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
