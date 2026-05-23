@@ -264,6 +264,13 @@ impl MutableSelection {
             }
         }
     }
+
+    fn comparable_source_indices(&self, source_len: usize) -> Vec<usize> {
+        match self {
+            MutableSelection::Whole => (0..source_len).collect(),
+            MutableSelection::Field { indices } => indices.clone(),
+        }
+    }
 }
 
 fn format_source_indices(indices: &[usize]) -> String {
@@ -783,6 +790,25 @@ impl MutableView {
             }
         }
     }
+
+    /// Return True if two MutableViews have the same source value and layout.
+    pub fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let Ok(other) = other.extract::<PyRef<'_, MutableView>>() else {
+            return Ok(false);
+        };
+
+        if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
+            return Ok(false);
+        }
+
+        let source = self.source.borrow(py);
+        let other_source = other.source.borrow(py);
+        Ok(source.as_bitvec_ref() == other_source.as_bitvec_ref()
+            && self.selection.comparable_source_indices(source.len())
+                == other
+                    .selection
+                    .comparable_source_indices(other_source.len()))
+    }
 }
 
 #[pymethods]
@@ -1163,5 +1189,16 @@ impl View {
         parts.push(self.byte_order.repr_name().to_string());
         parts.push(self.bit_order.repr_name().to_string());
         format!("View({})", parts.join(", "))
+    }
+
+    /// Return True if two Views have the same source value and layout.
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let Ok(other) = other.extract::<PyRef<'_, View>>() else {
+            return Ok(false);
+        };
+
+        Ok(self.source == other.source
+            && self.byte_order == other.byte_order
+            && self.bit_order == other.bit_order)
     }
 }

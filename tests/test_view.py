@@ -69,6 +69,20 @@ def test_view_from_source_indices_validates_source_indices():
         _ = View.from_source_indices(t, [0, 0])
 
 
+def test_view_equality_uses_type_source_and_layout():
+    t = Tibs("0x12")
+    m = Mutibs("0x12")
+
+    assert View(t) == View(m)
+    assert View.from_source_indices(Tibs("0xf0"), range(0, 4)) == View(Tibs("0xf"))
+
+    assert View(t) != t
+    assert View(t) != MutableView(m)
+    assert View(t) != View(Tibs("0x13"))
+    assert View(t) != View(t, byte_order=Endianness.Big)
+    assert View(t) != View(t, bit_order=BitOrder.Lsb0)
+
+
 def test_tibs_view_aliases_create_views():
     t = Tibs("0x1234")
 
@@ -132,6 +146,30 @@ def test_mutable_view_from_source_indices_validates_source_indices():
 
     with pytest.raises(ValueError, match="duplicates"):
         _ = MutableView.from_source_indices(m, [0, 0])
+
+
+def test_mutable_view_equality_uses_type_source_layout_and_source_indices():
+    m1 = Mutibs("0xff")
+    m2 = Mutibs("0xff")
+
+    assert MutableView(m1) == MutableView(m2)
+    assert MutableView(m1) == MutableView.from_source_indices(m1, range(len(m1)))
+
+    assert MutableView(m1) != View(m1)
+    assert MutableView(m1) != m1
+    assert MutableView(m1) != MutableView(Mutibs("0x00"))
+    assert MutableView(m1) != MutableView(m1, byte_order=Endianness.Big)
+    assert MutableView(m1) != MutableView(m1, bit_order=BitOrder.Lsb0)
+    assert MutableView.from_source_indices(m1, range(0, 4)) != (
+        MutableView.from_source_indices(m1, range(4, 8))
+    )
+
+    v1 = MutableView(m1)
+    v2 = MutableView(m2)
+    assert v1 == v2
+
+    m2[0] = False
+    assert v1 != v2
 
 
 def test_view_chaining_preserves_source_and_updates_layout():
