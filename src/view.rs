@@ -774,12 +774,8 @@ impl MutableView {
                 vec![source.__repr__(), format_source_indices(indices)]
             }
         };
-        if self.byte_order != Endianness::Unspecified {
-            parts.push(format!("byte_order={}", self.byte_order.repr_name()));
-        }
-        if self.bit_order != BitOrder::Msb0 {
-            parts.push(format!("bit_order={}", self.bit_order.repr_name()));
-        }
+        parts.push(self.byte_order.repr_name().to_string());
+        parts.push(self.bit_order.repr_name().to_string());
         match &self.selection {
             MutableSelection::Whole => format!("MutableView({})", parts.join(", ")),
             MutableSelection::Field { .. } => {
@@ -1164,12 +1160,8 @@ impl View {
 
     pub fn __repr__(&self) -> String {
         let mut parts = vec![self.source.__repr__()];
-        if self.byte_order != Endianness::Unspecified {
-            parts.push(format!("byte_order={}", self.byte_order.repr_name()));
-        }
-        if self.bit_order != BitOrder::Msb0 {
-            parts.push(format!("bit_order={}", self.bit_order.repr_name()));
-        }
+        parts.push(self.byte_order.repr_name().to_string());
+        parts.push(self.bit_order.repr_name().to_string());
         format!("View({})", parts.join(", "))
     }
 }
