@@ -41,17 +41,17 @@ def test_view_constructor_validates_byte_oriented_layout():
         _ = View(t, bit_order=BitOrder.Lsb0)
 
 
-def test_view_from_source_indices_accepts_ranges_and_iterables():
+def test_view_from_indices_accepts_ranges_and_iterables():
     t = Tibs("0b01101001")
 
-    assert View.from_source_indices(t, range(0, 8, 2)).bin == "0110"
-    assert View.from_source_indices(t, range(7, -1, -2)).bin == "1001"
-    assert View.from_source_indices(t, (i for i in [1, 3, 5])).bin == "100"
+    assert View.from_indices(t, range(0, 8, 2)).bin == "0110"
+    assert View.from_indices(t, range(7, -1, -2)).bin == "1001"
+    assert View.from_indices(t, (i for i in [1, 3, 5])).bin == "100"
 
 
-def test_view_from_source_indices_snapshots_mutibs_source():
+def test_view_from_indices_snapshots_mutibs_source():
     m = Mutibs("0b01101001")
-    v = View.from_source_indices(m, range(0, 8, 2))
+    v = View.from_indices(m, range(0, 8, 2))
 
     assert v.bin == "0110"
 
@@ -59,14 +59,14 @@ def test_view_from_source_indices_snapshots_mutibs_source():
     assert v.bin == "0110"
 
 
-def test_view_from_source_indices_validates_source_indices():
+def test_view_from_indices_validates_source_indices():
     t = Tibs("0b0110")
 
     with pytest.raises(ValueError, match="too short"):
-        _ = View.from_source_indices(t, [4])
+        _ = View.from_indices(t, [4])
 
     with pytest.raises(ValueError, match="duplicates"):
-        _ = View.from_source_indices(t, [0, 0])
+        _ = View.from_indices(t, [0, 0])
 
 
 def test_view_equality_uses_type_source_and_layout():
@@ -74,7 +74,7 @@ def test_view_equality_uses_type_source_and_layout():
     m = Mutibs("0x12")
 
     assert View(t) == View(m)
-    assert View.from_source_indices(Tibs("0xf0"), range(0, 4)) == View(Tibs("0xf"))
+    assert View.from_indices(Tibs("0xf0"), range(0, 4)) == View(Tibs("0xf"))
 
     assert View(t) != t
     assert View(t) != MutableView(m)
@@ -119,12 +119,12 @@ def test_mutable_view_constructor_rejects_source_indices():
         _ = MutableView(m, source_indices=range(0, 8))
 
 
-def test_mutable_view_from_source_indices_accepts_ranges_and_iterables():
+def test_mutable_view_from_indices_accepts_ranges_and_iterables():
     m = Mutibs("0x00")
-    v = MutableView.from_source_indices(m, range(0, 8, 2))
+    v = MutableView.from_indices(m, range(0, 8, 2))
 
     assert repr(v) == (
-        "MutableView.from_source_indices(Mutibs('0x00'), range(0, 8, 2), "
+        "MutableView.from_indices(Mutibs('0x00'), range(0, 8, 2), "
         "Endianness.Unspecified, BitOrder.Msb0)"
     )
     assert v.bin == "0000"
@@ -132,20 +132,20 @@ def test_mutable_view_from_source_indices_accepts_ranges_and_iterables():
     v.bin = "1111"
     assert m == Mutibs("0xaa")
 
-    reverse = MutableView.from_source_indices(m, (i for i in [7, 5, 3, 1]))
+    reverse = MutableView.from_indices(m, (i for i in [7, 5, 3, 1]))
     assert reverse.bin == "0000"
     reverse.bin = "1111"
     assert m == Mutibs("0xff")
 
 
-def test_mutable_view_from_source_indices_validates_source_indices():
+def test_mutable_view_from_indices_validates_source_indices():
     m = Mutibs("0b0110")
 
     with pytest.raises(ValueError, match="too short"):
-        _ = MutableView.from_source_indices(m, [4])
+        _ = MutableView.from_indices(m, [4])
 
     with pytest.raises(ValueError, match="duplicates"):
-        _ = MutableView.from_source_indices(m, [0, 0])
+        _ = MutableView.from_indices(m, [0, 0])
 
 
 def test_mutable_view_equality_uses_type_source_layout_and_source_indices():
@@ -153,15 +153,15 @@ def test_mutable_view_equality_uses_type_source_layout_and_source_indices():
     m2 = Mutibs("0xff")
 
     assert MutableView(m1) == MutableView(m2)
-    assert MutableView(m1) == MutableView.from_source_indices(m1, range(len(m1)))
+    assert MutableView(m1) == MutableView.from_indices(m1, range(len(m1)))
 
     assert MutableView(m1) != View(m1)
     assert MutableView(m1) != m1
     assert MutableView(m1) != MutableView(Mutibs("0x00"))
     assert MutableView(m1) != MutableView(m1, byte_order=Endianness.Big)
     assert MutableView(m1) != MutableView(m1, bit_order=BitOrder.Lsb0)
-    assert MutableView.from_source_indices(m1, range(0, 4)) != (
-        MutableView.from_source_indices(m1, range(4, 8))
+    assert MutableView.from_indices(m1, range(0, 4)) != (
+        MutableView.from_indices(m1, range(4, 8))
     )
 
     v1 = MutableView(m1)
@@ -399,7 +399,7 @@ def test_mutable_view_field_repr_includes_source_selection():
 
     assert v.hex == "000"
     assert repr(v) == (
-        "MutableView.from_source_indices(Mutibs('0x000fff'), range(0, 12), "
+        "MutableView.from_indices(Mutibs('0x000fff'), range(0, 12), "
         "Endianness.Unspecified, BitOrder.Msb0)"
     )
     recreated = eval(repr(v), namespace)

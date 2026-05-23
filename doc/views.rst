@@ -235,8 +235,8 @@ to the original ``Mutibs``::
     Mutibs('0x23a15678')
 
 For low-level reconstruction from physical source bit positions, use
-:meth:`View.from_source_indices` or :meth:`MutableView.from_source_indices`.
-The ``source_indices`` argument may be a ``range`` or any iterable of integers.
+:meth:`View.from_indices` or :meth:`MutableView.from_indices`.
+The ``indices`` argument may be a ``range`` or any iterable of integers.
 For ordinary fields described by a specification, prefer :meth:`View.field` or
 :meth:`MutableView.field`.
 

@@ -182,7 +182,7 @@ impl View {
         }
     }
 
-    fn from_source_indices_bits(
+    fn from_indices_bits(
         source: &BS,
         indices: Vec<usize>,
         byte_order: Endianness,
@@ -232,7 +232,7 @@ enum MutableSelection {
 }
 
 impl MutableSelection {
-    fn from_source_indices(indices: Vec<usize>, source_len: usize) -> PyResult<Self> {
+    fn from_indices(indices: Vec<usize>, source_len: usize) -> PyResult<Self> {
         validate_source_indices(&indices, source_len, "MutableView")?;
         Ok(MutableSelection::Field { indices })
     }
@@ -499,25 +499,25 @@ impl MutableView {
 
     /// Create a live mutable view from source bit positions.
     ///
-    /// ``source_indices`` may be a ``range`` or any iterable of integers. It maps
+    /// ``indices`` may be a ``range`` or any iterable of integers. It maps
     /// each viewed bit to a physical bit position in the source ``Mutibs``.
     ///
     /// This is a low-level reconstruction API. Use :meth:`~field` for normal
     /// specification-labelled fields.
     ///
     #[classmethod]
-    #[pyo3(signature = (source, source_indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, source_indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
-    pub fn from_source_indices(
+    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: PyRef<'_, Mutibs>,
-        source_indices: &Bound<'_, PyAny>,
+        indices: &Bound<'_, PyAny>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
     ) -> PyResult<Self> {
         let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
-        let indices = extract_source_indices(source_indices)?;
-        let selection = MutableSelection::from_source_indices(indices, source.len())?;
+        let indices = extract_source_indices(indices)?;
+        let selection = MutableSelection::from_indices(indices, source.len())?;
         View::validate_layout(selection.len(source.len())?, byte_order, bit_order)?;
         Ok(Self::from_parts(
             source.into(),
@@ -786,7 +786,7 @@ impl MutableView {
         match &self.selection {
             MutableSelection::Whole => format!("MutableView({})", parts.join(", ")),
             MutableSelection::Field { .. } => {
-                format!("MutableView.from_source_indices({})", parts.join(", "))
+                format!("MutableView.from_indices({})", parts.join(", "))
             }
         }
     }
@@ -861,7 +861,7 @@ impl View {
 
     /// Create a view by materializing selected source bit positions.
     ///
-    /// ``source_indices`` may be a ``range`` or any iterable of integers. It maps
+    /// ``indices`` may be a ``range`` or any iterable of integers. It maps
     /// each viewed bit to a physical bit position in the source. Passing a
     /// :class:`Mutibs` source stores an immutable snapshot.
     ///
@@ -869,11 +869,11 @@ impl View {
     /// specification-labelled fields.
     ///
     #[classmethod]
-    #[pyo3(signature = (source, source_indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, source_indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
-    pub fn from_source_indices(
+    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: &Bound<'_, PyAny>,
-        source_indices: &Bound<'_, PyAny>,
+        indices: &Bound<'_, PyAny>,
         byte_order: Option<Endianness>,
         bit_order: Option<BitOrder>,
     ) -> PyResult<Self> {
@@ -881,23 +881,13 @@ impl View {
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
 
         if let Ok(tibs) = source.extract::<PyRef<'_, Tibs>>() {
-            let indices = extract_source_indices(source_indices)?;
-            return View::from_source_indices_bits(
-                tibs.to_bitslice(),
-                indices,
-                byte_order,
-                bit_order,
-            );
+            let indices = extract_source_indices(indices)?;
+            return View::from_indices_bits(tibs.to_bitslice(), indices, byte_order, bit_order);
         }
 
         if let Ok(mutibs) = source.extract::<PyRef<'_, Mutibs>>() {
-            let indices = extract_source_indices(source_indices)?;
-            return View::from_source_indices_bits(
-                mutibs.as_bitslice(),
-                indices,
-                byte_order,
-                bit_order,
-            );
+            let indices = extract_source_indices(indices)?;
+            return View::from_indices_bits(mutibs.as_bitslice(), indices, byte_order, bit_order);
         }
 
         Err(PyTypeError::new_err(
