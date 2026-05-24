@@ -643,6 +643,25 @@ impl Mutibs {
         ))
     }
 
+    /// Extract a mutable field using inclusive MSB0 bit labels.
+    ///
+    /// This is equivalent to ``self.msb0.field(a, b)``.
+    ///
+    /// :param int a: One inclusive field endpoint.
+    /// :param int b: The other inclusive field endpoint.
+    /// :return: A new :class:`MutableView`.
+    ///
+    #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
+    pub fn field(slf: PyRef<'_, Self>, a: usize, b: usize) -> PyResult<MutableView> {
+        let py = slf.py();
+        MutableView::from_mutibs(
+            slf.into(),
+            Endianness::Unspecified,
+            BitOrder::Msb0,
+        )
+        .field(py, a, b)
+    }
+
     /// Create a new instance from a formatted string.
     ///
     /// This method initializes a new instance of :class:`Mutibs` using a formatted string.

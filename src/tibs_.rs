@@ -390,6 +390,24 @@ impl Tibs {
         ))
     }
 
+    /// Extract a field using inclusive MSB0 bit labels.
+    ///
+    /// This is equivalent to ``self.msb0.field(a, b)``.
+    ///
+    /// :param int a: One inclusive field endpoint.
+    /// :param int b: The other inclusive field endpoint.
+    /// :return: A new :class:`View`.
+    ///
+    #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
+    pub fn field(slf: PyRef<'_, Self>, a: usize, b: usize) -> PyResult<View> {
+        View::from_tibs(
+            slf.clone(),
+            Endianness::Unspecified,
+            BitOrder::Msb0,
+        )
+        .field(a, b)
+    }
+
     /// Iterate over the bits of the Tibs, yielding each bit as a boolean.
     ///
     /// :return: An iterator yielding bool values.

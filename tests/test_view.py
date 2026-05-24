@@ -534,6 +534,28 @@ def test_view_field_uses_msb0_labels_by_default():
     assert v.view().field(3, 0).bin == "1000"
 
 
+def test_tibs_and_mutibs_field_methods_use_msb0_labels():
+    t = Tibs("0x0180")
+
+    field = t.field(0, 8)
+
+    assert isinstance(field, View)
+    assert field.bin == "000000011"
+    assert field == t.msb0.field(0, 8)
+
+    m = Mutibs("0x0000")
+    field = m.field(8, 15)
+
+    assert isinstance(field, MutableView)
+    assert field.bin == "00000000"
+
+    field.hex = "f0"
+
+    assert field.bin == "11110000"
+    assert m == Mutibs("0x00f0")
+    assert m.field(8, 15) == m.msb0.field(8, 15)
+
+
 def test_view_field_validates_labels():
     v = Tibs("0xff").lsb0
 

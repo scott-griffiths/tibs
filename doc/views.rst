@@ -212,27 +212,33 @@ In Python slicing that would usually be written as ``[28:32]``, but for LSB0
 formats that still doesn't describe the right physical bits. The important detail
 is that the specification is giving bit labels, not Python slice positions.
 
-For this case we can use :meth:`View.field`. The two endpoints are inclusive, and can be
-given in either order::
+For this case we can use :meth:`Tibs.field`, which uses the default MSB0
+labels, or :meth:`View.field` for a different view such as ``lsb0``. The two
+endpoints are inclusive, and can be given in either order::
 
     >>> t = Tibs('0x23a11234')
+    >>> t.field(0, 7).hex
+    '23'
     >>> t.lsb0.field(31, 28).u
     12
     >>> t.lsb0.field(28, 31).u
     12
 
-When the source is mutable, :meth:`MutableView.field` returns another live
-``MutableView`` over the selected bits. Assigning through that field writes back
-to the original ``Mutibs``::
+When the source is mutable, :meth:`Mutibs.field` and :meth:`MutableView.field`
+return live ``MutableView`` objects over the selected bits. Assigning through
+that field writes back to the original ``Mutibs``::
 
     >>> m = Mutibs('0x23a11234')
+    >>> m.field(0, 7).hex = '42'
+    >>> m
+    Mutibs('0x42a11234')
     >>> m.lsb0.le.field(31, 16).u
     11336
     >>> m.lsb0.le.field(31, 16).u = 0x5678
     >>> m.lsb0.le.field(31, 16).u
     22136
     >>> m
-    Mutibs('0x23a11e6a')
+    Mutibs('0x42a11e6a')
 
 For low-level reconstruction from physical source bit positions, use
 :meth:`View.from_indices` or :meth:`MutableView.from_indices`.
