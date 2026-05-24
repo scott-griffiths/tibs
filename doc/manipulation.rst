@@ -149,7 +149,7 @@ current bit order::
     >>> m = Mutibs('0x23a11234')
     >>> m.lsb0.le.field(31, 16).u = 0x5678
     >>> m
-    Mutibs('0x23a15678')
+    Mutibs('0x23a11e6a')
 
 Unlike assignment on the source ``Mutibs``, assignment through a
 :class:`MutableView` cannot change the view's length. This keeps byte-order,

@@ -41,7 +41,7 @@ a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
 
     >>> v = t.view(Endianness.Little)
     >>> v
-    View(Tibs('0x01000000'), byte_order=Endianness.Little)
+    View(Tibs('0x01000000'), Endianness.Little, BitOrder.Msb0)
     >>> v.to_hex()
     '00000001'
     >>> v.to_u()
@@ -217,9 +217,9 @@ given in either order::
 
     >>> t = Tibs('0x23a11234')
     >>> t.lsb0.field(31, 28).u
-    3
+    12
     >>> t.lsb0.field(28, 31).u
-    3
+    12
 
 When the source is mutable, :meth:`MutableView.field` returns another live
 ``MutableView`` over the selected bits. Assigning through that field writes back
@@ -227,12 +227,12 @@ to the original ``Mutibs``::
 
     >>> m = Mutibs('0x23a11234')
     >>> m.lsb0.le.field(31, 16).u
-    4660
+    11336
     >>> m.lsb0.le.field(31, 16).u = 0x5678
     >>> m.lsb0.le.field(31, 16).u
     22136
     >>> m
-    Mutibs('0x23a15678')
+    Mutibs('0x23a11e6a')
 
 For low-level reconstruction from physical source bit positions, use
 :meth:`View.from_indices` or :meth:`MutableView.from_indices`.
@@ -256,31 +256,32 @@ the standard uses LSB0 bit labels and the whole-byte values are little-endian::
 
     >>> header = Tibs('0x23a11234').lsb0.le
     >>> header.field(31, 16).u  # message_id
-    4660
+    11336
     >>> header.field(15, 12).bin  # flags
-    '1010'
+    '0101'
     >>> header.field(11, 0).u   # payload_length
-    291
+    3144
 
 Byte order and field extraction are separate ideas. ``field()`` uses the current
-bit order to find the labelled bits. The result is then a normal MSB0 value.
+bit order to find the labelled bits, keeping the selected labels in ascending
+order. The result is then a normal MSB0 value.
 
 The ``message_id`` field is 16 bits long, so it keeps the little-endian byte
-order from the header. The stored field bytes are ``34 12``, but the integer
-interpretation is ``0x1234``::
+order from the header. The selected field bytes are ``48 2c``, and the integer
+interpretation is ``0x2c48``::
 
     >>> header.field(31, 16)
-    View(Tibs('0x3412'), byte_order=Endianness.Little)
+    View(Tibs('0x482c'), Endianness.Little, BitOrder.Msb0)
     >>> header.field(31, 16).u
-    4660
+    11336
 
 If the extracted field is not a whole number of bytes, byte order no longer has a
 meaning and is dropped::
 
     >>> header.field(11, 0)
-    View(Tibs('0x123'))
+    View(Tibs('0xc48'), Endianness.Unspecified, BitOrder.Msb0)
     >>> header.field(11, 0).u
-    291
+    3144
 
 Materializing a view
 ^^^^^^^^^^^^^^^^^^^^

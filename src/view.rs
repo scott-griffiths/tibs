@@ -79,17 +79,8 @@ fn validate_field_labels(len: usize, a: usize, b: usize) -> PyResult<(usize, usi
 
 fn field_source_indices(bit_order: BitOrder, low: usize, high: usize) -> Vec<usize> {
     let mut indices = Vec::with_capacity(high - low + 1);
-    match bit_order {
-        BitOrder::Msb0 => {
-            for label in low..=high {
-                indices.push(physical_index_for_label(bit_order, label));
-            }
-        }
-        BitOrder::Lsb0 => {
-            for label in (low..=high).rev() {
-                indices.push(physical_index_for_label(bit_order, label));
-            }
-        }
+    for label in low..=high {
+        indices.push(physical_index_for_label(bit_order, label));
     }
     indices
 }
@@ -1152,9 +1143,10 @@ impl View {
     /// least significant bit. For an MSB0 view, labels match normal Python slice
     /// positions.
     ///
-    /// The returned view has ``BitOrder.Msb0`` because the field has been
-    /// materialized into normal value order. The current byte order is kept for
-    /// whole-byte fields and dropped for non-whole-byte fields.
+    /// Labels are selected in ascending order after endpoint normalization. The
+    /// returned view has ``BitOrder.Msb0`` because the selected bits have been
+    /// materialized. The current byte order is kept for whole-byte fields and
+    /// dropped for non-whole-byte fields.
     ///
     /// :param int a: One inclusive field endpoint.
     /// :param int b: The other inclusive field endpoint.
@@ -1164,7 +1156,7 @@ impl View {
     ///
     ///     >>> t = Tibs('0x88040410')
     ///     >>> t.lsb0.field(31, 26).u
-    ///     4
+    ///     8
     ///
     pub fn field(&self, a: usize, b: usize) -> PyResult<Self> {
         let len = self.source.len();
