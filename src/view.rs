@@ -505,6 +505,14 @@ impl MutableView {
     /// This is a low-level reconstruction API. Use :meth:`~field` for normal
     /// specification-labelled fields.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0x00')
+    ///     >>> view = MutableView.from_indices(m, range(0, 8, 2))
+    ///     >>> view.bin = '1111'
+    ///     >>> m.bin
+    ///     '10101010'
+    ///
     #[classmethod]
     #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
     pub fn from_indices(
@@ -867,6 +875,13 @@ impl View {
     ///
     /// This is a low-level reconstruction API. Use :meth:`~field` for normal
     /// specification-labelled fields.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> View.from_indices(Tibs('0xf0'), range(0, 4)).bin
+    ///     '1111'
+    ///     >>> View.from_indices(Tibs('0xf0'), [7, 6, 5, 4]).bin
+    ///     '0000'
     ///
     #[classmethod]
     #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]

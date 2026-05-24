@@ -702,6 +702,13 @@ impl Mutibs {
     /// :param str s: A string of ``0`` and ``1`` s, optionally preceded with ``0b`` and optionally containing underscores.
     /// :return: None
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs()
+    ///     >>> m.write_bin('101')
+    ///     >>> m
+    ///     Mutibs('0b101')
+    ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_bin(&mut self, s: &str) -> PyResult<()> {
         let bv = bv_from_bin(s)?;
@@ -759,6 +766,13 @@ impl Mutibs {
     ///
     /// :param str s: A string of octal digits, optionally preceded with ``0o`` and optionally containing underscores.
     /// :return: None
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs()
+    ///     >>> m.write_oct('17')
+    ///     >>> m
+    ///     Mutibs('0b001111')
     ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_oct(&mut self, s: &str) -> PyResult<()> {
@@ -819,6 +833,13 @@ impl Mutibs {
     /// :param str s: A string of hexadecimal digits, optionally preceded with ``0x`` and optionally containing underscores.
     /// :return: None
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs()
+    ///     >>> m.write_hex('0f')
+    ///     >>> m
+    ///     Mutibs('0x0f')
+    ///
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_hex(&mut self, s: &str) -> PyResult<()> {
         let bv = bv_from_hex(s)?;
@@ -857,6 +878,13 @@ impl Mutibs {
     ///
     /// :param bytes data: A bytes-like object.
     /// :return: None
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs()
+    ///     >>> m.write_bytes(b'A')
+    ///     >>> m
+    ///     Mutibs('0x41')
     ///
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
     pub fn write_bytes(&mut self, data: Vec<u8>) -> PyResult<()> {
@@ -2168,6 +2196,11 @@ impl Mutibs {
     /// :return: A new Mutibs.
     /// :raises ValueError: if n < 0.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b001100') << 2
+    ///     Mutibs('0b110000')
+    ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
         Ok(self.lshift(shift))
@@ -2178,6 +2211,11 @@ impl Mutibs {
     /// :param int n: The number of bits to shift. Must be >= 0.
     /// :return: A new Mutibs.
     /// :raises ValueError: if n < 0.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b001100') >> 2
+    ///     Mutibs('0b000011')
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
@@ -2294,6 +2332,11 @@ impl Mutibs {
     /// :param Tibs other: The bits to append.
     /// :return: A new Mutibs.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b10') + '0b1'
+    ///     Mutibs('0b101')
+    ///
     pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // We accept the PyAny and convert manually here because if we instead
         // accept a Tibs, then correct types with wrong values (e.g. a malformed string)
@@ -2322,6 +2365,13 @@ impl Mutibs {
     ///
     /// :param Tibs other: The bits to append.
     /// :return: None
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b10')
+    ///     >>> m += '0b1'
+    ///     >>> m
+    ///     Mutibs('0b101')
     ///
     pub fn __iadd__(slf: PyRefMut<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<()> {
         Self::extend(slf, other)?;
@@ -2636,6 +2686,11 @@ impl Mutibs {
     /// :return: A new Mutibs.
     /// :raises ValueError: if n < 0.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b10') * 3
+    ///     Mutibs('0b101010')
+    ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
         if n < 0 {
             return Err(PyValueError::new_err(
@@ -2692,6 +2747,13 @@ impl Mutibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: None
     /// :raises ValueError: if n < 0.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b10')
+    ///     >>> m *= 3
+    ///     >>> m
+    ///     Mutibs('0b101010')
     ///
     pub fn __imul__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         match n {

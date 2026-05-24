@@ -1512,6 +1512,11 @@ impl Tibs {
     /// :return: A new Tibs.
     /// :raises ValueError: if n < 0.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b001100') << 2
+    ///     Tibs('0b110000')
+    ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
         Ok(self.lshift(shift))
@@ -1523,6 +1528,11 @@ impl Tibs {
     /// :return: A new Tibs.
     /// :raises ValueError: if n < 0.
     ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b001100') >> 2
+    ///     Tibs('0b000011')
+    ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
         Ok(self.rshift(shift))
@@ -1532,6 +1542,11 @@ impl Tibs {
     ///
     /// :param Tibs other: The bits to append.
     /// :return: A new Tibs.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b10') + '0b1'
+    ///     Tibs('0b101')
     ///
     pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
@@ -1747,6 +1762,11 @@ impl Tibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: A new Tibs.
     /// :raises ValueError: if n < 0.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b10') * 3
+    ///     Tibs('0b101010')
     ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
         if n < 0 {
