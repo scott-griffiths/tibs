@@ -214,7 +214,8 @@ is that the specification is giving bit labels, not Python slice positions.
 
 For this case we can use :meth:`Tibs.field`, which uses the default MSB0
 labels, or :meth:`View.field` for a different view such as ``lsb0``. The two
-endpoints are inclusive, and can be given in either order::
+endpoints are inclusive and can be given in either order. Both endpoints must be
+zero or positive bit labels::
 
     >>> t = Tibs('0x23a11234')
     >>> t.field(0, 7).hex

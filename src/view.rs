@@ -670,7 +670,9 @@ impl MutableView {
 
     /// Extract a field using inclusive bit labels.
     ///
-    /// The returned ``MutableView`` is a live view onto the selected source bits.
+    /// ``a`` and ``b`` must be zero or positive bit labels. The two endpoints
+    /// are inclusive and may be provided in either order. The returned
+    /// ``MutableView`` is a live view onto the selected source bits.
     pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<Self> {
         let source = self.source.borrow(py);
         let current_len = self.validate_current_layout(source.len())?;
@@ -1136,8 +1138,8 @@ impl View {
     /// Extract a field using inclusive bit labels.
     ///
     /// This is intended for specifications that describe fields using inclusive
-    /// bit labels such as ``31:26``. The endpoints may be provided in either
-    /// order.
+    /// bit labels such as ``31:26``. ``a`` and ``b`` must be zero or positive bit
+    /// labels. The endpoints may be provided in either order.
     ///
     /// For an LSB0 view, labels are interpreted within each byte with bit 0 at the
     /// least significant bit. For an MSB0 view, labels match normal Python slice
@@ -1148,8 +1150,8 @@ impl View {
     /// materialized. The current byte order is kept for whole-byte fields and
     /// dropped for non-whole-byte fields.
     ///
-    /// :param int a: One inclusive field endpoint.
-    /// :param int b: The other inclusive field endpoint.
+    /// :param int a: One non-negative inclusive field endpoint.
+    /// :param int b: The other non-negative inclusive field endpoint.
     /// :return: A new ``View`` containing the field.
     ///
     /// .. code-block:: pycon

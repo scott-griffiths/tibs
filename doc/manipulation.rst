@@ -144,7 +144,8 @@ For little-endian or LSB0 interpretations, assign through a mutable view instead
 
 Mutable views can also select labelled fields and assign through the same
 properties. The field endpoints are inclusive and interpreted using the view's
-current bit order. Plain ``Mutibs.field`` uses the default MSB0 labels::
+current bit order. They can be given in either order, but both endpoints must be
+zero or positive. Plain ``Mutibs.field`` uses the default MSB0 labels::
 
     >>> m = Mutibs('0x23a11234')
     >>> m.field(0, 7).hex = '42'

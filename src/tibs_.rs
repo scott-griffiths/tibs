@@ -392,10 +392,12 @@ impl Tibs {
 
     /// Extract a field using inclusive MSB0 bit labels.
     ///
-    /// This is equivalent to ``self.msb0.field(a, b)``.
+    /// ``a`` and ``b`` must be zero or positive bit labels. The two endpoints
+    /// are inclusive and may be provided in either order. This is equivalent to
+    /// ``self.msb0.field(a, b)``.
     ///
-    /// :param int a: One inclusive field endpoint.
-    /// :param int b: The other inclusive field endpoint.
+    /// :param int a: One non-negative inclusive field endpoint.
+    /// :param int b: The other non-negative inclusive field endpoint.
     /// :return: A new :class:`View`.
     ///
     #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
