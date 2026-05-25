@@ -44,6 +44,7 @@ This file gives project-specific guidance for automated coding assistants and co
 ## Git And Local State
 
 - The worktree may contain user edits and generated artifacts. Do not revert or clean unrelated changes.
+- Untracked files are common in this repository and are usually local scratch files. Do not treat them as a problem in status checks, release checks, or summaries unless the user specifically asks about untracked files or the files are directly relevant to the task. Releases are made from GitHub Actions, so local untracked files are not relevant to release readiness.
 - Before broad edits, inspect the current diff for files you plan to touch.
 - Keep changes tightly scoped to the request.
 - Avoid touching generated artifacts such as `dist/`, `target/`, `doc/_build/`, `html/`, benchmark result files, and logs unless explicitly requested.
