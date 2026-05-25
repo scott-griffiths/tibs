@@ -69,7 +69,7 @@ fn validate_field_labels(len: usize, a: i64, b: i64) -> PyResult<(usize, usize)>
     }
     if a < 0 || b < 0 {
         return Err(PyValueError::new_err(
-            "Negative integers cannot be used as field labels."
+            "Negative integers cannot be used as field labels.",
         ));
     }
     let a = a as usize;

@@ -248,11 +248,8 @@ fn try_find_byte_search(
     alignment_mod8: Option<usize>,
     reverse: bool,
 ) -> Option<Option<usize>> {
-    let Some((search_bytes, needle_bytes, start_byte)) =
-        byte_search_prep(haystack, needle, start, end, alignment_mod8)
-    else {
-        return None;
-    };
+    let (search_bytes, needle_bytes, start_byte) =
+        byte_search_prep(haystack, needle, start, end, alignment_mod8)?;
     let found = if reverse {
         memmem::rfind(&search_bytes, &needle_bytes)
     } else {

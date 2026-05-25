@@ -105,7 +105,7 @@ impl FindAllIterator {
             let lps = &slf.lps;
             let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
-            let result = if slf.is_reverse {
+            if slf.is_reverse {
                 if current_pos <= slf.start || current_pos > slf.end {
                     return Ok(None);
                 }
@@ -131,8 +131,7 @@ impl FindAllIterator {
                     slf.end,
                     alignment_mod8,
                 )
-            };
-            result
+            }
         };
 
         // Now, `slf` can be mutably accessed without conflicting with the previous borrows.

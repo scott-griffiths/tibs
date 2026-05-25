@@ -656,12 +656,8 @@ impl Mutibs {
     #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
     pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<MutableView> {
         let py = slf.py();
-        MutableView::from_mutibs(
-            slf.into(),
-            Endianness::Unspecified,
-            BitOrder::Msb0,
-        )
-        .field(py, a, b)
+        MutableView::from_mutibs(slf.into(), Endianness::Unspecified, BitOrder::Msb0)
+            .field(py, a, b)
     }
 
     /// Create a new instance from a formatted string.
@@ -1379,11 +1375,7 @@ impl Mutibs {
         // Handle slice indexing
         if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
-            let (start, stop, step) = (
-                isize::try_from(indices.start)?,
-                isize::try_from(indices.stop)?,
-                isize::try_from(indices.step)?,
-            );
+            let (start, stop, step) = (indices.start, indices.stop, indices.step);
 
             let result = if step == 1 {
                 if start < stop {
@@ -1449,9 +1441,9 @@ impl Mutibs {
             };
 
             let indices = slice.indices(length as isize)?;
-            let start: isize = indices.start.try_into()?;
-            let stop: isize = indices.stop.try_into()?;
-            let step: isize = indices.step.try_into()?;
+            let start = indices.start;
+            let stop = indices.stop;
+            let step = indices.step;
 
             if step == 1 {
                 debug_assert!(start >= 0);
@@ -2191,7 +2183,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (byte_length = None), text_signature = "($self, byte_length=None)")]
     pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Mutibs> {
-        Ok(BitCollection::byte_swap_copy(self, byte_length)?)
+        BitCollection::byte_swap_copy(self, byte_length)
     }
 
     /// Return the instance with every bit inverted.

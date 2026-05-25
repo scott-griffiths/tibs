@@ -1,3 +1,7 @@
+#![allow(clippy::match_like_matches_macro)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::collapsible_if)]
+
 pub mod core;
 pub mod enums;
 pub mod helpers;
