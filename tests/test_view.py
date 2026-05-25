@@ -286,6 +286,7 @@ def test_view_to_methods_use_bit_order_for_materialized_bits():
     assert v.to_hex() == "48"
     assert v.hex == "48"
     assert v.to_bytes() == b"\x48"
+    assert bytes(v) == b"\x48"
     assert v.bytes == b"\x48"
     assert v.to_u() == 0x48
     assert v.to_tibs() == Tibs("0x48")
@@ -373,12 +374,14 @@ def test_mutable_view_representation_setters_preserve_length_and_use_layout():
 
     assert m.le.write_bytes(b"\x12\x34") is None
     assert len(m) == 16
+    assert bytes(m.le) == b"\x12\x34"
     assert m.le.bytes == b"\x12\x34"
     assert m == Mutibs("0x3412")
 
     bits = Mutibs.from_zeros(8)
     bits.lsb0.bin = "00010010"
     assert len(bits) == 8
+    assert bytes(bits.lsb0) == b"\x12"
     assert bits.lsb0.bin == "00010010"
     assert bits == Mutibs("0x48")
 

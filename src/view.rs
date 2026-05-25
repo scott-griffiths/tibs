@@ -671,6 +671,11 @@ impl MutableView {
         BitCollection::to_byte_data(&self.to_tibs_view(py)?)
     }
 
+    /// Return the viewed bits as bytes.
+    pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+        self.to_bytes(py)
+    }
+
     /// Write the viewed bits from a bytes-like object without changing the view length.
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
     pub fn write_bytes(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
@@ -1085,6 +1090,11 @@ impl View {
     ///
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         BitCollection::to_byte_data(&self.to_tibs_view()?)
+    }
+
+    /// Return the viewed bits as bytes.
+    pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
+        self.to_bytes()
     }
 
     /// Materialize the view as a new :class:`Tibs`.
