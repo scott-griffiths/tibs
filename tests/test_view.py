@@ -606,3 +606,13 @@ def test_bin_field_views():
     assert m.lsb0.field(16, 31).bin == '0000111100000000'
     assert m.msb0.le.field(16, 31).bin == '0000000011110000'
     assert m.msb0.le.lsb0.field(16, 31).bin == '0000000000001111'
+
+
+def test_field_value_errors():
+    t = Tibs.from_random(100)
+    with pytest.raises(ValueError):
+        _ = t.field(-1, 1)
+    with pytest.raises(ValueError):
+        _ = t.to_mutibs().field(5, -11)
+    with pytest.raises(ValueError):
+        _ = t.le.field(-4, -6)

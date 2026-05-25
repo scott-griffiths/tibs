@@ -4,7 +4,7 @@ Tibs
 ----
 
 The Tibs class is an immutable container for binary data.
-The classes methods are detailed below, but what's not listed are
+The class's methods are detailed below, but what's not listed are
 the special methods. These can be seen using the ``help()`` function in Python, but I'll briefly list them here too:
 
 * ``[]`` : Slicing, e.g. ``s = t[4:16]``

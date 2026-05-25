@@ -654,7 +654,7 @@ impl Mutibs {
     /// :return: A new :class:`MutableView`.
     ///
     #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
-    pub fn field(slf: PyRef<'_, Self>, a: usize, b: usize) -> PyResult<MutableView> {
+    pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<MutableView> {
         let py = slf.py();
         MutableView::from_mutibs(
             slf.into(),

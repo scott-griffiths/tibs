@@ -61,25 +61,33 @@ fn physical_index_for_label(bit_order: BitOrder, label: usize) -> usize {
     }
 }
 
-fn validate_field_labels(len: usize, a: usize, b: usize) -> PyResult<(usize, usize)> {
+fn validate_field_labels(len: usize, a: i64, b: i64) -> PyResult<(usize, usize)> {
     if len == 0 {
         return Err(PyValueError::new_err(
             "Cannot extract a field from an empty view.",
         ));
     }
+    if a < 0 || b < 0 {
+        return Err(PyValueError::new_err(
+            "Negative integers cannot be used as field labels."
+        ));
+    }
+    let a = a as usize;
+    let b = b as usize;
     if a >= len || b >= len {
         return Err(PyValueError::new_err(format!(
             "Field labels must be in the range 0..{}. Received {a} and {b}.",
             len - 1
         )));
     }
-
-    Ok((a.min(b), a.max(b)))
+    let min = a.min(b);
+    let max = a.max(b);
+    Ok((min, max - min + 1))
 }
 
-fn field_source_indices(bit_order: BitOrder, low: usize, high: usize) -> Vec<usize> {
-    let mut indices = Vec::with_capacity(high - low + 1);
-    for label in low..=high {
+fn field_source_indices(bit_order: BitOrder, low: usize, field_len: usize) -> Vec<usize> {
+    let mut indices = Vec::with_capacity(field_len);
+    for label in low..low + field_len {
         indices.push(physical_index_for_label(bit_order, label));
     }
     indices
@@ -673,18 +681,17 @@ impl MutableView {
     /// ``a`` and ``b`` must be zero or positive bit labels. The two endpoints
     /// are inclusive and may be provided in either order. The returned
     /// ``MutableView`` is a live view onto the selected source bits.
-    pub fn field(&self, py: Python<'_>, a: usize, b: usize) -> PyResult<Self> {
+    pub fn field(&self, py: Python<'_>, a: i64, b: i64) -> PyResult<Self> {
         let source = self.source.borrow(py);
         let current_len = self.validate_current_layout(source.len())?;
-        let (low, high) = validate_field_labels(current_len, a, b)?;
-        let field_len = high - low + 1;
+        let (low, field_len) = validate_field_labels(current_len, a, b)?;
         let byte_order = if field_len.is_multiple_of(8) {
             self.byte_order
         } else {
             Endianness::Unspecified
         };
         let source_indices = self.selection.source_indices(source.len())?;
-        let indices = field_source_indices(self.bit_order, low, high)
+        let indices = field_source_indices(self.bit_order, low, field_len)
             .into_iter()
             .map(|index| source_indices[index])
             .collect();
@@ -1160,10 +1167,9 @@ impl View {
     ///     >>> t.lsb0.field(31, 26).u
     ///     8
     ///
-    pub fn field(&self, a: usize, b: usize) -> PyResult<Self> {
+    pub fn field(&self, a: i64, b: i64) -> PyResult<Self> {
         let len = self.source.len();
-        let (low, high) = validate_field_labels(len, a, b)?;
-        let field_len = high - low + 1;
+        let (low, field_len) = validate_field_labels(len, a, b)?;
         let byte_order = if field_len.is_multiple_of(8) {
             self.byte_order
         } else {
@@ -1172,7 +1178,7 @@ impl View {
 
         let source = self.source.to_bitslice();
         let mut field = BV::with_capacity(field_len);
-        for index in field_source_indices(self.bit_order, low, high) {
+        for index in field_source_indices(self.bit_order, low, field_len) {
             field.push(source[index]);
         }
 

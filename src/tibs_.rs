@@ -401,7 +401,7 @@ impl Tibs {
     /// :return: A new :class:`View`.
     ///
     #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
-    pub fn field(slf: PyRef<'_, Self>, a: usize, b: usize) -> PyResult<View> {
+    pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<View> {
         View::from_tibs(
             slf.clone(),
             Endianness::Unspecified,
