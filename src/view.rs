@@ -576,6 +576,18 @@ impl MutableView {
         self.with_layout(py, self.byte_order, BitOrder::Msb0)
     }
 
+    /// Return the byte-order interpretation setting for this mutable view.
+    #[getter]
+    fn byte_order(&self) -> Endianness {
+        self.byte_order
+    }
+
+    /// Return the bit-order interpretation setting for this mutable view.
+    #[getter]
+    fn bit_order(&self) -> BitOrder {
+        self.bit_order
+    }
+
     /// Return the current number of source bits in the view.
     pub fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let source = self.source.borrow(py);
@@ -983,6 +995,18 @@ impl View {
     #[getter]
     pub fn msb0(&self) -> PyResult<Self> {
         self.with_layout(self.byte_order, BitOrder::Msb0)
+    }
+
+    /// Return the byte-order interpretation setting for this view.
+    #[getter]
+    fn byte_order(&self) -> Endianness {
+        self.byte_order
+    }
+
+    /// Return the bit-order interpretation setting for this view.
+    #[getter]
+    fn bit_order(&self) -> BitOrder {
+        self.bit_order
     }
 
     /// Return the number of source bits in the view.

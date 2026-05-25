@@ -90,26 +90,63 @@ def test_tibs_view_aliases_create_views():
     assert repr(t.view()) == (
         "View(Tibs('0x1234'), Endianness.Unspecified, BitOrder.Msb0)"
     )
+    assert t.view().byte_order == Endianness.Unspecified
+    assert t.view().bit_order == BitOrder.Msb0
     assert repr(t.le) == "View(Tibs('0x1234'), Endianness.Little, BitOrder.Msb0)"
+    assert t.le.byte_order == Endianness.Little
+    assert t.le.bit_order == BitOrder.Msb0
     assert repr(t.be) == "View(Tibs('0x1234'), Endianness.Big, BitOrder.Msb0)"
+    assert t.be.byte_order == Endianness.Big
     assert repr(t.lsb0) == (
         "View(Tibs('0x1234'), Endianness.Unspecified, BitOrder.Lsb0)"
     )
+    assert t.lsb0.byte_order == Endianness.Unspecified
+    assert t.lsb0.bit_order == BitOrder.Lsb0
     assert repr(t.msb0) == (
         "View(Tibs('0x1234'), Endianness.Unspecified, BitOrder.Msb0)"
     )
     assert len(t.le) == len(t)
 
 
+def test_view_layout_properties_are_read_only():
+    v = Tibs("0x1234").le.lsb0
+
+    assert v.byte_order == Endianness.Little
+    assert v.bit_order == BitOrder.Lsb0
+
+    with pytest.raises(AttributeError):
+        v.byte_order = Endianness.Big
+    with pytest.raises(AttributeError):
+        v.bit_order = BitOrder.Msb0
+
+
 def test_mutibs_view_aliases_create_views():
     m = Mutibs("0xaa")
 
     assert isinstance(m.view(), MutableView)
+    assert m.view().byte_order == Endianness.Unspecified
+    assert m.view().bit_order == BitOrder.Msb0
     assert repr(m.le) == "MutableView(Mutibs('0xaa'), Endianness.Little, BitOrder.Msb0)"
+    assert m.le.byte_order == Endianness.Little
+    assert m.le.bit_order == BitOrder.Msb0
     assert repr(m.lsb0) == (
         "MutableView(Mutibs('0xaa'), Endianness.Unspecified, BitOrder.Lsb0)"
     )
+    assert m.lsb0.byte_order == Endianness.Unspecified
+    assert m.lsb0.bit_order == BitOrder.Lsb0
     assert len(m.lsb0) == len(m)
+
+
+def test_mutable_view_layout_properties_are_read_only():
+    v = Mutibs("0x1234").le.lsb0
+
+    assert v.byte_order == Endianness.Little
+    assert v.bit_order == BitOrder.Lsb0
+
+    with pytest.raises(AttributeError):
+        v.byte_order = Endianness.Big
+    with pytest.raises(AttributeError):
+        v.bit_order = BitOrder.Msb0
 
 
 def test_mutable_view_constructor_rejects_source_indices():
