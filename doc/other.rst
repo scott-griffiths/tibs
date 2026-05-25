@@ -8,12 +8,12 @@ Enums
    :member-order: groupwise
    :undoc-members:
 
-This specifies the byte-wise endianness to use when creating or interpreting some whole-byte values.
+This specifies the byte order to use when creating or interpreting some whole-byte values.
 
 The default is generally ``Endianness.Unspecified`` which means that values are considered bit-wise big-endian.
 This is equivalent to ``Endianness.Big`` for whole-byte values, but can be used for any length.
 
-Floats and integer values can be constructed and interpreted as big or little endian by using the appropriate
+Floats and integer values can be constructed and interpreted as big- or little-endian by using the appropriate
 enum value with ``from_`` and ``to_`` methods, for example see :meth:`Tibs.from_f` and :meth:`Mutibs.to_u`.
 The :attr:`Tibs.le` and :attr:`Tibs.be` view properties are usually the most convenient way to interpret an
 existing value.

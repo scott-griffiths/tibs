@@ -178,9 +178,9 @@ impl Tibs {
 ///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
 ///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
 ///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
-///     * ``Tibs.from_u(u, length, [endianness])`` - Create from an unsigned int to a given length.
-///     * ``Tibs.from_i(i, length, [endianness])`` - Create from a signed int to a given length.
-///     * ``Tibs.from_f(f, length, [endianness])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
+///     * ``Tibs.from_u(u, length, [byte_order])`` - Create from an unsigned int to a given length.
+///     * ``Tibs.from_i(i, length, [byte_order])`` - Create from a signed int to a given length.
+///     * ``Tibs.from_f(f, length, [byte_order])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
 ///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
 ///     * ``Tibs.from_string(s)`` - Use a formatted string.
 ///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
@@ -238,7 +238,7 @@ impl Tibs {
         BitCollection::reverse_copy(self)
     }
 
-    /// Return a new instance with the byte endianness swapped.
+    /// Return a new instance with the byte order swapped.
     ///
     /// The whole of the data will be byte-swapped. It must be a multiple
     /// of byte_length long.
@@ -812,7 +812,7 @@ impl Tibs {
     ///
     /// :param int u: An unsigned integer.
     /// :param int length: The bit length to create. Can be up to 128.
-    /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param Endianness byte_order: The byte order used to store the integer. Defaults to Endianness.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
@@ -823,14 +823,14 @@ impl Tibs {
     ///     Tibs('0x0f')
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, u, /, length, endianness)")]
+    #[pyo3(signature = (u, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, u, /, length, byte_order=None)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
         length: i64,
-        endianness: Option<Endianness>,
+        byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
+        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?))
     }
 
@@ -861,7 +861,7 @@ impl Tibs {
     ///
     /// :param int i: A signed integer.
     /// :param int length: The bit length to create. Can be up to 128.
-    /// :param Endianness endianness: The byte endianness used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param Endianness byte_order: The byte order used to store the integer. Defaults to Endianness.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
@@ -872,14 +872,14 @@ impl Tibs {
     ///     Tibs('0xe')
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, i, /, length, endianness)")]
+    #[pyo3(signature = (i, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, i, /, length, byte_order=None)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
         length: i64,
-        endianness: Option<Endianness>,
+        byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
+        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?))
     }
 
@@ -910,7 +910,7 @@ impl Tibs {
     ///
     /// :param float f: A floating point value.
     /// :param int length: The bit length to create. Must be 16, 32 or 64.
-    /// :param Endianness endianness: The byte endianness used to store the float. Defaults to Endianness.Unspecified.
+    /// :param Endianness byte_order: The byte order used to store the float. Defaults to Endianness.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: pycon
@@ -919,14 +919,14 @@ impl Tibs {
     ///     Tibs('0x3fc00000')
     ///
     #[classmethod]
-    #[pyo3(signature = (f, /, length, endianness = Endianness::Unspecified), text_signature = "(cls, f, /, length, endianness)")]
+    #[pyo3(signature = (f, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, f, /, length, byte_order=None)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
         length: i64,
-        endianness: Option<Endianness>,
+        byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(endianness, length)?;
+        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Tibs::from_bv(bv))
     }

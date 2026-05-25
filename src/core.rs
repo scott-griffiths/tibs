@@ -390,7 +390,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         let len = self.len();
         if !len.is_multiple_of(8) {
             return Err(PyValueError::new_err(format!(
-                "Bit length must be a multiple of 8 to use byte_swap (got length of {len} bits). This error can also be caused by using an endianness modifier on non-whole byte data."
+                "Bit length must be a multiple of 8 to use byte_swap (got length of {len} bits). This error can also be caused by using a byte-order modifier on non-whole byte data."
             )));
         }
         let byte_length = byte_length.unwrap_or((len as i64) / 8);

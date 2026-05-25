@@ -4,7 +4,7 @@ Views
 -----
 
 Views wrap a ``Tibs`` or a ``Mutibs`` to allow the bits inside it to be
-interpreted in a different way. This allows different endiannesses to be used,
+interpreted in a different way. This allows different byte orders to be used,
 as well as different bit numbering methods when interpreting the data.
 
 Both ``Tibs`` and ``Mutibs`` act like a Python container for bits - indexing and
@@ -34,7 +34,7 @@ For example, let's create a four-byte ``Tibs`` and interpret it as an unsigned i
 This is the byte-wise and bit-wise big-endian interpretation, which corresponds to
 the standard Python indexing convention where bit zero is the most significant bit.
 
-As this is a whole number of bytes long we can also consider its byte endianness.
+As this is a whole number of bytes long we can also consider its byte order.
 A little-endian interpretation essentially reverses the byte order, so the least
 significant byte is the first one. Without changing the data at all, we can create
 a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
@@ -91,7 +91,7 @@ Byte order
 Byte order only applies to whole-byte values. When you construct a value from an
 integer or float you can choose the byte order used to store it::
 
-    >>> t = Tibs.from_u(666, 16, Endianness.Little)
+    >>> t = Tibs.from_u(666, 16, byte_order=Endianness.Little)
     >>> t
     Tibs('0x9a02')
 
@@ -108,7 +108,7 @@ The little-endian view gives the intended interpretation::
 
 This works for floats and bytes too::
 
-    >>> x = Tibs.from_f(1984.3, 64, Endianness.Little)
+    >>> x = Tibs.from_f(1984.3, 64, byte_order=Endianness.Little)
     >>> x.f
     4.667261455589845e-62
     >>> x.le.f
@@ -171,7 +171,7 @@ Mutable views
 A :class:`MutableView` can also write interpreted values back into the source
 ``Mutibs`` without changing its length. The view supplies the layout::
 
-    >>> m = Mutibs.from_u(99, 16, Endianness.Little)
+    >>> m = Mutibs.from_u(99, 16, byte_order=Endianness.Little)
     >>> m.le.u
     99
     >>> m.le.write_u(45)

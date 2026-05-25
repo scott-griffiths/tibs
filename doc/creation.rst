@@ -39,8 +39,8 @@ Some examples::
     # From a signed integer. The length can be any value up to 128 bits.
     e = Tibs.from_i(-384, 20)
 
-    # From an unsigned integer. For whole byte lengths a byte endianness can be used.
-    f = Tibs.from_u(3, 32, Endianness.Little)
+    # From an unsigned integer. For whole-byte lengths a byte order can be used.
+    f = Tibs.from_u(3, 32, byte_order=Endianness.Little)
 
     # Floating point values need to have a length of 16, 32 or 64.
     g = Tibs.from_f(-0.125, 16)
