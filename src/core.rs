@@ -1276,19 +1276,22 @@ impl fmt::Debug for Tibs {
         if self.len() > 100 {
             return f
                 .debug_struct("Tibs")
-                .field("hex", &self.get_slice_unchecked(0, 100).to_hex().unwrap())
+                .field(
+                    "hex",
+                    &self.get_slice_unchecked(0, 100).to_hex(None, None).unwrap(),
+                )
                 .field("length", &self.len())
                 .finish();
         }
         if self.len().is_multiple_of(4) {
             return f
                 .debug_struct("Tibs")
-                .field("hex", &self.to_hex().unwrap())
+                .field("hex", &self.to_hex(None, None).unwrap())
                 .field("length", &self.len())
                 .finish();
         }
         f.debug_struct("Tibs")
-            .field("bin", &self.to_bin())
+            .field("bin", &BitCollection::to_binary(self))
             .field("length", &self.len())
             .finish()
     }

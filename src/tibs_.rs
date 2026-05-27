@@ -836,6 +836,9 @@ impl Tibs {
 
     /// Return the unsigned integer representation of the Tibs.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as an unsigned integer.
     ///
     /// .. code-block:: pycon
@@ -843,18 +846,23 @@ impl Tibs {
     ///     >>> Tibs('0x0f').to_u()
     ///     15
     ///
-    pub fn to_u(&self) -> PyResult<u128> {
-        BitCollection::to_u128(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_u128(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_u128(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Read-only property of the unsigned integer representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_u`.
+    /// Equivalent to using :meth:`~to_u` with no parameters.
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
     fn u(&self) -> PyResult<u128> {
-        self.to_u()
+        self.to_u(None, None)
     }
 
     /// Create a new instance from a signed integer.
@@ -885,6 +893,9 @@ impl Tibs {
 
     /// Return the signed integer representation of the Tibs.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as a signed integer.
     ///
     /// .. code-block:: pycon
@@ -892,18 +903,23 @@ impl Tibs {
     ///     >>> Tibs('0xe').to_i()
     ///     -2
     ///
-    pub fn to_i(&self) -> PyResult<i128> {
-        BitCollection::to_i128(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_i128(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_i128(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Read-only property of the signed integer representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_i`.
+    /// Equivalent to using :meth:`~to_i` with no parameters.
     ///
     /// :return: The value as a signed integer.
     #[getter]
     fn i(&self) -> PyResult<i128> {
-        self.to_i()
+        self.to_i(None, None)
     }
 
     /// Create a new instance from a floating point number.
@@ -935,6 +951,9 @@ impl Tibs {
     ///
     /// The length must be 16, 32 or 64.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as a Python float.
     ///
     /// .. code-block:: pycon
@@ -942,18 +961,23 @@ impl Tibs {
     ///     >>> Tibs('0x3fc00000').to_f()
     ///     1.5
     ///
-    pub fn to_f(&self) -> PyResult<f64> {
-        BitCollection::to_f64(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_f(&self, start: Option<isize>, end: Option<isize>) -> PyResult<f64> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_f64(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_f64(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Read-only property of the floating point representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_f`.
+    /// Equivalent to using :meth:`~to_f` with no parameters.
     ///
     /// :return: The value as a Python float.
     #[getter]
     fn f(&self) -> PyResult<f64> {
-        self.to_f()
+        self.to_f(None, None)
     }
 
     /// Create a new instance from a binary string.
@@ -974,16 +998,26 @@ impl Tibs {
 
     /// Return the binary representation of the Tibs as a string.
     ///
-    /// Equivalent to using the ``bin`` property.
+    /// Equivalent to using the ``bin`` property when called with no parameters.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
     ///
     /// :return: The binary representation.
-    pub fn to_bin(&self) -> String {
-        BitCollection::to_binary(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bin(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return Ok(BitCollection::to_binary(self));
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        Ok(BitCollection::to_binary(
+            &self.get_slice_unchecked(start, end - start),
+        ))
     }
 
     /// Read-only property of the binary representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_bin`.
+    /// Equivalent to using :meth:`~to_bin` with no parameters.
     ///
     /// :return: The binary representation.
     #[getter]
@@ -1010,17 +1044,25 @@ impl Tibs {
 
     /// Return the octal representation of the Tibs as a string.
     ///
-    /// Equivalent to using the ``oct`` property.
+    /// Equivalent to using the ``oct`` property when called with no parameters.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
-    pub fn to_oct(&self) -> PyResult<String> {
-        BitCollection::to_octal(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_oct(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_octal(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_octal(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Read-only property of the octal representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_oct`.
+    /// Equivalent to using :meth:`~to_oct` with no parameters.
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
@@ -1048,17 +1090,25 @@ impl Tibs {
 
     /// Return the hexadecimal representation of the Tibs as a string.
     ///
-    /// Equivalent to using the ``hex`` property.
+    /// Equivalent to using the ``hex`` property when called with no parameters.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
-    pub fn to_hex(&self) -> PyResult<String> {
-        BitCollection::to_hexadecimal(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_hex(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_hexadecimal(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_hexadecimal(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Read-only property of the hexadecimal representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_hex`.
+    /// Equivalent to using :meth:`~to_hex` with no parameters.
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
@@ -1155,15 +1205,23 @@ impl Tibs {
 
     /// Return the Tibs as a bytes object.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
-    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bytes(&self, start: Option<isize>, end: Option<isize>) -> PyResult<Vec<u8>> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_byte_data(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_byte_data(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Read-only property of the ``bytes`` representation of the Tibs.
     ///
-    /// Equivalent to using :meth:`~to_bytes`.
+    /// Equivalent to using :meth:`~to_bytes` with no parameters.
     ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
@@ -1763,7 +1821,7 @@ impl Tibs {
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
-        self.to_bytes()
+        self.to_bytes(None, None)
     }
 
     /// Return new Tibs consisting of n concatenations of self.

@@ -17,6 +17,44 @@ def test_to_bin():
     assert a.to_mutibs().to_bin() == '1001'
 
 
+def test_to_base_conversions_with_bit_range():
+    for cls in (Tibs, Mutibs):
+        bits = cls('0x123456')
+        assert bits.to_bin(4, 12) == '00100011'
+        assert bits.to_bin(start=4, end=12) == '00100011'
+        assert bits.to_bin(-20, -12) == '00100011'
+        assert bits.to_bin(None, 4) == '0001'
+        assert bits.to_bin(20, None) == '0110'
+        assert bits.bin == '000100100011010001010110'
+
+        assert bits.to_oct(4, 16) == '1064'
+        assert bits.to_oct(start=4, end=16) == '1064'
+        assert bits.oct == '04432126'
+
+        assert bits.to_hex(4, 20) == '2345'
+        assert bits.to_hex(start=4, end=20) == '2345'
+        assert bits.hex == '123456'
+
+        assert bits.to_bytes(4, 20) == b'\x23\x45'
+        assert bits.to_bytes(start=4, end=20) == b'\x23\x45'
+        assert bits.bytes == b'\x12\x34\x56'
+
+
+def test_to_base_conversions_with_bit_range_errors():
+    for cls in (Tibs, Mutibs):
+        bits = cls('0x123456')
+        with pytest.raises(ValueError, match="Invalid slice positions"):
+            bits.to_bin(12, 4)
+        with pytest.raises(ValueError, match="Invalid slice positions"):
+            bits.to_bytes(-30, 8)
+        with pytest.raises(ValueError, match="not a multiple of 3"):
+            bits.to_oct(0, 4)
+        with pytest.raises(ValueError, match="not a multiple of 4"):
+            bits.to_hex(0, 6)
+        with pytest.raises(ValueError, match="not a multiple of 8"):
+            bits.to_bytes(0, 12)
+
+
 def test_from_oct():
     a = Tibs.from_oct('12')
     b = Tibs.from_string('0o12')
@@ -71,6 +109,45 @@ def test_from_u():
     assert a == b
     c = a.to_u()
     assert c == 15
+
+
+def test_to_numeric_with_bit_range():
+    for cls in (Tibs, Mutibs):
+        bits = cls('0b11100101000')
+        assert bits.to_u(3, 8) == 5
+        assert bits.to_u(start=3, end=8) == 5
+        assert bits.to_u(-8, -3) == 5
+        assert bits.to_u(None, 4) == 14
+        assert bits.to_u(3, None) == int('00101000', 2)
+        assert bits.u == int('11100101000', 2)
+
+        signed_bits = cls('0b00111000')
+        assert signed_bits.to_i(2, 6) == -2
+        assert signed_bits.to_i(start=2, end=6) == -2
+        assert signed_bits.i == 56
+
+        float_bits = cls.from_joined([
+            cls('0b101'),
+            cls.from_f(0.25, 32),
+            cls('0b00'),
+        ])
+        assert float_bits.to_f(3, 35) == 0.25
+        assert float_bits.to_f(start=3, end=35) == 0.25
+
+
+def test_to_numeric_with_bit_range_errors():
+    for cls in (Tibs, Mutibs):
+        bits = cls('0b11100101000')
+        with pytest.raises(ValueError, match="Invalid slice positions"):
+            bits.to_u(8, 3)
+        with pytest.raises(ValueError, match="Invalid slice positions"):
+            bits.to_i(-20, 3)
+        with pytest.raises(ValueError, match="Cannot convert to unsigned int"):
+            bits.to_u(3, 3)
+        with pytest.raises(ValueError, match="Cannot convert to signed int"):
+            bits.to_i(3, 3)
+        with pytest.raises(ValueError, match="Unsupported float bit length"):
+            bits.to_f(0, 8)
 
 
 def test_from_u_errors():

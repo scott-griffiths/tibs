@@ -705,11 +705,21 @@ impl Mutibs {
 
     /// Return the binary representation of the Mutibs as a string.
     ///
-    /// Equivalent to using the ``bin`` property.
+    /// Equivalent to using the ``bin`` property when called with no parameters.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
     ///
     /// :return: The binary representation.
-    pub fn to_bin(&self) -> String {
-        BitCollection::to_binary(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bin(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return Ok(BitCollection::to_binary(self));
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        Ok(BitCollection::to_binary(
+            &self.get_slice_unchecked(start, end - start),
+        ))
     }
 
     /// Replace the current bits from a binary string.
@@ -735,8 +745,8 @@ impl Mutibs {
 
     /// Property of the binary representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_bin`. Assigning is equivalent
-    /// to using :meth:`~write_bin` and can change the length.
+    /// Reading is equivalent to using :meth:`~to_bin` with no parameters.
+    /// Assigning is equivalent to using :meth:`~write_bin` and can change the length.
     ///
     /// :return: The binary representation.
     #[getter]
@@ -769,12 +779,20 @@ impl Mutibs {
 
     /// Return the octal representation of the Mutibs as a string.
     ///
-    /// Equivalent to using the ``oct`` property.
+    /// Equivalent to using the ``oct`` property when called with no parameters.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
-    pub fn to_oct(&self) -> PyResult<String> {
-        BitCollection::to_octal(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_oct(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_octal(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_octal(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Replace the current bits from an octal string.
@@ -800,8 +818,8 @@ impl Mutibs {
 
     /// Property of the octal representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_oct`. Assigning is equivalent
-    /// to using :meth:`~write_oct` and can change the length.
+    /// Reading is equivalent to using :meth:`~to_oct` with no parameters.
+    /// Assigning is equivalent to using :meth:`~write_oct` and can change the length.
     ///
     /// :return: The octal representation.
     /// :raises ValueError: if the length is not a multiple of 3.
@@ -837,10 +855,18 @@ impl Mutibs {
 
     /// Return the hexadecimal representation of the Mutibs as a string.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
-    pub fn to_hex(&self) -> PyResult<String> {
-        BitCollection::to_hexadecimal(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_hex(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_hexadecimal(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_hexadecimal(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Replace the current bits from a hexadecimal string.
@@ -866,8 +892,8 @@ impl Mutibs {
 
     /// Property of the hexadecimal representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_hex`. Assigning is equivalent
-    /// to using :meth:`~write_hex` and can change the length.
+    /// Reading is equivalent to using :meth:`~to_hex` with no parameters.
+    /// Assigning is equivalent to using :meth:`~write_hex` and can change the length.
     ///
     /// :return: The hexadecimal representation.
     /// :raises ValueError: if the length is not a multiple of 4.
@@ -883,10 +909,18 @@ impl Mutibs {
 
     /// Return the Mutibs as a bytes object.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
-    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bytes(&self, start: Option<isize>, end: Option<isize>) -> PyResult<Vec<u8>> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_byte_data(self);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_byte_data(&self.get_slice_unchecked(start, end - start))
     }
 
     /// Replace the current bits from a bytes-like object.
@@ -912,8 +946,8 @@ impl Mutibs {
 
     /// Property of the ``bytes`` representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_bytes`. Assigning is equivalent
-    /// to using :meth:`~write_bytes` and can change the length.
+    /// Reading is equivalent to using :meth:`~to_bytes` with no parameters.
+    /// Assigning is equivalent to using :meth:`~write_bytes` and can change the length.
     ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
@@ -1013,6 +1047,9 @@ impl Mutibs {
 
     /// Return the unsigned integer representation of the Mutibs.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as an unsigned integer.
     ///
     /// .. code-block:: pycon
@@ -1020,8 +1057,13 @@ impl Mutibs {
     ///     >>> Mutibs('0x0f').to_u()
     ///     15
     ///
-    pub fn to_u(&self) -> PyResult<u128> {
-        BitCollection::to_u128(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_u128(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_u128(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Write the current bits from an unsigned integer without changing the length.
@@ -1046,13 +1088,13 @@ impl Mutibs {
 
     /// Property of the unsigned integer representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_u`. Assigning is equivalent to
-    /// using :meth:`~write_u`.
+    /// Reading is equivalent to using :meth:`~to_u` with no parameters. Assigning
+    /// is equivalent to using :meth:`~write_u`.
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
     fn u(&self) -> PyResult<u128> {
-        self.to_u()
+        self.to_u(None, None)
     }
 
     #[setter(u)]
@@ -1089,6 +1131,9 @@ impl Mutibs {
 
     /// Return the signed integer representation of the Mutibs.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as a signed integer.
     ///
     /// .. code-block:: pycon
@@ -1096,8 +1141,13 @@ impl Mutibs {
     ///     >>> Mutibs('0xe').to_i()
     ///     -2
     ///
-    pub fn to_i(&self) -> PyResult<i128> {
-        BitCollection::to_i128(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_i128(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_i128(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Write the current bits from a signed integer without changing the length.
@@ -1122,13 +1172,13 @@ impl Mutibs {
 
     /// Property of the signed integer representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_i`. Assigning is equivalent to
-    /// using :meth:`~write_i`.
+    /// Reading is equivalent to using :meth:`~to_i` with no parameters. Assigning
+    /// is equivalent to using :meth:`~write_i`.
     ///
     /// :return: The value as a signed integer.
     #[getter]
     fn i(&self) -> PyResult<i128> {
-        self.to_i()
+        self.to_i(None, None)
     }
 
     #[setter(i)]
@@ -1165,6 +1215,9 @@ impl Mutibs {
     ///
     /// The length must be 16, 32 or 64.
     ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
     /// :return: The value as a Python float.
     ///
     /// .. code-block:: pycon
@@ -1172,8 +1225,13 @@ impl Mutibs {
     ///     >>> Mutibs('0x3fc00000').to_f()
     ///     1.5
     ///
-    pub fn to_f(&self) -> PyResult<f64> {
-        BitCollection::to_f64(self, false)
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_f(&self, start: Option<isize>, end: Option<isize>) -> PyResult<f64> {
+        if start.is_none() && end.is_none() {
+            return BitCollection::to_f64(self, false);
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        BitCollection::to_f64(&self.get_slice_unchecked(start, end - start), false)
     }
 
     /// Write the current bits from a floating point number without changing the length.
@@ -1197,13 +1255,13 @@ impl Mutibs {
 
     /// Property of the floating point representation of the Mutibs.
     ///
-    /// Reading is equivalent to using :meth:`~to_f`. Assigning is equivalent to
-    /// using :meth:`~write_f`.
+    /// Reading is equivalent to using :meth:`~to_f` with no parameters. Assigning
+    /// is equivalent to using :meth:`~write_f`.
     ///
     /// :return: The value as a Python float.
     #[getter]
     fn f(&self) -> PyResult<f64> {
-        self.to_f()
+        self.to_f(None, None)
     }
 
     #[setter(f)]
@@ -2688,7 +2746,7 @@ impl Mutibs {
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
-        self.to_bytes()
+        self.to_bytes(None, None)
     }
 
     /// Return new Mutibs consisting of n concatenations of self.
