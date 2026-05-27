@@ -40,8 +40,8 @@ It's designed to be light-weight and easy to use, and is written in Rust for eff
 
 The two most important classes available in the tibs module are:
 
-* :doc:`tibs` — An immutable sequence of bits.
-* :doc:`mutibs` — A mutable sequence of bits.
+* :doc:`tibs` — An immutable sequence of bits ('tibs' is 'bits' rearranged).
+* :doc:`mutibs` — A mutable sequence of bits ('mutibs' is a mutable tibs).
 
 These classes efficiently hold arbitrary length binary data; they can be constructed
 from bytes, ints, floats, binary and hex strings, random data, and bools. They can then be
