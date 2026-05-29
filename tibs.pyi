@@ -37,8 +37,7 @@ class Dtype:
             self,
             kind: DtypeKind,
             length: int,
-            byte_order: Endianness = Endianness.Unspecified,
-            bit_order: BitOrder = BitOrder.Msb0
+            byte_order: Endianness = Endianness.Unspecified
     ) -> None: ...
 
     @property
@@ -49,9 +48,6 @@ class Dtype:
 
     @property
     def byte_order(self) -> Endianness: ...
-
-    @property
-    def bit_order(self) -> BitOrder: ...
 
 
 class View:
@@ -334,6 +330,11 @@ class Tibs:
 
     @classmethod
     def from_dtype(cls, dtype: Dtype, value: Any, /) -> Tibs: ...
+
+    @classmethod
+    def from_dtype_iter(cls, dtype: Dtype, iterable: Iterable[Any], /) -> Tibs: ...
+
+    def to_dtype(self, dtype: Dtype, start: int | None = None, end: int | None = None) -> int | float | str | bytes: ...
 
     @classmethod
     def from_u(cls, u: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Tibs: ...

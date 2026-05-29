@@ -37,3 +37,86 @@ def test_dtype_hex():
     d = Dtype(DtypeKind.Hex, 8)
     t = Tibs.from_dtype(d, "0f")
     assert t == Tibs.from_hex("0f")
+
+
+def test_to_dtype_float():
+    d = Dtype(DtypeKind.Float, 16, Endianness.Little)
+    t = Tibs.from_dtype(d, 14.5)
+    assert t.to_dtype(d) == 14.5
+
+
+def test_to_dtype_uint():
+    d = Dtype(DtypeKind.Uint, 16, Endianness.Little)
+    t = Tibs.from_dtype(d, 0x0102)
+    assert t.to_dtype(d) == 0x0102
+
+
+def test_to_dtype_int():
+    d = Dtype(DtypeKind.Int, 8)
+    t = Tibs.from_dtype(d, -2)
+    assert t.to_dtype(d) == -2
+
+
+def test_to_dtype_bytes():
+    d = Dtype(DtypeKind.Bytes, 16)
+    t = Tibs.from_dtype(d, b"ab")
+    assert t.to_dtype(d) == b"ab"
+
+
+def test_to_dtype_bin():
+    d = Dtype(DtypeKind.Bin, 4)
+    t = Tibs.from_dtype(d, "0b1010")
+    assert t.to_dtype(d) == "1010"
+
+
+def test_to_dtype_oct():
+    d = Dtype(DtypeKind.Oct, 6)
+    t = Tibs.from_dtype(d, "17")
+    assert t.to_dtype(d) == "17"
+
+
+def test_to_dtype_hex():
+    d = Dtype(DtypeKind.Hex, 8)
+    t = Tibs.from_dtype(d, "0f")
+    assert t.to_dtype(d) == "0f"
+
+
+def test_to_dtype_slice():
+    d = Dtype(DtypeKind.Hex, 8)
+    t = Tibs.from_hex("aa0fbb")
+    assert t.to_dtype(d, 8, 16) == "0f"
+
+
+def test_to_dtype_requires_matching_length():
+    d = Dtype(DtypeKind.Uint, 8)
+    with pytest.raises(ValueError, match="dtype with length 8 bits"):
+        Tibs.from_hex("0f0f").to_dtype(d)
+
+
+def test_from_dtype_iter_uint():
+    d = Dtype(DtypeKind.Uint, 8)
+    t = Tibs.from_dtype_iter(d, [1, 2, 3])
+    assert t == Tibs.from_bytes(b"\x01\x02\x03")
+
+
+def test_from_dtype_iter_little_endian_uint():
+    d = Dtype(DtypeKind.Uint, 16, Endianness.Little)
+    t = Tibs.from_dtype_iter(d, [0x0102, 0x0304])
+    assert t == Tibs.from_hex("02010403")
+
+
+def test_from_dtype_iter_generator():
+    d = Dtype(DtypeKind.Hex, 8)
+    t = Tibs.from_dtype_iter(d, (x for x in ["aa", "bb", "cc"]))
+    assert t == Tibs.from_hex("aabbcc")
+
+
+def test_from_dtype_iter_empty():
+    d = Dtype(DtypeKind.Uint, 8)
+    assert Tibs.from_dtype_iter(d, []) == Tibs()
+
+
+def test_from_dtype_iter_propagates_item_errors():
+    d = Dtype(DtypeKind.Uint, 8)
+    with pytest.raises(OverflowError, match="does not fit"):
+        Tibs.from_dtype_iter(d, [1, 256])

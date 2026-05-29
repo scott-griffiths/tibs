@@ -12,6 +12,7 @@ use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
@@ -210,6 +211,21 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
         }
         let bv = promote_to_bv(&obj)?;
         Ok(Tibs::from_bv(bv))
+    }
+}
+
+fn bv_from_dtype_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
+    let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+    match dtype.kind {
+        DtypeKind::Float => bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian),
+        DtypeKind::Uint => bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian),
+        DtypeKind::Int => bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian),
+        DtypeKind::Bytes => {
+            bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))
+        }
+        DtypeKind::Bin => bv_from_bin(&value.extract::<String>()?),
+        DtypeKind::Oct => bv_from_oct(&value.extract::<String>()?),
+        DtypeKind::Hex => bv_from_hex(&value.extract::<String>()?),
     }
 }
 
@@ -771,25 +787,61 @@ impl Tibs {
         dtype: &Dtype,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
-        let bv = match dtype.kind {
-            DtypeKind::Float => {
-                bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)?
+        Ok(Tibs::from_bv(bv_from_dtype_value(dtype, value)?))
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (dtype, iterable, /), text_signature = "(cls, dtype, iterable, /)")]
+    pub fn from_dtype_iter(
+        _cls: &Bound<'_, PyType>,
+        py: Python<'_>,
+        dtype: &Dtype,
+        iterable: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let mut bv = BV::new();
+        for (index, item) in iterable.try_iter()?.enumerate() {
+            if index.is_multiple_of(1024) {
+                py.check_signals()?;
             }
-            DtypeKind::Uint => {
-                bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian)?
-            }
-            DtypeKind::Int => {
-                bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian)?
-            }
-            DtypeKind::Bytes => {
-                bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))?
-            }
-            DtypeKind::Bin => bv_from_bin(&value.extract::<String>()?)?,
-            DtypeKind::Oct => bv_from_oct(&value.extract::<String>()?)?,
-            DtypeKind::Hex => bv_from_hex(&value.extract::<String>()?)?,
-        };
+            bv.extend(bv_from_dtype_value(dtype, &item?)?);
+        }
         Ok(Tibs::from_bv(bv))
+    }
+
+    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    pub fn to_dtype(
+        &self,
+        py: Python<'_>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyAny>> {
+        if dtype.length < 0 {
+            return Err(PyValueError::new_err(format!(
+                "Negative dtype length of {} bits provided.",
+                dtype.length
+            )));
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        let value = self.get_slice_unchecked(start, end - start);
+        if value.len() != dtype.length as usize {
+            return Err(PyValueError::new_err(format!(
+                "Cannot convert {} bits using a dtype with length {} bits.",
+                value.len(),
+                dtype.length
+            )));
+        }
+
+        let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+        match dtype.kind {
+            DtypeKind::Float => BitCollection::to_f64(&value, is_little_endian)?.into_py_any(py),
+            DtypeKind::Uint => BitCollection::to_u128(&value, is_little_endian)?.into_py_any(py),
+            DtypeKind::Int => BitCollection::to_i128(&value, is_little_endian)?.into_py_any(py),
+            DtypeKind::Bytes => BitCollection::to_byte_data(&value)?.into_py_any(py),
+            DtypeKind::Bin => BitCollection::to_binary(&value).into_py_any(py),
+            DtypeKind::Oct => BitCollection::to_octal(&value)?.into_py_any(py),
+            DtypeKind::Hex => BitCollection::to_hexadecimal(&value)?.into_py_any(py),
+        }
     }
 
     /// Create a new instance with all bits set to '1'.
