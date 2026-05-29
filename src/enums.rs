@@ -70,3 +70,30 @@ pub enum Codec {
     Rice,
     Zstd,
 }
+
+
+#[pyclass(from_py_object, module = "tibs")]
+#[derive(Clone, Copy)]
+pub enum DtypeKind {
+    Uint,
+    Int,
+    Float,
+    Bytes,
+    Bin,
+    Oct,
+    Hex,
+}
+
+impl DtypeKind {
+    pub(crate) fn repr_name(self) -> &'static str {
+        match self {
+            DtypeKind::Uint => "DtypeKind.Uint",
+            DtypeKind::Int => "DtypeKind.Int",
+            DtypeKind::Float => "DtypeKind.Float",
+            DtypeKind::Bytes => "DtypeKind.Bytes",
+            DtypeKind::Bin => "DtypeKind.Bin",
+            DtypeKind::Oct => "DtypeKind.Oct",
+            DtypeKind::Hex => "DtypeKind.Hex",
+        }
+    }
+}

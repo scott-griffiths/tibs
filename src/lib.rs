@@ -9,6 +9,7 @@ pub mod iterator;
 pub mod mutibs;
 pub mod tibs_;
 pub mod view;
+pub mod dtype;
 
 use pyo3::prelude::*;
 
@@ -19,7 +20,9 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<enums::Endianness>()?;
     m.add_class::<enums::BitOrder>()?;
     m.add_class::<enums::Codec>()?;
+    m.add_class::<enums::DtypeKind>()?;
     m.add_class::<view::View>()?;
     m.add_class::<view::MutableView>()?;
+    m.add_class::<dtype::Dtype>()?;
     Ok(())
 }
