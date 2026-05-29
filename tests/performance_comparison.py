@@ -157,7 +157,7 @@ def test_chunks_tibs():
     t = Tibs.from_bytes(some_bytes)
     f = Tibs('0b11111')
     count = 0
-    for chunk in t.chunks(5):
+    for chunk in t.chunks_iter(5):
         if chunk == f:
             count += 1
 

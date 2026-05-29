@@ -444,7 +444,7 @@ impl MutableView {
         let len = self.validate_current_layout(source.len())?;
         drop(source);
 
-        let viewed = bv_from_u128(u, len as i64, false)?;
+        let viewed = bv_from_u128(u, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
@@ -453,7 +453,7 @@ impl MutableView {
         let len = self.validate_current_layout(source.len())?;
         drop(source);
 
-        let viewed = bv_from_i128(i, len as i64, false)?;
+        let viewed = bv_from_i128(i, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
@@ -462,7 +462,7 @@ impl MutableView {
         let len = self.validate_current_layout(source.len())?;
         drop(source);
 
-        let viewed = bv_from_f64(f, len as i64, false)?;
+        let viewed = bv_from_f64(f, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 }

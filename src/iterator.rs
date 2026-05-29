@@ -1,6 +1,7 @@
 use crate::core::BitCollection;
+use crate::enums::{DtypeKind, Endianness};
 use crate::helpers;
-use crate::tibs_::Tibs;
+use crate::tibs_::{Tibs, py_from_dtype_parts};
 use memchr::memmem;
 use pyo3::prelude::*;
 
@@ -203,5 +204,37 @@ impl ChunksIterator {
         slf.chunks_generated += 1;
 
         Ok(Some(chunk_bits))
+    }
+}
+
+#[pyclass]
+pub struct DtypeIterator {
+    pub(crate) bits_object: Py<Tibs>,
+    pub(crate) dtype_kind: DtypeKind,
+    pub(crate) dtype_length: usize,
+    pub(crate) byte_order: Endianness,
+    pub(crate) chunk_size: usize,
+    pub(crate) current_pos: usize,
+    pub(crate) end_pos: usize,
+}
+
+#[pymethods]
+impl DtypeIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        if slf.current_pos >= slf.end_pos {
+            return Ok(None);
+        }
+
+        let value = {
+            let bits = slf.bits_object.borrow(py);
+            bits.get_slice_unchecked(slf.current_pos, slf.chunk_size)
+        };
+        slf.current_pos += slf.chunk_size;
+
+        py_from_dtype_parts(py, slf.dtype_kind, slf.dtype_length, slf.byte_order, &value).map(Some)
     }
 }

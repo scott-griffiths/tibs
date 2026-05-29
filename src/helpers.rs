@@ -22,6 +22,15 @@ const BITS_CACHE_SIZE: usize = 1024;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
+pub(crate) fn validate_length(length: i64) -> PyResult<usize> {
+    if length < 0 {
+        Err(PyValueError::new_err(format!(
+            "Negative bit length given: {length}."
+        )))
+    } else { Ok(length as usize) }
+}
+
+
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {
         Err(PyValueError::new_err(format!(
@@ -545,7 +554,7 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
         .to_string();
     // Remove any underscores or whitespace characters
     new_hex.retain(|c| c != '_' && !c.is_whitespace());
-    let new_hex_length = new_hex.len() as i64;
+    let new_hex_length = new_hex.len();
     if new_hex_length % 2 != 0 {
         new_hex.push('0');
     }
@@ -564,44 +573,32 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
 
 pub(crate) fn bv_from_bytes_slice(
     data: Vec<u8>,
-    offset: Option<i64>,
-    length: Option<i64>,
+    offset: Option<usize>,
+    length: Option<usize>,
 ) -> PyResult<BV> {
     if length.is_none() && offset.is_none() {
         return Ok(BV::from_vec(data));
     }
-    let start_bit = offset.unwrap_or(0);
-    if start_bit < 0 {
-        return Err(PyValueError::new_err(format!(
-            "Cannot create using a negative offset of {start_bit}."
-        )));
-    }
-    let start_bit = start_bit as usize;
+    let offset = offset.unwrap_or(0);
     let data_length = data.len() * 8;
-    if start_bit > data_length {
+    if offset > data_length {
         return Err(PyValueError::new_err(format!(
-            "Offset of {start_bit} is greater than the data length ({data_length} bits)."
+            "Offset of {offset} is greater than the data length ({data_length} bits)."
         )));
     }
-    let length = length.unwrap_or(data_length as i64 - start_bit as i64);
-    if length < 0 {
+    let length = length.unwrap_or(data_length - offset);
+    if offset + length > data_length {
         return Err(PyValueError::new_err(format!(
-            "Negative length of {length} bits provided."
-        )));
-    }
-    let length = length as usize;
-    if start_bit + length > data_length {
-        return Err(PyValueError::new_err(format!(
-            "Length of {length} with offset of {start_bit} is greater than the data length ({data_length} bits)."
+            "Length of {length} with offset of {offset} is greater than the data length ({data_length} bits)."
         )));
     }
     let bs = BS::from_slice(&data);
-    Ok(bs[start_bit..start_bit + length].to_bitvec())
+    Ok(bs[offset..offset + length].to_bitvec())
 }
 
 #[inline]
-pub(crate) fn bv_from_u128(value: u128, length: i64, is_little_endian: bool) -> PyResult<BV> {
-    if length <= 0 || length > 128 {
+pub(crate) fn bv_from_u128(value: u128, length: usize, is_little_endian: bool) -> PyResult<BV> {
+    if length == 0 || length > 128 {
         return Err(PyValueError::new_err(format!(
             "Bit length for unsigned int must be between 1 and 128. Received {length}."
         )));
@@ -631,8 +628,8 @@ pub(crate) fn bv_from_u128(value: u128, length: i64, is_little_endian: bool) -> 
 }
 
 #[inline]
-pub(crate) fn bv_from_i128(value: i128, length: i64, is_little_endian: bool) -> PyResult<BV> {
-    if length <= 0 || length > 128 {
+pub(crate) fn bv_from_i128(value: i128, length: usize, is_little_endian: bool) -> PyResult<BV> {
+    if length == 0 || length > 128 {
         return Err(PyValueError::new_err(format!(
             "Bit length for signed int must be between 1 and 128. Received {length}."
         )));
@@ -664,7 +661,7 @@ pub(crate) fn bv_from_i128(value: i128, length: i64, is_little_endian: bool) -> 
     Ok(bv)
 }
 
-pub(crate) fn bv_from_f64(value: f64, length: i64, is_little_endian: bool) -> PyResult<BV> {
+pub(crate) fn bv_from_f64(value: f64, length: usize, is_little_endian: bool) -> PyResult<BV> {
     let bv = match length {
         64 => {
             let mut bv = BV::repeat(false, 64);

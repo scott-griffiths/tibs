@@ -1,11 +1,6 @@
 use crate::core::BitCollection;
 use crate::enums::{BitOrder, Codec, Endianness};
-use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
-    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index,
-    validate_logical_op_lengths, validate_shift, validate_slice,
-};
+use crate::helpers::{BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, validate_length};
 use crate::tibs_::Tibs;
 use crate::view::{MutableView, View};
 
@@ -167,7 +162,7 @@ impl Mutibs {
     #[inline]
     fn assign_u(&mut self, u: u128) -> PyResult<()> {
         let length = self.len();
-        let value = bv_from_u128(u, length as i64, false)?;
+        let value = bv_from_u128(u, length, false)?;
         self.assign_from_bv(value);
         Ok(())
     }
@@ -175,7 +170,7 @@ impl Mutibs {
     #[inline]
     fn assign_i(&mut self, i: i128) -> PyResult<()> {
         let length = self.len();
-        let value = bv_from_i128(i, length as i64, false)?;
+        let value = bv_from_i128(i, length, false)?;
         self.assign_from_bv(value);
         Ok(())
     }
@@ -183,7 +178,7 @@ impl Mutibs {
     #[inline]
     fn assign_f(&mut self, f: f64) -> PyResult<()> {
         let length = self.len();
-        let value = bv_from_f64(f, length as i64, false)?;
+        let value = bv_from_f64(f, length, false)?;
         self.assign_from_bv(value);
         Ok(())
     }
@@ -262,13 +257,16 @@ impl Mutibs {
         if self.is_empty() {
             return Err(PyValueError::new_err("Cannot rotate an empty Mutibs."));
         }
-        if n < 0 {
-            return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
-        }
+        let n = match n {
+            ..0 => {
+                return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
+            },
+            _ => n as usize
+        };
 
         let (start, end) = validate_slice(self.len(), start, end)?;
         if start != end {
-            let n = (n % (end as i64 - start as i64)) as usize;
+            let n = n % (end - start);
             if rotate_left {
                 self.as_mut_bitvec_ref()[start..end].rotate_left(n);
             } else {
@@ -1040,6 +1038,7 @@ impl Mutibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         let bv = bv_from_u128(u, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv))
@@ -1124,6 +1123,7 @@ impl Mutibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         let bv = bv_from_i128(i, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv))
@@ -1206,6 +1206,7 @@ impl Mutibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv))
@@ -1281,13 +1282,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
-        if length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative bit length given: {}.",
-                length
-            )));
-        }
-        Ok(Self::from_bv(bv_from_zeros(length as usize)))
+        let length = validate_length(length)?;
+        Ok(Self::from_bv(bv_from_zeros(length)))
     }
 
     /// Create a new instance with all bits set to one.
@@ -1303,13 +1299,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
-        if length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative bit length given: {}.",
-                length
-            )));
-        }
-        Ok(Mutibs::from_bv(bv_from_ones(length as usize)))
+        let length = validate_length(length)?;
+        Ok(Mutibs::from_bv(bv_from_ones(length)))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -1375,6 +1366,14 @@ impl Mutibs {
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
+        let length = match length {
+            Some(length) => Some(validate_length(length)?),
+            None => None,
+        };
+        let offset = match offset {
+            Some(offset) => Some(validate_length(offset)?),
+            None => None,
+        };
         let bv = bv_from_bytes_slice(data, offset, length)?;
         Ok(Self::from_bv(bv))
     }

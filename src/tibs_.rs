@@ -2,13 +2,8 @@ use crate::core::BitCollection;
 use crate::dtype::Dtype;
 use crate::enums::{BitOrder, Codec, DtypeKind, Endianness};
 use crate::helpers;
-use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
-    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_logical_op_lengths, validate_shift, validate_slice,
-};
-use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator};
+use crate::helpers::{BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv, validate_logical_op_lengths, validate_shift, validate_slice, validate_length};
+use crate::iterator::{BoolIterator, ChunksIterator, DtypeIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
@@ -227,6 +222,41 @@ fn bv_from_dtype_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> 
         DtypeKind::Oct => bv_from_oct(&value.extract::<String>()?),
         DtypeKind::Hex => bv_from_hex(&value.extract::<String>()?),
     }
+}
+
+pub(crate) fn py_from_dtype_parts(
+    py: Python<'_>,
+    dtype_kind: DtypeKind,
+    dtype_length: usize,
+    byte_order: Endianness,
+    value: &Tibs,
+) -> PyResult<Py<PyAny>> {
+    if value.len() != dtype_length {
+        return Err(PyValueError::new_err(format!(
+            "Cannot convert {} bits using a dtype with length {} bits.",
+            value.len(),
+            dtype_length
+        )));
+    }
+
+    let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+    match dtype_kind {
+        DtypeKind::Float => BitCollection::to_f64(value, is_little_endian)?.into_py_any(py),
+        DtypeKind::Uint => BitCollection::to_u128(value, is_little_endian)?.into_py_any(py),
+        DtypeKind::Int => BitCollection::to_i128(value, is_little_endian)?.into_py_any(py),
+        DtypeKind::Bytes => BitCollection::to_byte_data(value)?.into_py_any(py),
+        DtypeKind::Bin => BitCollection::to_binary(value).into_py_any(py),
+        DtypeKind::Oct => BitCollection::to_octal(value)?.into_py_any(py),
+        DtypeKind::Hex => BitCollection::to_hexadecimal(value)?.into_py_any(py),
+    }
+}
+
+pub(crate) fn py_from_dtype_value(
+    py: Python<'_>,
+    dtype: &Dtype,
+    value: &Tibs,
+) -> PyResult<Py<PyAny>> {
+    py_from_dtype_parts(py, dtype.kind, dtype.length, dtype.byte_order, value)
 }
 
 /// Public Python-facing methods.
@@ -486,7 +516,7 @@ impl Tibs {
             Some(c) => {
                 if c < 0 {
                     return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk generator - count of {c} given, but it must be > 0 if present."
+                        "Cannot create chunk generator - count of {c} given, but it must be >= 0 if present."
                     )));
                 }
                 c as usize
@@ -771,13 +801,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
-        if length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative bit length given: {}.",
-                length
-            )));
-        }
-        Ok(Self::from_bv(bv_from_zeros(length as usize)))
+        let length = validate_length(length)?;
+        Ok(Self::from_bv(bv_from_zeros(length)))
     }
 
     #[classmethod]
@@ -809,6 +834,38 @@ impl Tibs {
     }
 
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    pub fn to_dtype_iter(
+        slf: PyRef<'_, Self>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<DtypeIterator>> {
+        let (start, end) = validate_slice(slf.len(), start, end)?;
+        let selected_len = end - start;
+        let chunk_size = dtype.length;
+        if !selected_len.is_multiple_of(chunk_size) {
+            return Err(PyValueError::new_err(format!(
+                "Cannot create dtype iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
+                dtype.length
+            )));
+        }
+
+        let py = slf.py();
+        Py::new(
+            py,
+            DtypeIterator {
+                bits_object: slf.into(),
+                dtype_kind: dtype.kind,
+                dtype_length: dtype.length,
+                byte_order: dtype.byte_order,
+                chunk_size,
+                current_pos: start,
+                end_pos: end,
+            },
+        )
+    }
+
+    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_dtype(
         &self,
         py: Python<'_>,
@@ -816,32 +873,9 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
-        if dtype.length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative dtype length of {} bits provided.",
-                dtype.length
-            )));
-        }
         let (start, end) = validate_slice(self.len(), start, end)?;
         let value = self.get_slice_unchecked(start, end - start);
-        if value.len() != dtype.length as usize {
-            return Err(PyValueError::new_err(format!(
-                "Cannot convert {} bits using a dtype with length {} bits.",
-                value.len(),
-                dtype.length
-            )));
-        }
-
-        let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
-        match dtype.kind {
-            DtypeKind::Float => BitCollection::to_f64(&value, is_little_endian)?.into_py_any(py),
-            DtypeKind::Uint => BitCollection::to_u128(&value, is_little_endian)?.into_py_any(py),
-            DtypeKind::Int => BitCollection::to_i128(&value, is_little_endian)?.into_py_any(py),
-            DtypeKind::Bytes => BitCollection::to_byte_data(&value)?.into_py_any(py),
-            DtypeKind::Bin => BitCollection::to_binary(&value).into_py_any(py),
-            DtypeKind::Oct => BitCollection::to_octal(&value)?.into_py_any(py),
-            DtypeKind::Hex => BitCollection::to_hexadecimal(&value)?.into_py_any(py),
-        }
+        py_from_dtype_value(py, dtype, &value)
     }
 
     /// Create a new instance with all bits set to '1'.
@@ -857,13 +891,8 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
-        if length < 0 {
-            return Err(PyValueError::new_err(format!(
-                "Negative bit length given: {}.",
-                length
-            )));
-        }
-        Ok(Tibs::from_bv(bv_from_ones(length as usize)))
+        let length = validate_length(length)?;
+        Ok(Tibs::from_bv(bv_from_ones(length)))
     }
 
     /// Create a new instance from a formatted string.
@@ -911,6 +940,7 @@ impl Tibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?))
     }
@@ -968,6 +998,7 @@ impl Tibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?))
     }
@@ -1023,6 +1054,7 @@ impl Tibs {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let length = validate_length(length)?;
         let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
         let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Tibs::from_bv(bv))
@@ -1218,6 +1250,14 @@ impl Tibs {
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
+        let length = match length {
+            Some(length) => Some(validate_length(length)?),
+            None => None,
+        };
+        let offset = match offset {
+            Some(offset) => Some(validate_length(offset)?),
+            None => None,
+        };
         let bv = bv_from_bytes_slice(data, offset, length)?;
         Ok(Self::from_bv(bv))
     }

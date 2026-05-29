@@ -1,11 +1,11 @@
 use crate::enums::{DtypeKind, Endianness};
-use pyo3::{PyResult, pyclass, pymethods};
 use pyo3::exceptions::PyValueError;
+use pyo3::{PyResult, pyclass, pymethods};
 
 #[pyclass(module = "tibs", frozen)]
 pub struct Dtype {
     pub(crate) kind: DtypeKind,
-    pub(crate) length: i64,
+    pub(crate) length: usize,
     pub(crate) byte_order: Endianness,
 }
 
@@ -22,7 +22,7 @@ impl Dtype {
         }
         Ok(Dtype {
             kind,
-            length,
+            length: length as usize,
             byte_order: byte_order.unwrap_or(Endianness::Unspecified),
         })
     }
@@ -33,7 +33,7 @@ impl Dtype {
     }
 
     #[getter]
-    fn length(&self) -> i64 {
+    fn length(&self) -> usize {
         self.length
     }
 
