@@ -40,6 +40,9 @@ class Dtype:
             byte_order: Endianness = Endianness.Unspecified
     ) -> None: ...
 
+    @classmethod
+    def u(cls, length: int, byte_order: Endianness = Endianness.Unspecified) -> Dtype: ...
+
     @property
     def kind(self) -> DtypeKind: ...
 

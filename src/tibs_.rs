@@ -2,7 +2,12 @@ use crate::core::BitCollection;
 use crate::dtype::Dtype;
 use crate::enums::{BitOrder, Codec, DtypeKind, Endianness};
 use crate::helpers;
-use crate::helpers::{BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv, validate_logical_op_lengths, validate_shift, validate_slice, validate_length};
+use crate::helpers::{
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
+    compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+};
 use crate::iterator::{BoolIterator, ChunksIterator, DtypeIterator, FindAllIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;

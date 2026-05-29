@@ -27,9 +27,10 @@ pub(crate) fn validate_length(length: i64) -> PyResult<usize> {
         Err(PyValueError::new_err(format!(
             "Negative bit length given: {length}."
         )))
-    } else { Ok(length as usize) }
+    } else {
+        Ok(length as usize)
+    }
 }
-
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {

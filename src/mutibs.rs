@@ -1,6 +1,11 @@
 use crate::core::BitCollection;
 use crate::enums::{BitOrder, Codec, Endianness};
-use crate::helpers::{BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_logical_op_lengths, validate_shift, validate_slice, validate_length};
+use crate::helpers::{
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
+    find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_length,
+    validate_logical_op_lengths, validate_shift, validate_slice,
+};
 use crate::tibs_::Tibs;
 use crate::view::{MutableView, View};
 
@@ -260,8 +265,8 @@ impl Mutibs {
         let n = match n {
             ..0 => {
                 return Err(PyValueError::new_err("Cannot rotate by a negative amount."));
-            },
-            _ => n as usize
+            }
+            _ => n as usize,
         };
 
         let (start, end) = validate_slice(self.len(), start, end)?;

@@ -8,6 +8,13 @@ def test_creation():
     assert d.length == 8
 
 
+def test_uint_constructor():
+    d = Dtype.u(8, Endianness.Little)
+    assert d.kind is DtypeKind.Uint
+    assert d.length == 8
+    assert d.byte_order is Endianness.Little
+
+
 def test_dtype_float():
     d = Dtype(DtypeKind.Float, 16, Endianness.Little)
     t = Tibs.from_dtype(d, 14.5)

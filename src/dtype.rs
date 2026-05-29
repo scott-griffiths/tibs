@@ -27,6 +27,16 @@ impl Dtype {
         })
     }
 
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn u(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Uint, length, byte_order)
+    }
+
     #[getter]
     fn kind(&self) -> DtypeKind {
         self.kind
