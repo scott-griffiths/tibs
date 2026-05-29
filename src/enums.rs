@@ -71,7 +71,6 @@ pub enum Codec {
     Zstd,
 }
 
-
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy)]
 pub enum DtypeKind {

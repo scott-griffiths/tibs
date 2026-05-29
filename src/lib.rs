@@ -3,13 +3,13 @@
 #![allow(clippy::collapsible_if)]
 
 pub mod core;
+pub mod dtype;
 pub mod enums;
 pub mod helpers;
 pub mod iterator;
 pub mod mutibs;
 pub mod tibs_;
 pub mod view;
-pub mod dtype;
 
 use pyo3::prelude::*;
 

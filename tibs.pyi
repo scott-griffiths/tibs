@@ -22,6 +22,38 @@ class Codec:
     Zstd: ClassVar[Codec]
 
 
+class DtypeKind:
+    Uint: ClassVar[DtypeKind]
+    Int: ClassVar[DtypeKind]
+    Float: ClassVar[DtypeKind]
+    Bytes: ClassVar[DtypeKind]
+    Bin: ClassVar[DtypeKind]
+    Oct: ClassVar[DtypeKind]
+    Hex: ClassVar[DtypeKind]
+
+
+class Dtype:
+    def __init__(
+            self,
+            kind: DtypeKind,
+            length: int,
+            byte_order: Endianness = Endianness.Unspecified,
+            bit_order: BitOrder = BitOrder.Msb0
+    ) -> None: ...
+
+    @property
+    def kind(self) -> DtypeKind: ...
+
+    @property
+    def length(self) -> int: ...
+
+    @property
+    def byte_order(self) -> Endianness: ...
+
+    @property
+    def bit_order(self) -> BitOrder: ...
+
+
 class View:
     def __init__(
             self,
@@ -299,6 +331,9 @@ class Tibs:
 
     @classmethod
     def from_string(cls, s: str, /) -> Tibs: ...
+
+    @classmethod
+    def from_dtype(cls, dtype: Dtype, value: Any, /) -> Tibs: ...
 
     @classmethod
     def from_u(cls, u: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Tibs: ...

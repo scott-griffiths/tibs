@@ -1,5 +1,6 @@
 use crate::core::BitCollection;
-use crate::enums::{BitOrder, Codec, Endianness};
+use crate::dtype::Dtype;
+use crate::enums::{BitOrder, Codec, DtypeKind, Endianness};
 use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -761,6 +762,34 @@ impl Tibs {
             )));
         }
         Ok(Self::from_bv(bv_from_zeros(length as usize)))
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
+    pub fn from_dtype(
+        _cls: &Bound<'_, PyType>,
+        dtype: &Dtype,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+        let bv = match dtype.kind {
+            DtypeKind::Float => {
+                bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)?
+            }
+            DtypeKind::Uint => {
+                bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian)?
+            }
+            DtypeKind::Int => {
+                bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian)?
+            }
+            DtypeKind::Bytes => {
+                bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))?
+            }
+            DtypeKind::Bin => bv_from_bin(&value.extract::<String>()?)?,
+            DtypeKind::Oct => bv_from_oct(&value.extract::<String>()?)?,
+            DtypeKind::Hex => bv_from_hex(&value.extract::<String>()?)?,
+        };
+        Ok(Tibs::from_bv(bv))
     }
 
     /// Create a new instance with all bits set to '1'.
