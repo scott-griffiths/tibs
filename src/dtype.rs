@@ -37,6 +37,66 @@ impl Dtype {
         Self::py_new(DtypeKind::Uint, length, byte_order)
     }
 
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn i(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Int, length, byte_order)
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn f(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Float, length, byte_order)
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn bytes(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Bytes, length, byte_order)
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn bin(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Bin, length, byte_order)
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn oct(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Oct, length, byte_order)
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
+    pub fn hex(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        length: i64,
+        byte_order: Option<Endianness>,
+    ) -> PyResult<Self> {
+        Self::py_new(DtypeKind::Hex, length, byte_order)
+    }
+
     #[getter]
     fn kind(&self) -> DtypeKind {
         self.kind

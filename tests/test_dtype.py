@@ -15,6 +15,24 @@ def test_uint_constructor():
     assert d.byte_order is Endianness.Little
 
 
+@pytest.mark.parametrize(
+    "constructor,kind",
+    [
+        (Dtype.i, DtypeKind.Int),
+        (Dtype.f, DtypeKind.Float),
+        (Dtype.bytes, DtypeKind.Bytes),
+        (Dtype.bin, DtypeKind.Bin),
+        (Dtype.oct, DtypeKind.Oct),
+        (Dtype.hex, DtypeKind.Hex),
+    ],
+)
+def test_dtype_kind_constructors(constructor, kind):
+    d = constructor(8, Endianness.Little)
+    assert d.kind is kind
+    assert d.length == 8
+    assert d.byte_order is Endianness.Little
+
+
 def test_dtype_float():
     d = Dtype(DtypeKind.Float, 16, Endianness.Little)
     t = Tibs.from_dtype(d, 14.5)
