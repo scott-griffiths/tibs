@@ -23,7 +23,7 @@ pub struct Dtype {
 }
 
 impl Dtype {
-    fn from_parts(kind: DtypeKind, length: i64, byte_order: Option<Endianness>) -> PyResult<Self> {
+    fn from_parts(kind: DtypeKind, length: i64, byte_order: Endianness) -> PyResult<Self> {
         if length <= 0 {
             return Err(PyValueError::new_err(format!(
                 "Dtype length must be greater than zero, but received {}.",
@@ -31,7 +31,6 @@ impl Dtype {
             )));
         }
         let length = length as usize;
-        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         match byte_order {
             Endianness::Unspecified => (),
             _ => match kind {
@@ -72,11 +71,11 @@ impl Dtype {
     fn parse_spec(spec: &str) -> PyResult<Self> {
         let spec = spec.trim().to_ascii_lowercase();
         let (base, byte_order) = if let Some(base) = spec.strip_suffix("_le") {
-            (base, Some(Endianness::Little))
+            (base, Endianness::Little)
         } else if let Some(base) = spec.strip_suffix("_be") {
-            (base, Some(Endianness::Big))
+            (base, Endianness::Big)
         } else {
-            (spec.as_str(), None)
+            (spec.as_str(), Endianness::Unspecified)
         };
 
         let (kind, length_text) = if let Some(length) = base.strip_prefix("bytes") {
@@ -157,6 +156,7 @@ impl Dtype {
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
+        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
         Self::from_parts(kind, length, byte_order)
     }
 
