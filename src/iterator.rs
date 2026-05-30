@@ -1,7 +1,7 @@
 use crate::core::BitCollection;
 use crate::enums::{DtypeKind, Endianness};
 use crate::helpers;
-use crate::tibs_::{Tibs, py_from_dtype_parts};
+use crate::tibs_::{Tibs, py_from_value_parts};
 use memchr::memmem;
 use pyo3::prelude::*;
 
@@ -208,7 +208,7 @@ impl ChunksIterator {
 }
 
 #[pyclass]
-pub struct DtypeIterator {
+pub struct ValuesIterator {
     pub(crate) bits_object: Py<Tibs>,
     pub(crate) dtype_kind: DtypeKind,
     pub(crate) dtype_length: usize,
@@ -219,7 +219,7 @@ pub struct DtypeIterator {
 }
 
 #[pymethods]
-impl DtypeIterator {
+impl ValuesIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
@@ -235,6 +235,6 @@ impl DtypeIterator {
         };
         slf.current_pos += slf.chunk_size;
 
-        py_from_dtype_parts(py, slf.dtype_kind, slf.dtype_length, slf.byte_order, &value).map(Some)
+        py_from_value_parts(py, slf.dtype_kind, slf.dtype_length, slf.byte_order, &value).map(Some)
     }
 }

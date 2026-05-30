@@ -8,7 +8,7 @@ use crate::helpers::{
     compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
     validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
-use crate::iterator::{BoolIterator, ChunksIterator, DtypeIterator, FindAllIterator};
+use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
@@ -214,7 +214,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
     }
 }
 
-fn bv_from_dtype_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
+pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
     let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
     match dtype.kind {
         DtypeKind::Float => bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian),
@@ -229,7 +229,26 @@ fn bv_from_dtype_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> 
     }
 }
 
-pub(crate) fn py_from_dtype_parts(
+pub(crate) fn bv_from_values_iter(
+    py: Python<'_>,
+    dtype: &Dtype,
+    iterable: &Bound<'_, PyAny>,
+) -> PyResult<BV> {
+    let capacity = iterable
+        .len()
+        .ok()
+        .and_then(|len| len.checked_mul(dtype.length));
+    let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
+    for (index, item) in iterable.try_iter()?.enumerate() {
+        if index.is_multiple_of(1024) {
+            py.check_signals()?;
+        }
+        bv.extend(bv_from_value(dtype, &item?)?);
+    }
+    Ok(bv)
+}
+
+pub(crate) fn py_from_value_parts(
     py: Python<'_>,
     dtype_kind: DtypeKind,
     dtype_length: usize,
@@ -256,12 +275,36 @@ pub(crate) fn py_from_dtype_parts(
     }
 }
 
-pub(crate) fn py_from_dtype_value(
+pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyResult<Py<PyAny>> {
+    py_from_value_parts(py, dtype.kind, dtype.length, dtype.byte_order, value)
+}
+
+pub(crate) fn py_values_from_range(
     py: Python<'_>,
+    bits: &Tibs,
     dtype: &Dtype,
-    value: &Tibs,
-) -> PyResult<Py<PyAny>> {
-    py_from_dtype_parts(py, dtype.kind, dtype.length, dtype.byte_order, value)
+    start: Option<isize>,
+    end: Option<isize>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let (start, end) = validate_slice(bits.len(), start, end)?;
+    let selected_len = end - start;
+    if !selected_len.is_multiple_of(dtype.length) {
+        return Err(PyValueError::new_err(format!(
+            "Cannot convert to values - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
+            dtype.length
+        )));
+    }
+
+    let count = selected_len / dtype.length;
+    let mut values = Vec::with_capacity(count);
+    for index in 0..count {
+        if index.is_multiple_of(1024) {
+            py.check_signals()?;
+        }
+        let value = bits.get_slice_unchecked(start + index * dtype.length, dtype.length);
+        values.push(py_from_value(py, dtype, &value)?);
+    }
+    Ok(values)
 }
 
 /// Public Python-facing methods.
@@ -812,45 +855,38 @@ impl Tibs {
 
     #[classmethod]
     #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
-    pub fn from_dtype(
+    pub fn from_value(
         _cls: &Bound<'_, PyType>,
         dtype: &Dtype,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Tibs::from_bv(bv_from_dtype_value(dtype, value)?))
+        Ok(Tibs::from_bv(bv_from_value(dtype, value)?))
     }
 
     #[classmethod]
     #[pyo3(signature = (dtype, iterable, /), text_signature = "(cls, dtype, iterable, /)")]
-    pub fn from_dtype_iter(
+    pub fn from_values(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         dtype: &Dtype,
         iterable: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        let mut bv = BV::new();
-        for (index, item) in iterable.try_iter()?.enumerate() {
-            if index.is_multiple_of(1024) {
-                py.check_signals()?;
-            }
-            bv.extend(bv_from_dtype_value(dtype, &item?)?);
-        }
-        Ok(Tibs::from_bv(bv))
+        Ok(Tibs::from_bv(bv_from_values_iter(py, dtype, iterable)?))
     }
 
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
-    pub fn to_dtype_iter(
+    pub fn to_values_iter(
         slf: PyRef<'_, Self>,
         dtype: &Dtype,
         start: Option<isize>,
         end: Option<isize>,
-    ) -> PyResult<Py<DtypeIterator>> {
+    ) -> PyResult<Py<ValuesIterator>> {
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let selected_len = end - start;
         let chunk_size = dtype.length;
         if !selected_len.is_multiple_of(chunk_size) {
             return Err(PyValueError::new_err(format!(
-                "Cannot create dtype iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
+                "Cannot create values iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
                 dtype.length
             )));
         }
@@ -858,7 +894,7 @@ impl Tibs {
         let py = slf.py();
         Py::new(
             py,
-            DtypeIterator {
+            ValuesIterator {
                 bits_object: slf.into(),
                 dtype_kind: dtype.kind,
                 dtype_length: dtype.length,
@@ -871,7 +907,18 @@ impl Tibs {
     }
 
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
-    pub fn to_dtype(
+    pub fn to_values(
+        &self,
+        py: Python<'_>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        py_values_from_range(py, self, dtype, start, end)
+    }
+
+    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    pub fn to_value(
         &self,
         py: Python<'_>,
         dtype: &Dtype,
@@ -880,7 +927,7 @@ impl Tibs {
     ) -> PyResult<Py<PyAny>> {
         let (start, end) = validate_slice(self.len(), start, end)?;
         let value = self.get_slice_unchecked(start, end - start);
-        py_from_dtype_value(py, dtype, &value)
+        py_from_value(py, dtype, &value)
     }
 
     /// Create a new instance with all bits set to '1'.

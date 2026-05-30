@@ -1,4 +1,5 @@
 use crate::core::BitCollection;
+use crate::dtype::Dtype;
 use crate::enums::{BitOrder, Codec, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -6,7 +7,7 @@ use crate::helpers::{
     find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_length,
     validate_logical_op_lengths, validate_shift, validate_slice,
 };
-use crate::tibs_::Tibs;
+use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
 use crate::view::{MutableView, View};
 
 use crate::helpers;
@@ -1401,6 +1402,27 @@ impl Mutibs {
         Ok(Mutibs::from_bv(bv))
     }
 
+    #[classmethod]
+    #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
+    pub fn from_value(
+        _cls: &Bound<'_, PyType>,
+        dtype: &Dtype,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        Ok(Mutibs::from_bv(bv_from_value(dtype, value)?))
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (dtype, iterable, /), text_signature = "(cls, dtype, iterable, /)")]
+    pub fn from_values(
+        _cls: &Bound<'_, PyType>,
+        py: Python<'_>,
+        dtype: &Dtype,
+        iterable: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        Ok(Mutibs::from_bv(bv_from_values_iter(py, dtype, iterable)?))
+    }
+
     /// The bit length of the Mutibs.
     pub fn __len__(&self) -> usize {
         self.len()
@@ -1409,6 +1431,32 @@ impl Mutibs {
     /// Whether the Mutibs has any bits.
     pub fn __bool__(&self) -> bool {
         !self.as_bitvec_ref().is_empty()
+    }
+
+    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    pub fn to_values(
+        &self,
+        py: Python<'_>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        let snapshot = self.to_tibs();
+        py_values_from_range(py, &snapshot, dtype, start, end)
+    }
+
+    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    pub fn to_value(
+        &self,
+        py: Python<'_>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyAny>> {
+        let snapshot = self.to_tibs();
+        let (start, end) = validate_slice(snapshot.len(), start, end)?;
+        let value = snapshot.get_slice_unchecked(start, end - start);
+        py_from_value(py, dtype, &value)
     }
 
     /// Get a bit or a slice of bits.
@@ -2873,6 +2921,7 @@ impl Mutibs {
             || name == "rfind_all_iter"
             || name == "chunks_iter"
             || name == "rchunks_iter"
+            || name == "to_values_iter"
         {
             Err(PyAttributeError::new_err(format!(
                 "'Mutibs' object has no attribute '{name}', but `Tibs` does. Perhaps try '.to_tibs().{name}()' instead."
