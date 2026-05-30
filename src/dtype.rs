@@ -10,9 +10,9 @@ use pyo3::{PyResult, pyclass, pymethods};
 ///
 ///     .. code-block:: pycon
 ///
-///         >>> Dtype.u(16, Endianness.Little)
-///         Dtype.u(16, Endianness.Little)
-///         >>> Tibs.from_value(Dtype.u(8), 15)
+///         >>> Dtype("u16_le")
+///         Dtype('u16_le')
+///         >>> Tibs.from_value(Dtype("u8"), 15)
 ///         Tibs('0x0f')
 ///
 #[pyclass(module = "tibs", frozen)]
@@ -22,20 +22,8 @@ pub struct Dtype {
     pub(crate) byte_order: Endianness,
 }
 
-#[pymethods]
 impl Dtype {
-    /// Create a value encoding description.
-    ///
-    /// :param DtypeKind kind: The kind of value to encode or decode.
-    /// :param int length: The number of bits used by one value.
-    /// :param Endianness byte_order: The byte order for integer and floating-point values. Defaults to ``Endianness.Unspecified``.
-    /// :return: A new ``Dtype``.
-    ///
-    /// :raises ValueError: if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
-    ///
-    #[new]
-    #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "($self, kind, length, byte_order)")]
-    pub fn py_new(kind: DtypeKind, length: i64, byte_order: Option<Endianness>) -> PyResult<Self> {
+    fn from_parts(kind: DtypeKind, length: i64, byte_order: Option<Endianness>) -> PyResult<Self> {
         if length <= 0 {
             return Err(PyValueError::new_err(format!(
                 "Dtype length must be greater than zero, but received {}.",
@@ -81,101 +69,95 @@ impl Dtype {
         })
     }
 
-    /// Create an unsigned integer dtype.
+    fn parse_spec(spec: &str) -> PyResult<Self> {
+        let spec = spec.trim().to_ascii_lowercase();
+        let (base, byte_order) = if let Some(base) = spec.strip_suffix("_le") {
+            (base, Some(Endianness::Little))
+        } else if let Some(base) = spec.strip_suffix("_be") {
+            (base, Some(Endianness::Big))
+        } else {
+            (spec.as_str(), None)
+        };
+
+        let (kind, length_text) = if let Some(length) = base.strip_prefix("bytes") {
+            (DtypeKind::Bytes, length)
+        } else if let Some(length) = base.strip_prefix("bin") {
+            (DtypeKind::Bin, length)
+        } else if let Some(length) = base.strip_prefix("oct") {
+            (DtypeKind::Oct, length)
+        } else if let Some(length) = base.strip_prefix("hex") {
+            (DtypeKind::Hex, length)
+        } else if let Some(length) = base.strip_prefix('u') {
+            (DtypeKind::Uint, length)
+        } else if let Some(length) = base.strip_prefix('i') {
+            (DtypeKind::Int, length)
+        } else if let Some(length) = base.strip_prefix('f') {
+            (DtypeKind::Float, length)
+        } else {
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}'."
+            )));
+        };
+
+        if length_text.is_empty() || !length_text.chars().all(|c| c.is_ascii_digit()) {
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': missing or invalid bit length."
+            )));
+        }
+        let length = length_text.parse::<i64>().map_err(|_| {
+            PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': bit length is too large."
+            ))
+        })?;
+        Self::from_parts(kind, length, byte_order)
+    }
+}
+
+#[pymethods]
+impl Dtype {
+    /// Create a dtype from a compact string specification.
     ///
-    /// :param int length: The number of bits used by one unsigned integer value.
-    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
-    /// :return: A new unsigned integer ``Dtype``.
+    /// :param str spec: A dtype string such as ``"u8"``, ``"i16"``, ``"f32_le"``, ``"hex32"`` or ``"bytes64"``.
+    /// :return: A new ``Dtype``.
+    ///
+    /// :raises ValueError: if the string cannot be parsed, if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Dtype.u(8)
-    ///     Dtype.u(8)
+    ///     >>> Dtype("u8")
+    ///     Dtype('u8')
+    ///     >>> Dtype("f32_le")
+    ///     Dtype('f32_le')
+    ///
+    #[new]
+    #[pyo3(signature = (spec, /), text_signature = "($self, spec, /)")]
+    pub fn py_new(spec: &str) -> PyResult<Self> {
+        Self::parse_spec(spec)
+    }
+
+    /// Create a dtype from explicit parameters.
+    ///
+    /// :param DtypeKind kind: The kind of value to encode or decode.
+    /// :param int length: The number of bits used by one value.
+    /// :param Endianness byte_order: The byte order for integer and floating-point values. Defaults to ``Endianness.Unspecified``.
+    /// :return: A new ``Dtype``.
+    ///
+    /// :raises ValueError: if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Dtype.from_params(DtypeKind.Uint, 16, Endianness.Little)
+    ///     Dtype('u16_le')
     ///
     #[classmethod]
-    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
-    pub fn u(
+    #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "(cls, kind, length, byte_order)")]
+    pub fn from_params(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        kind: DtypeKind,
         length: i64,
         byte_order: Option<Endianness>,
     ) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Uint, length, byte_order)
-    }
-
-    /// Create a signed integer dtype.
-    ///
-    /// :param int length: The number of bits used by one signed integer value.
-    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
-    /// :return: A new signed integer ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
-    pub fn i(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        length: i64,
-        byte_order: Option<Endianness>,
-    ) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Int, length, byte_order)
-    }
-
-    /// Create a floating-point dtype.
-    ///
-    /// :param int length: The number of bits used by one floating-point value. Supported value conversion lengths are 16, 32 and 64.
-    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
-    /// :return: A new floating-point ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
-    pub fn f(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        length: i64,
-        byte_order: Option<Endianness>,
-    ) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Float, length, byte_order)
-    }
-
-    /// Create a bytes dtype.
-    ///
-    /// :param int length: The number of bits used by one bytes value.
-    /// :return: A new bytes ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length), text_signature = "(cls, length)")]
-    pub fn bytes(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Bytes, length, None)
-    }
-
-    /// Create a binary string dtype.
-    ///
-    /// :param int length: The number of bits used by one binary string value.
-    /// :return: A new binary string ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length), text_signature = "(cls, length)")]
-    pub fn bin(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Bin, length, None)
-    }
-
-    /// Create an octal string dtype.
-    ///
-    /// :param int length: The number of bits used by one octal string value.
-    /// :return: A new octal string ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length), text_signature = "(cls, length)")]
-    pub fn oct(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Oct, length, None)
-    }
-
-    /// Create a hexadecimal string dtype.
-    ///
-    /// :param int length: The number of bits used by one hexadecimal string value.
-    /// :return: A new hexadecimal string ``Dtype``.
-    ///
-    #[classmethod]
-    #[pyo3(signature = (length), text_signature = "(cls, length)")]
-    pub fn hex(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
-        Self::py_new(DtypeKind::Hex, length, None)
+        Self::from_parts(kind, length, byte_order)
     }
 
     /// The value kind described by this dtype.
@@ -198,31 +180,19 @@ impl Dtype {
 
     pub fn __repr__(&self) -> String {
         let byte_order_str = match self.byte_order {
-            Endianness::Unspecified => "".to_string(),
-            _ => format!(", {}", self.byte_order.repr_name()),
+            Endianness::Unspecified => "",
+            Endianness::Little => "_le",
+            Endianness::Big => "_be",
         };
-        match self.kind {
-            DtypeKind::Uint => {
-                format!("Dtype.u({}{})", self.length, byte_order_str)
-            }
-            DtypeKind::Int => {
-                format!("Dtype.i({}{})", self.length, byte_order_str)
-            }
-            DtypeKind::Float => {
-                format!("Dtype.f({}{})", self.length, byte_order_str)
-            }
-            DtypeKind::Bin => {
-                format!("Dtype.bin({})", self.length)
-            }
-            DtypeKind::Oct => {
-                format!("Dtype.oct({})", self.length)
-            }
-            DtypeKind::Hex => {
-                format!("Dtype.hex({})", self.length)
-            }
-            DtypeKind::Bytes => {
-                format!("Dtype.bytes({})", self.length)
-            }
-        }
+        let spec = match self.kind {
+            DtypeKind::Uint => format!("u{}{}", self.length, byte_order_str),
+            DtypeKind::Int => format!("i{}{}", self.length, byte_order_str),
+            DtypeKind::Float => format!("f{}{}", self.length, byte_order_str),
+            DtypeKind::Bin => format!("bin{}", self.length),
+            DtypeKind::Oct => format!("oct{}", self.length),
+            DtypeKind::Hex => format!("hex{}", self.length),
+            DtypeKind::Bytes => format!("bytes{}", self.length),
+        };
+        format!("Dtype('{spec}')")
     }
 }

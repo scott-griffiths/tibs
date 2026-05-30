@@ -1410,7 +1410,7 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_value(Dtype.u(8), 15)
+    ///     >>> Mutibs.from_value(Dtype("u8"), 15)
     ///     Mutibs('0x0f')
     ///
     #[classmethod]
@@ -1431,7 +1431,7 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_values(Dtype.u(8), [1, 2, 3])
+    ///     >>> Mutibs.from_values(Dtype("u8"), [1, 2, 3])
     ///     Mutibs('0x010203')
     ///
     #[classmethod]
@@ -1467,7 +1467,7 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0x010203').to_values(Dtype.u(8))
+    ///     >>> Mutibs('0x010203').to_values(Dtype("u8"))
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
@@ -1493,7 +1493,7 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0x0f').to_value(Dtype.u(8))
+    ///     >>> Mutibs('0x0f').to_value(Dtype("u8"))
     ///     15
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]

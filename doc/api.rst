@@ -19,5 +19,6 @@ The most important classes available in the tibs module are:
 
     tibs
     mutibs
+    dtype
     view
     other

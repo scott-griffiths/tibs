@@ -40,6 +40,14 @@ extraction, see :doc:`views`.
 
 ----
 
+.. autoclass:: tibs.DtypeKind
+   :members:
+   :member-order: groupwise
+   :undoc-members:
+
+
+----
+
 .. autoclass:: tibs.Codec
    :members:
    :member-order: groupwise

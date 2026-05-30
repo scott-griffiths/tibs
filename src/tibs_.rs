@@ -861,7 +861,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_value(Dtype.u(8), 15)
+    ///     >>> Tibs.from_value(Dtype("u8"), 15)
     ///     Tibs('0x0f')
     ///
     #[classmethod]
@@ -882,7 +882,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_values(Dtype.u(8), [1, 2, 3])
+    ///     >>> Tibs.from_values(Dtype("u8"), [1, 2, 3])
     ///     Tibs('0x010203')
     ///
     #[classmethod]
@@ -907,7 +907,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0x010203').to_values_iter(Dtype.u(8)))
+    ///     >>> list(Tibs('0x010203').to_values_iter(Dtype("u8")))
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
@@ -953,7 +953,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0x010203').to_values(Dtype.u(8))
+    ///     >>> Tibs('0x010203').to_values(Dtype("u8"))
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
@@ -978,7 +978,7 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0x0f').to_value(Dtype.u(8))
+    ///     >>> Tibs('0x0f').to_value(Dtype("u8"))
     ///     15
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]

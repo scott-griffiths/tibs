@@ -33,33 +33,15 @@ class DtypeKind:
 
 
 class Dtype:
-    def __init__(
-            self,
+    def __init__(self, spec: str, /) -> None: ...
+
+    @classmethod
+    def from_params(
+            cls,
             kind: DtypeKind,
             length: int,
             byte_order: Endianness = Endianness.Unspecified
-    ) -> None: ...
-
-    @classmethod
-    def u(cls, length: int, byte_order: Endianness = Endianness.Unspecified) -> Dtype: ...
-
-    @classmethod
-    def i(cls, length: int, byte_order: Endianness = Endianness.Unspecified) -> Dtype: ...
-
-    @classmethod
-    def f(cls, length: int, byte_order: Endianness = Endianness.Unspecified) -> Dtype: ...
-
-    @classmethod
-    def bytes(cls, length: int) -> Dtype: ...
-
-    @classmethod
-    def bin(cls, length: int) -> Dtype: ...
-
-    @classmethod
-    def oct(cls, length: int) -> Dtype: ...
-
-    @classmethod
-    def hex(cls, length: int) -> Dtype: ...
+    ) -> Dtype: ...
 
     @property
     def kind(self) -> DtypeKind: ...
