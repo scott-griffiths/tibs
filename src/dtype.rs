@@ -2,6 +2,19 @@ use crate::enums::{DtypeKind, Endianness};
 use pyo3::exceptions::PyValueError;
 use pyo3::{PyResult, pyclass, pymethods};
 
+///     A data type which determines how a value is encoded as a fixed-width bit sequence.
+///
+///     ``Dtype`` is used by :meth:`Tibs.from_value`, :meth:`Tibs.to_value`,
+///     :meth:`Tibs.from_values` and related methods to describe the kind, length and
+///     optional byte order for encoded values.
+///
+///     .. code-block:: pycon
+///
+///         >>> Dtype.u(16, Endianness.Little)
+///         Dtype.u(16, Endianness.Little)
+///         >>> Tibs.from_value(Dtype.u(8), 15)
+///         Tibs('0x0f')
+///
 #[pyclass(module = "tibs", frozen)]
 pub struct Dtype {
     pub(crate) kind: DtypeKind,
@@ -11,6 +24,15 @@ pub struct Dtype {
 
 #[pymethods]
 impl Dtype {
+    /// Create a value encoding description.
+    ///
+    /// :param DtypeKind kind: The kind of value to encode or decode.
+    /// :param int length: The number of bits used by one value.
+    /// :param Endianness byte_order: The byte order for integer and floating-point values. Defaults to ``Endianness.Unspecified``.
+    /// :return: A new ``Dtype``.
+    ///
+    /// :raises ValueError: if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
+    ///
     #[new]
     #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "($self, kind, length, byte_order)")]
     pub fn py_new(kind: DtypeKind, length: i64, byte_order: Option<Endianness>) -> PyResult<Self> {
@@ -59,6 +81,17 @@ impl Dtype {
         })
     }
 
+    /// Create an unsigned integer dtype.
+    ///
+    /// :param int length: The number of bits used by one unsigned integer value.
+    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
+    /// :return: A new unsigned integer ``Dtype``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Dtype.u(8)
+    ///     Dtype.u(8)
+    ///
     #[classmethod]
     #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
     pub fn u(
@@ -69,6 +102,12 @@ impl Dtype {
         Self::py_new(DtypeKind::Uint, length, byte_order)
     }
 
+    /// Create a signed integer dtype.
+    ///
+    /// :param int length: The number of bits used by one signed integer value.
+    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
+    /// :return: A new signed integer ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
     pub fn i(
@@ -79,6 +118,12 @@ impl Dtype {
         Self::py_new(DtypeKind::Int, length, byte_order)
     }
 
+    /// Create a floating-point dtype.
+    ///
+    /// :param int length: The number of bits used by one floating-point value. Supported value conversion lengths are 16, 32 and 64.
+    /// :param Endianness byte_order: The byte order for byte-wide values. Defaults to ``Endianness.Unspecified``.
+    /// :return: A new floating-point ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length, byte_order = Endianness::Unspecified), text_signature = "(cls, length, byte_order)")]
     pub fn f(
@@ -89,40 +134,63 @@ impl Dtype {
         Self::py_new(DtypeKind::Float, length, byte_order)
     }
 
+    /// Create a bytes dtype.
+    ///
+    /// :param int length: The number of bits used by one bytes value.
+    /// :return: A new bytes ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length), text_signature = "(cls, length)")]
     pub fn bytes(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
         Self::py_new(DtypeKind::Bytes, length, None)
     }
 
+    /// Create a binary string dtype.
+    ///
+    /// :param int length: The number of bits used by one binary string value.
+    /// :return: A new binary string ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length), text_signature = "(cls, length)")]
     pub fn bin(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
         Self::py_new(DtypeKind::Bin, length, None)
     }
 
+    /// Create an octal string dtype.
+    ///
+    /// :param int length: The number of bits used by one octal string value.
+    /// :return: A new octal string ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length), text_signature = "(cls, length)")]
     pub fn oct(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
         Self::py_new(DtypeKind::Oct, length, None)
     }
 
+    /// Create a hexadecimal string dtype.
+    ///
+    /// :param int length: The number of bits used by one hexadecimal string value.
+    /// :return: A new hexadecimal string ``Dtype``.
+    ///
     #[classmethod]
     #[pyo3(signature = (length), text_signature = "(cls, length)")]
     pub fn hex(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, length: i64) -> PyResult<Self> {
         Self::py_new(DtypeKind::Hex, length, None)
     }
 
+    /// The value kind described by this dtype.
     #[getter]
     fn kind(&self) -> DtypeKind {
         self.kind
     }
 
+    /// The number of bits used by one value.
     #[getter]
     fn length(&self) -> usize {
         self.length
     }
 
+    /// The byte order used by integer and floating-point values.
     #[getter]
     fn byte_order(&self) -> Endianness {
         self.byte_order

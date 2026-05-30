@@ -1402,6 +1402,17 @@ impl Mutibs {
         Ok(Mutibs::from_bv(bv))
     }
 
+    /// Create a new instance by encoding one value with a dtype.
+    ///
+    /// :param Dtype dtype: The value encoding to use.
+    /// :param object value: The value to encode.
+    /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_value(Dtype.u(8), 15)
+    ///     Mutibs('0x0f')
+    ///
     #[classmethod]
     #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
     pub fn from_value(
@@ -1412,6 +1423,17 @@ impl Mutibs {
         Ok(Mutibs::from_bv(bv_from_value(dtype, value)?))
     }
 
+    /// Create a new instance by encoding and concatenating values with a dtype.
+    ///
+    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param Iterable iterable: The values to encode.
+    /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs.from_values(Dtype.u(8), [1, 2, 3])
+    ///     Mutibs('0x010203')
+    ///
     #[classmethod]
     #[pyo3(signature = (dtype, iterable, /), text_signature = "(cls, dtype, iterable, /)")]
     pub fn from_values(
@@ -1433,6 +1455,21 @@ impl Mutibs {
         !self.as_bitvec_ref().is_empty()
     }
 
+    /// Return a list of values decoded with a dtype.
+    ///
+    /// The selected range must be a whole number of dtype values. The values are
+    /// decoded from the current contents when the method is called.
+    ///
+    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    /// :return: A list of decoded Python values.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0x010203').to_values(Dtype.u(8))
+    ///     [1, 2, 3]
+    ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_values(
         &self,
@@ -1445,6 +1482,20 @@ impl Mutibs {
         py_values_from_range(py, &snapshot, dtype, start, end)
     }
 
+    /// Return one value decoded with a dtype.
+    ///
+    /// The selected range must have exactly the dtype length.
+    ///
+    /// :param Dtype dtype: The value encoding to use.
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    /// :return: The decoded Python value.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0x0f').to_value(Dtype.u(8))
+    ///     15
+    ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_value(
         &self,
