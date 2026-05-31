@@ -27,6 +27,9 @@ other_bytes = Tibs.from_random(10_000_000, seed=b'b').to_bytes()
 t = Tibs.from_bytes(some_bytes)
 bit_list = list(t[:10_000_000])
 
+value_words = [randrange(1 << 16) for _ in range(100_000)]
+value_bytes = Tibs.from_values('u16', value_words).to_bytes()
+
 
 def test_findall_tibs():
     t = Tibs.from_bytes(some_bytes)
@@ -188,6 +191,57 @@ def test_pop_tibs():
         _ = t.pop()
 
 
+def test_bool_construction_bitarray():
+    b = bitarray(bit_list)
+    assert len(b) == len(bit_list)
+
+
+def test_bool_construction_tibs():
+    t = Tibs.from_bools(bit_list)
+    assert len(t) == len(bit_list)
+
+
+def test_slice_count_bitarray():
+    b = bitarray()
+    b.frombytes(some_bytes)
+    total = 0
+    for start in range(0, 750_000, 5):
+        total += b[start:start + 257].count(1)
+    assert total >= 0
+
+
+def test_slice_count_tibs():
+    t = Tibs.from_bytes(some_bytes)
+    total = 0
+    for start in range(0, 750_000, 5):
+        total += t[start:start + 257].count(1)
+    assert total >= 0
+
+
+def test_pack_u16_bitarray():
+    b = bitarray()
+    for value in value_words:
+        b.extend(int2ba(value, length=16))
+    assert len(b) == 16 * len(value_words)
+
+
+def test_pack_u16_tibs():
+    t = Tibs.from_values('u16', value_words)
+    assert len(t) == 16 * len(value_words)
+
+
+def test_unpack_u16_bitarray():
+    b = bitarray()
+    b.frombytes(value_bytes)
+    values = [ba2int(b[i:i + 16]) for i in range(0, len(b), 16)]
+    assert values == value_words
+
+
+def test_unpack_u16_tibs():
+    values = Tibs.from_bytes(value_bytes).to_values('u16')
+    assert values == value_words
+
+
 class FunctionPairs:
     def __init__(self, name, bitarray_func, tibs_func):
         self.name = name
@@ -238,6 +292,10 @@ def main():
         FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),
         FunctionPairs("Extend", test_extending_bits_bitarray, test_extending_bits_tibs),
         FunctionPairs("Pop", test_pop_bitarray, test_pop_tibs),
+        FunctionPairs("Bool construction", test_bool_construction_bitarray, test_bool_construction_tibs),
+        FunctionPairs("Slice count", test_slice_count_bitarray, test_slice_count_tibs),
+        FunctionPairs("Pack u16 values", test_pack_u16_bitarray, test_pack_u16_tibs),
+        FunctionPairs("Unpack u16 values", test_unpack_u16_bitarray, test_unpack_u16_tibs),
     ]
     ts = TestSuite(fn_pairs)
     ts.run()
