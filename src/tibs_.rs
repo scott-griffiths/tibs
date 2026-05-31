@@ -1605,6 +1605,10 @@ impl Tibs {
     ///     4
     ///
     pub fn count(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+        if let Some(b) = helpers::convert_to_bool(value) {
+            return Ok(<Tibs as BitCollection>::count(self, b));
+        }
+
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
@@ -1613,15 +1617,9 @@ impl Tibs {
                     helpers::count_bitvec(py, self.to_bitslice(), v.as_bitslice())
                 }
             }
-            Err(_) => {
-                let count_ones = helpers::convert_to_bool(value);
-                match count_ones {
-                    Some(b) => Ok(<Tibs as BitCollection>::count(self, b)),
-                    None => Err(PyValueError::new_err(
-                        "Cannot convert value to 0, 1 or a Tibs",
-                    )),
-                }
-            }
+            Err(_) => Err(PyValueError::new_err(
+                "Cannot convert value to 0, 1 or a Tibs",
+            )),
         }
     }
 

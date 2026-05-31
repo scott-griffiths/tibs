@@ -2176,6 +2176,10 @@ impl Mutibs {
     ///     12
     ///
     pub fn count(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+        if let Some(b) = helpers::convert_to_bool(value) {
+            return Ok(<Mutibs as BitCollection>::count(self, b));
+        }
+
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
@@ -2184,15 +2188,9 @@ impl Mutibs {
                     helpers::count_bitvec(py, self.as_bitslice(), v.as_bitslice())
                 }
             }
-            Err(_) => {
-                let count_ones = helpers::convert_to_bool(value);
-                match count_ones {
-                    Some(b) => Ok(<Mutibs as BitCollection>::count(self, b)),
-                    None => Err(PyValueError::new_err(
-                        "Cannot convert value to 0, 1 or a Tibs",
-                    )),
-                }
-            }
+            Err(_) => Err(PyValueError::new_err(
+                "Cannot convert value to 0, 1 or a Tibs",
+            )),
         }
     }
 
