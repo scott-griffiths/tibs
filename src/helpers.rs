@@ -19,6 +19,7 @@ pub type BS = BitSlice<u8, Msb0>;
 
 // Define a static LRU cache.
 const BITS_CACHE_SIZE: usize = 1024;
+pub(crate) const SIGNAL_CHECK_INTERVAL: usize = 65_536;
 static BITS_CACHE: Lazy<Mutex<LruCache<String, BV>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(BITS_CACHE_SIZE).unwrap())));
 
@@ -57,109 +58,122 @@ pub(crate) fn convert_to_bool(bit: &Bound<'_, PyAny>) -> Option<bool> {
 }
 
 // An implementation of the KMP algorithm for bit slices.
-pub(crate) fn compute_lps(pattern: &BS) -> Vec<usize> {
+pub(crate) fn compute_lps(py: Python<'_>, pattern: &BS) -> PyResult<Vec<usize>> {
     let len = pattern.len();
     let mut lps = vec![0; len];
     let mut i = 1;
     let mut len_prev = 0;
+    let mut check_at = SIGNAL_CHECK_INTERVAL.min(len);
 
     while i < len {
-        match pattern[i] == pattern[len_prev] {
-            true => {
-                len_prev += 1;
-                lps[i] = len_prev;
-                i += 1;
-            }
-            false if len_prev != 0 => len_prev = lps[len_prev - 1],
-            false => {
-                lps[i] = 0;
-                i += 1;
+        while i < check_at {
+            match pattern[i] == pattern[len_prev] {
+                true => {
+                    len_prev += 1;
+                    lps[i] = len_prev;
+                    i += 1;
+                }
+                false if len_prev != 0 => len_prev = lps[len_prev - 1],
+                false => {
+                    lps[i] = 0;
+                    i += 1;
+                }
             }
         }
+        if i < len {
+            py.check_signals()?;
+            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(len);
+        }
     }
-    lps
+    Ok(lps)
 }
 
 pub(crate) fn find_bitvec(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     start: usize,
     end: usize,
     byte_aligned: bool,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    let lps = compute_lps(needle);
+    let lps = compute_lps(py, needle)?;
     let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-    find_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
+    find_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn find_bitvec_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    let lps = compute_lps(needle);
-    find_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
+    let lps = compute_lps(py, needle)?;
+    find_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn find_bitvec_with_lps_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
-        return found;
+        return Ok(found);
     }
-    find_bitvec_impl_with_lps_aligned(haystack, needle, lps, start, end, alignment_mod8)
+    find_bitvec_impl_with_lps_aligned(py, haystack, needle, lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn rfind_bitvec_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    let lps = compute_lps(needle);
-    rfind_bitvec_with_lps_aligned(haystack, needle, &lps, start, end, alignment_mod8)
+    let lps = compute_lps(py, needle)?;
+    rfind_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn rfind_bitvec_with_lps_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
-        return found;
+        return Ok(found);
     }
-    rfind_bitvec_impl_with_lps_aligned(haystack, needle, lps, start, end, alignment_mod8)
+    rfind_bitvec_impl_with_lps_aligned(py, haystack, needle, lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn collect_find_all_positions(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     haystack_len: usize,
     start: usize,
     end: usize,
     byte_aligned: bool,
-) -> Vec<u64> {
+) -> PyResult<Vec<u64>> {
     debug_assert!(!needle.is_empty());
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
@@ -173,8 +187,13 @@ pub(crate) fn collect_find_all_positions(
     {
         let mut matches = Vec::new();
         let mut byte_current = 0;
+        let mut check_at = SIGNAL_CHECK_INTERVAL;
 
         loop {
+            if matches.len() >= check_at {
+                py.check_signals()?;
+                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+            }
             let found = if byte_current >= byte_haystack.len() {
                 None
             } else {
@@ -189,10 +208,10 @@ pub(crate) fn collect_find_all_positions(
             byte_current = byte_pos + 1;
         }
 
-        return matches;
+        return Ok(matches);
     }
 
-    let lps = compute_lps(needle);
+    let lps = compute_lps(py, needle)?;
     let mut current_pos = start;
     let mut matches = Vec::new();
 
@@ -200,7 +219,15 @@ pub(crate) fn collect_find_all_positions(
         let found = if current_pos >= haystack_len || end.saturating_sub(current_pos) < needle_len {
             None
         } else {
-            find_bitvec_with_lps_aligned(haystack, needle, &lps, current_pos, end, alignment_mod8)
+            find_bitvec_with_lps_aligned(
+                py,
+                haystack,
+                needle,
+                &lps,
+                current_pos,
+                end,
+                alignment_mod8,
+            )?
         };
 
         let Some(pos) = found else {
@@ -210,7 +237,7 @@ pub(crate) fn collect_find_all_positions(
         current_pos = pos + step;
     }
 
-    matches
+    Ok(matches)
 }
 
 #[inline]
@@ -269,112 +296,135 @@ fn try_find_byte_search(
 }
 
 fn rfind_bitvec_impl_with_lps_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     _lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     if needle.is_empty() || needle.len() > end - start {
-        return None;
+        return Ok(None);
     }
 
     let needle_len = needle.len();
     let reversed_needle: BV = needle.iter().by_vals().rev().collect();
-    let reversed_lps = compute_lps(reversed_needle.as_bitslice());
+    let reversed_lps = compute_lps(py, reversed_needle.as_bitslice())?;
     let search_len = end - start;
     let mut i = 0;
     let mut j = 0;
+    let mut check_at = SIGNAL_CHECK_INTERVAL.min(search_len);
 
     while i < search_len {
-        if reversed_needle[j] == haystack[end - 1 - i] {
-            i += 1;
-            j += 1;
+        while i < check_at {
+            if reversed_needle[j] == haystack[end - 1 - i] {
+                i += 1;
+                j += 1;
 
-            if j == needle_len {
-                let reversed_match_pos = i - j;
-                let match_pos = end - needle_len - reversed_match_pos;
-                if matches_alignment(match_pos, alignment_mod8) {
-                    return Some(match_pos);
+                if j == needle_len {
+                    let reversed_match_pos = i - j;
+                    let match_pos = end - needle_len - reversed_match_pos;
+                    if matches_alignment(match_pos, alignment_mod8) {
+                        return Ok(Some(match_pos));
+                    }
+                    j = reversed_lps[j - 1];
                 }
+            } else if j != 0 {
                 j = reversed_lps[j - 1];
+            } else {
+                i += 1;
             }
-        } else if j != 0 {
-            j = reversed_lps[j - 1];
-        } else {
-            i += 1;
+        }
+        if i < search_len {
+            py.check_signals()?;
+            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(search_len);
         }
     }
 
-    None
+    Ok(None)
 }
 
 fn find_bitvec_impl_with_lps_aligned(
+    py: Python<'_>,
     haystack: &BS,
     needle: &BS,
     lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<usize> {
+) -> PyResult<Option<usize>> {
     if needle.is_empty() || needle.len() > end - start {
-        return None;
+        return Ok(None);
     }
     let needle_len = needle.len();
     let mut i = start;
     let mut j = 0;
+    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
 
     while i < end {
-        if needle[j] == haystack[i] {
-            i += 1;
-            j += 1;
+        while i < check_at {
+            if needle[j] == haystack[i] {
+                i += 1;
+                j += 1;
 
-            if j == needle_len {
-                let match_pos = i - j;
-                if matches_alignment(match_pos, alignment_mod8) {
-                    return Some(match_pos);
+                if j == needle_len {
+                    let match_pos = i - j;
+                    if matches_alignment(match_pos, alignment_mod8) {
+                        return Ok(Some(match_pos));
+                    }
+                    // Continue searching for a byte-aligned match
+                    j = lps[j - 1];
                 }
-                // Continue searching for a byte-aligned match
+            } else if j != 0 {
                 j = lps[j - 1];
+            } else {
+                i += 1;
             }
-        } else if j != 0 {
-            j = lps[j - 1];
-        } else {
-            i += 1;
+        }
+        if i < end {
+            py.check_signals()?;
+            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
         }
     }
-    None
+    Ok(None)
 }
 
 /// Count the number of occurrences of needle in haystack.
-pub(crate) fn count_bitvec(haystack: &BS, needle: &BS) -> usize {
+pub(crate) fn count_bitvec(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResult<usize> {
     if needle.is_empty() || needle.len() > haystack.len() {
-        return 0;
+        return Ok(0);
     }
-    let lps = compute_lps(needle);
+    let lps = compute_lps(py, needle)?;
     let needle_len = needle.len();
     let mut i = 0; // The start
     let mut j = 0;
     let end = haystack.len();
     let mut count = 0;
+    let mut check_at = SIGNAL_CHECK_INTERVAL.min(end);
     while i < end {
-        if needle[j] == haystack[i] {
-            i += 1;
-            j += 1;
+        while i < check_at {
+            if needle[j] == haystack[i] {
+                i += 1;
+                j += 1;
 
-            if j == needle_len {
-                count += 1;
-                // Continue searching
+                if j == needle_len {
+                    count += 1;
+                    // Continue searching
+                    j = lps[j - 1];
+                }
+            } else if j != 0 {
                 j = lps[j - 1];
+            } else {
+                i += 1;
             }
-        } else if j != 0 {
-            j = lps[j - 1];
-        } else {
-            i += 1;
+        }
+        if i < end {
+            py.check_signals()?;
+            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
         }
     }
-    count
+    Ok(count)
 }
 
 /// Validates the index is in range and returns an absolute bit index.

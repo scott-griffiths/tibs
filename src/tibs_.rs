@@ -133,6 +133,7 @@ impl Tibs {
 
     pub(crate) fn find_impl(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
@@ -147,20 +148,22 @@ impl Tibs {
 
         let found = if !reverse {
             find_bitvec_aligned(
+                py,
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )
+            )?
         } else {
             rfind_bitvec_aligned(
+                py,
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )
+            )?
         };
         Ok(found)
     }
@@ -239,9 +242,11 @@ pub(crate) fn bv_from_values_iter(
         .ok()
         .and_then(|len| len.checked_mul(dtype.length));
     let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
+    let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
     for (index, item) in iterable.try_iter()?.enumerate() {
-        if index.is_multiple_of(1024) {
+        if index >= check_at {
             py.check_signals()?;
+            check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
         bv.extend(bv_from_value(dtype, &item?)?);
     }
@@ -297,9 +302,11 @@ pub(crate) fn py_values_from_range(
 
     let count = selected_len / dtype.length;
     let mut values = Vec::with_capacity(count);
+    let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
     for index in 0..count {
-        if index.is_multiple_of(1024) {
+        if index >= check_at {
             py.check_signals()?;
+            check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
         let value = bits.get_slice_unchecked(start + index * dtype.length, dtype.length);
         values.push(py_from_value(py, dtype, &value)?);
@@ -682,6 +689,7 @@ impl Tibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find_all(
         slf: PyRef<'_, Self>,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
@@ -694,14 +702,15 @@ impl Tibs {
         let haystack_len = slf.len();
         let (start, end) = validate_slice(haystack_len, start, end)?;
 
-        Ok(helpers::collect_find_all_positions(
+        helpers::collect_find_all_positions(
+            py,
             slf.as_bitslice(),
             needle.as_bitslice(),
             haystack_len,
             start,
             end,
             byte_aligned,
-        ))
+        )
     }
 
     /// Find all occurrences of a bit sequence, returning an iterator of bit positions.
@@ -753,7 +762,7 @@ impl Tibs {
             (Some(haystack), Some(needle), base)
         });
         let py = slf.py();
-        let lps = { compute_lps(needle.to_bitslice()) };
+        let lps = { compute_lps(py, needle.to_bitslice())? };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             haystack_len,
@@ -820,7 +829,7 @@ impl Tibs {
             (Some(haystack), Some(needle), base)
         });
         let py = slf.py();
-        let lps = { compute_lps(needle.to_bitslice()) };
+        let lps = { compute_lps(py, needle.to_bitslice())? };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             haystack_len,
@@ -1501,20 +1510,19 @@ impl Tibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(needle, start, end, byte_aligned, false)
+        self.find_impl(py, needle, start, end, byte_aligned, false)
     }
 
     /// Return True if b is a sub-sequence of self.
-    pub fn __contains__(&self, b: Tibs) -> bool {
-        match self.find(b, None, None, false) {
-            Ok(Some(_)) => true,
-            _ => false,
-        }
+    pub fn __contains__(&self, py: Python<'_>, b: Tibs) -> PyResult<bool> {
+        self.find(py, b, None, None, false)
+            .map(|found| found.is_some())
     }
 
     /// As Tibs is immutable, this returns the same instance.
@@ -1542,12 +1550,13 @@ impl Tibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn rfind(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(needle, start, end, byte_aligned, true)
+        self.find_impl(py, needle, start, end, byte_aligned, true)
     }
 
     /// Return whether the current Tibs starts with prefix.
@@ -1595,13 +1604,13 @@ impl Tibs {
     ///     >>> Tibs.from_bin('0011010101100').count('0b01')
     ///     4
     ///
-    pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    pub fn count(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
                     Ok(<Tibs as BitCollection>::count(self, v.get_index(0)?))
                 } else {
-                    Ok(helpers::count_bitvec(self.to_bitslice(), v.as_bitslice()))
+                    helpers::count_bitvec(py, self.to_bitslice(), v.as_bitslice())
                 }
             }
             Err(_) => {
@@ -1749,6 +1758,7 @@ impl Tibs {
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
     pub fn replaced(
         &self,
+        py: Python<'_>,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
         start: Option<isize>,
@@ -1759,7 +1769,7 @@ impl Tibs {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         let mut out = self.to_mutibs();
-        let _ = out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
+        let _ = out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
         Ok(out.to_tibs())
     }
 

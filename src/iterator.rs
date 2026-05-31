@@ -56,7 +56,7 @@ impl FindAllIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<usize>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<Option<usize>> {
         let needle_len = slf.needle.len();
         if needle_len == 0 {
             return Ok(None);
@@ -90,8 +90,6 @@ impl FindAllIterator {
             };
         }
 
-        let py = slf.py();
-
         // Read values from slf that are needed for the find logic
         // or for updating state *after* the find.
         let current_pos = slf.current_pos;
@@ -111,13 +109,14 @@ impl FindAllIterator {
                     return Ok(None);
                 }
                 helpers::rfind_bitvec_with_lps_aligned(
+                    py,
                     haystack_rs.as_bitslice(),
                     slf.needle.as_bitslice(),
                     lps,
                     slf.start,
                     current_pos,
                     alignment_mod8,
-                )
+                )?
             } else {
                 if current_pos >= haystack_len
                     || haystack_len.saturating_sub(current_pos) < needle_len
@@ -125,13 +124,14 @@ impl FindAllIterator {
                     return Ok(None); // No space left for the needle or already past the end
                 }
                 helpers::find_bitvec_with_lps_aligned(
+                    py,
                     haystack_rs.as_bitslice(),
                     slf.needle.as_bitslice(),
                     lps,
                     current_pos,
                     slf.end,
                     alignment_mod8,
-                )
+                )?
             }
         };
 

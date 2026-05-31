@@ -328,6 +328,7 @@ impl Mutibs {
 
     pub(crate) fn apply_replace_bits(
         &mut self,
+        py: Python<'_>,
         old: Tibs,
         new: Tibs,
         start: Option<isize>,
@@ -354,12 +355,13 @@ impl Mutibs {
         let mut current_pos = search_start;
         while current_pos < search_end && countdown > 0 {
             if let Some(found_pos) = find_bitvec(
+                py,
                 self.as_bitvec_ref(),
                 search_old.as_bitslice(),
                 current_pos,
                 search_end,
                 byte_aligned,
-            ) {
+            )? {
                 starting_points.push(found_pos);
                 current_pos = found_pos + search_old.len();
                 countdown -= 1;
@@ -414,6 +416,7 @@ impl Mutibs {
 
     pub(crate) fn find_impl(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
@@ -428,20 +431,22 @@ impl Mutibs {
 
         let found = if !reverse {
             find_bitvec_aligned(
+                py,
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )
+            )?
         } else {
             helpers::rfind_bitvec_aligned(
+                py,
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )
+            )?
         };
         Ok(found)
     }
@@ -1766,11 +1771,9 @@ impl Mutibs {
     }
 
     /// Return True if b is a sub-sequence of self.
-    pub fn __contains__(&self, b: Tibs) -> bool {
-        match self.find(b, None, None, false) {
-            Ok(Some(_)) => true,
-            _ => false,
-        }
+    pub fn __contains__(&self, py: Python<'_>, b: Tibs) -> PyResult<bool> {
+        self.find(py, b, None, None, false)
+            .map(|found| found.is_some())
     }
 
     /// Return whether the current Mutibs ends with suffix.
@@ -1808,12 +1811,13 @@ impl Mutibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(needle, start, end, byte_aligned, false)
+        self.find_impl(py, needle, start, end, byte_aligned, false)
     }
 
     /// Find all occurrences of a bit sequence.
@@ -1835,6 +1839,7 @@ impl Mutibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn find_all(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
@@ -1847,14 +1852,15 @@ impl Mutibs {
         let haystack_len = self.len();
         let (start, end) = validate_slice(haystack_len, start, end)?;
 
-        Ok(helpers::collect_find_all_positions(
+        helpers::collect_find_all_positions(
+            py,
             self.as_bitslice(),
             needle.as_bitslice(),
             haystack_len,
             start,
             end,
             byte_aligned,
-        ))
+        )
     }
 
     /// Return a list of Mutibs by cutting into chunks.
@@ -2169,13 +2175,13 @@ impl Mutibs {
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    pub fn count(&self, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    pub fn count(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
                     Ok(<Mutibs as BitCollection>::count(self, v.get_index(0)?))
                 } else {
-                    Ok(helpers::count_bitvec(self.as_bitslice(), v.as_bitslice()))
+                    helpers::count_bitvec(py, self.as_bitslice(), v.as_bitslice())
                 }
             }
             Err(_) => {
@@ -2239,12 +2245,13 @@ impl Mutibs {
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
     pub fn rfind(
         &self,
+        py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(needle, start, end, byte_aligned, true)
+        self.find_impl(py, needle, start, end, byte_aligned, true)
     }
 
     /// Invert one or many bits in place.
@@ -2728,6 +2735,7 @@ impl Mutibs {
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
     pub fn replace<'a>(
         mut slf: PyRefMut<'a, Self>,
+        py: Python<'_>,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
         start: Option<isize>,
@@ -2749,7 +2757,7 @@ impl Mutibs {
         } else {
             Tibs::extract(new.as_borrowed())?
         };
-        slf.apply_replace_bits(old, new, start, end, count, byte_aligned)
+        slf.apply_replace_bits(py, old, new, start, end, count, byte_aligned)
     }
 
     /// Search and replace and return a new Mutibs.
@@ -2773,6 +2781,7 @@ impl Mutibs {
     #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
     pub fn replaced(
         &self,
+        py: Python<'_>,
         old: &Bound<'_, PyAny>,
         new: &Bound<'_, PyAny>,
         start: Option<isize>,
@@ -2783,7 +2792,7 @@ impl Mutibs {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         let mut out = self.clone();
-        let _ = out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
+        let _ = out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
         Ok(out)
     }
 
