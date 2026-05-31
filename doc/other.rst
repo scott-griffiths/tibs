@@ -45,6 +45,11 @@ extraction, see :doc:`views`.
    :member-order: groupwise
    :undoc-members:
 
+Each :class:`Dtype` instance has a 'kind' which controls how to create and interpret values.
+For example ``Codec.Float`` is used for floating point data types.
+
+Unless you are creating or dealing with data types programmatically, you probably won't need to
+use this enum directly.
 
 ----
 
