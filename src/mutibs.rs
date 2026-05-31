@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::dtype::Dtype;
+use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, Codec, Endianness};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -1419,34 +1419,35 @@ impl Mutibs {
 
     /// Create a new instance by encoding one value with a dtype.
     ///
-    /// :param Dtype dtype: The value encoding to use.
+    /// :param Dtype | str dtype: The value encoding to use.
     /// :param object value: The value to encode.
     /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_value(Dtype("u8"), 15)
+    ///     >>> Mutibs.from_value("u8", 15)
     ///     Mutibs('0x0f')
     ///
     #[classmethod]
     #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
     pub fn from_value(
         _cls: &Bound<'_, PyType>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Mutibs::from_bv(bv_from_value(dtype, value)?))
+        let dtype = extract_dtype(dtype)?;
+        Ok(Mutibs::from_bv(bv_from_value(&dtype, value)?))
     }
 
     /// Create a new instance by encoding and concatenating values with a dtype.
     ///
-    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param Iterable iterable: The values to encode.
     /// :return: A newly constructed ``Mutibs``.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_values(Dtype("u8"), [1, 2, 3])
+    ///     >>> Mutibs.from_values("u8", [1, 2, 3])
     ///     Mutibs('0x010203')
     ///
     #[classmethod]
@@ -1454,10 +1455,11 @@ impl Mutibs {
     pub fn from_values(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         iterable: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Mutibs::from_bv(bv_from_values_iter(py, dtype, iterable)?))
+        let dtype = extract_dtype(dtype)?;
+        Ok(Mutibs::from_bv(bv_from_values_iter(py, &dtype, iterable)?))
     }
 
     /// The bit length of the Mutibs.
@@ -1475,54 +1477,56 @@ impl Mutibs {
     /// The selected range must be a whole number of dtype values. The values are
     /// decoded from the current contents when the method is called.
     ///
-    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
     /// :return: A list of decoded Python values.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0x010203').to_values(Dtype("u8"))
+    ///     >>> Mutibs('0x010203').to_values("u8")
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_values(
         &self,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Vec<Py<PyAny>>> {
+        let dtype = extract_dtype(dtype)?;
         let snapshot = self.to_tibs();
-        py_values_from_range(py, &snapshot, dtype, start, end)
+        py_values_from_range(py, &snapshot, &dtype, start, end)
     }
 
     /// Return one value decoded with a dtype.
     ///
     /// The selected range must have exactly the dtype length.
     ///
-    /// :param Dtype dtype: The value encoding to use.
+    /// :param Dtype | str dtype: The value encoding to use.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
     /// :return: The decoded Python value.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0x0f').to_value(Dtype("u8"))
+    ///     >>> Mutibs('0x0f').to_value("u8")
     ///     15
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_value(
         &self,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
+        let dtype = extract_dtype(dtype)?;
         let snapshot = self.to_tibs();
         let (start, end) = validate_slice(snapshot.len(), start, end)?;
         let value = snapshot.get_slice_unchecked(start, end - start);
-        py_from_value(py, dtype, &value)
+        py_from_value(py, &dtype, &value)
     }
 
     /// Get a bit or a slice of bits.

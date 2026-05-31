@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::dtype::Dtype;
+use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, Codec, DtypeKind, Endianness};
 use crate::helpers;
 use crate::helpers::{
@@ -864,34 +864,35 @@ impl Tibs {
 
     /// Create a new instance by encoding one Python value with a dtype.
     ///
-    /// :param Dtype dtype: The value encoding to use.
+    /// :param Dtype | str dtype: The value encoding to use.
     /// :param object value: The value to encode.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_value(Dtype("u8"), 15)
+    ///     >>> Tibs.from_value("u8", 15)
     ///     Tibs('0x0f')
     ///
     #[classmethod]
     #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
     pub fn from_value(
         _cls: &Bound<'_, PyType>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Tibs::from_bv(bv_from_value(dtype, value)?))
+        let dtype = extract_dtype(dtype)?;
+        Ok(Tibs::from_bv(bv_from_value(&dtype, value)?))
     }
 
     /// Create a new instance by encoding and concatenating values with a dtype.
     ///
-    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param Iterable iterable: The values to encode.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_values(Dtype("u8"), [1, 2, 3])
+    ///     >>> Tibs.from_values("u8", [1, 2, 3])
     ///     Tibs('0x010203')
     ///
     #[classmethod]
@@ -899,33 +900,35 @@ impl Tibs {
     pub fn from_values(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         iterable: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Tibs::from_bv(bv_from_values_iter(py, dtype, iterable)?))
+        let dtype = extract_dtype(dtype)?;
+        Ok(Tibs::from_bv(bv_from_values_iter(py, &dtype, iterable)?))
     }
 
     /// Return an iterator over values decoded with a dtype.
     ///
     /// The selected range must be a whole number of dtype values.
     ///
-    /// :param Dtype dtype: The value encoding to use for each yielded item.
+    /// :param Dtype | str dtype: The value encoding to use for each yielded item.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
     /// :return: An iterator yielding decoded Python values.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> list(Tibs('0x010203').to_values_iter(Dtype("u8")))
+    ///     >>> list(Tibs('0x010203').to_values_iter("u8"))
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_values_iter(
         slf: PyRef<'_, Self>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<ValuesIterator>> {
+        let dtype = extract_dtype(dtype)?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
         let selected_len = end - start;
         let chunk_size = dtype.length;
@@ -955,52 +958,54 @@ impl Tibs {
     ///
     /// The selected range must be a whole number of dtype values.
     ///
-    /// :param Dtype dtype: The value encoding to use for each item.
+    /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
     /// :return: A list of decoded Python values.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0x010203').to_values(Dtype("u8"))
+    ///     >>> Tibs('0x010203').to_values("u8")
     ///     [1, 2, 3]
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_values(
         &self,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Vec<Py<PyAny>>> {
-        py_values_from_range(py, self, dtype, start, end)
+        let dtype = extract_dtype(dtype)?;
+        py_values_from_range(py, self, &dtype, start, end)
     }
 
     /// Return one value decoded with a dtype.
     ///
     /// The selected range must have exactly the dtype length.
     ///
-    /// :param Dtype dtype: The value encoding to use.
+    /// :param Dtype | str dtype: The value encoding to use.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
     /// :return: The decoded Python value.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0x0f').to_value(Dtype("u8"))
+    ///     >>> Tibs('0x0f').to_value("u8")
     ///     15
     ///
     #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
     pub fn to_value(
         &self,
         py: Python<'_>,
-        dtype: &Dtype,
+        dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
+        let dtype = extract_dtype(dtype)?;
         let (start, end) = validate_slice(self.len(), start, end)?;
         let value = self.get_slice_unchecked(start, end - start);
-        py_from_value(py, dtype, &value)
+        py_from_value(py, &dtype, &value)
     }
 
     /// Create a new instance with all bits set to '1'.

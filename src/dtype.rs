@@ -1,6 +1,7 @@
 use crate::enums::{DtypeKind, Endianness};
-use pyo3::exceptions::PyValueError;
-use pyo3::{PyResult, pyclass, pymethods};
+use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::types::PyAnyMethods;
+use pyo3::{Bound, PyAny, PyRef, PyResult, pyclass, pymethods};
 
 ///     A data type which determines how a value is encoded as a fixed-width bit sequence.
 ///
@@ -12,10 +13,11 @@ use pyo3::{PyResult, pyclass, pymethods};
 ///
 ///         >>> Dtype("u16_le")
 ///         Dtype('u16_le')
-///         >>> Tibs.from_value(Dtype("u8"), 15)
+///         >>> Tibs.from_value("u8", 15)
 ///         Tibs('0x0f')
 ///
-#[pyclass(module = "tibs", frozen)]
+#[pyclass(module = "tibs", frozen, skip_from_py_object)]
+#[derive(Clone)]
 pub struct Dtype {
     pub(crate) kind: DtypeKind,
     pub(crate) length: usize,
@@ -110,6 +112,18 @@ impl Dtype {
         })?;
         Self::from_parts(kind, length, byte_order)
     }
+}
+
+pub(crate) fn extract_dtype(obj: &Bound<'_, PyAny>) -> PyResult<Dtype> {
+    if let Ok(dtype) = obj.extract::<PyRef<'_, Dtype>>() {
+        return Ok(dtype.clone());
+    }
+    if let Ok(spec) = obj.extract::<String>() {
+        return Dtype::parse_spec(&spec);
+    }
+    Err(PyTypeError::new_err(
+        "dtype must be a Dtype instance or dtype string.",
+    ))
 }
 
 #[pymethods]

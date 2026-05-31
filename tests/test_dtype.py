@@ -75,6 +75,10 @@ def test_from_value_uint():
     assert t == Tibs.from_u(17, 9)
 
 
+def test_from_value_accepts_dtype_string():
+    assert Tibs.from_value("u16_le", 0x0102) == Tibs.from_hex("0201")
+
+
 def test_from_value_bin():
     d = Dtype("bin4")
     t = Tibs.from_value(d, "0b1010")
@@ -103,6 +107,11 @@ def test_to_value_uint():
     d = Dtype("u16_le")
     t = Tibs.from_value(d, 0x0102)
     assert t.to_value(d) == 0x0102
+
+
+def test_to_value_accepts_dtype_string():
+    t = Tibs.from_hex("0201")
+    assert t.to_value("u16_le") == 0x0102
 
 
 def test_to_value_int():
@@ -153,6 +162,11 @@ def test_from_values_uint():
     assert t == Tibs.from_bytes(b"\x01\x02\x03")
 
 
+def test_from_values_accepts_dtype_string():
+    t = Tibs.from_values("u16_le", [0x0102, 0x0304])
+    assert t == Tibs.from_hex("02010403")
+
+
 def test_from_values_little_endian_uint():
     d = Dtype("u16_le")
     t = Tibs.from_values(d, [0x0102, 0x0304])
@@ -182,10 +196,20 @@ def test_to_values_iter_uint():
     assert list(t.to_values_iter(d)) == [1, 2, 3]
 
 
+def test_to_values_iter_accepts_dtype_string():
+    t = Tibs.from_hex("02010403")
+    assert list(t.to_values_iter("u16_le")) == [0x0102, 0x0304]
+
+
 def test_to_values_uint():
     d = Dtype("u8")
     t = Tibs.from_values(d, [1, 2, 3])
     assert t.to_values(d) == [1, 2, 3]
+
+
+def test_to_values_accepts_dtype_string():
+    t = Tibs.from_hex("02010403")
+    assert t.to_values("u16_le") == [0x0102, 0x0304]
 
 
 def test_to_values_iter_little_endian_uint():
@@ -244,15 +268,28 @@ def test_mutibs_from_value():
     assert Mutibs.from_value(d, 1) == Mutibs.from_bytes(b"\x01")
 
 
+def test_mutibs_from_value_accepts_dtype_string():
+    assert Mutibs.from_value("u16_le", 0x0102) == Mutibs.from_hex("0201")
+
+
 def test_mutibs_from_values():
     d = Dtype("u8")
     assert Mutibs.from_values(d, [1, 2, 3]) == Mutibs.from_bytes(b"\x01\x02\x03")
+
+
+def test_mutibs_from_values_accepts_dtype_string():
+    assert Mutibs.from_values("u16_le", [0x0102, 0x0304]) == Mutibs.from_hex("02010403")
 
 
 def test_mutibs_to_value():
     d = Dtype("u8")
     m = Mutibs.from_bytes(b"\x01")
     assert m.to_value(d) == 1
+
+
+def test_mutibs_to_value_accepts_dtype_string():
+    m = Mutibs.from_hex("0201")
+    assert m.to_value("u16_le") == 0x0102
 
 
 def test_mutibs_to_values():
@@ -263,10 +300,22 @@ def test_mutibs_to_values():
     assert values == [1, 2, 3]
 
 
+def test_mutibs_to_values_accepts_dtype_string():
+    m = Mutibs.from_hex("02010403")
+    assert m.to_values("u16_le") == [0x0102, 0x0304]
+
+
 def test_mutibs_to_values_slice():
     d = Dtype("u8")
     m = Mutibs.from_bytes(b"\x00\x01\x02\x03")
     assert m.to_values(d, 8, 24) == [1, 2]
+
+
+def test_dtype_string_errors_are_reported_by_value_methods():
+    with pytest.raises(ValueError, match="Cannot parse Dtype spec"):
+        Tibs.from_value("unknown8", 1)
+    with pytest.raises(TypeError, match="dtype must be a Dtype instance or dtype string"):
+        Tibs.from_value(object(), 1)
 
 
 def test_old_dtype_method_names_are_not_exposed():
