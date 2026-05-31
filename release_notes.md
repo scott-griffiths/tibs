@@ -1,5 +1,34 @@
 # Release Notes
 
+### May 31st 2026: version 0.9.
+
+Backwardly incompatible changes
+
+* `Mutibs.replace()` now returns the number of replacements made instead of
+  `None`.
+
+Added
+
+* Added the `Dtype` class and `DtypeKind` enum for describing typed binary
+  values. Dtypes can be created from compact strings such as `Dtype("u8")`,
+  `Dtype("i16")`, `Dtype("f32_le")`, `Dtype("hex8")` and `Dtype("bytes16")`,
+  or explicitly with `Dtype.from_params(...)`.
+* Added `Tibs.from_value`, `Tibs.from_values`, `Tibs.to_value`,
+  `Tibs.to_values_iter` and `Tibs.to_values`. These accept either a `Dtype`
+  instance or a dtype string.
+* Added matching value conversion methods to `Mutibs`, except for
+  `to_values_iter`.
+* Added `start` and `end` parameters to `Tibs.byte_swapped`,
+  `Mutibs.byte_swap` and `Mutibs.byte_swapped`.
+* Added `start` and `end` parameters to the `to_u`, `to_i`, `to_f`, `to_bin`,
+  `to_oct`, `to_hex` and `to_bytes` interpretation methods.
+
+Improvements
+
+* Added periodic Python signal checks to several longer-running operations so
+  they can be interrupted more reliably.
+
+
 ### May 25th 2026: version 0.8.
 
 Backwardly incompatible changes
