@@ -1759,7 +1759,7 @@ impl Tibs {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         let mut out = self.to_mutibs();
-        out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
+        let _ = out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
         Ok(out.to_tibs())
     }
 

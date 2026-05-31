@@ -334,7 +334,7 @@ impl Mutibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
-    ) -> PyResult<()> {
+    ) -> PyResult<usize> {
         if old.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
@@ -369,9 +369,10 @@ impl Mutibs {
         }
 
         if starting_points.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
 
+        let replacements = starting_points.len();
         starting_points.sort_unstable();
         let mut result = BV::new();
         let mut last_pos = 0;
@@ -383,7 +384,7 @@ impl Mutibs {
         result.extend_from_bitslice(&self.as_bitvec_ref()[last_pos..]);
 
         *self.as_mut_bitvec_ref() = result;
-        Ok(())
+        Ok(replacements)
     }
 
     pub(crate) fn apply_insert_bits(&mut self, mut pos: isize, bs: &Tibs) -> PyResult<()> {
@@ -2714,12 +2715,13 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
-    /// :return: None
+    /// :return: The number of replacements made.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs('0b00010010')
     ///     >>> m.replace([0, 1], [1, 1, 1])
+    ///     2
     ///     >>> m
     ///     Mutibs('0b0011101110')
     ///
@@ -2732,7 +2734,7 @@ impl Mutibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
-    ) -> PyResult<()> {
+    ) -> PyResult<usize> {
         let old = if old.as_ptr() == slf.as_ptr() {
             slf.to_tibs()
         } else {
@@ -2781,7 +2783,7 @@ impl Mutibs {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         let mut out = self.clone();
-        out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
+        let _ = out.apply_replace_bits(old, new, start, end, count, byte_aligned)?;
         Ok(out)
     }
 

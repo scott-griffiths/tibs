@@ -68,10 +68,12 @@ Inserting, replacing and deleting
 
 :meth:`Mutibs.replace` searches for one bit pattern and replaces it with another.
 It accepts the same ``start``, ``end``, ``count`` and ``byte_aligned`` options as
-the non-mutating :meth:`Tibs.replaced` method::
+the non-mutating :meth:`Tibs.replaced` method, and returns the number of
+replacements made::
 
     >>> m = Mutibs('0b100100100')
     >>> m.replace('0b100', '0b11', count=2)
+    2
     >>> m
     Mutibs('0b1111100')
 
