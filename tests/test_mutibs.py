@@ -868,6 +868,30 @@ def test_byte_swap_with_length():
     assert a == '0x34127856'
 
 
+def test_byte_swap_with_slice():
+    a = Mutibs('0x001122334455')
+    a.byte_swap(start=8, end=40)
+    assert a == '0x004433221155'
+
+
+def test_byte_swap_with_length_and_slice():
+    a = Mutibs('0x001122334455')
+    a.byte_swap(2, start=8, end=40)
+    assert a == '0x002211443355'
+
+
+def test_byte_swap_with_unaligned_slice():
+    a = Mutibs('0b000000001000000101')
+    a.byte_swap(start=1, end=17)
+    assert a == '0b000000010000000011'
+
+
+def test_byte_swap_with_empty_slice():
+    a = Mutibs('0x1234')
+    a.byte_swap(start=8, end=8)
+    assert a == '0x1234'
+
+
 def test_byte_swap_single_byte():
     # Byte swap single byte (no change)
     a = Mutibs('0x12')
@@ -923,6 +947,18 @@ def test_byte_swap_not_multiple_of_byte_length():
     with pytest.raises(ValueError):
         a = Mutibs('0x123456')  # 3 bytes
         a.byte_swap(2)  # Not a multiple of 2 bytes
+
+
+def test_byte_swap_slice_not_multiple_of_byte_length():
+    a = Mutibs('0x0011223344')
+    with pytest.raises(ValueError):
+        a.byte_swap(2, start=8, end=32)
+
+
+def test_byte_swap_invalid_slice():
+    a = Mutibs('0x0011223344')
+    with pytest.raises(ValueError):
+        a.byte_swap(start=32, end=8)
 
 
 def test_to_tibs_basic():
@@ -1370,6 +1406,20 @@ def test_byte_swapped():
     a = Mutibs.from_bytes(b'!olleh')
     b = a.byte_swapped()
     assert b == b'hello!'
+
+
+def test_mutibs_byte_swapped_with_slice():
+    a = Mutibs('0x001122334455')
+    b = a.byte_swapped(start=8, end=40)
+    assert a == '0x001122334455'
+    assert b == '0x004433221155'
+
+
+def test_tibs_byte_swapped_with_slice():
+    a = Tibs('0x001122334455')
+    b = a.byte_swapped(start=8, end=40)
+    assert a == '0x001122334455'
+    assert b == '0x004433221155'
 
 
 def test_from_u_bad_endianness_type():

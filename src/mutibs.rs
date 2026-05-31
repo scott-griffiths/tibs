@@ -14,7 +14,7 @@ use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
-use std::ops::{Deref, Not};
+use std::ops::Not;
 
 ///     A mutable container of binary data.
 ///
@@ -279,6 +279,21 @@ impl Mutibs {
                 self.as_mut_bitvec_ref()[start..end].rotate_right(n);
             }
         }
+        Ok(())
+    }
+
+    pub(crate) fn apply_byte_swap(
+        &mut self,
+        byte_length: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<()> {
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        let swapped = BitCollection::byte_swap_copy(
+            &self.get_slice_unchecked(start, end - start),
+            byte_length,
+        )?;
+        self.as_mut_bitvec_ref()[start..end].copy_from_bitslice(swapped.as_bitslice());
         Ok(())
     }
 
@@ -2304,11 +2319,13 @@ impl Mutibs {
 
     /// Swap byte order in-place.
     ///
-    /// The whole of the Mutibs will be byte-swapped. It must be a multiple
-    /// of byte_length long.
+    /// The selected slice will be byte-swapped. It must be a multiple of
+    /// byte_length long.
     ///
     /// :param int | None byte_length: An int giving the number of bytes in each swap, or None (the default)
-    ///   to do a single reverse over the whole data.
+    ///   to do a single reverse over the selected slice.
+    /// :param int | None start: Start of slice to byte-swap. Defaults to 0.
+    /// :param int | None end: End of slice to byte-swap. Defaults to len(self).
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -2318,21 +2335,25 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0x34127856')
     ///
-    #[pyo3(signature = (byte_length = None), text_signature = "($self, byte_length=None)")]
-    pub fn byte_swap(mut slf: PyRefMut<'_, Self>, byte_length: Option<i64>) -> PyResult<()> {
-        // We create a new Mutibs and replace rather than explicitly doing this in-place.
-        // If we add a start / end later then this should be made properly in-place.
-        *slf = BitCollection::byte_swap_copy(slf.deref(), byte_length)?;
-        Ok(())
+    #[pyo3(signature = (byte_length = None, start=None, end=None), text_signature = "($self, byte_length=None, start=None, end=None)")]
+    pub fn byte_swap(
+        mut slf: PyRefMut<'_, Self>,
+        byte_length: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<()> {
+        slf.apply_byte_swap(byte_length, start, end)
     }
 
     /// Return a new instance with the byte order swapped.
     ///
-    /// The whole of the data will be byte-swapped. It must be a multiple
-    /// of byte_length long.
+    /// The selected slice will be byte-swapped. It must be a multiple of
+    /// byte_length long.
     ///
     /// :param int | None byte_length: An int giving the number of bytes in each swap, or None (the default)
-    ///   to do a single reverse over the whole data.
+    ///   to do a single reverse over the selected slice.
+    /// :param int | None start: Start of slice to byte-swap. Defaults to 0.
+    /// :param int | None end: End of slice to byte-swap. Defaults to len(self).
     /// :return: Mutibs
     ///
     /// .. code-block:: pycon
@@ -2342,9 +2363,16 @@ impl Mutibs {
     ///     >>> b
     ///     Mutibs('0x34127856')
     ///
-    #[pyo3(signature = (byte_length = None), text_signature = "($self, byte_length=None)")]
-    pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Mutibs> {
-        BitCollection::byte_swap_copy(self, byte_length)
+    #[pyo3(signature = (byte_length = None, start=None, end=None), text_signature = "($self, byte_length=None, start=None, end=None)")]
+    pub fn byte_swapped(
+        &self,
+        byte_length: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Mutibs> {
+        let mut out = self.clone();
+        out.apply_byte_swap(byte_length, start, end)?;
+        Ok(out)
     }
 
     /// Return the instance with every bit inverted.

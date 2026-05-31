@@ -176,7 +176,8 @@ whole sequence or a selected range::
     '01010011'
 
 :meth:`Mutibs.byte_swap` reverses byte groups. With no argument it reverses the
-order of all bytes; with a byte length it reverses each group of that size::
+order of all selected bytes; with a byte length it reverses each group of that
+size. Use ``start`` and ``end`` to byte-swap only part of a sequence::
 
     >>> m = Mutibs('0x12345678')
     >>> m.byte_swap()
@@ -185,6 +186,9 @@ order of all bytes; with a byte length it reverses each group of that size::
     >>> m.byte_swap(2)
     >>> m
     Mutibs('0x56781234')
+    >>> m.byte_swap(start=8, end=24)
+    >>> m
+    Mutibs('0x56127834')
 
 Stack-like operations and capacity
 ==================================

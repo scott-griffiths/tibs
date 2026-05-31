@@ -335,11 +335,13 @@ impl Tibs {
 
     /// Return a new instance with the byte order swapped.
     ///
-    /// The whole of the data will be byte-swapped. It must be a multiple
-    /// of byte_length long.
+    /// The selected slice will be byte-swapped. It must be a multiple of
+    /// byte_length long.
     ///
     /// :param int | None byte_length: An int giving the number of bytes in each swap, or None (the default)
-    ///   to do a single reverse over the whole data.
+    ///   to do a single reverse over the selected slice.
+    /// :param int | None start: Start of slice to byte-swap. Defaults to 0.
+    /// :param int | None end: End of slice to byte-swap. Defaults to len(self).
     /// :return: Tibs
     ///
     /// .. code-block:: pycon
@@ -349,9 +351,16 @@ impl Tibs {
     ///     >>> b
     ///     Tibs('0x34127856')
     ///
-    #[pyo3(signature = (byte_length = None), text_signature = "($self, byte_length=None)")]
-    pub fn byte_swapped(&self, byte_length: Option<i64>) -> PyResult<Tibs> {
-        BitCollection::byte_swap_copy(self, byte_length)
+    #[pyo3(signature = (byte_length = None, start=None, end=None), text_signature = "($self, byte_length=None, start=None, end=None)")]
+    pub fn byte_swapped(
+        &self,
+        byte_length: Option<i64>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Tibs> {
+        let mut out = self.to_mutibs();
+        out.apply_byte_swap(byte_length, start, end)?;
+        Ok(out.to_tibs())
     }
 
     /// Return a copy of the raw byte information.
