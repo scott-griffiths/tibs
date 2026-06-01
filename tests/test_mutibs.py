@@ -1331,11 +1331,16 @@ def test_count_edge_cases():
     assert m.count(1) == 4
     assert m.count(True) == 4
     assert m.count(0) == 8
+    assert m.count(1, 2, 10) == m[2:10].count(1)
+    assert m.count([1, 1], 2, 10) == m[2:10].count([1, 1])
+    assert m.count(0, -4) == m[-4:].count(0)
     assert m.count([1, 1, 1, 1]) == 1
     assert m.count(m) == 1
     assert m.count(m + [0]) == 0
     with pytest.raises(ValueError):
         _ = m.count(2)
+    with pytest.raises(ValueError):
+        _ = m.count(1, 8, 2)
 
 
 def test_set_bug():

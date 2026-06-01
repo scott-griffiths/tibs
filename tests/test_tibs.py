@@ -341,6 +341,15 @@ def test_count_expanded():
     assert b == 0
 
 
+def test_count_with_range():
+    a = Tibs('0b0011010101100')
+    assert a.count(1, 2, 10) == a[2:10].count(1)
+    assert a.count([1, 0], 2, 10) == a[2:10].count([1, 0])
+    assert a.count(0, -5) == a[-5:].count(0)
+    with pytest.raises(ValueError):
+        _ = a.count(1, 8, 2)
+
+
 def test_tibs_set_at_returns_new_instance():
     a = Tibs('0b0000')
     b = a.set_at([0, -1])

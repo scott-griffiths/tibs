@@ -51,6 +51,8 @@ To count the number of times a bit value or sequence of bits occurs use the :met
     49996739
     >>> t.count([1, 0, 1])
     12503821
+    >>> Tibs('0xef').count(1, 0, 4)
+    3
 
 Counting should be fast, especially when just counting the number ``1`` or ``0``.
 

@@ -50,6 +50,42 @@ fn logical_op_with_aligned_bytes(
         .collect()
 }
 
+pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
+    let mut ones = 0;
+
+    match slice.domain() {
+        bitvec::domain::Domain::Region { head, body, tail } => {
+            if let Some(h) = head {
+                ones += h.into_bitslice().count_ones();
+            }
+            if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(body) {
+                // Considerable speed increase by casting data to usize if possible.
+                for &word in words {
+                    ones += word.count_ones() as usize;
+                }
+                // Handle the remainder not fitting into usize
+                let remainder_start = std::mem::size_of_val(words);
+                for &byte in &body[remainder_start..] {
+                    ones += byte.count_ones() as usize;
+                }
+            } else {
+                // Fallback for architectures where alignment is strict
+                for &byte in body {
+                    ones += byte.count_ones() as usize;
+                }
+            }
+            if let Some(t) = tail {
+                ones += t.into_bitslice().count_ones();
+            }
+        }
+        _ => {
+            ones = slice.count_ones();
+        }
+    }
+
+    if count_ones { ones } else { slice.len() - ones }
+}
+
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized + Clone {
     fn from_bv(bv: BV) -> Self;
@@ -256,40 +292,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     fn count(&self, count_ones: bool) -> usize {
-        let slice = self.as_bitslice();
-        let mut ones = 0;
-
-        match slice.domain() {
-            bitvec::domain::Domain::Region { head, body, tail } => {
-                if let Some(h) = head {
-                    ones += h.into_bitslice().count_ones();
-                }
-                if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(body) {
-                    // Considerable speed increase by casting data to usize if possible.
-                    for &word in words {
-                        ones += word.count_ones() as usize;
-                    }
-                    // Handle the remainder not fitting into usize
-                    let remainder_start = std::mem::size_of_val(words);
-                    for &byte in &body[remainder_start..] {
-                        ones += byte.count_ones() as usize;
-                    }
-                } else {
-                    // Fallback for architectures where alignment is strict
-                    for &byte in body {
-                        ones += byte.count_ones() as usize;
-                    }
-                }
-                if let Some(t) = tail {
-                    ones += t.into_bitslice().count_ones();
-                }
-            }
-            _ => {
-                ones = slice.count_ones();
-            }
-        }
-
-        if count_ones { ones } else { self.len() - ones }
+        count_bitslice(self.as_bitslice(), count_ones)
     }
 
     fn multiply(&self, n: usize) -> Self {

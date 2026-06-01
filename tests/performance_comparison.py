@@ -214,7 +214,7 @@ def test_slice_count_tibs():
     t = Tibs.from_bytes(some_bytes)
     total = 0
     for start in range(0, 750_000, 5):
-        total += t[start:start + 257].count(1)
+        total += t.count(1, start, start + 257)
     assert total >= 0
 
 

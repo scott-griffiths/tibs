@@ -1,4 +1,4 @@
-use crate::core::BitCollection;
+use crate::core::{BitCollection, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, Codec, Endianness};
 use crate::helpers::{
@@ -2165,27 +2165,42 @@ impl Mutibs {
     /// Counts the total number of occurrences of a bit pattern.
     ///
     /// :param object value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    /// :param int | None start: The start of the slice to count within. Defaults to 0.
+    /// :param int | None end: The end of the slice to count within. Defaults to len(self).
     ///
     /// :return: The number of times the bit pattern is found.
+    /// :raises ValueError: if the slice parameters are invalid.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Mutibs('0xef').count(1)
     ///     7
+    ///     >>> Mutibs('0xef').count(1, 0, 4)
+    ///     3
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    pub fn count(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    #[pyo3(signature = (value, start=None, end=None), text_signature = "($self, value, start=None, end=None)")]
+    pub fn count(
+        &self,
+        py: Python<'_>,
+        value: &Bound<'_, PyAny>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<usize> {
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        let haystack = &self.as_bitslice()[start..end];
+
         if let Some(b) = helpers::convert_to_bool(value) {
-            return Ok(<Mutibs as BitCollection>::count(self, b));
+            return Ok(count_bitslice(haystack, b));
         }
 
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 if v.len() == 1 {
-                    Ok(<Mutibs as BitCollection>::count(self, v.get_index(0)?))
+                    Ok(count_bitslice(haystack, v.get_index(0)?))
                 } else {
-                    helpers::count_bitvec(py, self.as_bitslice(), v.as_bitslice())
+                    helpers::count_bitvec(py, haystack, v.as_bitslice())
                 }
             }
             Err(_) => Err(PyValueError::new_err(
