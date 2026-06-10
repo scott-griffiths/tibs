@@ -155,7 +155,7 @@ zero or positive. Plain ``Mutibs.field`` uses the default MSB0 labels::
     Mutibs('0x42a11234')
     >>> m.lsb0.le.field(31, 16).u = 0x5678
     >>> m
-    Mutibs('0x42a11e6a')
+    Mutibs('0x42a17856')
 
 Unlike assignment on the source ``Mutibs``, assignment through a
 :class:`MutableView` cannot change the view's length. This keeps byte-order,

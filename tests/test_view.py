@@ -417,12 +417,12 @@ def test_mutable_view_field_returns_mutable_view_and_writes_whole_byte_field():
 
     assert isinstance(field, MutableView)
     assert len(field) == 16
-    assert field.u == 0x2c48
+    assert field.u == 0x3412
 
     field.u = 0x5678
 
     assert field.u == 0x5678
-    assert m == Mutibs("0x23a11e6a")
+    assert m == Mutibs("0x23a17856")
     assert m.lsb0.le.field(31, 16).u == 0x5678
 
 
@@ -456,7 +456,7 @@ def test_mutable_view_field_representation_setters_are_fixed_width():
 
     assert field.hex == "5678"
     assert field.u == 0x5678
-    assert m == Mutibs("0x23a11e6a")
+    assert m == Mutibs("0x23a17856")
 
     original = m.to_tibs()
     with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
@@ -470,7 +470,7 @@ def test_mutable_view_field_endpoint_order_does_not_change_write_mapping():
 
     m.lsb0.le.field(16, 31).write_u(0x5678)
 
-    assert m == Mutibs("0x23a11e6a")
+    assert m == Mutibs("0x23a17856")
     assert m.lsb0.le.field(31, 16).u == 0x5678
 
 
@@ -479,12 +479,30 @@ def test_mutable_view_field_writes_non_whole_byte_field():
     field = m.lsb0.field(31, 26)
 
     assert len(field) == 6
-    assert field.u == 8
+    assert field.u == 4
 
     field.u = 42
 
     assert field.u == 42
+    assert m == Mutibs("0x880404a8")
     assert m.lsb0.field(31, 26).u == 42
+
+
+def test_mutable_view_lsb0_field_writes_value_order():
+    m = Mutibs.from_zeros(8)
+    field = m.lsb0.field(0, 3)
+
+    field.bin = "0001"
+
+    assert field.bin == "0001"
+    assert field.u == 1
+    assert m == Mutibs("0x01")
+
+    field.u = 8
+
+    assert field.bin == "1000"
+    assert field.u == 8
+    assert m == Mutibs("0x08")
 
 
 def test_mutable_view_field_write_failure_leaves_source_unchanged():
@@ -530,30 +548,35 @@ def test_mutable_view_revalidates_layout_after_source_length_change():
 
 
 def test_view_field_extracts_lsb0_spec_labels():
+    literal = Tibs("0x01").lsb0
+
+    assert literal.field(0, 3).bin == "0001"
+    assert literal.field(0, 3).u == 1
+
     v = Tibs("0x88040410").lsb0
 
     assert v.field(1, 0).u == 0
-    assert v.field(6, 2).u == 8
-    assert v.field(9, 7).u == 4
-    assert v.field(12, 10).u == 4
+    assert v.field(6, 2).u == 2
+    assert v.field(9, 7).u == 1
+    assert v.field(12, 10).u == 1
     assert v.field(17, 13).u == 0
-    assert v.field(23, 18).u == 32
+    assert v.field(23, 18).u == 1
     assert v.field(25, 24).u == 0
-    assert v.field(31, 26).u == 8
+    assert v.field(31, 26).u == 4
 
 
 def test_view_field_endpoint_order_does_not_change_value():
     v = Tibs("0x88040410").lsb0
 
-    assert v.field(31, 26).u == v.field(26, 31).u == 8
+    assert v.field(31, 26).u == v.field(26, 31).u == 4
 
 
 def test_view_field_preserves_byte_order_for_whole_byte_fields():
     v = Tibs("0x0102").lsb0.le
     field = v.field(15, 0)
 
-    assert repr(field) == "View(Tibs('0x8040'), Endianness.Little, BitOrder.Msb0)"
-    assert field.u == Tibs("0x0102").lsb0.field(15, 0).le.u
+    assert repr(field) == "View(Tibs('0x0102'), Endianness.Little, BitOrder.Msb0)"
+    assert field.u == 0x0201
 
 
 def test_view_field_drops_byte_order_for_non_whole_byte_fields():
@@ -561,10 +584,16 @@ def test_view_field_drops_byte_order_for_non_whole_byte_fields():
     field = v.field(31, 26)
 
     assert repr(field) == (
-        "View(Tibs('0b001000'), Endianness.Unspecified, BitOrder.Msb0)"
+        "View(Tibs('0b000100'), Endianness.Unspecified, BitOrder.Msb0)"
     )
-    assert field.u == 8
+    assert field.u == 4
     assert field.u == Tibs("0x88040410").lsb0.field(31, 26).u
+
+    payload = Tibs("0x23a11234").lsb0.le.field(11, 0)
+    assert repr(payload) == (
+        "View(Tibs('0x123'), Endianness.Unspecified, BitOrder.Msb0)"
+    )
+    assert payload.u == 0x123
 
 
 def test_view_field_uses_msb0_labels_by_default():
@@ -630,22 +659,22 @@ def test_bin_views():
 def test_bin_field_views():
     t = Tibs('0x0180')
     assert t.msb0.field(0, 7).bin == '00000001'
-    assert t.lsb0.field(0, 7).bin == '10000000'
+    assert t.lsb0.field(0, 7).bin == '00000001'
     assert t.le.field(0, 7).bin == '00000001'
     assert t.msb0.field(0, 8).bin == '000000011'
-    assert t.lsb0.field(0, 8).bin == '100000000'
+    assert t.lsb0.field(0, 8).bin == '000000001'
 
     t = Tibs('0x0000f000')
     assert t.msb0.field(16, 31).bin == '1111000000000000'
-    assert t.lsb0.field(16, 31).bin == '0000111100000000'
+    assert t.lsb0.field(16, 31).bin == '0000000011110000'
     assert t.msb0.le.field(16, 31).bin == '0000000011110000'
-    assert t.msb0.le.lsb0.field(16, 31).bin == '0000000000001111'
+    assert t.msb0.le.lsb0.field(16, 31).bin == '0000000011110000'
 
     m = Mutibs('0x0000f000')
     assert m.msb0.field(16, 31).bin == '1111000000000000'
-    assert m.lsb0.field(16, 31).bin == '0000111100000000'
+    assert m.lsb0.field(16, 31).bin == '0000000011110000'
     assert m.msb0.le.field(16, 31).bin == '0000000011110000'
-    assert m.msb0.le.lsb0.field(16, 31).bin == '0000000000001111'
+    assert m.msb0.le.lsb0.field(16, 31).bin == '0000000011110000'
 
 
 def test_field_value_errors():

@@ -85,10 +85,37 @@ fn validate_field_labels(len: usize, a: i64, b: i64) -> PyResult<(usize, usize)>
     Ok((min, max - min + 1))
 }
 
-fn field_source_indices(bit_order: BitOrder, low: usize, field_len: usize) -> Vec<usize> {
+fn field_source_indices(
+    bit_order: BitOrder,
+    byte_order: Endianness,
+    low: usize,
+    field_len: usize,
+) -> Vec<usize> {
     let mut indices = Vec::with_capacity(field_len);
-    for label in low..low + field_len {
-        indices.push(physical_index_for_label(bit_order, label));
+    let high = low + field_len;
+    match bit_order {
+        BitOrder::Msb0 => {
+            indices.extend(low..high);
+        }
+        BitOrder::Lsb0 => {
+            // LSB0 labels run opposite to physical order within each byte.
+            // Fields should read and write value bits in field order, not
+            // label order, so label 0 is the least significant bit. Whole-byte
+            // little-endian fields keep byte chunks in little-endian order.
+            if byte_order == Endianness::Little && field_len.is_multiple_of(8) {
+                let mut chunk_low = low;
+                while chunk_low < high {
+                    for label in (chunk_low..chunk_low + 8).rev() {
+                        indices.push(physical_index_for_label(BitOrder::Lsb0, label));
+                    }
+                    chunk_low += 8;
+                }
+            } else {
+                for label in (low..high).rev() {
+                    indices.push(physical_index_for_label(BitOrder::Lsb0, label));
+                }
+            }
+        }
     }
     indices
 }
@@ -708,7 +735,7 @@ impl MutableView {
             Endianness::Unspecified
         };
         let source_indices = self.selection.source_indices(source.len())?;
-        let indices = field_source_indices(self.bit_order, low, field_len)
+        let indices = field_source_indices(self.bit_order, byte_order, low, field_len)
             .into_iter()
             .map(|index| source_indices[index])
             .collect();
@@ -1186,10 +1213,11 @@ impl View {
     /// least significant bit. For an MSB0 view, labels match normal Python slice
     /// positions.
     ///
-    /// Labels are selected in ascending order after endpoint normalization. The
-    /// returned view has ``BitOrder.Msb0`` because the selected bits have been
-    /// materialized. The current byte order is kept for whole-byte fields and
-    /// dropped for non-whole-byte fields.
+    /// Labels are selected in field-value order after endpoint normalization.
+    /// This means LSB0 labels identify the physical bits, while the returned
+    /// field is not bit-reversed. The returned view has ``BitOrder.Msb0``
+    /// because the selected bits have been materialized. The current byte order
+    /// is kept for whole-byte fields and dropped for non-whole-byte fields.
     ///
     /// :param int a: One non-negative inclusive field endpoint.
     /// :param int b: The other non-negative inclusive field endpoint.
@@ -1199,7 +1227,7 @@ impl View {
     ///
     ///     >>> t = Tibs('0x88040410')
     ///     >>> t.lsb0.field(31, 26).u
-    ///     8
+    ///     4
     ///
     pub fn field(&self, a: i64, b: i64) -> PyResult<Self> {
         let len = self.source.len();
@@ -1212,7 +1240,7 @@ impl View {
 
         let source = self.source.to_bitslice();
         let mut field = BV::with_capacity(field_len);
-        for index in field_source_indices(self.bit_order, low, field_len) {
+        for index in field_source_indices(self.bit_order, byte_order, low, field_len) {
             field.push(source[index]);
         }
 
