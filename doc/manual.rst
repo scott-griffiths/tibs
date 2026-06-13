@@ -5,8 +5,7 @@
 
    <div style="display: flex; justify-content: left; margin: 0 0 1rem 0;">
      <div style="display: flex; align-items: flex-end; gap: 1rem;">
-       <img src="_static/tibs_white.png" alt="Tibs" class="only-light" style="width: 95px; height: auto;"/>
-       <img src="_static/tibs_white.png" alt="Tibs" class="only-dark pst-js-only" style="width: 95px; height: auto;"/>
+       <img src="_static/tibs_cat.png" alt="Tibs" style="width: 95px; height: auto;"/>
        <div style="display: flex; flex-direction: column; align-items: center;">
          <img src="_static/tibs.png" alt="tibs" style="width: 240px; height: auto;"/>
          <div>A sleek Python library for binary data</div>

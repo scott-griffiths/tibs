@@ -1,5 +1,5 @@
 <p>
-  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs_white.png" alt="Tibs cat" height="130" align="left" />
+  <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/_static/tibs_cat.png" alt="Tibs cat" height="130" align="left" />
   <a href="https://github.com/scott-griffiths/tibs">
     <img src="https://raw.githubusercontent.com/scott-griffiths/tibs/main/doc/tibs.png" alt="tibs" height="110" />
   </a><br />
