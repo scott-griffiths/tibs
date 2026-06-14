@@ -67,7 +67,8 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install tibs[dev] --find-links dist --force-reinstall
+          pip install pytest hypothesis pytest-benchmark
+          pip install tibs --no-index --find-links dist --force-reinstall --no-deps
           pytest
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
@@ -79,10 +80,10 @@ jobs:
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip pytest
+            pip3 install -U pip pytest hypothesis pytest-benchmark
           run: |
             set -e
-            pip3 install tibs[dev] --find-links dist --force-reinstall
+            pip3 install tibs --no-index --find-links dist --force-reinstall --no-deps
             pytest
 
   musllinux:
@@ -130,7 +131,8 @@ jobs:
             apk add py3-pip py3-virtualenv
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install tibs[dev] --find-links dist --force-reinstall
+            pip install pytest hypothesis pytest-benchmark
+            pip install tibs --no-index --find-links dist --force-reinstall --no-deps
             pytest
           '
       - name: pytest
@@ -146,7 +148,8 @@ jobs:
             set -e
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install tibs[dev] --find-links dist --force-reinstall
+            pip install pytest hypothesis pytest-benchmark
+            pip install tibs --no-index --find-links dist --force-reinstall --no-deps
             pytest
 
   windows:
@@ -186,7 +189,8 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
-          pip install tibs[dev] --find-links dist --force-reinstall
+          pip install pytest hypothesis pytest-benchmark
+          pip install tibs --no-index --find-links dist --force-reinstall --no-deps
           pytest
 
   # Keep this separate from the regular Windows wheel job. Use the official
@@ -236,7 +240,8 @@ jobs:
           set -e
           python3.14t.exe -m venv .venv
           source .venv/Scripts/activate
-          pip install tibs[dev] --find-links dist --force-reinstall
+          pip install pytest hypothesis pytest-benchmark
+          pip install tibs --no-index --find-links dist --force-reinstall --no-deps
           pytest
 
   macos:
@@ -275,7 +280,8 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install tibs[dev] --find-links dist --force-reinstall
+          pip install pytest hypothesis pytest-benchmark
+          pip install tibs --no-index --find-links dist --force-reinstall --no-deps
           pytest
 
   # Disabling as it doesn't build the wheel and I don't think we need it.
