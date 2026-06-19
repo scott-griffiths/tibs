@@ -1,0 +1,161 @@
+name: Performance
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Benchmark regression
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      BENCHMARK_THRESHOLD: "0.10"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create benchmark environments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv-base
+          python -m venv .venv-head
+
+      - name: Build base package
+        shell: bash
+        working-directory: base
+        run: |
+          set -euo pipefail
+          ../.venv-base/bin/python -m pip install -U pip
+          ../.venv-base/bin/python -m pip install maturin pytest pytest-benchmark
+          ../.venv-base/bin/maturin develop --release
+
+      - name: Benchmark base
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv-base/bin/python -m pytest head/tests/performance_regression.py \
+            --benchmark-only \
+            --benchmark-disable-gc \
+            --benchmark-min-rounds=5 \
+            --benchmark-json benchmark-base.json
+
+      - name: Build PR package
+        shell: bash
+        working-directory: head
+        run: |
+          set -euo pipefail
+          ../.venv-head/bin/python -m pip install -U pip
+          ../.venv-head/bin/python -m pip install maturin pytest pytest-benchmark
+          ../.venv-head/bin/maturin develop --release
+
+      - name: Benchmark PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv-head/bin/python -m pytest head/tests/performance_regression.py \
+            --benchmark-only \
+            --benchmark-disable-gc \
+            --benchmark-min-rounds=5 \
+            --benchmark-json benchmark-head.json
+
+      - name: Compare benchmarks
+        id: benchmark-report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python head/.github/scripts/compare_benchmarks.py \
+            --base benchmark-base.json \
+            --head benchmark-head.json \
+            --report benchmark-report.md \
+            --threshold "$BENCHMARK_THRESHOLD" \
+            --base-label "${{ github.event.pull_request.base.ref }}@${{ github.event.pull_request.base.sha }}" \
+            --head-label "${{ github.event.pull_request.head.ref }}@${{ github.event.pull_request.head.sha }}"
+          cat benchmark-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: performance-benchmarks
+          path: |
+            benchmark-base.json
+            benchmark-head.json
+            benchmark-report.md
+
+  comment:
+    name: Report benchmark summary
+    runs-on: ubuntu-22.04
+    needs: regression
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.regression.result == 'success' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Download benchmark report
+        uses: actions/download-artifact@v7
+        with:
+          name: performance-benchmarks
+
+      - name: Update PR benchmark comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- tibs-benchmark-report -->";
+            const body = fs.readFileSync("benchmark-report.md", "utf8");
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
