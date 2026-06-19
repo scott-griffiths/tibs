@@ -195,10 +195,29 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
         DtypeKind::Bytes => {
             bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))
         }
-        DtypeKind::Bin => bv_from_bin(&value.extract::<String>()?),
-        DtypeKind::Oct => bv_from_oct(&value.extract::<String>()?),
-        DtypeKind::Hex => bv_from_hex(&value.extract::<String>()?),
+        DtypeKind::Bin => {
+            validate_dtype_value_length(dtype, bv_from_bin(&value.extract::<String>()?)?)
+        }
+        DtypeKind::Oct => {
+            validate_dtype_value_length(dtype, bv_from_oct(&value.extract::<String>()?)?)
+        }
+        DtypeKind::Hex => {
+            validate_dtype_value_length(dtype, bv_from_hex(&value.extract::<String>()?)?)
+        }
     }
+}
+
+fn validate_dtype_value_length(dtype: &Dtype, bv: BV) -> PyResult<BV> {
+    let value_length = bv.len();
+    if value_length != dtype.length {
+        return Err(PyValueError::new_err(format!(
+            "Dtype length is {} bits, but {} value produced {} bits.",
+            dtype.length,
+            dtype.kind.repr_name(),
+            value_length
+        )));
+    }
+    Ok(bv)
 }
 
 pub(crate) fn bv_from_values_iter(

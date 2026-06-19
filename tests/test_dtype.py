@@ -97,6 +97,32 @@ def test_from_value_hex():
     assert t == Tibs.from_hex("0f")
 
 
+@pytest.mark.parametrize(
+    "dtype,value",
+    [
+        ("bin4", "101"),
+        ("bin4", "10101"),
+        ("oct6", "7"),
+        ("oct6", "777"),
+        ("hex8", "f"),
+        ("hex8", "fff"),
+    ],
+)
+def test_from_value_textual_requires_dtype_length(dtype, value):
+    with pytest.raises(ValueError, match="Dtype length"):
+        Tibs.from_value(dtype, value)
+
+
+def test_mutibs_from_value_textual_requires_dtype_length():
+    with pytest.raises(ValueError, match="Dtype length"):
+        Mutibs.from_value("hex8", "f")
+
+
+def test_from_values_textual_requires_each_item_to_match_dtype_length():
+    with pytest.raises(ValueError, match="Dtype length"):
+        Tibs.from_values("hex8", ["0f", "f"])
+
+
 def test_to_value_float():
     d = Dtype("f16_le")
     t = Tibs.from_value(d, 14.5)
