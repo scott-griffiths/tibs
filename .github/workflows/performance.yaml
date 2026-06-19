@@ -59,8 +59,9 @@ jobs:
         run: |
           set -euo pipefail
           ../.venv-base/bin/python -m pip install -U pip
-          ../.venv-base/bin/python -m pip install maturin pytest pytest-benchmark
-          ../.venv-base/bin/maturin develop --release
+          source ../.venv-base/bin/activate
+          pip install maturin pytest pytest-benchmark
+          maturin develop --release
 
       - name: Benchmark base
         shell: bash
@@ -78,8 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           ../.venv-head/bin/python -m pip install -U pip
-          ../.venv-head/bin/python -m pip install maturin pytest pytest-benchmark
-          ../.venv-head/bin/maturin develop --release
+          source ../.venv-head/bin/activate
+          pip install maturin pytest pytest-benchmark
+          maturin develop --release
 
       - name: Benchmark head
         shell: bash
