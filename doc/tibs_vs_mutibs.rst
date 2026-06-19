@@ -3,8 +3,10 @@
 Tibs vs Mutibs
 --------------
 
-* Tibs instances cannot change after they are created. This lets you use them as keys in dictionaries,
-  they can be hashed and used in sets.
+* Tibs instances cannot change after they are created, but they are not hashable. This is because
+  they compare equal to other promotable bit representations such as strings and bytes. To use
+  a ``Tibs`` or ``Mutibs`` value as a dictionary or set key, use an encoded ``bytes`` key such as
+  ``bits.encode(Codec.Raw)``.
 * Methods that return iterators over the data are available for Tibs, but not Mutibs. This is because for
   a Mutibs the data could change while the iterator is live. To use these methods on a Mutibs first convert
   to a Tibs.

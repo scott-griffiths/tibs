@@ -892,20 +892,22 @@ class TestManyDifferentThings:
         assert not s[9:16].ends_with("0x34")
         assert not s[8:15].ends_with("0x34")
 
-    def test_const_bit_stream_hashability(self):
+    def test_const_bit_stream_unhashable(self):
         a = Tibs("0x1")
         b = Tibs("0x2")
         c = Tibs("0x1")
-        s = {a, b, c}
-        assert len(s) == 2
-        assert hash(a) == hash(c)
+        for value in (a, b, c):
+            with pytest.raises(TypeError, match="unhashable"):
+                hash(value)
+        with pytest.raises(TypeError, match="unhashable"):
+            {a, b, c}
 
-    def test_hash_edge_cases(self):
+    def test_encode_raw_can_be_used_as_const_bit_stream_key(self):
         a = Tibs("0xabcd")
         b = Tibs("0xabcd")
         c = b[1:]
-        assert hash(a) == hash(b)
-        assert hash(a) != hash(c)
+        keys = {a.encode(), b.encode(), c.encode()}
+        assert len(keys) == 2
 
     def test_const_bits_copy(self):
         a = Tibs("0xabc")

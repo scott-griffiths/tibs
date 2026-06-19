@@ -8,8 +8,7 @@ The Mutibs class (pronounced 'mew-tibs') is a mutable container for binary data.
 
 It's mostly a superset of the Tibs class, and adds methods that can change the contained data in-place.
 
-Unlike Tibs, a Mutibs instance is not hashable, and so can't be used as a dictionary key or in a set.
-It can also be less efficient to use a Mutibs if an immutable Tibs would work equally well, but the differences are
+It can be less efficient to use a Mutibs if an immutable Tibs would work equally well, but the differences are
 likely to be small in most use-cases.
 
 Methods on Tibs which produce an iterator over the data, such as :meth:`Tibs.find_all_iter`

@@ -21,6 +21,12 @@ into a single byte. For longer sequences the raw codec overhead is still small.
 The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
 if a ``Tibs`` and ``Mutibs`` are equal they will encode to the same ``bytes``.
 
+This also makes encoded bytes a good explicit key when you need hashing behavior.
+``Tibs`` and ``Mutibs`` are not hashable themselves, but ``bits.encode()``
+is a stable ``bytes`` representation of the exact bit sequence, including
+its bit length. Those keys can be stored in dictionaries or sets and later decoded
+with :meth:`Tibs.decode` or :meth:`Mutibs.decode`.
+
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
 

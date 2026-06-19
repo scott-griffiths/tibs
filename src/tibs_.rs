@@ -11,43 +11,12 @@ use crate::helpers::{
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
-use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
-
-impl Hash for Tibs {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.len().hash(state);
-
-        let bits = self.to_bitslice();
-
-        let mut words = bits.chunks_exact(64);
-        for chunk in words.by_ref() {
-            state.write_u64(chunk.load_be::<u64>());
-        }
-
-        let mut bytes = words.remainder().chunks_exact(8);
-        for chunk in bytes.by_ref() {
-            state.write_u8(chunk.load_be::<u8>());
-        }
-
-        let tail = bytes.remainder();
-        if !tail.is_empty() {
-            let mut last = 0u8;
-            for bit in tail {
-                last = (last << 1) | (*bit as u8);
-            }
-            last <<= 8 - tail.len();
-            state.write_u8(last);
-        }
-    }
-}
 
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
@@ -661,13 +630,8 @@ impl Tibs {
         *self.to_bitslice() == *other.as_bitslice()
     }
 
-    #[pyo3(name = "__hash__")]
-    /// Return a hash of the Tibs.
-    pub fn __hash__(&self) -> isize {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish() as isize
-    }
+    #[classattr]
+    const __hash__: Option<Py<PyAny>> = None;
 
     /// Find all occurrences of a bit sequence.
     ///

@@ -657,3 +657,20 @@ def test_more_encoding():
 
     assert b_auto == b_zstd
     assert Tibs.decode(b_zstd) == Tibs.decode(b_raw) == Tibs.decode(b_rice)
+
+
+def test_raw_encoding_is_stable_key_for_tibs_and_mutibs():
+    values = [
+        Tibs("0b101"),
+        Tibs("0b101"),
+        Tibs("0x05"),
+        Mutibs("0b101"),
+    ]
+
+    keys = {value.encode(Codec.Raw) for value in values}
+
+    assert len(keys) == 2
+    assert Tibs("0b101").encode(Codec.Raw) in keys
+    assert Mutibs("0b101").encode(Codec.Raw) in keys
+    decoded_keys = {Tibs.decode(key).encode(Codec.Raw) for key in keys}
+    assert decoded_keys == keys

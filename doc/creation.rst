@@ -141,10 +141,15 @@ For example there are many ways for a ``Tibs`` to be constructed from the unsign
     u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
     u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
 
-These are three different ``Tibs``, but they all can have equal interpretations::
+These are three different ``Tibs``, but they all can have equal interpretations.
+``Tibs`` itself is not hashable, so use an encoded ``bytes`` key if you need to put bit
+sequences in a set or dictionary::
 
-    >>> set([u1, u2, u3])
-    {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
+    >>> keys = {u1.encode(), u2.encode(), u3.encode()}
+    >>> keys
+    {b'\xa3', b'H\x03\x00', b'H\x00\x03'}
+    >>> {Tibs.decode(x) for x in keys}
+    {Tibs('0x0003'), Tibs('0x0300'), Tibs('0b00011')}
     >>> set([u1.u, u2.u, u3.le.u])
     {3}
 
