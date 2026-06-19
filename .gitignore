@@ -1,0 +1,22 @@
+# OS files and hidden tool/cache/editor directories
+.DS_Store
+.*/
+!.github/
+
+# Python caches, environments, and packaging output
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.egg-info/
+uv.lock
+
+# Rust and maturin build output
+target/
+
+# Generated documentation
+doc/_build/
+html/
+
+# Local root scratch files
+/temp_*

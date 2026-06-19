@@ -9,6 +9,7 @@ Backwardly incompatible changes
   shouldn't have been available. The new recommendation is to use the `encode` method
   to convert to `bytes` objects to use as keys.
 
+
 ### May 31st 2026: version 0.9.
 
 Backwardly incompatible changes
