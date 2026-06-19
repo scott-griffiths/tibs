@@ -2,12 +2,15 @@ name: Performance
 
 on:
   pull_request:
+  push:
+    branches:
+      - "**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: performance-${{ github.event.pull_request.number }}
+  group: performance-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,15 +27,15 @@ jobs:
       - name: Checkout base
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.event.pull_request.base.repo.full_name }}
-          ref: ${{ github.event.pull_request.base.sha }}
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           path: base
 
-      - name: Checkout PR
+      - name: Checkout head
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           path: head
 
       - name: Set up Python
@@ -69,7 +72,7 @@ jobs:
             --benchmark-min-rounds=5 \
             --benchmark-json benchmark-base.json
 
-      - name: Build PR package
+      - name: Build head package
         shell: bash
         working-directory: head
         run: |
@@ -78,7 +81,7 @@ jobs:
           ../.venv-head/bin/python -m pip install maturin pytest pytest-benchmark
           ../.venv-head/bin/maturin develop --release
 
-      - name: Benchmark PR
+      - name: Benchmark head
         shell: bash
         run: |
           set -euo pipefail
@@ -98,8 +101,8 @@ jobs:
             --head benchmark-head.json \
             --report benchmark-report.md \
             --threshold "$BENCHMARK_THRESHOLD" \
-            --base-label "${{ github.event.pull_request.base.ref }}@${{ github.event.pull_request.base.sha }}" \
-            --head-label "${{ github.event.pull_request.head.ref }}@${{ github.event.pull_request.head.sha }}"
+            --base-label "${{ github.event_name == 'pull_request' && format('{0}@{1}', github.event.pull_request.base.ref, github.event.pull_request.base.sha) || format('{0}@{1}', github.ref_name, github.event.before) }}" \
+            --head-label "${{ github.event_name == 'pull_request' && format('{0}@{1}', github.event.pull_request.head.ref, github.event.pull_request.head.sha) || format('{0}@{1}', github.ref_name, github.sha) }}"
           cat benchmark-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark artifacts
@@ -115,7 +118,7 @@ jobs:
     name: Report benchmark summary
     runs-on: ubuntu-22.04
     needs: regression
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.regression.result == 'success' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.regression.result == 'success' }}
     permissions:
       contents: read
       issues: write
