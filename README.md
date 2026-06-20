@@ -21,23 +21,31 @@
 ----
 
 ``tibs`` is a simple but powerful Python library for creating, interpreting and manipulating binary data.
-It is 100% written in Rust to give it excellent performance, and is from the same author as
+It is 100% written in Rust to give it excellent performance, and is from the author of
 the [bitstring](https://github.com/scott-griffiths/bitstring) library.
 
 # Documentation
 
 The full documentation is available on [Read the Docs](https://mutibs.readthedocs.io/en/latest/).
 
-## Getting started
+## Install
 
-To install use
-
-```
+```bash
 pip install tibs
 ```
 
-There are pre-built wheels for most configurations - if there are issues then please let me know.
-Tibs works with Python 3.8 and later.
+Tibs works with Python 3.8 and later. There are pre-built wheels for most common
+platforms; if there are issues then please let me know.
+
+
+## Why use it?
+
+- Store bit sequences of any length, not just whole bytes.
+- Construct from strings, bytes, bools, integers, floats, random data or repeated typed values.
+- Slice at bit positions and interpret each slice as bytes, ints, floats, binary, octal or hex.
+- Read little-endian values and LSB0-labelled fields without manually reshuffling the source data.
+- Search, count, replace, rotate, reverse, byte-swap, set and unset bits with Rust-backed operations.
+- Use immutable `Tibs` for cheap slicing and stable values; switch to `Mutibs` when in-place edits are better.
 
 
 ## A taster
@@ -90,7 +98,24 @@ worked examples.
 
 For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
 
-# Credits
+## Project status
+
+Tibs is currently beta: API changes are still possible when they improve the
+design, but the project is already performant and stable enough to be used as the core of the bitstring
+library, and it has millions of downloads per month.
+
+There are over 600 unit tests, including Hypothesis tests and performance benchmarks.
+The Rust extension is built with PyO3 and supports Python 3.8 and later.
+
+
+For more examples and the full API reference, see the
+[documentation](https://mutibs.readthedocs.io/en/latest/). The runnable examples
+also live in the [`examples/`](examples/) directory.
+
+I hope to release version 1.0 before the end of 2026.
+
+
+## Credits
 
 The `tibs` library was created by Scott Griffiths and is released under the MIT License.
 
