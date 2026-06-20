@@ -8,7 +8,7 @@ interpreted in a different way. This allows different byte orders to be used,
 as well as different bit numbering methods when interpreting the data.
 
 Both ``Tibs`` and ``Mutibs`` act like a Python container for bits - indexing and
-slicing always have the usual meaning, with indices running fron left to right.
+slicing always have the usual meaning, with indices running from left to right.
 Interpretations of the bit data also have the usual meanings in Python::
 
     >>> int.from_bytes(b'xyz')
@@ -150,11 +150,10 @@ Let's go through these one at a time:
   order is swapped by the view, so the right-most byte has the most significant bits and the
   left-most byte as the least significant bits, but
   the bits within each byte are unchanged.
-* ``t.lsb0.bin`` -> ``10000000_00000000``. The Least Significant Bit Zero (LSB0) view. Here
-  bit zero of each byte (the left-most bit) is the least significant bit, rather than the
-  more usual most significant bit. Note that this view doesn't change the byte order - it's
-  like traversing the bytes from left to right, but taking the bits in each byte from
-  right to left.
+* ``t.lsb0.bin`` -> ``10000000_00000000``. The Least Significant Bit Zero (LSB0) view.
+  In the source byte, label 0 refers to the right-most bit rather than the left-most bit.
+  When the view is materialized, each byte is therefore read from right to left, while the
+  byte order itself is unchanged.
 * ``t.lsb0.le.bin`` -> ``00000000_10000000``. Finally we can combine them (in either order)
   to both traverse the bytes from right to left and the bits in the byte from right to left.
   The overall effect is to reverse the bit order.

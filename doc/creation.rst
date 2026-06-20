@@ -20,6 +20,8 @@ A wide range of ``from_`` constructor methods are provided:
 * :meth:`Tibs.from_u`: Create from an unsigned int to a given length.
 * :meth:`Tibs.from_i`: Create from a signed int to a given length.
 * :meth:`Tibs.from_f`: Create from an IEEE float to a 16, 32 or 64 bit length.
+* :meth:`Tibs.from_value`: Create one fixed-width value from a dtype.
+* :meth:`Tibs.from_values`: Create many fixed-width values from a dtype.
 * :meth:`Tibs.from_joined`: Concatenate an iterable of objects.
 
 Some examples::
@@ -49,7 +51,7 @@ Some examples::
     h = Tibs.from_string('0xff01, 0b101')
 
     # An efficient way to join many other Tibs together.
-    i = Tibs.from_joined([a, b, c, d, e, f, g, h, i])
+    i = Tibs.from_joined([a, b, c, d, e, f, g, h])
 
 Promotion to Tibs
 ^^^^^^^^^^^^^^^^^
@@ -133,6 +135,8 @@ There are also a number of data interpretations that complement the data represe
 * :meth:`Tibs.to_u()` / :attr:`Tibs.u`. Interprets as an unsigned integer.
 * :meth:`Tibs.to_i()` / :attr:`Tibs.i`. Interprets as a signed integer.
 * :meth:`Tibs.to_f()` / :attr:`Tibs.f`. Converts to Python float. Length must be 16, 32 or 64.
+* :meth:`Tibs.to_value`. Interprets one fixed-width value using a dtype.
+* :meth:`Tibs.to_values` / :meth:`Tibs.to_values_iter`. Interprets repeated fixed-width values using a dtype.
 
 Unlike the data representations, the interpretations can have a many-to-one relationship.
 For example there are many ways for a ``Tibs`` to be constructed from the unsigned integer 3::
@@ -146,14 +150,47 @@ These are three different ``Tibs``, but they all can have equal interpretations.
 sequences in a set or dictionary::
 
     >>> keys = {u1.encode(), u2.encode(), u3.encode()}
-    >>> keys
-    {b'\xa3', b'H\x03\x00', b'H\x00\x03'}
-    >>> {Tibs.decode(x) for x in keys}
-    {Tibs('0x0003'), Tibs('0x0300'), Tibs('0b00011')}
+    >>> sorted(keys)
+    [b'H\x00\x03', b'H\x03\x00', b'\xa3']
+    >>> decoded = [Tibs.decode(x) for x in keys]
+    >>> sorted(repr(x) for x in decoded)
+    ["Tibs('0b00011')", "Tibs('0x0003')", "Tibs('0x0300')"]
     >>> set([u1.u, u2.u, u3.le.u])
     {3}
 
 For the value stored in ``u3`` a little-endian :class:`View` was used - we'll cover that later.
+
+
+Repeated fixed-width values
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When every item uses the same fixed-width encoding, :class:`Dtype` strings make
+the intent explicit and avoid writing a construction loop yourself. The most
+common dtype forms are unsigned integers such as ``"u8"`` or ``"u12"``, signed
+integers such as ``"i16"``, floats such as ``"f32"``, and string or byte
+representations such as ``"hex16"`` and ``"bytes32"``.
+
+Use :meth:`Tibs.from_value` for one value, or :meth:`Tibs.from_values` for an
+iterable of values::
+
+    >>> Tibs.from_value("u8", 15)
+    Tibs('0x0f')
+    >>> samples = Tibs.from_values("u12", [0, 103, 2048, 4095])
+    >>> samples.hex
+    '000067800fff'
+
+The matching interpretation methods decode values back from a bit sequence::
+
+    >>> samples.to_values("u12")
+    [0, 103, 2048, 4095]
+    >>> samples.to_value("u12", 12, 24)
+    103
+
+For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
+when byte order matters::
+
+    >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
+    '3412cdab'
 
 
 Switching between Tibs and Mutibs

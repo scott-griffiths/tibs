@@ -11,8 +11,9 @@ be used to reconstruct the Tibs via :meth:`~Tibs.decode`.
 There are different codecs that are used to compress the data, both a general use Zstandard codec
 and a Rice codec, which is particularly good at sparse data.
 
-The raw encoding is also very efficient, and all the encoded sequences contain the bit length, which
-means that they can be safely concatenated without losing any information.
+The raw encoding is also very efficient, and all the encoded sequences contain the bit length. This
+means a stream parser can concatenate encoded values without losing boundary information. The public
+``decode`` methods still expect one complete value at a time and reject trailing bytes.
 
 The base implementation does a good job at the smaller bit sequences that compression
 algorithms would be very inefficient at storing, for example all bit sequences up to 6 bits long are encoded

@@ -1348,7 +1348,7 @@ impl Mutibs {
 
     /// Create a new instance with all bits randomly set.
     ///
-    /// :param int length: The number of bits to set. Must be positive.
+    /// :param int length: The number of bits to set. Must be non-negative.
     /// :param bool secure: If ``True``, use the OS's cryptographically secure generator. Default is ``False``.
     /// :param bytes | bytearray | None seed: A bytes or bytearray to use as an optional seed, only if ``secure`` is ``False``.
     /// :return: A newly constructed ``Mutibs`` with random data.

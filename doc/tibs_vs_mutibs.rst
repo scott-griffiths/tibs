@@ -73,8 +73,8 @@ The :meth:`Tibs.unset_at` method returns a brand new ``Tibs`` on each iteration.
 of the time in this version is spent allocating memory each new ``Tibs``,
 which is only being used to generate the next value before being destroyed.
 
-On my laptop the mutating version runs about 30x faster; calculating the first 100 million
-primes in about half a second.
+On my laptop the mutating version runs about 30x faster; calculating the primes below
+100 million in about half a second.
 
 Don't incrementally build a Tibs
 """"""""""""""""""""""""""""""""

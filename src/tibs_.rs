@@ -1402,7 +1402,7 @@ impl Tibs {
 
     /// Create a new instance with all bits randomly set.
     ///
-    /// :param int length: The number of bits to set. Must be positive.
+    /// :param int length: The number of bits to set. Must be non-negative.
     /// :param bool secure: If ``True``, use the OS's cryptographically secure generator. Default is ``False``.
     /// :param bytes | bytearray | None seed: A bytes or bytearray to use as an optional seed, only if ``secure`` is ``False``.
     /// :return: A newly constructed ``Tibs`` with random data.
@@ -2046,10 +2046,12 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
+    ///     >>> t = Tibs('0b101')
     ///     >>> b = t.encode()
     ///     >>> b
-    ///     b'\xb7'
+    ///     b'\x8d'
     ///     >>> Tibs.decode(b)
+    ///     Tibs('0b101')
     ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
     pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {

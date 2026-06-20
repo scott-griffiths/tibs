@@ -8,6 +8,36 @@ Data types control how bits are converted into values, and how values are conver
 They are often used implicitly when creating from or interpreting to integers, floats and other types, but
 can also be used explicitly in methods like :meth:`Tibs.from_values`.
 
+Dtype strings
+^^^^^^^^^^^^^
+
+The compact dtype string starts with a kind and ends with the bit length of one
+value:
+
+.. csv-table::
+   :header: "Form", "Meaning", "Example"
+
+   ``uN``, "Unsigned integer", ``u12``
+   ``iN``, "Signed integer", ``i16``
+   ``fN``, "IEEE floating-point value", ``f32``
+   ``binN``, "Binary string with exactly N bits", ``bin5``
+   ``octN``, "Octal string with exactly N bits", ``oct12``
+   ``hexN``, "Hex string with exactly N bits", ``hex16``
+   ``bytesN``, "Bytes value using N bits", ``bytes32``
+
+For integer and floating-point dtypes, append ``_le`` or ``_be`` to specify
+byte order for whole-byte values::
+
+    >>> Dtype("u16_le")
+    Dtype('u16_le')
+    >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
+    '3412cdab'
+
+Byte order cannot be used with ``bin``, ``oct``, ``hex`` or ``bytes`` dtypes.
+Float values are encoded using the supported IEEE widths: 16, 32 and 64 bits.
+The selected bit range for :meth:`Tibs.to_values` must be a whole number of dtype
+values.
+
 
 .. autoclass:: tibs.Dtype
    :members:
