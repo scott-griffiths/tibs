@@ -1,13 +1,21 @@
 # Release Notes
 
-### Unreleased: version 0.10.
+### June 20th 2026: version 0.10.0.
 
 Backwardly incompatible changes
 
-* Removed `__hash__` method from `Tibs`. The way that we allow `Tibs` to compare
-  equal to other types  (e.g. `Tibs('0xf') == '0b1111'`) means that the hash
-  shouldn't have been available. The new recommendation is to use the `encode` method
-  to convert to `bytes` objects to use as keys.
+* Removed `__hash__` method from `Tibs`. Because `Tibs` can compare equal to
+  other types (for example `Tibs('0xf') == '0b1111'`), the hash should not have
+  been available. The new recommendation is to use the `encode` method to
+  convert to `bytes` objects to use as keys.
+
+Fixes
+
+* Fixed LSB0 field extraction and assignment ordering for combined bit-order and
+  byte-order views. LSB0 labels now identify the physical bits while extracted
+  fields are returned in field-value order instead of being bit-reversed.
+* Fixed dtype length validation for `bin`, `oct` and `hex` values passed to
+  `from_value` and `from_values`.
 
 
 ### May 31st 2026: version 0.9.
