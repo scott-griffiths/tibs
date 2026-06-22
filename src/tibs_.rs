@@ -11,12 +11,43 @@ use crate::helpers::{
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
+use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PySlice, PyType};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::sync::Arc;
+
+impl Hash for Tibs {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
+
+        let bits = self.to_bitslice();
+
+        let mut words = bits.chunks_exact(64);
+        for chunk in words.by_ref() {
+            state.write_u64(chunk.load_be::<u64>());
+        }
+
+        let mut bytes = words.remainder().chunks_exact(8);
+        for chunk in bytes.by_ref() {
+            state.write_u8(chunk.load_be::<u8>());
+        }
+
+        let tail = bytes.remainder();
+        if !tail.is_empty() {
+            let mut last = 0u8;
+            for bit in tail {
+                last = (last << 1) | (*bit as u8);
+            }
+            last <<= 8 - tail.len();
+            state.write_u8(last);
+        }
+    }
+}
 
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
@@ -640,17 +671,29 @@ impl Tibs {
 
     /// Return True if two Tibs have the same binary representation.
     ///
-    /// The right hand side will be promoted to a Tibs if needed and possible.
+    /// Equality is only defined against :class:`Tibs` and :class:`Mutibs`.
     ///
-    /// >>> Tibs('0b1110') == '0xe'
+    /// >>> Tibs('0b1110') == Tibs('0xe')
     /// True
     ///
-    pub fn __eq__(&self, other: Tibs) -> bool {
-        *self.to_bitslice() == *other.as_bitslice()
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        if let Ok(other) = other.extract::<PyRef<'_, Tibs>>() {
+            return Ok(self.as_bitslice() == other.as_bitslice());
+        }
+        if let Ok(other) = other.extract::<PyRef<'_, Mutibs>>() {
+            return Ok(self.as_bitslice() == other.as_bitslice());
+        }
+        Ok(false)
     }
 
-    #[classattr]
-    const __hash__: Option<Py<PyAny>> = None;
+    /// Return a hash of the logical bit sequence.
+    pub fn __hash__(&self) -> isize {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        let hash = hasher.finish() as isize;
+        // Python reserves -1 as the error return value from tp_hash.
+        if hash == -1 { -2 } else { hash }
+    }
 
     /// Find all occurrences of a bit sequence.
     ///

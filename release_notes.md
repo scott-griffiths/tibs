@@ -1,5 +1,18 @@
 # Release Notes
 
+### Unreleased: version 0.11.0.
+
+Backwardly incompatible changes
+
+* Restored `Tibs.__hash__`, reversing the change made in version 0.10.0.
+  `Tibs` is now hashable again, while `Mutibs` remains unhashable.
+* Instead equality no longer promotes strings, bytes or iterables to bit containers.
+  `Tibs` and `Mutibs` compare equal to each other when their bit sequences
+  match, but expressions such as `Tibs('0xf') == '0b1111'` now return `False`.
+  Use `Tibs('0b1111')`, `Mutibs('0b1111')`, or representation properties such
+  as `.bin` and `.hex` when comparing against literal representations.
+
+
 ### June 20th 2026: version 0.10.0.
 
 Backwardly incompatible changes

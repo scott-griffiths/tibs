@@ -24,7 +24,7 @@ class TestCreation:
 class TestInitialisation:
     def test_empty_init(self):
         a = Tibs()
-        assert a == ""
+        assert a == Tibs()
 
     def test_find(self):
         a = Tibs.from_string("0xabcd")
@@ -51,7 +51,7 @@ class TestCut:
     def test_cut(self):
         s = Tibs().from_joined(["0b000111"] * 10)
         for t in s.chunks(6):
-            assert t == "0b000111"
+            assert t == Tibs('0b000111')
 
 
 def test_unorderable():
@@ -79,9 +79,9 @@ def test_adding():
     a = Tibs.from_string("0b0")
     b = Tibs.from_string("0b11")
     c = a + b
-    assert c == "0b011"
-    assert a == "0b0"
-    assert b == "0b11"
+    assert c == Tibs('0b011')
+    assert a == Tibs('0b0')
+    assert b == Tibs('0b11')
 
 
 class TestContainsBug:
@@ -120,7 +120,7 @@ def test_from_iterable():
     a = Tibs.from_bools([])
     assert a == Tibs()
     a = Tibs.from_bools([1, 0, 1, 1])
-    assert a == "0b1011"
+    assert a == Tibs('0b1011')
     a = Tibs.from_bools((True,))
     assert a.to_bin() == "1"
 
@@ -158,15 +158,15 @@ def test_bits_slicing():
     b = a[-5:-8:1]
     assert b == Tibs()
 
-    assert a[::2] == '0xff'
-    assert a[1::2] == '0x00'
+    assert a[::2] == Tibs('0xff')
+    assert a[1::2] == Tibs('0x00')
 
 
 def test_from_random():
     a = Tibs.from_random(0)
     assert a == Tibs()
     a = Tibs.from_random(1)
-    assert a == '0b1' or a == '0b0'
+    assert a == Tibs('0b1') or a == Tibs('0b0')
     a = Tibs.from_random(10000, seed=b'a_seed')
     b = Tibs.from_random(10000, seed=b'a_seed')
     assert a == b
@@ -175,6 +175,30 @@ def test_from_random():
     assert a != b
     c = Mutibs.from_random(10000, seed=b'a_seed')
     assert a == c
+
+
+def test_strict_equality_and_hashing():
+    assert Tibs("0xf") == Tibs("0b1111")
+    assert Tibs("0xf") == Mutibs("0xf")
+    assert Mutibs("0xf") == Tibs("0xf")
+
+    assert Tibs("0xf") != "0xf"
+    assert "0xf" != Tibs("0xf")
+    assert Tibs("0xf") != b"\x0f"
+    assert Tibs("0b101") != [1, 0, 1]
+    assert Mutibs("0xf") != "0xf"
+
+    a = Tibs("0xabcd")
+    b = Tibs("0xabcd")
+    c = Tibs("0x00abcd")[8:]
+    d = Tibs("0b11001101")
+
+    assert len({a, b, c}) == 1
+    assert hash(a) == hash(b) == hash(c)
+    assert len({Tibs("0x0f"), Tibs("0b1111"), d}) == 3
+
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(Mutibs("0xf"))
 
 
 def test_is_things():
@@ -234,14 +258,14 @@ def test_bools_from_iterable():
     v = [1, 0, 0, 1]
     i = iter(v)
     b = Tibs.from_bools(i)
-    assert b == '0b1001'
+    assert b == Tibs('0b1001')
 
 
 def test_joined_from_iterable():
     v = [[0], '0b11']
     i = iter(v)
     b = Tibs.from_joined(v)
-    assert b == '0b011'
+    assert b == Tibs('0b011')
 
 
 def test_promotion_from_mutibs():
@@ -260,11 +284,11 @@ def test_promotion_from_mutibs():
 def test_reversed():
     a = Tibs('0b1100')
     b = a.reversed()
-    assert b == '0b0011'
+    assert b == Tibs('0b0011')
 
     m1 = Mutibs('0b11100')
     m2 = m1.reversed()
-    assert m2 == '0b00111'
+    assert m2 == Tibs('0b00111')
     m3 = Mutibs.from_random(1_000_000)
     m4 = m3.reversed()
     m4.reverse()

@@ -546,14 +546,23 @@ impl Mutibs {
 
     /// Return True if two Mutibs have the same binary representation.
     ///
-    /// The right hand side will be promoted to a Mutibs if needed and possible.
+    /// Equality is only defined against :class:`Tibs` and :class:`Mutibs`.
     ///
-    /// >>> Mutibs('0xf2') == '0b11110010'
+    /// >>> Mutibs('0xf2') == Tibs('0b11110010')
     /// True
     ///
-    pub fn __eq__(&self, other: Tibs) -> bool {
-        *self.as_bitvec_ref() == *other.as_bitslice()
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        if let Ok(other) = other.extract::<PyRef<'_, Tibs>>() {
+            return Ok(self.as_bitslice() == other.as_bitslice());
+        }
+        if let Ok(other) = other.extract::<PyRef<'_, Mutibs>>() {
+            return Ok(self.as_bitslice() == other.as_bitslice());
+        }
+        Ok(false)
     }
+
+    #[classattr]
+    const __hash__: Option<Py<PyAny>> = None;
 
     /// Return string representations for printing.
     pub fn __str__(&self) -> String {

@@ -104,7 +104,7 @@ def test_count_large():
 
 def test_from_u():
     a = Tibs.from_u(15, 8)
-    assert a == '0b00001111'
+    assert a == Tibs('0b00001111')
     b = Mutibs.from_u(15, 8)
     assert a == b
     c = a.to_u()
@@ -249,41 +249,41 @@ def test_raw_bytes_and_offset():
     raw_bytes, offset, length = b.to_raw_data()
     assert offset == 4
     assert raw_bytes == b'\xff\x00\xff'
-    assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == '0x0f00f0'
+    assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == Tibs('0x0f00f0')
 
 
 def test_mutibs_raw_bytes_and_offset():
     a = Mutibs('0xff')
     b = a[4:]
     b += '0x77'
-    assert b == '0xf77'
+    assert b == Tibs('0xf77')
     raw_bytes, offset, length = b.to_raw_data()
-    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == '0x0f77'
+    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == Tibs('0x0f77')
     assert offset == 4
-    assert b == '0xf77'
+    assert b == Tibs('0xf77')
     raw_bytes, offset, length = b.as_raw_data()
-    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == '0x0f77'
+    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == Tibs('0x0f77')
     assert offset == 4
     assert length == 12
-    assert b == []
+    assert b == Tibs()
 
 
 def test_from_bytes_offsets():
     x = b'\xff\x00\xee\x11'
     a = Tibs.from_bytes(x)
-    assert a == '0xff00ee11'
+    assert a == Tibs('0xff00ee11')
     b = Tibs.from_bytes(x, None, 16)
-    assert b == '0xff00'
+    assert b == Tibs('0xff00')
     c = Tibs.from_bytes(x, offset=16)
-    assert c == '0xee11'
+    assert c == Tibs('0xee11')
     d = Tibs.from_bytes(x, 4, 12)
-    assert d == '0xf00'
+    assert d == Tibs('0xf00')
     e = Mutibs.from_bytes(x, length=4, offset=28)
-    assert e == '0x1'
+    assert e == Tibs('0x1')
     f = Mutibs.from_bytes(x, 0, 32)
     assert f == a
     g = Mutibs.from_bytes(x, 0, 0)
-    assert g == []
+    assert g == Tibs()
 
 
 def test_from_bytes_errors():
@@ -304,12 +304,12 @@ def test_bit_ops_alignments():
     a = Tibs('0x00ff00')
     b = a[4:20]
     c = a[2:18]
-    assert b & c == '0b0000001111110000'
+    assert b & c == Tibs('0b0000001111110000')
 
     a = Mutibs('0x00ff00')
     b = a[4:20]
     c = a[2:18]
-    assert b & c == '0b0000001111110000'
+    assert b & c == Tibs('0b0000001111110000')
 
 
 def test_raw_data_bug():
@@ -353,52 +353,52 @@ def test_count_with_range():
 def test_tibs_set_at_returns_new_instance():
     a = Tibs('0b0000')
     b = a.set_at([0, -1])
-    assert a == '0b0000'
-    assert b == '0b1001'
+    assert a == Tibs('0b0000')
+    assert b == Tibs('0b1001')
     assert isinstance(b, Tibs)
 
 
 def test_tibs_unset_at_returns_new_instance():
     a = Tibs('0b1111')
     b = a.unset_at(range(2))
-    assert a == '0b1111'
-    assert b == '0b0011'
+    assert a == Tibs('0b1111')
+    assert b == Tibs('0b0011')
 
 
 def test_tibs_inverted_returns_new_instance():
     a = Tibs('0b1010')
     b = a.inverted([0, -1])
-    assert a == '0b1010'
-    assert b == '0b0011'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b0011')
 
 
 def test_tibs_inserted_returns_new_instance():
     a = Tibs('0b1010')
     b = a.inserted(2, '0b11')
-    assert a == '0b1010'
-    assert b == '0b101110'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b101110')
 
 
 def test_tibs_replaced_returns_new_instance():
     a = Tibs('0b10101010')
     b = a.replaced('0b10', '0b11', count=2)
-    assert a == '0b10101010'
-    assert b == '0b11111010'
+    assert a == Tibs('0b10101010')
+    assert b == Tibs('0b11111010')
 
 
 def test_tibs_rotated_left_returns_new_instance():
     a = Tibs('0b1010')
     b = a.rotated_left(1)
-    assert a == '0b1010'
-    assert b == '0b0101'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b0101')
     assert isinstance(b, Tibs)
 
 
 def test_tibs_rotated_right_with_slice():
     a = Tibs('0b10101100')
     b = a.rotated_right(2, start=2, end=6)
-    assert a == '0b10101100'
-    assert b == '0b10111000'
+    assert a == Tibs('0b10101100')
+    assert b == Tibs('0b10111000')
 
 
 def test_start_and_ends_with():
@@ -464,7 +464,7 @@ def test_rchunks():
     for i in range(5):
         t += Tibs.from_u(i, 7)
     c = list(t.rchunks_iter(7))
-    assert c[-1] == '0b111'
+    assert c[-1] == Tibs('0b111')
     for i in range(5):
         assert c[i].to_u() == 4 - i
         assert len(c[i]) == 7

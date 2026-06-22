@@ -16,48 +16,48 @@ def test_extend():
     # Basic extend functionality
     a = Mutibs('0x0f')
     a.extend('0x0a')
-    assert a == '0x0f0a'
+    assert a == Tibs('0x0f0a')
 
     a = Mutibs('0x01')
     a.extend('0x02')
     a.extend('0x03')
-    assert a == '0x010203'
+    assert a == Tibs('0x010203')
 
     # Different input types
     a = Mutibs('0b1010')
     a.extend(Tibs('0b1111'))  # Tibs object
-    assert a == '0b10101111'
+    assert a == Tibs('0b10101111')
     a.extend(Tibs.from_bools([True, False, True]))
-    assert a == '0b10101111101'
+    assert a == Tibs('0b10101111101')
 
     # Empty extend
     a = Mutibs('0x42')
     a.extend(Tibs())
-    assert a == '0x42'
+    assert a == Tibs('0x42')
 
 
 def test_extend_left():
     # Basic prepend functionality
     a = Mutibs('0x0f')
     a.extend_left('0x0a')
-    assert a == '0x0a0f'
+    assert a == Tibs('0x0a0f')
 
     a = Mutibs('0x03')
     a.extend_left('0x02')
     a.extend_left('0x01')
-    assert a == '0x010203'
+    assert a == Tibs('0x010203')
 
     # Different input types
     a = Mutibs('0b1010')
     a.extend_left(Tibs('0b1111'))  # Tibs object
-    assert a == '0b11111010'
+    assert a == Tibs('0b11111010')
     a.extend_left(Tibs.from_bools([True, False, True]))  # Boolean list
-    assert a == '0b10111111010'
+    assert a == Tibs('0b10111111010')
 
     # Empty prepend
     a = Mutibs('0x42')
     a.extend_left(Tibs())
-    assert a == '0x42'
+    assert a == Tibs('0x42')
 
 
 def test_extend_prepend_together():
@@ -65,19 +65,19 @@ def test_extend_prepend_together():
     a = Mutibs('0xAA')
     a.extend('0xBB')
     a.extend_left('0xCC')
-    assert a == '0xCCAABB'
+    assert a == Tibs('0xCCAABB')
 
 
 def test_setitem_single_bit():
     a = Mutibs('0b0010')
     a[0] = 1
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
     a[2] = 0
-    assert a == '0b1000'
+    assert a == Tibs('0b1000')
     a[-1] = True
-    assert a == '0b1001'
+    assert a == Tibs('0b1001')
     a[-4] = False
-    assert a == '0b0001'
+    assert a == Tibs('0b0001')
     # Out of range
     with pytest.raises(IndexError):
         a[4] = 1
@@ -88,56 +88,56 @@ def test_setitem_single_bit():
 def test_setitem_slice():
     a = Mutibs('0b101010')
     a[1:4] = '0b111'
-    assert a == '0b111110'
+    assert a == Tibs('0b111110')
     a[0:2] = Tibs('0b00')
-    assert a == '0b001110'
+    assert a == Tibs('0b001110')
     a[2:5] = Mutibs('0b101')
-    assert a == '0b001010'
+    assert a == Tibs('0b001010')
     # Negative indices
     a[-3:-1] = '0b11'
-    assert a == '0b001110'
+    assert a == Tibs('0b001110')
     # Full slice
     a[:] = '0b000000'
-    assert a == '0b000000'
+    assert a == Tibs('0b000000')
     # Empty slice
     a[2:2] = '0b'
-    assert a == '0b000000'
+    assert a == Tibs('0b000000')
     a[1:3] = '0b1'
-    assert a == '0b01000'
+    assert a == Tibs('0b01000')
     # Stepping is not allowed
     with pytest.raises(ValueError):
         a[::2] = '0b00'
     a[10:12] = '0b00'  # Out of range, so just extends.
-    assert a == '0b0100000'
+    assert a == Tibs('0b0100000')
 
 
 def test_setitem_slice_length_change():
     a = Mutibs('0b1010')
     a[1:3] = '0b111'
-    assert a == '0b11110'  # Length increased by 1
+    assert a == Tibs('0b11110')  # Length increased by 1
     a[0:2] = '0b0'
-    assert a == '0b0110'
+    assert a == Tibs('0b0110')
     a[1:2] = '0b1111'
-    assert a == '0b0111110'
+    assert a == Tibs('0b0111110')
     a[0:15] = '0b1'
-    assert a == '0b1'
+    assert a == Tibs('0b1')
     # Setting to empty
     a[:] = ''
-    assert a == ''
+    assert a == Tibs()
     # Setting empty slice to non-empty
     a[0:0] = '0b101'
-    assert a == '0b101'
+    assert a == Tibs('0b101')
 
 
 def test_delitem_single_bit():
     # Test deleting single bits
     a = Mutibs('0b1010')
     del a[1]
-    assert a == '0b110'
+    assert a == Tibs('0b110')
 
     a = Mutibs('0b1010')
     del a[-1]
-    assert a == '0b101'
+    assert a == Tibs('0b101')
 
     # Out of range
     with pytest.raises(IndexError):
@@ -153,38 +153,38 @@ def test_delitem_slice():
     # Test deleting slices
     a = Mutibs('0b101010')
     del a[1:4]
-    assert a == '0b110'
+    assert a == Tibs('0b110')
 
     # Negative indices
     a = Mutibs('0b101010')
     del a[-4:-2]
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
     # Empty slice should do nothing
     a = Mutibs('0b1010')
     del a[2:2]
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
     # Full slice deletion
     a = Mutibs('0b1010')
     del a[:]
-    assert a == ''
+    assert a == Tibs()
 
     # Partial indices
     a = Mutibs('0b101010')
     del a[2:]  # Delete from index 2 to the end
-    assert a == '0b10'
+    assert a == Tibs('0b10')
 
     a = Mutibs('0b101010')
     del a[:2]  # Delete from start to index 2
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_delitem_with_step():
     # Test slices with step
     a = Mutibs('0b101010')
     del a[::2]  # Delete every other bit
-    assert a == '0b000'
+    assert a == Tibs('0b000')
     with pytest.raises(ValueError):
         del a[::0]
 
@@ -197,18 +197,18 @@ def test_delitem_edge_cases():
 
     a = Mutibs('0b1010')
     del a[10:20]  # Out of range slice, should do nothing
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
     # Delete last bit
     a = Mutibs('0b1')
     del a[0]
-    assert a == ''
+    assert a == Tibs()
 
 
 def test_inplace_add():
     a = Mutibs('0x123')
     a += '0xff'
-    assert a == '0x123ff'
+    assert a == Tibs('0x123ff')
 
 
 def test_inplace_mul():
@@ -217,24 +217,24 @@ def test_inplace_mul():
     assert a == Mutibs()
     a += '0b10'
     a *= 5
-    assert a == '0b1010101010'
+    assert a == Tibs('0b1010101010')
 
 
 def test_find_all():
     a = Mutibs('0b11111')
-    assert a.find_all('0b1') == [0, 1, 2, 3, 4]
-    assert a.find_all('0b11') == [0, 1, 2, 3]
-    assert a.find_all('0b10') == []
+    assert a.find_all(Tibs('0b1')) == [0, 1, 2, 3, 4]
+    assert a.find_all(Tibs('0b11')) == [0, 1, 2, 3]
+    assert a.find_all(Tibs('0b10')) == []
 
     b = Mutibs('0b1001001001001001001')
-    assert b.find_all('0b1001') == [0, 3, 6, 9, 12, 15]
+    assert b.find_all(Tibs('0b1001')) == [0, 3, 6, 9, 12, 15]
 
 
 def test_chunks():
     a = Mutibs('0x00112233445')
-    assert a.chunks(8) == ["0x00", "0x11", "0x22", "0x33", "0x44", "0x5"]
-    assert a[8:16].chunks(4) == ["0x1", "0x1"]
-    assert a[0:44].chunks(4, 4) == ["0x0", "0x0", "0x1", "0x1"]
+    assert a.chunks(8) == [Tibs('0x00'), Tibs('0x11'), Tibs('0x22'), Tibs('0x33'), Tibs('0x44'), Tibs('0x5')]
+    assert a[8:16].chunks(4) == [Tibs('0x1'), Tibs('0x1')]
+    assert a[0:44].chunks(4, 4) == [Tibs('0x0'), Tibs('0x0'), Tibs('0x1'), Tibs('0x1')]
     assert Mutibs().chunks(10) == []
 
 
@@ -242,58 +242,57 @@ def test_or():
     a = Mutibs('0x0f')
     b = Mutibs('0xf0')
     c = a | b
-    assert c == '0xff'
+    assert c == Tibs('0xff')
 
 
 def test_ior():
     a = Mutibs('0xf00')
     a |= '0x00a'
-    assert a == '0xf0a'
+    assert a == Tibs('0xf0a')
 
 
 def test_iand():
     a = Mutibs('0b1100')
     a &= '0b1010'
-    assert a == '0b1000'
+    assert a == Tibs('0b1000')
     b = Mutibs('0b1111')
     a &= b
-    assert a == '0b1000'
-    from tibs import Tibs
+    assert a == Tibs('0b1000')
     c = Tibs('0b0100')
     a &= c
-    assert a == '0b0000'
+    assert a == Tibs('0b0000')
 
 
 def test_and():
     a = Mutibs('0b1100')
     b = Mutibs('0b1010')
     c = a & b
-    assert c == '0b1000'
+    assert c == Tibs('0b1000')
     d = Tibs('0b0110')
     e = a & d
-    assert e == '0b0100'
+    assert e == Tibs('0b0100')
 
 
 def test_ixor():
     a = Mutibs('0b1100')
     a ^= '0b1010'
-    assert a == '0b0110'
+    assert a == Tibs('0b0110')
     b = Mutibs('0b0011')
     a ^= b
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
     c = Tibs('0b1100')
     a ^= c
-    assert a == '0b1001'
+    assert a == Tibs('0b1001')
 
 
 def test_xor():
     a = Mutibs('0b1100')
     b = Mutibs('0b1010')
     c = a ^ b
-    assert c == '0b0110'
+    assert c == Tibs('0b0110')
     d = Tibs('0b0110')
     e = a ^ d
-    assert e == '0b1010'
+    assert e == Tibs('0b1010')
 
 
 def test_constructors():
@@ -306,139 +305,139 @@ def test_constructors():
     assert b == Mutibs.from_bytes(b'123123')
 
     c.extend(d)
-    assert c == '0o47654'
+    assert c == Tibs('0o47654')
     d.extend(d)
-    assert d == '0o76547654'
+    assert d == Tibs('0o76547654')
 
 
 def test_invert():
     a = Mutibs('0b1110')
     b = ~a
-    assert b == '0b0001'
-    assert a == '0b1110'
+    assert b == Tibs('0b0001')
+    assert a == Tibs('0b1110')
 
 
 def test_insert_basic():
     # Basic insert functionality
     a = Mutibs('0b1010')
     a.insert(2, '0b11')
-    assert a == '0b101110'
+    assert a == Tibs('0b101110')
 
 
 def test_insert_beginning():
     # Insert at beginning
     a = Mutibs('0b1010')
     a.insert(0, '0b11')
-    assert a == '0b111010'
+    assert a == Tibs('0b111010')
 
 
 def test_insert_end():
     # Insert at end
     a = Mutibs('0b1010')
     a.insert(4, '0b11')
-    assert a == '0b101011'
+    assert a == Tibs('0b101011')
 
 
 def test_insert_empty():
     # Insert empty bits
     a = Mutibs('0b1010')
     a.insert(2, '')
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_insert_from_bits():
     # Insert with Tibs object
     a = Mutibs('0b1010')
     a.insert(2, Tibs('0b11'))
-    assert a == '0b101110'
+    assert a == Tibs('0b101110')
 
 
 def test_insert_from_mutable_bits():
     # Insert with Mutibs object
     a = Mutibs('0b1010')
     a.insert(2, Mutibs('0b11'))
-    assert a == '0b101110'
+    assert a == Tibs('0b101110')
 
 
 def test_inserted_returns_new_mutibs():
     a = Mutibs('0b1010')
     b = a.inserted(2, '0b11')
-    assert a == '0b1010'
-    assert b == '0b101110'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b101110')
 
 
 def test_insert_chaining():
     a = Mutibs('0b10')
     a.insert(1, '0b1')
     a.insert(2, '0b0')
-    assert a == '0b1100'
+    assert a == Tibs('0b1100')
 
 
 def test_insert_beyond_length():
     # Position beyond length
     a = Mutibs('0b1010')
     a.insert(5, '0b11')  # Position beyond length
-    assert a == '0b101011'  # Just extends - standard Python behaviour
+    assert a == Tibs('0b101011')  # Just extends - standard Python behaviour
 
 
 def test_set_single_bit_to_one():
     # Basic set functionality - setting a single bit to 1
     a = Mutibs('0b0000')
     a.set(2)
-    assert a == '0b0010'
+    assert a == Tibs('0b0010')
 
 
 def test_set_single_bit_to_zero():
     # Setting a single bit to 0
     a = Mutibs('0b1111')
     a.unset(2)
-    assert a == '0b1101'
+    assert a == Tibs('0b1101')
 
 
 def test_set_with_boolean_values():
     # Setting with boolean values
     a = Mutibs('0b0000')
     a.set(1)
-    assert a == '0b0100'
+    assert a == Tibs('0b0100')
     a.unset(1)
-    assert a == '0b0000'
+    assert a == Tibs('0b0000')
 
 
 def test_set_with_negative_index():
     # Setting with negative index
     a = Mutibs('0b0010')
     a.set(-1)
-    assert a == '0b0011'
+    assert a == Tibs('0b0011')
     a.unset(-2)
-    assert a == '0b0001'
+    assert a == Tibs('0b0001')
 
 
 def test_set_multiple_positions():
     # Setting multiple positions
     a = Mutibs('0b0000')
     a.set([0, 2])
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_set_mixed_indices():
     # Setting with mixed positive and negative indices
     a = Mutibs('0b0000')
     a.set([1, -1])
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
 
 
 def test_set_with_range():
     # Setting with range
     a = Mutibs('0b0000')
     a.set(range(4))
-    assert a == '0b1111'
+    assert a == Tibs('0b1111')
 
 
 def test_set_with_empty_sequence():
     # Setting with an empty sequence
     a = Mutibs('0b1010')
     a.unset([])
-    assert a == '0b1010'  # Should remain unchanged
+    assert a == Tibs('0b1010')  # Should remain unchanged
 
 
 def test_set_method_chaining():
@@ -446,22 +445,22 @@ def test_set_method_chaining():
     result = a.set(0)
     assert result is None
     a.set(2)
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_set_at_returns_new_mutibs():
     a = Mutibs('0b0000')
     b = a.set_at([0, 2])
-    assert a == '0b0000'
-    assert b == '0b1010'
+    assert a == Tibs('0b0000')
+    assert b == Tibs('0b1010')
     assert isinstance(b, Mutibs)
 
 
 def test_unset_at_returns_new_mutibs():
     a = Mutibs('0b1111')
     b = a.unset_at(range(1, 4))
-    assert a == '0b1111'
-    assert b == '0b1000'
+    assert a == Tibs('0b1111')
+    assert b == Tibs('0b1000')
 
 
 def test_set_index_out_of_range():
@@ -481,42 +480,42 @@ def test_invert_all():
     # Test invert method with no argument (inverts all bits)
     a = Mutibs('0b1010')
     a.invert()
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
 
 
 def test_invert_single_bit():
     # Test inverting single bit
     a = Mutibs('0b1010')
     a.invert(1)
-    assert a == '0b1110'
+    assert a == Tibs('0b1110')
 
 
 def test_invert_with_negative_index():
     # Test with negative index
     a = Mutibs('0b1010')
     a.invert(-1)
-    assert a == '0b1011'
+    assert a == Tibs('0b1011')
 
 
 def test_invert_multiple_positions():
     # Test with list of positions
     a = Mutibs('0b1010')
     a.invert([0, 2])
-    assert a == '0b0000'
+    assert a == Tibs('0b0000')
 
 
 def test_invert_mixed_indices():
     # Test with mixed positive and negative indices
     a = Mutibs('0b1010')
     a.invert([0, -2])
-    assert a == '0b0000'
+    assert a == Tibs('0b0000')
 
 
 def test_invert_with_range():
     # Test with range
     a = Mutibs('0b1010')
     a.invert(range(2))
-    assert a == '0b0110'
+    assert a == Tibs('0b0110')
 
 
 def test_invert_chaining():
@@ -524,14 +523,14 @@ def test_invert_chaining():
     result = a.invert(1)
     assert result is None
     a.invert(2)
-    assert a == '0b1100'
+    assert a == Tibs('0b1100')
 
 
 def test_inverted_returns_new_mutibs():
     a = Mutibs('0b1010')
     b = a.inverted([0, -1])
-    assert a == '0b1010'
-    assert b == '0b0011'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b0011')
     assert isinstance(b, Mutibs)
 
 
@@ -552,7 +551,7 @@ def test_invert_empty_bits():
     # Empty Mutibs
     a = Mutibs()
     a.invert()  # Inverting empty bits should do nothing
-    assert a == ''
+    assert a == Tibs()
 
 
 def test_replace_basic():
@@ -560,21 +559,21 @@ def test_replace_basic():
     a = Mutibs('0b10101010')
     count = a.replace('0b10', '0b111')
     assert count == 4
-    assert a == '0b111111111111'
+    assert a == Tibs('0b111111111111')
 
 
 def test_replace_same_length():
     # Replace with same length pattern
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b00')
-    assert a == '0b00000000'
+    assert a == Tibs('0b00000000')
 
 
 def test_replace_with_empty():
     # Replace with empty bits (should effectively delete)
     a = Mutibs('0b10101010')
     a.replace('0b10', '')
-    assert a == ''
+    assert a == Tibs()
 
 
 def test_replace_with_count():
@@ -582,35 +581,35 @@ def test_replace_with_count():
     a = Mutibs('0b10101010')
     count = a.replace('0b10', '0b00', count=2)
     assert count == 2
-    assert a == '0b00001010'
+    assert a == Tibs('0b00001010')
 
 
 def test_replace_with_start():
     # Replace with start parameter
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', start=2)
-    assert a == '0b10111111'
+    assert a == Tibs('0b10111111')
 
 
 def test_replace_with_end():
     # Replace with end parameter
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', end=4)
-    assert a == '0b11111010'
+    assert a == Tibs('0b11111010')
 
 
 def test_replace_with_start_end():
     # Replace with both start and end parameters
     a = Mutibs('0b10101010')
     a.replace('0b10', '0b11', start=2, end=6)
-    assert a == '0b10111110'
+    assert a == Tibs('0b10111110')
 
 
 def test_replace_byte_aligned():
     # Replace with byte_aligned=True
     a = Mutibs('0b10101010')
     a.replace('0b1010', '0b1111', byte_aligned=True)
-    assert a == '0b11111010'
+    assert a == Tibs('0b11111010')
 
 
 def test_replace_returns_count():
@@ -619,21 +618,21 @@ def test_replace_returns_count():
     assert result == 4
     result = a.replace('0b11', '0b00')
     assert result == 4
-    assert a == '0b00000000'
+    assert a == Tibs('0b00000000')
 
 
 def test_replaced_returns_new_mutibs():
     a = Mutibs('0b10101010')
     b = a.replaced('0b10', '0b11', count=2)
-    assert a == '0b10101010'
-    assert b == '0b11111010'
+    assert a == Tibs('0b10101010')
+    assert b == Tibs('0b11111010')
 
 
 def test_replace_different_types():
     # Replace with different types
     a = Mutibs('0b10101010')
     a.replace(Tibs('0b10'), Mutibs('0b11'))
-    assert a == '0b11111111'
+    assert a == Tibs('0b11111111')
 
 
 def test_replace_empty_pattern():
@@ -648,7 +647,7 @@ def test_replace_pattern_not_found():
     a = Mutibs('0b1010')
     count = a.replace('0b11', '0b00')
     assert count == 0
-    assert a == '0b1010'  # Should remain unchanged
+    assert a == Tibs('0b1010')  # Should remain unchanged
 
 
 def test_replace_with_count_zero():
@@ -656,49 +655,49 @@ def test_replace_with_count_zero():
     a = Mutibs('0b10101010')
     count = a.replace('0b10', '0b11', count=0)
     assert count == 0
-    assert a == '0b10101010'
+    assert a == Tibs('0b10101010')
 
 
 def test_reverse_basic():
     # Basic reverse functionality
     a = Mutibs('0b1010')
     a.reverse()
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
 
 
 def test_reverse_palindrome():
     # Palindrome should remain the same when reversed
     a = Mutibs('0b1001')
     a.reverse()
-    assert a == '0b1001'
+    assert a == Tibs('0b1001')
 
 
 def test_reverse_empty():
     # Reverse empty Mutibs
     a = Mutibs()
     a.reverse()
-    assert a == ''
+    assert a == Tibs()
 
 
 def test_reverse_single_bit():
     # Reverse single bit
     a = Mutibs('0b1')
     a.reverse()
-    assert a == '0b1'
+    assert a == Tibs('0b1')
 
 
 def test_reverse_hex():
     # Reverse with hex representation
     a = Mutibs('0xAB')
     a.reverse()
-    assert a == '0xd5'  # 0xAB = 10101011 -> 11010101 = 0xd5
+    assert a == Tibs('0xd5')  # 0xAB = 10101011 -> 11010101 = 0xd5
 
 
 def test_reverse_method_chaining():
     a = Mutibs('0b1100')
     result = a.reverse()
     assert result is None
-    assert a == '0b0011'
+    assert a == Tibs('0b0011')
 
 
 def test_reverse_idempotence():
@@ -706,49 +705,49 @@ def test_reverse_idempotence():
     a = Mutibs('0b10110')
     a.reverse()
     a.reverse()
-    assert a == '0b10110'
+    assert a == Tibs('0b10110')
 
 
 def test_rol_basic():
     # Basic rotate left functionality
     a = Mutibs('0b1010')
     a.rotate_left(1)
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
 
 
 def test_rol_full_rotation():
     # Rotating by the full length should return the original
     a = Mutibs('0b1010')
     a.rotate_left(4)
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_rol_wraparound():
     # Rotating by more than length should wrap around
     a = Mutibs('0b1010')
     a.rotate_left(5)
-    assert a == '0b0101'  # Same as rotate_left(1)
+    assert a == Tibs('0b0101')  # Same as rotate_left(1)
 
 
 def test_rol_with_start_end():
     # Rotating with start and end parameters
     a = Mutibs('0b10101100')
     a.rotate_left(2, start=2, end=6)
-    assert a == '0b10111000'
+    assert a == Tibs('0b10111000')
 
 
 def test_rol_method_chaining():
     a = Mutibs('0b1010')
     result = a.rotate_left(1)
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
     assert result is None
 
 
 def test_rotated_left_returns_new_mutibs():
     a = Mutibs('0b1010')
     b = a.rotated_left(1)
-    assert a == '0b1010'
-    assert b == '0b0101'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b0101')
     assert isinstance(b, Mutibs)
 
 
@@ -770,56 +769,56 @@ def test_rol_zero_rotation():
     # Zero rotation should not change anything
     a = Mutibs('0b1010')
     a.rotate_left(0)
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_rol_large_rotation():
     # Large rotation value
     a = Mutibs('0b1010')
     a.rotate_left(1000000)  # Should be equivalent to rotate_left(0) since 1000000 % 4 = 0
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_ror_basic():
     # Basic rotate right functionality
     a = Mutibs('0b1010')
     a.rotate_right(1)
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
 
 
 def test_ror_full_rotation():
     # Rotating by the full length should return the original
     a = Mutibs('0b1010')
     a.rotate_right(4)
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_ror_wraparound():
     # Rotating by more than length should wrap around
     a = Mutibs('0b1010')
     a.rotate_right(5)
-    assert a == '0b0101'  # Same as rotate_right(1)
+    assert a == Tibs('0b0101')  # Same as rotate_right(1)
 
 
 def test_ror_with_start_end():
     # Rotating with start and end parameters
     a = Mutibs('0b10101100')
     a.rotate_right(2, start=2, end=6)
-    assert a == '0b10111000'
+    assert a == Tibs('0b10111000')
 
 
 def test_ror_method_chaining():
     a = Mutibs('0b1010')
     result = a.rotate_right(1)
-    assert a == '0b0101'
+    assert a == Tibs('0b0101')
     assert result is None
 
 
 def test_rotated_right_returns_new_mutibs():
     a = Mutibs('0b1010')
     b = a.rotated_right(1)
-    assert a == '0b1010'
-    assert b == '0b0101'
+    assert a == Tibs('0b1010')
+    assert b == Tibs('0b0101')
     assert isinstance(b, Mutibs)
 
 
@@ -828,7 +827,7 @@ def test_rol_ror_cancellation():
     a = Mutibs('0b10110')
     a.rotate_left(2)
     a.rotate_right(2)
-    assert a == '0b10110'
+    assert a == Tibs('0b10110')
 
 
 def test_ror_negative_amount():
@@ -849,65 +848,65 @@ def test_ror_zero_rotation():
     # Zero rotation should not change anything
     a = Mutibs('0b1010')
     a.rotate_right(0)
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_ror_large_rotation():
     # Large rotation value
     a = Mutibs('0b1010')
     a.rotate_right(1000000)  # Should be equivalent to rotate_right(0) since 1000000 % 4 = 0
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
 
 
 def test_byte_swap_basic():
     # Basic byte_swap functionality with default parameters
     a = Mutibs('0x1234')
     a.byte_swap()
-    assert a == '0x3412'
+    assert a == Tibs('0x3412')
 
 
 def test_byte_swap_with_length():
     # Byte swap with specific byte_length parameter
     a = Mutibs('0x12345678')
     a.byte_swap(2)
-    assert a == '0x34127856'
+    assert a == Tibs('0x34127856')
 
 
 def test_byte_swap_with_slice():
     a = Mutibs('0x001122334455')
     a.byte_swap(start=8, end=40)
-    assert a == '0x004433221155'
+    assert a == Tibs('0x004433221155')
 
 
 def test_byte_swap_with_length_and_slice():
     a = Mutibs('0x001122334455')
     a.byte_swap(2, start=8, end=40)
-    assert a == '0x002211443355'
+    assert a == Tibs('0x002211443355')
 
 
 def test_byte_swap_with_unaligned_slice():
     a = Mutibs('0b000000001000000101')
     a.byte_swap(start=1, end=17)
-    assert a == '0b000000010000000011'
+    assert a == Tibs('0b000000010000000011')
 
 
 def test_byte_swap_with_empty_slice():
     a = Mutibs('0x1234')
     a.byte_swap(start=8, end=8)
-    assert a == '0x1234'
+    assert a == Tibs('0x1234')
 
 
 def test_byte_swap_single_byte():
     # Byte swap single byte (no change)
     a = Mutibs('0x12')
     a.byte_swap(1)
-    assert a == '0x12'
+    assert a == Tibs('0x12')
 
 
 def test_byte_swap_method_chaining():
     a = Mutibs('0x1234')
     result = a.byte_swap()
-    assert a == '0x3412'
+    assert a == Tibs('0x3412')
     assert result is None
 
 
@@ -916,7 +915,7 @@ def test_byte_swap_idempotence():
     a = Mutibs('0x12345678')
     a.byte_swap(2)
     a.byte_swap(2)
-    assert a == '0x12345678'
+    assert a == Tibs('0x12345678')
 
 
 def test_byte_swap_non_multiple_of_8():
@@ -930,7 +929,7 @@ def test_byte_swap_empty():
     # Empty Mutibs
     a = Mutibs()
     a.byte_swap()
-    assert a == ''
+    assert a == Tibs()
 
 
 def test_byte_swap_negative_length():
@@ -971,7 +970,7 @@ def test_to_tibs_basic():
     a = Mutibs('0b1010')
     b = a.to_tibs()
     assert isinstance(b, Tibs)
-    assert b == '0b1010'
+    assert b == Tibs('0b1010')
 
 
 def test_to_tibs_immutable_copy_operations():
@@ -979,9 +978,9 @@ def test_to_tibs_immutable_copy_operations():
     a = Mutibs('0b1010')
     b = a.to_tibs()
     c = ~b
-    assert a == '0b1010'  # Original remains unchanged
-    assert b == '0b1010'  # Original immutable copy unchanged
-    assert c == '0b0101'  # New inverted copy
+    assert a == Tibs('0b1010')  # Original remains unchanged
+    assert b == Tibs('0b1010')  # Original immutable copy unchanged
+    assert c == Tibs('0b0101')  # New inverted copy
 
 
 def test_to_tibs_original_modifications():
@@ -989,8 +988,8 @@ def test_to_tibs_original_modifications():
     a = Mutibs('0b1010')
     b = a.to_tibs()
     a.invert()
-    assert a == '0b0101'  # Original changed
-    assert b == '0b1010'  # Immutable copy remains unchanged
+    assert a == Tibs('0b0101')  # Original changed
+    assert b == Tibs('0b1010')  # Immutable copy remains unchanged
 
 
 def test_to_tibs_empty():
@@ -998,7 +997,7 @@ def test_to_tibs_empty():
     a = Mutibs()
     b = a.to_tibs()
     assert isinstance(b, Tibs)
-    assert b == ''
+    assert b == Tibs()
     assert len(b) == 0
 
 
@@ -1006,13 +1005,13 @@ def test_mutable_bits_from_bits():
     # Test creating Mutibs from Tibs object
     b = Tibs('0b1010')
     a = b.to_mutibs()
-    assert a == '0b1010'
+    assert a == Tibs('0b1010')
     assert isinstance(a, Mutibs)
 
     # Modification should not affect original
     a.invert()
-    assert a == '0b0101'
-    assert b == '0b1010'
+    assert a == Tibs('0b0101')
+    assert b == Tibs('0b1010')
 
 
 def test_setitem_with_bits_object():
@@ -1020,7 +1019,7 @@ def test_setitem_with_bits_object():
     a = Mutibs('0b1010')
     b = Tibs('0b11')
     a[1:3] = b
-    assert a == '0b1110'
+    assert a == Tibs('0b1110')
 
 
 def test_iadd_with_bits():
@@ -1028,7 +1027,7 @@ def test_iadd_with_bits():
     a = Mutibs('0x12')
     b = Tibs('0x34')
     a += b
-    assert a == '0x1234'
+    assert a == Tibs('0x1234')
 
 
 def test_iadd_multiple_types():
@@ -1037,45 +1036,45 @@ def test_iadd_multiple_types():
     a += '0b11'  # String
     a += Tibs('0b00')  # Tibs object
     a += Mutibs('0b111')  # Another Mutibs
-    assert a == '0b10101100111'
+    assert a == Tibs('0b10101100111')
 
 
 def test_imul_repeats():
     # Test in-place multiply
     a = Mutibs('0b101')
     a *= 3
-    assert a == '0b101101101'
+    assert a == Tibs('0b101101101')
 
     # Test with zero
     b = Mutibs('0b111')
     b *= 0
-    assert b == ''
+    assert b == Tibs()
 
 
 def test_delitem_sequence():
     # Test deleting multiple items in sequence
     a = Mutibs('0b10101010')
     del a[0]
-    assert a == '0b0101010'
+    assert a == Tibs('0b0101010')
     del a[2]
-    assert a == '0b011010'
+    assert a == Tibs('0b011010')
     del a[-1]
-    assert a == '0b01101'
+    assert a == Tibs('0b01101')
 
 
 def test_setitem_complex_cases():
     # Test setting a slice with different-length content
     a = Mutibs('0b1010')
     a[1:3] = '0b111'  # Replace 2 bits with 3 bits
-    assert a == '0b11110'
+    assert a == Tibs('0b11110')
 
     # Replace with empty content (effectively deleting)
     a[2:4] = ''
-    assert a == '0b110'
+    assert a == Tibs('0b110')
 
     # Replace everything with shorter content
     a[:] = '0b1'
-    assert a == '0b1'
+    assert a == Tibs('0b1')
 
 
 def test_bit_operations_with_bits():
@@ -1083,19 +1082,19 @@ def test_bit_operations_with_bits():
     a = Mutibs('0b1100')
     b = Tibs('0b1010')
     a &= b
-    assert a == '0b1000'
+    assert a == Tibs('0b1000')
 
     # Testing bitwise OR with Tibs
     a = Mutibs('0b1100')
     b = Tibs('0b0011')
     a |= b
-    assert a == '0b1111'
+    assert a == Tibs('0b1111')
 
     # Testing bitwise XOR with Tibs
     a = Mutibs('0b1100')
     b = Tibs('0b1010')
     a ^= b
-    assert a == '0b0110'
+    assert a == Tibs('0b0110')
 
 
 def test_equality_with_bits():
@@ -1107,7 +1106,7 @@ def test_equality_with_bits():
     # Test after modification
     a[0] = 0
     assert a != b
-    assert a == '0b0010'
+    assert a == Tibs('0b0010')
 
 
 def test_interleaved_operations():
@@ -1117,7 +1116,7 @@ def test_interleaved_operations():
     a += '0b11'
     a.invert(0)
     del a[-1]
-    assert a == '0b00001'
+    assert a == Tibs('0b00001')
 
     # Chain multiple operations
     a = Mutibs('0b101')
@@ -1125,7 +1124,7 @@ def test_interleaved_operations():
     a.invert()
     a.reverse()
     assert result is None
-    assert a == '0b101010'  # 101 + 010 -> 101010 -> 010101 (invert) -> 010010 (reverse)
+    assert a == Tibs('0b101010')  # 101 + 010 -> 101010 -> 010101 (invert) -> 010010 (reverse)
 
 
 def test_mutable_bits_conversion_roundtrip():
@@ -1136,8 +1135,8 @@ def test_mutable_bits_conversion_roundtrip():
     back_to_tibs = mutable.to_tibs()
 
     assert isinstance(back_to_tibs, Tibs)
-    assert back_to_tibs == '0b01011100'
-    assert orig == '0b10101100'  # Original should be unchanged
+    assert back_to_tibs == Tibs('0b01011100')
+    assert orig == Tibs('0b10101100')  # Original should be unchanged
 
 
 def test_inserting_bits_objects():
@@ -1145,31 +1144,31 @@ def test_inserting_bits_objects():
     a = Mutibs('0b1010')
     b = Tibs('0b11')
     a.insert(2, b)
-    assert a == '0b101110'
+    assert a == Tibs('0b101110')
 
     # Insert at beginning
     c = Tibs('0b00')
     a.insert(0, c)
-    assert a == '0b00101110'
+    assert a == Tibs('0b00101110')
 
 
 def test_mixed_representation_operations():
     # Test operations with mixed representations (binary, hex)
     a = Mutibs('0b1010')
     a += '0x3A'
-    assert a == '0b1010_0011_1010'
+    assert a == Tibs('0b1010_0011_1010')
 
     a[4:8] = '0o7'
-    assert a == '0b1010_111_1010'
+    assert a == Tibs('0b1010_111_1010')
 
 
 def test_shifting_inplace():
     # Test in-place shifting operations
     a = Mutibs('0b001010')
     a <<= 2
-    assert a == '0b101000'
+    assert a == Tibs('0b101000')
     a >>= 3
-    assert a == '0b000101'
+    assert a == Tibs('0b000101')
     with pytest.raises(ValueError):
         a <<= -1
     with pytest.raises(ValueError):
@@ -1189,9 +1188,9 @@ def test_shifts():
     a = Mutibs.from_ones(5)
     a += '0b0'
     b = a << 1
-    assert b == '0b111100'
+    assert b == Tibs('0b111100')
     c = b >> 1
-    assert c == '0b011110'
+    assert c == Tibs('0b011110')
 
 
 def test_str():
@@ -1221,13 +1220,13 @@ def test_auto_conversions():
     with pytest.raises(TypeError):
         _ = a + 1
     b = a + '0x1'
-    assert isinstance(b, Mutibs) and b == '0x1'
+    assert isinstance(b, Mutibs) and b == Tibs('0x1')
     b = a + b'123'
-    assert isinstance(b, Mutibs) and b == b'123'
+    assert isinstance(b, Mutibs) and b == Tibs(b'123')
     b = a + [1, 0]
-    assert isinstance(b, Mutibs) and b == '0b10'
+    assert isinstance(b, Mutibs) and b == Tibs('0b10')
     b = a + (1, 0, 'steve')
-    assert isinstance(b, Mutibs) and b == '0b101'
+    assert isinstance(b, Mutibs) and b == Tibs('0b101')
 
 
 def test_clear():
@@ -1257,9 +1256,9 @@ def test_reserve():
 def test_insert_slice():
     a = Mutibs('0xff')
     a[0:0] = '0xab'
-    assert a == '0xabff'
+    assert a == Tibs('0xabff')
     a[0:0] = a
-    assert a == '0xabffabff'
+    assert a == Tibs('0xabffabff')
 
 
 def test_del_ranges():
@@ -1271,7 +1270,7 @@ def test_del_ranges():
 def test_set_item_with_step():
     a = Mutibs('0b000000')
     a[::2] = '0b110'
-    assert a == '0b101000'
+    assert a == Tibs('0b101000')
 
 
 def test_iter():
@@ -1286,7 +1285,7 @@ def test_partial_update():
         a.unset([0, 1, 1000])
     except IndexError:
         pass
-    assert a == '0b1111111111'
+    assert a == Tibs('0b1111111111')
 
 
 def test_append():
@@ -1297,7 +1296,7 @@ def test_append():
     a.append(False)
     a.append(0)
     a.append(1)
-    assert a == '0b101001'
+    assert a == Tibs('0b101001')
     with pytest.raises(TypeError):
         a.append(0.5)
     with pytest.raises(TypeError):
@@ -1346,7 +1345,7 @@ def test_count_edge_cases():
 def test_set_bug():
     m = Mutibs.from_hex('0x001122')
     m[8:0] = '0xff'
-    assert m == '0x00ff1122'
+    assert m == Tibs('0x00ff1122')
 
 
 def test_convenience_properties():
@@ -1415,21 +1414,21 @@ def test_representation_write_errors_leave_value_unchanged():
 def test_byte_swapped():
     a = Mutibs.from_bytes(b'!olleh')
     b = a.byte_swapped()
-    assert b == b'hello!'
+    assert b == Tibs(b'hello!')
 
 
 def test_mutibs_byte_swapped_with_slice():
     a = Mutibs('0x001122334455')
     b = a.byte_swapped(start=8, end=40)
-    assert a == '0x001122334455'
-    assert b == '0x004433221155'
+    assert a == Tibs('0x001122334455')
+    assert b == Tibs('0x004433221155')
 
 
 def test_tibs_byte_swapped_with_slice():
     a = Tibs('0x001122334455')
     b = a.byte_swapped(start=8, end=40)
-    assert a == '0x001122334455'
-    assert b == '0x004433221155'
+    assert a == Tibs('0x001122334455')
+    assert b == Tibs('0x004433221155')
 
 
 def test_from_u_bad_endianness_type():

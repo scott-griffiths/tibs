@@ -12,31 +12,31 @@ from tibs import Tibs, Mutibs
 
 class TestTibsCreation:
     def test_from_bin_simple(self):
-        assert Tibs.from_bin("101") == "0b101"
+        assert Tibs.from_bin("101") == Tibs('0b101')
 
     def test_from_bin_with_prefix(self):
-        assert Tibs.from_bin("0b110") == "0b110"
+        assert Tibs.from_bin("0b110") == Tibs('0b110')
 
     def test_from_oct_simple(self):
-        assert Tibs.from_oct("75") == "0o75"
+        assert Tibs.from_oct("75") == Tibs('0o75')
 
     def test_from_oct_with_prefix(self):
-        assert Tibs.from_oct("0o64") == "0o64"
+        assert Tibs.from_oct("0o64") == Tibs('0o64')
 
     def test_from_hex_simple(self):
-        assert Tibs.from_hex("af") == "0xaf"
+        assert Tibs.from_hex("af") == Tibs('0xaf')
 
     def test_from_hex_with_prefix(self):
-        assert Tibs.from_hex("0xbe") == "0xbe"
+        assert Tibs.from_hex("0xbe") == Tibs('0xbe')
 
     def test_from_u_basic(self):
-        assert Tibs.from_u(42, 8) == "0b00101010"
+        assert Tibs.from_u(42, 8) == Tibs('0b00101010')
 
     def test_from_i_positive(self):
-        assert Tibs.from_i(42, 8) == "0b00101010"
+        assert Tibs.from_i(42, 8) == Tibs('0b00101010')
 
     def test_from_i_negative(self):
-        assert Tibs.from_i(-42, 8) == "0b11010110"
+        assert Tibs.from_i(-42, 8) == Tibs('0b11010110')
 
     def test_from_f16(self):
         assert len(Tibs.from_f(3.14, 16)) == 16
@@ -48,28 +48,28 @@ class TestTibsCreation:
         assert len(Tibs.from_f(3.14, 64)) == 64
 
     def test_from_bytes(self):
-        assert Tibs.from_bytes(b"abc") == "0x616263"
+        assert Tibs.from_bytes(b"abc") == Tibs('0x616263')
 
     def test_from_string_bin(self):
-        assert Tibs.from_string("0b101") == "0b101"
+        assert Tibs.from_string("0b101") == Tibs('0b101')
 
     def test_from_string_hex(self):
-        assert Tibs.from_string("0xabc") == "0xabc"
+        assert Tibs.from_string("0xabc") == Tibs('0xabc')
 
     def test_from_bools(self):
-        assert Tibs.from_bools([True, False, 1, 0]) == "0b1010"
+        assert Tibs.from_bools([True, False, 1, 0]) == Tibs('0b1010')
 
     def test_from_zeros(self):
-        assert Tibs.from_zeros(5) == "0b00000"
+        assert Tibs.from_zeros(5) == Tibs('0b00000')
 
     def test_from_ones(self):
-        assert Tibs.from_ones(5) == "0b11111"
+        assert Tibs.from_ones(5) == Tibs('0b11111')
 
     def test_from_random(self):
         assert len(Tibs.from_random(100)) == 100
 
     def test_from_joined(self):
-        assert Tibs.from_joined(["0b11", "0o7", "0xf"]) == "0b111111111"
+        assert Tibs.from_joined(["0b11", "0o7", "0xf"]) == Tibs('0b111111111')
 
     def test_constructor_delegation(self):
         assert Tibs("0b101") == Tibs.from_string("0b101")
@@ -79,50 +79,50 @@ class TestTibsCreation:
     def test_from_slice(self):
         a = Tibs("0b101100111000")
         b = a[2:10]
-        assert b == "0b11001110"
+        assert b == Tibs('0b11001110')
         c = Tibs(b)
-        assert c == "0b11001110"
+        assert c == Tibs('0b11001110')
 
 
 class TestMutibsCreation:
     def test_from_bin_simple(self):
-        assert Mutibs.from_bin("101") == "0b101"
+        assert Mutibs.from_bin("101") == Tibs('0b101')
 
     def test_from_oct_simple(self):
-        assert Mutibs.from_oct("75") == "0o75"
+        assert Mutibs.from_oct("75") == Tibs('0o75')
 
     def test_from_hex_simple(self):
-        assert Mutibs.from_hex("af") == "0xaf"
+        assert Mutibs.from_hex("af") == Tibs('0xaf')
 
     def test_from_u_basic(self):
-        assert Mutibs.from_u(42, 8) == "0b00101010"
+        assert Mutibs.from_u(42, 8) == Tibs('0b00101010')
 
     def test_from_i_positive(self):
-        assert Mutibs.from_i(42, 8) == "0b00101010"
+        assert Mutibs.from_i(42, 8) == Tibs('0b00101010')
 
     def test_from_f32(self):
         assert len(Mutibs.from_f(3.14, 32)) == 32
 
     def test_from_bytes(self):
-        assert Mutibs.from_bytes(b"abc") == "0x616263"
+        assert Mutibs.from_bytes(b"abc") == Tibs('0x616263')
 
     def test_from_string_bin(self):
-        assert Mutibs.from_string("0b101") == "0b101"
+        assert Mutibs.from_string("0b101") == Tibs('0b101')
 
     def test_from_bools(self):
-        assert Mutibs.from_bools([True, False, 1, 0]) == "0b1010"
+        assert Mutibs.from_bools([True, False, 1, 0]) == Tibs('0b1010')
 
     def test_from_zeros(self):
-        assert Mutibs.from_zeros(5) == "0b00000"
+        assert Mutibs.from_zeros(5) == Tibs('0b00000')
 
     def test_from_ones(self):
-        assert Mutibs.from_ones(5) == "0b11111"
+        assert Mutibs.from_ones(5) == Tibs('0b11111')
 
     def test_from_random(self):
         assert len(Mutibs.from_random(100)) == 100
 
     def test_from_joined(self):
-        assert Mutibs.from_joined(["0b11", "0o7", "0xf"]) == "0b111111111"
+        assert Mutibs.from_joined(["0b11", "0o7", "0xf"]) == Tibs('0b111111111')
 
     def test_constructor_delegation(self):
         assert Mutibs("0b101") == Mutibs.from_string("0b101")
@@ -132,15 +132,15 @@ class TestMutibsCreation:
     def test_from_slice(self):
         a = Tibs("0b101100111000")
         b = a[2:10]
-        assert b == "0b11001110"
+        assert b == Tibs('0b11001110')
         c = Mutibs(b)
-        assert c == "0b11001110"
+        assert c == Tibs('0b11001110')
 
 
 class TestTibsMethods:
     def test_eq(self):
-        assert Tibs("0xf") == "0b1111"
-        assert not (Tibs("0xf") == "0b1110")
+        assert Tibs("0xf") == Tibs('0b1111')
+        assert not (Tibs("0xf") == Tibs('0b1110'))
 
     def test_str(self):
         assert str(Tibs("0b101")) == "0b101"
@@ -151,8 +151,8 @@ class TestTibsMethods:
 
 class TestMutibsMethods:
     def test_eq(self):
-        assert Mutibs("0xf") == "0b1111"
-        assert not (Mutibs("0xf") == "0b1110")
+        assert Mutibs("0xf") == Tibs('0b1111')
+        assert not (Mutibs("0xf") == Tibs('0b1110'))
 
     def test_str(self):
         assert str(Mutibs("0b101")) == "0b101"
@@ -163,37 +163,37 @@ class TestMutibsMethods:
     def test_set_index(self):
         m = Mutibs("0b000")
         m[1] = 1
-        assert m == "0b010"
+        assert m == Tibs('0b010')
 
     def test_set_slice(self):
         m = Mutibs("0b00000")
         m[1:4] = "0b111"
-        assert m == "0b01110"
+        assert m == Tibs('0b01110')
 
     def test_ixor(self):
         m = Mutibs("0b1100")
         m ^= "0b1010"
-        assert m == "0b0110"
+        assert m == Tibs('0b0110')
 
     def test_ior(self):
         m = Mutibs("0b1100")
         m |= "0b1010"
-        assert m == "0b1110"
+        assert m == Tibs('0b1110')
 
     def test_iand(self):
         m = Mutibs("0b1100")
         m &= "0b1010"
-        assert m == "0b1000"
+        assert m == Tibs('0b1000')
 
     def test_set_from_sequence(self):
         m = Mutibs("0b00000")
         m.set([1, 3])
-        assert m == "0b01010"
+        assert m == Tibs('0b01010')
 
     def test_set_from_slice(self):
         m = Mutibs("0b00000000")
         m[1:7:2] = [1, 1, 1]
-        assert m == "0b01010100"
+        assert m == Tibs('0b01010100')
 
     def test_insert_uses_logical_position(self):
         m = Mutibs("0b1100")
@@ -220,8 +220,8 @@ class TestIterators:
         t = Tibs("0b101101")
         chunks = list(t.chunks_iter(3))
         assert len(chunks) == 2
-        assert chunks[0] == "0b101"
-        assert chunks[1] == "0b101"
+        assert chunks[0] == Tibs('0b101')
+        assert chunks[1] == Tibs('0b101')
 
 
 class TestErrorHandling:
@@ -258,17 +258,17 @@ class TestAdvancedFeatures:
     def test_rol(self):
         s = Mutibs("0b0001")
         s.rotate_left(1)
-        assert s == "0b0010"
+        assert s == Tibs('0b0010')
 
     def test_ror(self):
         s = Mutibs("0b1000")
         s.rotate_right(1)
-        assert s == "0b0100"
+        assert s == Tibs('0b0100')
 
     def test_byte_swap(self):
         s = Mutibs("0x0123456789abcdef")
         s.byte_swap()
-        assert s == "0xefcdab8967452301"
+        assert s == Tibs('0xefcdab8967452301')
 
     def test_to_f(self):
         f = 3.14159
@@ -286,18 +286,18 @@ class TestAdvancedFeatures:
 
     def test_find_all_byte_aligned(self):
         a = Tibs("0x00ff00ff")
-        assert a.find_all("0xff", byte_aligned=True) == [8, 24]
+        assert a.find_all(Tibs('0xff'), byte_aligned=True) == [8, 24]
 
 
 class TestComplexInteractions:
     def test_overlapping_replace(self):
         s = Mutibs("0b101010")
         s.replace("0b10", "0b1010")
-        assert s == "0b101010101010"
+        assert s == Tibs('0b101010101010')
 
     def test_find_all_overlapping(self):
         s = Tibs("0b1010101")
-        assert s.find_all("0b101") == [0, 2, 4]
+        assert s.find_all(Tibs('0b101')) == [0, 2, 4]
 
     def test_chunks_with_remainder(self):
         s = Tibs.from_zeros(10)
@@ -311,7 +311,7 @@ class TestComplexInteractions:
     def test_set_slice_with_self_overlap(self):
         m = Mutibs("0b11110000")
         m[2:6] = m[0:4]
-        assert m == "0b11111100"
+        assert m == Tibs('0b11111100')
 
     def test_int_representation_edges(self):
         assert Tibs.from_u(255, 8).to_i() == -1
@@ -325,41 +325,41 @@ class TestComplexInteractions:
         m = Mutibs("0b1010")
         t = Tibs("0b0101")
         m |= t
-        assert m == "0b1111"
+        assert m == Tibs('0b1111')
 
     def test_chained_mutations(self):
         m = Mutibs("0x1234")
         m.rotate_left(4)
         m.invert()
         m.rotate_right(8)
-        assert m == "0xbedc"
+        assert m == Tibs('0xbedc')
 
     def test_immutable_slice_mutation_check(self):
         t = Tibs("0x12345678")
         s = t[8:24]
         m = s.to_mutibs()
         m.invert()
-        assert t == "0x12345678"
+        assert t == Tibs('0x12345678')
         assert s != m
-        assert s == "0x3456"
+        assert s == Tibs('0x3456')
 
     def test_from_joined_mixed_types(self):
         t = Tibs("0b11")
         m = Mutibs("0b00")
         result = Tibs.from_joined([t, m, "0xff", [1, 0, 1]])
-        assert result == "0b110011111111101"
+        assert result == Tibs('0b110011111111101')
 
     def test_delete_and_insert(self):
         m = Mutibs("0xabcdef")
         del m[8:16]
-        assert m == "0xabef"
+        assert m == Tibs('0xabef')
         m.insert(8, "0b11110000")
-        assert m == "0xabf0ef"
+        assert m == Tibs('0xabf0ef')
 
     def test_replace_with_empty_string(self):
         s = Mutibs("0b101010")
         s.replace("0b10", "")
-        assert s == "0b"
+        assert s == Tibs('0b')
 
 
 class TestSliceOperations:
@@ -374,35 +374,35 @@ class TestSliceOperations:
         b = Tibs("0b10101010")
         s_a = a[0:8]
         s_b = b[0:8]
-        assert s_a | s_b == "0b10101111"
+        assert s_a | s_b == Tibs('0b10101111')
 
     def test_slice_logical_and(self):
         a = Tibs("0b00001111")
         b = Tibs("0b10101010")
         s_a = a[0:8]
         s_b = b[0:8]
-        assert s_a & s_b == "0b00001010"
+        assert s_a & s_b == Tibs('0b00001010')
 
     def test_slice_logical_xor(self):
         a = Tibs("0b00001111")
         b = Tibs("0b10101010")
         s_a = a[0:8]
         s_b = b[0:8]
-        assert s_a ^ s_b == "0b10100101"
+        assert s_a ^ s_b == Tibs('0b10100101')
 
     def test_slice_logical_or_offset(self):
         a = Tibs("0b100001111")  # 9 bits
         b = Tibs("0b010101010")  # 9 bits
         s_a = a[1:9]  # offset = 1
         s_b = b[1:9]  # offset = 1
-        assert s_a | s_b == "0b10101111"
+        assert s_a | s_b == Tibs('0b10101111')
 
     def test_slice_logical_and_offset(self):
         a = Tibs("0b100001111")
         b = Tibs("0b010101010")
         s_a = a[1:9]
         s_b = b[1:9]
-        assert s_a & s_b == "0b00001010"
+        assert s_a & s_b == Tibs('0b00001010')
 
     def test_find_slice(self):
         a = Tibs("0b101100111000101100")
@@ -422,7 +422,7 @@ class TestSliceOperations:
         a = Tibs("0b101100111000")
         b = a[2:10]
         c = Tibs.from_joined([b, b])
-        assert c == "0b1100111011001110"
+        assert c == Tibs('0b1100111011001110')
 
     def test_mutibs_from_slice(self):
         a = Tibs("0b101100111000")
@@ -430,37 +430,37 @@ class TestSliceOperations:
         m = Mutibs(b)
         m.invert()
         assert m != b
-        assert a == "0b101100111000"
+        assert a == Tibs('0b101100111000')
 
     def test_logical_op_stepped_slice(self):
         a = Tibs("0b00110011")
         b = Tibs("0b01010101")
         c = a[::2]  # 0101
         d = b[::2]  # 0000
-        assert c | d == "0b0101"
-        assert c & d == "0b0000"
-        assert c ^ d == "0b0101"
+        assert c | d == Tibs('0b0101')
+        assert c & d == Tibs('0b0000')
+        assert c ^ d == Tibs('0b0101')
 
     def test_mixed_tibs_mutibs_slice_ops(self):
         a = Tibs("0b11110000")
         b = Mutibs("0b10101010")
         s_a = a[0:8]
         s_b = b[0:8]
-        assert s_a & s_b == "0b10100000"
+        assert s_a & s_b == Tibs('0b10100000')
 
     def test_mutibs_slice_is_immutable_copy(self):
         a = Mutibs("0b00000000")
         b = a[2:6]
         b[1] = 1
         # The original is unchanged
-        assert a == "0b00000000"
+        assert a == Tibs('0b00000000')
 
     def test_slice_logical_xor_offset(self):
         a = Tibs("0b100001111")
         b = Tibs("0b010101010")
         s_a = a[1:9]
         s_b = b[1:9]
-        assert s_a ^ s_b == "0b10100101"
+        assert s_a ^ s_b == Tibs('0b10100101')
 
 
 class TestKnownRegressions:
@@ -468,7 +468,7 @@ class TestKnownRegressions:
         m = Mutibs("0b101010")
         m.rotate_left(3, start=2, end=2)
         m.rotate_right(1, start=4, end=4)
-        assert m == "0b101010"
+        assert m == Tibs('0b101010')
 
     def test_set_negative_step_range(self):
         m = Mutibs("0b00000000")
@@ -500,7 +500,7 @@ class TestDocsMismatchRegressions:
     def test_mutibs_insert_out_of_range_raises_value_error_docs_contract(self):
         m = Mutibs("0b101")
         m.insert(len(m) + 1, "0b1")
-        assert m == "0b1011"
+        assert m == Tibs('0b1011')
 
     def test_tibs_to_u_empty_raises_value_error_docs_contract(self):
         with pytest.raises(ValueError):
@@ -687,7 +687,7 @@ class TestConcreteRegressionCases:
 
     def test_find_all_byte_aligned_empty_subrange_returns_empty_list(self):
         t = Tibs("0x11223344")
-        assert t.find_all("0x11", start=1, end=1, byte_aligned=True) == []
+        assert t.find_all(Tibs('0x11'), start=1, end=1, byte_aligned=True) == []
 
     def test_rfind_reverse_search_finds_prefix_match(self):
         t = Tibs("0b0111")

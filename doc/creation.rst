@@ -66,8 +66,8 @@ So for example ::
     u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
 
 These types (string, iterables and bytes/bytearray/memoryview) can also be automatically promoted to ``Tibs``.
-Roughly speaking, anywhere that
-requires a ``Tibs`` or ``Mutibs`` will also accept another type it can promote in this way. So, for example, if you want to count
+Most methods that
+take a bit sequence will also accept another type they can promote in this way. So, for example, if you want to count
 how many times the bit pattern ``101`` appears in a random bit sequence you could write::
 
     t = Tibs.from_random(1_000_000)  # A million random bits
@@ -79,7 +79,9 @@ but it's more natural to use automatic promotion ::
 
 This automatic promotion of these types to Tibs is quite pervasive in the library, and is generally recommended
 for conciseness and clarity.
-An exception is when performance is critical and not having the small overhead of examining the type and dispatching to
+Equality is the main exception: ``Tibs`` and ``Mutibs`` compare equal only to other ``Tibs`` or ``Mutibs``
+instances, not to strings, bytes or iterables.
+Another exception is when performance is critical and not having the small overhead of examining the type and dispatching to
 another method is significant — in this rare case using an explicit ``from_`` method for construction is preferred.
 
 
@@ -145,16 +147,10 @@ For example there are many ways for a ``Tibs`` to be constructed from the unsign
     u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
     u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
 
-These are three different ``Tibs``, but they all can have equal interpretations.
-``Tibs`` itself is not hashable, so use an encoded ``bytes`` key if you need to put bit
-sequences in a set or dictionary::
+These are three different ``Tibs``, but they all can have equal interpretations::
 
-    >>> keys = {u1.encode(), u2.encode(), u3.encode()}
-    >>> sorted(keys)
-    [b'H\x00\x03', b'H\x03\x00', b'\xa3']
-    >>> decoded = [Tibs.decode(x) for x in keys]
-    >>> sorted(repr(x) for x in decoded)
-    ["Tibs('0b00011')", "Tibs('0x0003')", "Tibs('0x0300')"]
+    >>> set([u1, u2, u3])
+    {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
     >>> set([u1.u, u2.u, u3.le.u])
     {3}
 

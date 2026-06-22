@@ -10,60 +10,60 @@ class TestNoPosAttribute:
     def test_replace(self):
         s = Mutibs.from_string("0b01")
         s.replace("0b1", "0b11")
-        assert s == "0b011"
+        assert s == Tibs('0b011')
 
     def test_delete(self):
         s = Mutibs('0b000000001')
         del s[-1:]
-        assert s == '0b00000000'
+        assert s == Tibs('0b00000000')
 
     def test_insert(self):
         s = Mutibs.from_string("0b00")
         s.insert(1, "0xf")
-        assert s == "0b011110"
+        assert s == Tibs('0b011110')
 
     def test_insert_self(self):
         b = Mutibs.from_string("0b10")
         b.insert(0, b)
-        assert b == "0b1010"
+        assert b == Tibs('0b1010')
         c = Mutibs.from_string("0x00ff")
         c.insert(8, c)
-        assert c == "0x0000ffff"
+        assert c == Tibs('0x0000ffff')
         a = Mutibs.from_string("0b11100")
         a.insert(3, a)
-        assert a == "0b1111110000"
+        assert a == Tibs('0b1111110000')
 
     def test_overwrite(self):
         s = Mutibs.from_string("0b01110")
         s[1:4] = "0b000"
-        assert s == "0b00000"
+        assert s == Tibs('0b00000')
 
     def test_prepend(self):
         s = Tibs.from_zeros(1)
         t = Tibs.from_bools([1]) + s
-        assert s == "0b0"
-        assert t == "0b10"
+        assert s == Tibs('0b0')
+        assert t == Tibs('0b10')
 
     def test_rol(self):
         s = Mutibs("0b0001")
         s.rotate_left(1)
-        assert s == "0b0010"
+        assert s == Tibs('0b0010')
 
     def test_ror(self):
         s = Tibs.from_string("0b1000")
         t = s.to_mutibs()
         t.rotate_right(1)
-        assert s == "0b1000"
-        assert t == "0b0100"
+        assert s == Tibs('0b1000')
+        assert t == Tibs('0b0100')
 
     def test_set_item(self):
         s = Mutibs('0b000100')
         s[4:5] = '0xf'
-        assert s == '0b000111110'
+        assert s == Tibs('0b000111110')
         s[0:1] = [1]
-        assert s == '0b100111110'
+        assert s == Tibs('0b100111110')
         s[5:5] = Mutibs()
-        assert s == '0b100111110'
+        assert s == Tibs('0b100111110')
 
     def test_adding_nonsense(self):
         a = Mutibs.from_bools([0])
@@ -85,7 +85,7 @@ def test_not_byte_aligned():
     assert p == 20
     a = a.to_mutibs()
     a.replace("0xff", "")
-    assert a == "0x000"
+    assert a == Tibs('0x000')
 
 
 class TestSliceAssignment:
@@ -118,7 +118,7 @@ class TestSliceAssignment:
             a[0] = '0b00'
         a += '0b1'
         a[0:2] = '0b11'
-        assert a == '0b11'
+        assert a == Tibs('0b11')
 
     def test_del_slice_step(self):
         a = Mutibs.from_bin('100111101001001110110100101')
@@ -149,10 +149,10 @@ class TestSliceAssignment:
     def test_del_slice_negative_end(self):
         a = Mutibs('0b01001000100001')
         del a[:-5]
-        assert a == '0b00001'
+        assert a == Tibs('0b00001')
         a = Mutibs('0b01001000100001')
         del a[-11:-5]
-        assert a == '0b01000001'
+        assert a == Tibs('0b01000001')
 
     def test_del_slice_errors(self):
         a = Mutibs.from_zeros(10)
@@ -208,9 +208,9 @@ def test_adding():
     a = Tibs.from_string("0b0")
     b = Tibs.from_string("0b11")
     c = a + b
-    assert c == "0b011"
-    assert a == "0b0"
-    assert b == "0b11"
+    assert c == Tibs('0b011')
+    assert a == Tibs('0b0')
+    assert b == Tibs('0b11')
 
 
 def test_copy_method():
@@ -250,6 +250,6 @@ def test_mutable_bits_conversion_to_bytes():
 
 def test_bytes_from_list():
     s = Tibs.from_bytes(bytes([1, 2]))
-    assert s == "0x0102"
+    assert s == Tibs('0x0102')
     s = Tibs.from_bytes(bytearray([1, 2]))
-    assert s == "0x0102"
+    assert s == Tibs('0x0102')
