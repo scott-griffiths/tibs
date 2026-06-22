@@ -479,32 +479,38 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     #[inline]
     fn to_byte_data(&self) -> PyResult<Vec<u8>> {
-        if self.is_empty() {
-            return Ok(Vec::new());
-        }
         let len_bits = self.len();
         if !len_bits.is_multiple_of(8) {
             return Err(PyValueError::new_err(format!(
                 "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
             )));
         }
+        Ok(self.to_padded_byte_data())
+    }
+
+    #[inline]
+    fn to_padded_byte_data(&self) -> Vec<u8> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+        let len_bits = self.len();
         match self.as_bitslice().domain() {
             // Fast path: element-aligned and length is a multiple of 8
             bitvec::domain::Domain::Region {
                 head: None,
                 body,
                 tail: None,
-            } => {
+            } if len_bits.is_multiple_of(8) => {
                 // Already byte-aligned; copy the bytes directly.
-                Ok(body.to_vec())
+                body.to_vec()
             }
-            // Misaligned: repack by extending from the bitslice
+            // Repack by extending from the bitslice and zero-padding on the right.
             _ => {
-                let mut bv = BV::with_capacity(len_bits);
-                bv.extend_from_bitslice(self.as_bitslice());
                 let new_len = (len_bits + 7) & !7;
+                let mut bv = BV::with_capacity(new_len);
+                bv.extend_from_bitslice(self.as_bitslice());
                 bv.resize(new_len, false);
-                Ok(bv.into_vec())
+                bv.into_vec()
             }
         }
     }

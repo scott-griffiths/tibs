@@ -38,6 +38,9 @@ def test_to_base_conversions_with_bit_range():
         assert bits.to_bytes(4, 20) == b'\x23\x45'
         assert bits.to_bytes(start=4, end=20) == b'\x23\x45'
         assert bits.bytes == b'\x12\x34\x56'
+        assert bits.to_padded_bytes() == b'\x12\x34\x56'
+        assert bits.to_padded_bytes(0, 12) == b'\x12\x30'
+        assert bits.to_padded_bytes(start=0, end=12) == b'\x12\x30'
 
 
 def test_to_base_conversions_with_bit_range_errors():
@@ -47,12 +50,40 @@ def test_to_base_conversions_with_bit_range_errors():
             bits.to_bin(12, 4)
         with pytest.raises(ValueError, match="Invalid slice positions"):
             bits.to_bytes(-30, 8)
+        with pytest.raises(ValueError, match="Invalid slice positions"):
+            bits.to_padded_bytes(-30, 8)
         with pytest.raises(ValueError, match="not a multiple of 3"):
             bits.to_oct(0, 4)
         with pytest.raises(ValueError, match="not a multiple of 4"):
             bits.to_hex(0, 6)
         with pytest.raises(ValueError, match="not a multiple of 8"):
             bits.to_bytes(0, 12)
+        assert bits.to_padded_bytes(0, 12) == b'\x12\x30'
+
+
+@pytest.mark.parametrize("cls", (Tibs, Mutibs))
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("", b""),
+        ("0b1", b"\x80"),
+        ("0b101", b"\xa0"),
+        ("0b1010101", b"\xaa"),
+        ("0b10101010", b"\xaa"),
+        ("0b101010101", b"\xaa\x80"),
+    ],
+)
+def test_to_padded_bytes_zero_pads_rhs(cls, source, expected):
+    bits = cls(source)
+    assert bits.to_padded_bytes() == expected
+
+
+def test_to_padded_bytes_handles_offset_slices():
+    bits = Tibs.from_bytes(b"\xff")[:5]
+
+    assert bits.to_padded_bytes() == b"\xf8"
+    with pytest.raises(ValueError, match="not a multiple of 8"):
+        bits.to_bytes()
 
 
 def test_from_oct():

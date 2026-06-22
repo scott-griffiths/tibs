@@ -1505,6 +1505,27 @@ impl Tibs {
         BitCollection::to_byte_data(&self.get_slice_unchecked(start, end - start))
     }
 
+    /// Return the Tibs as a bytes object, padding the right-hand side with zero bits.
+    ///
+    /// This appends 0 to 7 zero bits to the end of the selected bit sequence so
+    /// the returned value has a whole number of bytes. If the selected length is
+    /// already a multiple of 8, this is equivalent to :meth:`~to_bytes`.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    ///
+    /// :return: The padded bytes representation.
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_padded_bytes(&self, start: Option<isize>, end: Option<isize>) -> PyResult<Vec<u8>> {
+        if start.is_none() && end.is_none() {
+            return Ok(BitCollection::to_padded_byte_data(self));
+        }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        Ok(BitCollection::to_padded_byte_data(
+            &self.get_slice_unchecked(start, end - start),
+        ))
+    }
+
     /// Read-only property of the ``bytes`` representation of the Tibs.
     ///
     /// Equivalent to using :meth:`~to_bytes` with no parameters.

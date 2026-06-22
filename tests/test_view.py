@@ -296,6 +296,11 @@ def test_view_to_methods_use_bit_order_for_materialized_bits():
     assert Tibs("0x123456").lsb0.oct == Tibs("0x482c6a").oct
 
 
+def test_views_do_not_have_to_padded_bytes():
+    assert not hasattr(Tibs("0x12").lsb0, "to_padded_bytes")
+    assert not hasattr(Mutibs("0x12").lsb0, "to_padded_bytes")
+
+
 def test_mutable_view_reflects_current_source_value():
     m = Mutibs("0x12")
     v = m.lsb0

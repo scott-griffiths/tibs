@@ -97,6 +97,9 @@ A subset of these methods return lossless representations of the exact bit seque
 * :meth:`Tibs.to_hex()` / :attr:`Tibs.hex`. Converts to a hexadecimal string. Length must be a multiple of 4.
 * :meth:`Tibs.to_bytes()` / :attr:`Tibs.bytes`. Converts to a ``bytes`` object. Length must be a multiple of 8.
 
+There is also :meth:`Tibs.to_padded_bytes()`, which appends 0 to 7 zero bits on the right before converting
+to ``bytes``.
+
 These ``to_`` methods accept optional ``start`` and ``end`` bit positions when you only want to convert part of
 the data. With no parameters, the properties are provided as a convenient alias.
 So instead of using ``t.to_bin()`` you can use just ``t.bin`` when you want the whole value.
@@ -120,6 +123,11 @@ needs the data length to be a multiple of 8::
 To convert to a ``bytes`` object we need to change the length, for example by extending it with four ``0`` bits::
 
     >>> (t + '0x0').bytes
+    b'AE\xc0'
+
+This is a common enough operations that the :meth:`Tibs.to_padded_bytes` method is provided::
+
+    >>> t.to_padded_bytes()
     b'AE\xc0'
 
 Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``

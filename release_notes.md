@@ -12,6 +12,12 @@ Backwardly incompatible changes
   Use `Tibs('0b1111')`, `Mutibs('0b1111')`, or representation properties such
   as `.bin` and `.hex` when comparing against literal representations.
 
+Added
+
+* Added `Tibs.to_padded_bytes()` and `Mutibs.to_padded_bytes()`, which convert
+  to `bytes` after appending 0 to 7 zero bits on the right to reach a byte
+  boundary.
+
 
 ### June 20th 2026: version 0.10.0.
 
