@@ -11,6 +11,7 @@ use pyo3::{PyErr, ffi};
 use rand::rngs::{StdRng, SysRng};
 use rand::{Rng, SeedableRng, TryRng};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
 
@@ -169,7 +170,7 @@ pub(crate) fn collect_find_all_positions(
     py: Python<'_>,
     haystack: &BS,
     needle: &BS,
-    haystack_len: usize,
+    _haystack_len: usize,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -178,9 +179,10 @@ pub(crate) fn collect_find_all_positions(
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
 
-    let needle_len = needle.len();
-    let step = if byte_aligned { 8 } else { 1 };
     let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+    if needle.len() == 1 {
+        return collect_single_bit_positions(py, haystack, needle[0], start, end, alignment_mod8);
+    }
 
     if let Some((byte_haystack, byte_needle, byte_base)) =
         byte_search_prep(haystack, needle, start, end, alignment_mod8)
@@ -211,30 +213,101 @@ pub(crate) fn collect_find_all_positions(
         return Ok(matches);
     }
 
-    let lps = compute_lps(py, needle)?;
-    let mut current_pos = start;
+    collect_find_all_positions_kmp(py, haystack, needle, start, end, alignment_mod8)
+}
+
+fn collect_single_bit_positions(
+    py: Python<'_>,
+    haystack: &BS,
+    value: bool,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Vec<u64>> {
     let mut matches = Vec::new();
+    let mut check_at = SIGNAL_CHECK_INTERVAL;
 
-    loop {
-        let found = if current_pos >= haystack_len || end.saturating_sub(current_pos) < needle_len {
-            None
-        } else {
-            find_bitvec_with_lps_aligned(
-                py,
-                haystack,
-                needle,
-                &lps,
-                current_pos,
-                end,
-                alignment_mod8,
-            )?
-        };
+    if let Some(required) = alignment_mod8 {
+        let start_mod = start & 7;
+        let adjustment = (required + 8 - start_mod) & 7;
+        let mut pos = start.saturating_add(adjustment);
+        while pos < end {
+            if haystack[pos] == value {
+                matches.push(pos as u64);
+                if matches.len() >= check_at {
+                    py.check_signals()?;
+                    check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+                }
+            }
+            pos += 8;
+        }
+        return Ok(matches);
+    }
 
-        let Some(pos) = found else {
-            break;
-        };
-        matches.push(pos as u64);
-        current_pos = pos + step;
+    let slice = &haystack[start..end];
+    if value {
+        for pos in slice.iter_ones() {
+            matches.push((start + pos) as u64);
+            if matches.len() >= check_at {
+                py.check_signals()?;
+                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+            }
+        }
+    } else {
+        for pos in slice.iter_zeros() {
+            matches.push((start + pos) as u64);
+            if matches.len() >= check_at {
+                py.check_signals()?;
+                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+            }
+        }
+    }
+
+    Ok(matches)
+}
+
+fn collect_find_all_positions_kmp(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Vec<u64>> {
+    if needle.len() > end - start {
+        return Ok(Vec::new());
+    }
+
+    let lps = compute_lps(py, needle)?;
+    let mut matches = Vec::new();
+    let needle_len = needle.len();
+    let mut i = start;
+    let mut j = 0;
+    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
+
+    while i < end {
+        while i < check_at {
+            if needle[j] == haystack[i] {
+                i += 1;
+                j += 1;
+
+                if j == needle_len {
+                    let match_pos = i - j;
+                    if matches_alignment(match_pos, alignment_mod8) {
+                        matches.push(match_pos as u64);
+                    }
+                    j = lps[j - 1];
+                }
+            } else if j != 0 {
+                j = lps[j - 1];
+            } else {
+                i += 1;
+            }
+        }
+        if i < end {
+            py.check_signals()?;
+            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
+        }
     }
 
     Ok(matches)
@@ -248,13 +321,13 @@ pub(crate) fn bits_to_bytes(bits: &BS) -> Vec<u8> {
         .collect()
 }
 
-pub(crate) fn byte_search_prep(
-    haystack: &BS,
-    needle: &BS,
+pub(crate) fn byte_search_prep<'h, 'n>(
+    haystack: &'h BS,
+    needle: &'n BS,
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
-) -> Option<(Vec<u8>, Vec<u8>, usize)> {
+) -> Option<(Cow<'h, [u8]>, Cow<'n, [u8]>, usize)> {
     if alignment_mod8 != Some(0) || !needle.len().is_multiple_of(8) {
         return None;
     }
@@ -264,9 +337,21 @@ pub(crate) fn byte_search_prep(
     if start_byte > end_byte {
         return None;
     }
-    let haystack_bytes = bits_to_bytes(&haystack[start_byte * 8..end_byte * 8]);
-    let needle_bytes = bits_to_bytes(needle);
+    let haystack_bytes = bits_to_byte_cow(&haystack[start_byte * 8..end_byte * 8]);
+    let needle_bytes = bits_to_byte_cow(needle);
     Some((haystack_bytes, needle_bytes, start_byte))
+}
+
+fn bits_to_byte_cow(bits: &BS) -> Cow<'_, [u8]> {
+    debug_assert!(bits.len().is_multiple_of(8));
+    match bits.domain() {
+        bitvec::domain::Domain::Region {
+            head: None,
+            body,
+            tail: None,
+        } => Cow::Borrowed(body),
+        _ => Cow::Owned(bits_to_bytes(bits)),
+    }
 }
 
 #[inline]
@@ -288,9 +373,9 @@ fn try_find_byte_search(
     let (search_bytes, needle_bytes, start_byte) =
         byte_search_prep(haystack, needle, start, end, alignment_mod8)?;
     let found = if reverse {
-        memmem::rfind(&search_bytes, &needle_bytes)
+        memmem::rfind(search_bytes.as_ref(), needle_bytes.as_ref())
     } else {
-        memmem::find(&search_bytes, &needle_bytes)
+        memmem::find(search_bytes.as_ref(), needle_bytes.as_ref())
     };
     Some(found.map(|index| (start_byte + index) * 8))
 }

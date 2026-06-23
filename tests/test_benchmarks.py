@@ -13,8 +13,9 @@ def test_chunking(benchmark):
         s = Tibs.from_string("0xef1356a6200b3, 0b0")
         s = Tibs.from_joined(itertools.repeat(s, 6000))
         c = 0
+        v = Tibs('0b001')
         for triplet in s.chunks(3):
-            if triplet == "0b001":
+            if triplet == v:
                 c += 1
         return c
 

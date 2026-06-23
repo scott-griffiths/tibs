@@ -785,7 +785,7 @@ impl Tibs {
             alignment_mod8,
         )
         .map_or((None, None, 0), |(haystack, needle, base)| {
-            (Some(haystack), Some(needle), base)
+            (Some(haystack.into_owned()), Some(needle.into_owned()), base)
         });
         let py = slf.py();
         let lps = { compute_lps(py, needle.to_bitslice())? };
@@ -852,7 +852,7 @@ impl Tibs {
             alignment_mod8,
         )
         .map_or((None, None, 0), |(haystack, needle, base)| {
-            (Some(haystack), Some(needle), base)
+            (Some(haystack.into_owned()), Some(needle.into_owned()), base)
         });
         let py = slf.py();
         let lps = { compute_lps(py, needle.to_bitslice())? };

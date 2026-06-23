@@ -689,6 +689,28 @@ class TestConcreteRegressionCases:
         t = Tibs("0x11223344")
         assert t.find_all(Tibs('0x11'), start=1, end=1, byte_aligned=True) == []
 
+    def test_find_all_single_bit_respects_slice_and_alignment(self):
+        t = Tibs("0b1000000010000000100000001")
+
+        assert t.find_all("0b1") == [0, 8, 16, 24]
+        assert t.find_all("0b1", start=1, end=24, byte_aligned=True) == [8, 16]
+
+        zeros = Tibs("0b011111110111111101111111")
+        assert zeros.find_all("0b0", byte_aligned=True) == [0, 8, 16]
+
+    def test_find_all_single_pass_preserves_overlapping_matches(self):
+        t = Tibs("0b11111")
+        assert t.find_all("0b111") == [0, 1, 2]
+
+    def test_find_all_byte_aligned_respects_subrange(self):
+        t = Tibs("0xabcdabcd")
+        assert t.find_all("0xabcd", start=8, end=32, byte_aligned=True) == [16]
+
+    def test_mutibs_find_all_uses_same_search_semantics(self):
+        m = Mutibs("0b11111")
+        assert m.find_all("0b111") == [0, 1, 2]
+        assert m.find_all("0b1", byte_aligned=True) == [0]
+
     def test_rfind_reverse_search_finds_prefix_match(self):
         t = Tibs("0b0111")
         assert t.rfind("0b011") == 0
