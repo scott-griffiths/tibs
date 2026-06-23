@@ -56,6 +56,15 @@ def test_repr_is_parseable():
     assert Dtype("u16_le").kind is DtypeKind.Uint
 
 
+def test_dtype_equality_and_hashing_are_by_value():
+    assert Dtype("u8") == Dtype("u8")
+    assert Dtype("u8") != Dtype("u16")
+    assert Dtype("u8") != "u8"
+    assert "u8" != Dtype("u8")
+    assert {Dtype("u8"), Dtype("u8"), Dtype("u16")} == {Dtype("u8"), Dtype("u16")}
+    assert {Dtype("u8"): "value"}[Dtype("u8")] == "value"
+
+
 @pytest.mark.parametrize("spec", ["", "u", "unknown8", "u8_xe", "hex8_le", "u7_le", "u0"])
 def test_invalid_specs(spec):
     with pytest.raises(ValueError):
@@ -95,6 +104,41 @@ def test_from_value_hex():
     d = Dtype("hex8")
     t = Tibs.from_value(d, "0f")
     assert t == Tibs.from_hex("0f")
+
+
+@pytest.mark.parametrize(
+    "dtype,value",
+    [
+        ("u9", 17),
+        ("i8", -2),
+        ("f16_le", 14.5),
+        ("bytes16", b"ab"),
+        ("bin4", "0b1010"),
+        ("oct6", "17"),
+        ("hex8", "0f"),
+    ],
+)
+def test_dtype_pack_matches_from_value(dtype, value):
+    d = Dtype(dtype)
+    assert d.pack(value) == Tibs.from_value(d, value)
+
+
+@pytest.mark.parametrize(
+    "dtype,value",
+    [
+        ("u9", 17),
+        ("i8", -2),
+        ("f16_le", 14.5),
+        ("bytes16", b"ab"),
+        ("bin4", "0b1010"),
+        ("oct6", "17"),
+        ("hex8", "0f"),
+    ],
+)
+def test_dtype_unpack_matches_to_value(dtype, value):
+    d = Dtype(dtype)
+    bits = d.pack(value)
+    assert d.unpack(bits) == bits.to_value(d)
 
 
 @pytest.mark.parametrize(
@@ -210,6 +254,18 @@ def test_from_values_empty():
     assert Tibs.from_values(d, []) == Tibs()
 
 
+def test_dtype_pack_values_matches_from_values():
+    d = Dtype("u8")
+    assert d.pack_values([1, 2, 3]) == Tibs.from_values(d, [1, 2, 3])
+
+
+def test_dtype_pack_values_accepts_empty_iterables_and_generators():
+    d = Dtype("hex8")
+
+    assert d.pack_values([]) == Tibs()
+    assert d.pack_values(x for x in ["aa", "bb", "cc"]) == Tibs.from_hex("aabbcc")
+
+
 def test_from_values_propagates_item_errors():
     d = Dtype("u8")
     with pytest.raises(OverflowError, match="does not fit"):
@@ -270,6 +326,32 @@ def test_to_values_iter_empty():
 def test_to_values_empty():
     d = Dtype("u8")
     assert Tibs().to_values(d) == []
+
+
+def test_dtype_unpack_values_matches_to_values():
+    d = Dtype("u8")
+    bits = Tibs.from_values(d, [1, 2, 3])
+
+    assert d.unpack_values(bits) == bits.to_values(d)
+    assert d.unpack_values(bits, 8, 24) == [2, 3]
+
+
+def test_dtype_unpack_values_iter_accepts_promoted_inputs():
+    d = Dtype("u8")
+
+    assert list(d.unpack_values_iter("0x010203")) == [1, 2, 3]
+    assert list(d.unpack_values_iter(b"\x01\x02\x03")) == [1, 2, 3]
+    assert list(d.unpack_values_iter([0, 0, 0, 0, 0, 0, 0, 1])) == [1]
+
+
+def test_dtype_unpack_values_iter_snapshots_mutibs():
+    d = Dtype("u8")
+    bits = Mutibs.from_bytes(b"\x01\x02")
+    values = d.unpack_values_iter(bits)
+
+    bits.bytes = b"\xff\xff"
+
+    assert list(values) == [1, 2]
 
 
 def test_to_values_iter_rejects_zero_length_dtype():
@@ -342,6 +424,23 @@ def test_dtype_string_errors_are_reported_by_value_methods():
         Tibs.from_value("unknown8", 1)
     with pytest.raises(TypeError, match="dtype must be a Dtype instance or dtype string"):
         Tibs.from_value(object(), 1)
+
+
+def test_dtype_pack_and_unpack_error_consistency():
+    d = Dtype("u8")
+
+    with pytest.raises(OverflowError, match="does not fit"):
+        d.pack(256)
+    with pytest.raises(ValueError, match="Dtype length"):
+        Dtype("hex8").pack("f")
+    with pytest.raises(ValueError, match="dtype with length 8 bits"):
+        d.unpack("0b101")
+    with pytest.raises(ValueError, match="not a multiple"):
+        d.unpack_values("0b101")
+    with pytest.raises(ValueError, match="not a multiple"):
+        list(d.unpack_values_iter("0b101"))
+    with pytest.raises(TypeError, match="Cannot promote object"):
+        d.unpack(object())
 
 
 def test_old_dtype_method_names_are_not_exposed():

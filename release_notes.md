@@ -17,6 +17,13 @@ Added
 * Added `Tibs.to_padded_bytes()` and `Mutibs.to_padded_bytes()`, which convert
   to `bytes` after appending 0 to 7 zero bits on the right to reach a byte
   boundary.
+* Added `Dtype.pack`, `Dtype.pack_values`, `Dtype.unpack`,
+  `Dtype.unpack_values` and `Dtype.unpack_values_iter`.
+
+Fixes
+
+* `Dtype` instances now compare and hash by kind, length and byte order instead
+  of by object identity.
 
 
 ### June 20th 2026: version 0.10.0.

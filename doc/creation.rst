@@ -190,6 +190,13 @@ The matching interpretation methods decode values back from a bit sequence::
     >>> samples.to_value("u12", 12, 24)
     103
 
+If the dtype will be reused, creating it once can make the code read more naturally::
+
+    >>> sample_dtype = Dtype("u12")
+    >>> samples = sample_dtype.pack_values([0, 103, 2048, 4095])
+    >>> sample_dtype.unpack(samples, 12, 24)
+    103
+
 For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
 when byte order matters::
 

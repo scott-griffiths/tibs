@@ -7,6 +7,18 @@ Data types control how bits are converted into values, and how values are conver
 
 They are often used implicitly when creating from or interpreting to integers, floats and other types, but
 can also be used explicitly in methods like :meth:`Tibs.from_values`.
+Once created, a ``Dtype`` can also pack and unpack values itself::
+
+    >>> d = Dtype("u12")
+    >>> packed = d.pack_values([0, 103, 2048, 4095])
+    >>> packed.hex
+    '000067800fff'
+    >>> d.unpack_values(packed)
+    [0, 103, 2048, 4095]
+
+The ``pack`` and ``pack_values`` methods return immutable :class:`Tibs`
+instances. If mutable output is needed directly, use :meth:`Mutibs.from_value`
+or :meth:`Mutibs.from_values`.
 
 Dtype strings
 ^^^^^^^^^^^^^
@@ -35,8 +47,8 @@ byte order for whole-byte values::
 
 Byte order cannot be used with ``bin``, ``oct``, ``hex`` or ``bytes`` dtypes.
 Float values are encoded using the supported IEEE widths: 16, 32 and 64 bits.
-The selected bit range for :meth:`Tibs.to_values` must be a whole number of dtype
-values.
+The selected bit range for :meth:`Tibs.to_values` and
+:meth:`Dtype.unpack_values` must be a whole number of dtype values.
 
 
 .. autoclass:: tibs.Dtype
