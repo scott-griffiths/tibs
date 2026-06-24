@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Small local performance comparison between tibs and bitarray.
 
-This is a diagnostic tool, not a CI gate. It is meant to rank optimization
+This is a diagnostic tool meant to rank optimization
 opportunities by showing where Tibs is materially slower than a mature bit
 library on similar workloads.
+
+This helps track regressions and improvements, but it is not intended
+to be a balanced comparison between the two libraries.
+
 """
 
 import argparse
+import math
 import os
 import random
 import statistics
@@ -194,9 +199,10 @@ def main():
         f"Running local comparison with {args.bytes:,} bytes, "
         f"{args.values:,} u16 values, {args.repeats} repeats."
     )
-    print("Lower times are better. Ratio is tibs_time / bitarray_time.")
+    print("Lower times are better. Speedup is bitarray_time / tibs_time.")
     print()
 
+    speedups = []
     for name, bitarray_fn, tibs_fn in build_cases(args.bytes, args.values):
         bitarray_result = bitarray_fn()
         tibs_result = tibs_fn()
@@ -208,11 +214,29 @@ def main():
 
         bitarray_time = median_time(bitarray_fn, args.repeats)
         tibs_time = median_time(tibs_fn, args.repeats)
-        ratio = tibs_time / bitarray_time if bitarray_time else float("inf")
+        speedup = bitarray_time / tibs_time if tibs_time else float("inf")
+        if bitarray_time > 0 and tibs_time > 0:
+            speedups.append(speedup)
         print(
             f"{name:24s} bitarray={bitarray_time * 1e3:8.3f} ms "
-            f"tibs={tibs_time * 1e3:8.3f} ms ratio={ratio:6.2f}x"
+            f"tibs={tibs_time * 1e3:8.3f} ms speedup={speedup:6.2f}x"
         )
+
+    if speedups:
+        geometric_mean = math.prod(speedups) ** (1 / len(speedups))
+        median_speedup = statistics.median(speedups)
+        print()
+        if geometric_mean >= 1:
+            print(f"Geometric mean: Tibs is {geometric_mean:.2f}x faster.")
+        else:
+            print(
+                "Geometric mean: "
+                f"Tibs is {1 / geometric_mean:.2f}x slower."
+            )
+        if median_speedup >= 1:
+            print(f"Median: Tibs is {median_speedup:.2f}x faster.")
+        else:
+            print(f"Median: Tibs is {1 / median_speedup:.2f}x slower.")
 
 
 if __name__ == "__main__":
