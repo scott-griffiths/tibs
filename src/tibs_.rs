@@ -430,16 +430,12 @@ impl Tibs {
     /// bits that are not considered part of the object's data. Usually using
     /// :meth:`~to_bytes` is what you really need.
     ///
-    /// The way that the data is stored is not considered part of the public interface
-    /// and so the output of this method may change between point releases, and even
-    /// during the running of a program.
-    ///
     /// :return: A tuple of the raw bytes, the bit offset and the bit length.
     ///
     /// .. code-block:: python
     ///
     ///     raw_bytes, offset, length = t.to_raw_data()
-    ///     assert t == Tibs.from_bytes(raw_bytes)[offset:offset + length]
+    ///     assert t == Tibs.from_bytes(raw_bytes, offset=offset, length=length)
     ///
     pub fn to_raw_data(&self) -> (Vec<u8>, usize, usize) {
         self.raw_data()
@@ -2165,6 +2161,11 @@ impl Tibs {
     ///
     /// The bytes instance can be used to recreate the Tibs exactly -
     /// see :meth:`Tibs.decode`.
+    ///
+    /// Use ``Codec.Raw`` when the encoded bytes themselves need to be a stable,
+    /// canonical representation. The default ``Codec.Auto`` chooses a valid
+    /// encoding for compactness and may produce different bytes for the same
+    /// value in a future release.
     ///
     /// :param Codec codec: The codec to use. Defaults to Codec.Auto.
     /// :return: The encoded bytes.

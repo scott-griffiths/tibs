@@ -60,11 +60,13 @@ use this enum directly.
 
 Different encoding strategies can be specified when using :meth:`Tibs.encode`.
 Usually the default ``Codec.Auto`` should be used. It uses compact inline forms for short sequences and tries to
-pick a small representation for longer sequences.
+pick a small representation for longer sequences. Use ``Codec.Raw`` when the encoded bytes themselves are part of
+an external contract, such as persistent cache keys or serialized hashes.
 
 ``Codec.Raw`` stores the bits directly with length metadata. ``Codec.Rice`` is intended for sparse data, where one
 bit value occurs much less often than the other. ``Codec.Zstd`` uses Zstandard compression and is often better for
 larger byte-like data.
 
-The encoded byte format stores enough length information to decode one value exactly. See :doc:`byte_format` for the
-format details.
+The encoded byte format stores enough length information to decode one value exactly. Future versions should
+continue to decode complete values written by earlier stable versions, but the exact bytes produced by
+``Codec.Auto`` may change between releases. See :doc:`byte_format` for the format details.

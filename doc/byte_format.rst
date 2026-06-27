@@ -15,18 +15,25 @@ The raw encoding is also very efficient, and all the encoded sequences contain t
 means a stream parser can concatenate encoded values without losing boundary information. The public
 ``decode`` methods still expect one complete value at a time and reject trailing bytes.
 
+The compatibility contract has two parts:
+
+* Future versions of Tibs will continue to decode complete values written by earlier stable versions.
+* ``encode(Codec.Raw)`` is the canonical byte-for-byte representation of a logical bit sequence.
+
+Use ``Codec.Raw`` for persistent keys, serialized hashes, and protocols where the exact bytes are
+part of the contract. The default ``Codec.Auto`` chooses a valid encoding for compactness and may
+produce different bytes for the same bit sequence in a future release as heuristics or codec
+implementations improve. Explicit ``Codec.Rice`` and ``Codec.Zstd`` outputs are also valid encoded
+values, but compressed output is not the canonical key form. Forward compatibility is not
+guaranteed: older versions may reject encodings introduced later.
+
 The base implementation does a good job at the smaller bit sequences that compression
 algorithms would be very inefficient at storing, for example all bit sequences up to 6 bits long are encoded
 into a single byte. For longer sequences the raw codec overhead is still small.
 
-The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data, so
-if a ``Tibs`` and ``Mutibs`` are equal they will encode to the same ``bytes``.
-
-This also makes encoded bytes a good explicit key when you need stable serialized
-hashing behavior. ``Tibs`` values are hashable in Python, but ``bits.encode()``
-is a stable ``bytes`` representation of the exact bit sequence, including its bit
-length. Those keys can be stored in dictionaries or sets, used for ``Mutibs``
-values, and later decoded with :meth:`Tibs.decode` or :meth:`Mutibs.decode`.
+The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data. The same bytes can be
+decoded as either class, and the decoded objects have the same logical bits. For byte-for-byte
+stable keys, use the same explicit codec for both objects, normally ``Codec.Raw``.
 
 .. csv-table::
    :header: "Tibs length", "Raw encoded byte overhead"
