@@ -570,6 +570,23 @@ def test_view_field_extracts_lsb0_spec_labels():
     assert v.field(31, 26).u == 4
 
 
+def test_view_decodes_published_lsb0_little_endian_ebpf_instruction():
+    # Linux's eBPF ISA documentation gives these bytes as a little-endian
+    # instruction decoded as "r1 += 0x11223344".
+    # https://docs.kernel.org/bpf/standardization/instruction-set.html
+    instruction = Tibs.from_bytes(
+        bytes.fromhex("07 01 00 00 44 33 22 11")
+    ).lsb0.le
+
+    assert instruction.field(2, 0).u == 0x7  # BPF_ALU64 instruction class.
+    assert instruction.field(3, 3).u == 0x0  # BPF_K source mode.
+    assert instruction.field(7, 4).u == 0x0  # BPF_ADD operation code.
+    assert instruction.field(11, 8).u == 1  # dst_reg.
+    assert instruction.field(15, 12).u == 0  # src_reg.
+    assert instruction.field(31, 16).i == 0
+    assert instruction.field(63, 32).u == 0x11223344
+
+
 def test_view_field_endpoint_order_does_not_change_value():
     v = Tibs("0x88040410").lsb0
 
