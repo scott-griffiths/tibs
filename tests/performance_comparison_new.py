@@ -63,6 +63,14 @@ def build_cases(byte_count, value_count):
     value_words = [rng.randrange(1 << 16) for _ in range(value_count)]
     value_bytes = Tibs.from_values("u16", value_words).to_bytes()
 
+    bulk_set_bit_count = min(byte_count * 8, 2_000_000)
+    bulk_set_width = 8
+    rng = random.Random("comparison-bulk-set")
+    bulk_set_positions = [
+        [rng.randrange(bulk_set_bit_count) for _ in range(bulk_set_width)]
+        for _ in range(value_count)
+    ]
+
     def ba_find_all():
         pattern = bitarray("101010111100", endian="big")
         return len(list(search_bits.search(pattern)))
@@ -122,6 +130,19 @@ def build_cases(byte_count, value_count):
         out.extend(bit_list)
         return len(out)
 
+    def ba_bulk_index_set():
+        out = bitarray(bulk_set_bit_count, endian="big")
+        out.setall(0)
+        for positions in bulk_set_positions:
+            out[positions] = 1
+        return out.count(1)
+
+    def tibs_bulk_index_set():
+        out = Mutibs.from_zeros(bulk_set_bit_count)
+        for positions in bulk_set_positions:
+            out.set(positions)
+        return out.count(1)
+
     def ba_bool_construction():
         return len(bitarray(bit_list, endian="big"))
 
@@ -177,6 +198,7 @@ def build_cases(byte_count, value_count):
         ("count ones", ba_count, tibs_count),
         ("join small pieces", ba_join_small_pieces, tibs_join_small_pieces),
         ("extend bool list", ba_extend_bool_list, tibs_extend_bool_list),
+        ("bulk index set", ba_bulk_index_set, tibs_bulk_index_set),
         ("bool construction", ba_bool_construction, tibs_bool_construction),
         ("slice count", ba_slice_count, tibs_slice_count),
         ("pack u16", ba_pack_u16, tibs_pack_u16),
