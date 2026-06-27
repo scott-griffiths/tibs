@@ -172,7 +172,9 @@ When every item uses the same fixed-width encoding, :class:`Dtype` strings make
 the intent explicit and avoid writing a construction loop yourself. The most
 common dtype forms are unsigned integers such as ``"u8"`` or ``"u12"``, signed
 integers such as ``"i16"``, floats such as ``"f32"``, and string or byte
-representations such as ``"hex16"`` and ``"bytes32"``.
+representations such as ``"hex16"`` and ``"bytes32"``. Use ``"bool"`` for a
+single Python boolean bit, or ``"bitsN"`` when each value is itself a fixed-size
+bit sequence decoded as :class:`Tibs`.
 
 Use :meth:`Tibs.from_value` for one value, or :meth:`Tibs.from_values` for an
 iterable of values::
@@ -189,6 +191,15 @@ The matching interpretation methods decode values back from a bit sequence::
     [0, 103, 2048, 4095]
     >>> samples.to_value("u12", 12, 24)
     103
+
+Boolean and bit-sequence dtypes are useful when records mix flags with fields
+that should stay as bits::
+
+    >>> flags = Tibs.from_values("bool", [True, False, 1, 0])
+    >>> flags.bin
+    '1010'
+    >>> Tibs.from_values("bits3", ["0b101", "0b010"]).to_values("bits3")
+    [Tibs('0b101'), Tibs('0b010')]
 
 If the dtype will be reused, creating it once can make the code read more naturally::
 

@@ -39,16 +39,15 @@ impl Dtype {
             )));
         }
         let length = length as usize;
-        match byte_order {
-            Endianness::Unspecified => (),
-            _ => match kind {
-                DtypeKind::Bin | DtypeKind::Hex | DtypeKind::Oct | DtypeKind::Bytes => {
-                    return Err(PyValueError::new_err(format!(
-                        "A byte order cannot be specified for a Dtype of type {}.",
-                        kind.repr_name()
-                    )));
-                }
-                _ => {
+        if kind == DtypeKind::Bool && length != 1 {
+            return Err(PyValueError::new_err(format!(
+                "A Dtype of type {} must have length 1.",
+                kind.repr_name()
+            )));
+        }
+        if byte_order != Endianness::Unspecified {
+            match kind {
+                DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float => {
                     if !length.is_multiple_of(8) {
                         return Err(PyValueError::new_err(format!(
                             "If a Dtype byte_order is given, the length must be a multiple of 8 (length = {}).",
@@ -56,17 +55,12 @@ impl Dtype {
                         )));
                     }
                 }
-            },
-        }
-        if byte_order != Endianness::Unspecified {
-            match kind {
-                DtypeKind::Bin | DtypeKind::Hex | DtypeKind::Oct | DtypeKind::Bytes => {
+                _ => {
                     return Err(PyValueError::new_err(format!(
                         "A byte order cannot be specified for a Dtype of type {}.",
                         kind.repr_name()
                     )));
                 }
-                _ => (),
             }
         }
         Ok(Dtype {
@@ -86,8 +80,14 @@ impl Dtype {
             (spec.as_str(), Endianness::Unspecified)
         };
 
+        if base == "bool" {
+            return Self::from_parts(DtypeKind::Bool, 1, byte_order);
+        }
+
         let (kind, length_text) = if let Some(length) = base.strip_prefix("bytes") {
             (DtypeKind::Bytes, length)
+        } else if let Some(length) = base.strip_prefix("bits") {
+            (DtypeKind::Bits, length)
         } else if let Some(length) = base.strip_prefix("bin") {
             (DtypeKind::Bin, length)
         } else if let Some(length) = base.strip_prefix("oct") {
@@ -136,10 +136,10 @@ pub(crate) fn extract_dtype(obj: &Bound<'_, PyAny>) -> PyResult<Dtype> {
 impl Dtype {
     /// Create a dtype from a compact string specification.
     ///
-    /// :param str spec: A dtype string such as ``"u8"``, ``"i16"``, ``"f32_le"``, ``"hex32"`` or ``"bytes64"``.
+    /// :param str spec: A dtype string such as ``"u8"``, ``"i16"``, ``"f32_le"``, ``"bool"``, ``"bits32"``, ``"hex32"`` or ``"bytes64"``.
     /// :return: A new ``Dtype``.
     ///
-    /// :raises ValueError: if the string cannot be parsed, if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
+    /// :raises ValueError: if the string cannot be parsed, if ``length`` is not greater than zero, if ``bool`` is given a length other than 1, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
     ///
     /// .. code-block:: pycon
     ///
@@ -161,7 +161,7 @@ impl Dtype {
     /// :param Endianness byte_order: The byte order for integer and floating-point values. Defaults to ``Endianness.Unspecified``.
     /// :return: A new ``Dtype``.
     ///
-    /// :raises ValueError: if ``length`` is not greater than zero, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
+    /// :raises ValueError: if ``length`` is not greater than zero, if ``DtypeKind.Bool`` is given a length other than 1, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
     ///
     /// .. code-block:: pycon
     ///
@@ -337,6 +337,8 @@ impl Dtype {
             DtypeKind::Uint => format!("u{}{}", self.length, byte_order_str),
             DtypeKind::Int => format!("i{}{}", self.length, byte_order_str),
             DtypeKind::Float => format!("f{}{}", self.length, byte_order_str),
+            DtypeKind::Bool => "bool".to_string(),
+            DtypeKind::Bits => format!("bits{}", self.length),
             DtypeKind::Bin => format!("bin{}", self.length),
             DtypeKind::Oct => format!("oct{}", self.length),
             DtypeKind::Hex => format!("hex{}", self.length),

@@ -218,11 +218,33 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
 }
 
 pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
-    let is_little_endian = Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
     match dtype.kind {
-        DtypeKind::Float => bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian),
-        DtypeKind::Uint => bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian),
-        DtypeKind::Int => bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian),
+        DtypeKind::Float => {
+            let is_little_endian =
+                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)
+        }
+        DtypeKind::Uint => {
+            let is_little_endian =
+                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian)
+        }
+        DtypeKind::Int => {
+            let is_little_endian =
+                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian)
+        }
+        DtypeKind::Bool => match helpers::convert_to_bool(value) {
+            Some(bit) => {
+                let mut bv = BV::with_capacity(1);
+                bv.push(bit);
+                Ok(bv)
+            }
+            None => Err(PyTypeError::new_err(
+                "bool dtype values must be True, False, 0 or 1.",
+            )),
+        },
+        DtypeKind::Bits => validate_dtype_value_length(dtype, value.extract::<Tibs>()?.to_bitvec()),
         DtypeKind::Bytes => {
             bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))
         }
@@ -287,11 +309,24 @@ pub(crate) fn py_from_value_parts(
         )));
     }
 
-    let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
     match dtype_kind {
-        DtypeKind::Float => BitCollection::to_f64(value, is_little_endian)?.into_py_any(py),
-        DtypeKind::Uint => BitCollection::to_u128(value, is_little_endian)?.into_py_any(py),
-        DtypeKind::Int => BitCollection::to_i128(value, is_little_endian)?.into_py_any(py),
+        DtypeKind::Float => {
+            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            BitCollection::to_f64(value, is_little_endian)?.into_py_any(py)
+        }
+        DtypeKind::Uint => {
+            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            BitCollection::to_u128(value, is_little_endian)?.into_py_any(py)
+        }
+        DtypeKind::Int => {
+            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            BitCollection::to_i128(value, is_little_endian)?.into_py_any(py)
+        }
+        DtypeKind::Bool => value.as_bitslice()[0].into_py_any(py),
+        DtypeKind::Bits => {
+            let py_obj = Py::new(py, value.clone())?.into_pyobject(py)?;
+            Ok(py_obj.into())
+        }
         DtypeKind::Bytes => BitCollection::to_byte_data(value)?.into_py_any(py),
         DtypeKind::Bin => BitCollection::to_binary(value).into_py_any(py),
         DtypeKind::Oct => BitCollection::to_octal(value)?.into_py_any(py),
