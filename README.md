@@ -42,7 +42,7 @@ platforms; if there are issues then please let me know.
 
 - Store bit sequences of any length, not just whole bytes.
 - Construct from strings, bytes, bools, integers, floats, random data or repeated typed values.
-- Slice at bit positions and interpret each slice as bytes, ints, floats, binary, octal or hex.
+- Slice or split at bit positions and interpret each piece as bytes, ints, floats, binary, octal or hex.
 - Read little-endian values and LSB0-labelled fields without manually reshuffling the source data.
 - Search, count, replace, rotate, reverse, byte-swap, set and unset bits with Rust-backed operations.
 - Use immutable `Tibs` for cheap slicing and stable values; switch to `Mutibs` when in-place edits are better.
@@ -64,12 +64,13 @@ Tibs('0xac804f4b')
 >>> len(packet)
 32
 
->>> # Slice at bit positions, then interpret each slice however you need.
->>> packet[:4].bin
+>>> # Split at bit positions, then interpret each piece however you need.
+>>> flags, size, payload = packet.split_at([4, 16])
+>>> flags.bin
 '1010'
->>> packet[4:16].to_u()
+>>> size.to_u()
 3200
->>> packet[16:].bytes
+>>> payload.bytes
 b'OK'
 
 >>> # Search and test using strings, bytes, booleans or other Tibs values.

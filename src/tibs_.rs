@@ -15,7 +15,7 @@ use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PySlice, PyType};
+use pyo3::types::{PyBool, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -606,6 +606,32 @@ impl Tibs {
     #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
     pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
         BitCollection::collect_chunks(self, chunk_size, count)
+    }
+
+    /// Split at one or more bit positions.
+    ///
+    /// ``pos`` may be a single integer or an iterable of integers. Negative
+    /// positions count from the end. Positions must be in nondecreasing order
+    /// after normalization, and each position must be in the range
+    /// ``0`` through ``len(self)``, inclusive.
+    ///
+    /// The returned pieces are normal ``Tibs`` slices. They share storage with
+    /// the original ``Tibs`` when possible.
+    ///
+    /// :param int | Iterable[int] pos: The bit position or positions where the split should occur.
+    /// :return: A tuple of ``Tibs`` pieces.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b101100').split_at(3)
+    ///     (Tibs('0b101'), Tibs('0b100'))
+    ///     >>> Tibs('0b101100').split_at([2, 5])
+    ///     (Tibs('0b10'), Tibs('0b110'), Tibs('0b0'))
+    ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
+    pub fn split_at(&self, py: Python<'_>, pos: &Bound<'_, PyAny>) -> PyResult<Py<PyTuple>> {
+        let pieces = BitCollection::collect_split_at(self, pos)?;
+        Ok(PyTuple::new(py, pieces)?.unbind())
     }
 
     /// Return an iterator by cutting into Tibs chunks.

@@ -238,6 +238,29 @@ def test_chunks():
     assert Mutibs().chunks(10) == []
 
 
+def test_split_at_returns_mutibs_pieces():
+    m = Mutibs('0b101100')
+
+    pieces = m.split_at([2, -1])
+
+    assert pieces == (Mutibs('0b10'), Mutibs('0b110'), Mutibs('0b0'))
+    assert isinstance(pieces, tuple)
+    assert all(isinstance(piece, Mutibs) for piece in pieces)
+
+    pieces[0][0] = False
+    assert pieces[0] == Tibs('0b00')
+    assert m == Tibs('0b101100')
+
+
+def test_split_at_mutibs_errors():
+    m = Mutibs('0b101100')
+
+    with pytest.raises(ValueError, match="out of range"):
+        _ = m.split_at(7)
+    with pytest.raises(ValueError, match="nondecreasing"):
+        _ = m.split_at([4, 3])
+
+
 def test_or():
     a = Mutibs('0x0f')
     b = Mutibs('0xf0')

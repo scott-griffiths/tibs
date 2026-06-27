@@ -1,5 +1,11 @@
 # Release Notes
 
+### Unreleased: version 0.12.0.
+
+* Added `Tibs.split_at()` and `Mutibs.split_at()` for partitioning a bit
+  sequence at one or more bit positions.
+
+
 ### June 27th 2026: version 0.11.0.
 
 Backwardly incompatible changes

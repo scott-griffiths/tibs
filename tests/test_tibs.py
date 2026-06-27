@@ -513,6 +513,57 @@ def test_rchunks_remainder_and_count():
     assert [chunk.bin for chunk in limited_chunks] == ['0010', '1011']
 
 
+def test_split_at_single_position():
+    t = Tibs('0b101100')
+
+    pieces = t.split_at(3)
+
+    assert pieces == (Tibs('0b101'), Tibs('0b100'))
+    assert isinstance(pieces, tuple)
+    assert all(isinstance(piece, Tibs) for piece in pieces)
+
+
+def test_split_at_multiple_positions():
+    t = Tibs('0b101100')
+
+    assert t.split_at([2, 5]) == (
+        Tibs('0b10'),
+        Tibs('0b110'),
+        Tibs('0b0'),
+    )
+    assert t.split_at((0, 2, 2, len(t))) == (
+        Tibs(),
+        Tibs('0b10'),
+        Tibs(),
+        Tibs('0b1100'),
+        Tibs(),
+    )
+    assert t.split_at([]) == (t,)
+    assert Tibs().split_at(0) == (Tibs(), Tibs())
+    assert Tibs().split_at([]) == (Tibs(),)
+
+
+def test_split_at_negative_positions():
+    t = Tibs('0b101100')
+
+    assert t.split_at([2, -1]) == (
+        Tibs('0b10'),
+        Tibs('0b110'),
+        Tibs('0b0'),
+    )
+    assert t.split_at(-len(t)) == (Tibs(), t)
+
+
+def test_split_at_errors():
+    t = Tibs('0b101100')
+
+    with pytest.raises(ValueError, match="out of range"):
+        _ = t.split_at(len(t) + 1)
+    with pytest.raises(ValueError, match="out of range"):
+        _ = t.split_at(-len(t) - 1)
+    with pytest.raises(ValueError, match="nondecreasing"):
+        _ = t.split_at([4, 3])
+
 
 def encode_long_int(u: int) -> Tibs:
     if u <= 127:

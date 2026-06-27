@@ -4,8 +4,8 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
-use pyo3::PyResult;
 use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::prelude::*;
 use std::fmt;
 
 #[inline]
@@ -84,6 +84,19 @@ pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
     }
 
     if count_ones { ones } else { slice.len() - ones }
+}
+
+fn normalize_split_position(position: isize, length: usize) -> PyResult<usize> {
+    let mut normalized = position;
+    if normalized < 0 {
+        normalized += length as isize;
+    }
+    if normalized < 0 || normalized > length as isize {
+        return Err(PyValueError::new_err(format!(
+            "Split position {position} is out of range for length of {length}."
+        )));
+    }
+    Ok(normalized as usize)
 }
 
 // Trait used for commonality between the Tibs and Mutibs structs.
@@ -352,6 +365,35 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         Ok(chunks)
+    }
+
+    fn collect_split_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Vec<Self>> {
+        let len = self.len();
+        let positions = if let Ok(position) = pos.extract::<isize>() {
+            vec![normalize_split_position(position, len)?]
+        } else {
+            let capacity = pos.len().ok().unwrap_or(1);
+            let mut positions = Vec::with_capacity(capacity);
+            for item in pos.try_iter()? {
+                let position = item?.extract::<isize>()?;
+                positions.push(normalize_split_position(position, len)?);
+            }
+            positions
+        };
+
+        let mut pieces = Vec::with_capacity(positions.len() + 1);
+        let mut start = 0;
+        for position in positions {
+            if position < start {
+                return Err(PyValueError::new_err(
+                    "Split positions must be in nondecreasing order.",
+                ));
+            }
+            pieces.push(self.get_slice_unchecked(start, position - start));
+            start = position;
+        }
+        pieces.push(self.get_slice_unchecked(start, len - start));
+        Ok(pieces)
     }
 
     fn lshift(&self, n: usize) -> Self {

@@ -37,6 +37,26 @@ A ``Mutibs`` can also have bits and slices set::
     Mutibs('0x7f0beef')
 
 
+Splitting at positions
+^^^^^^^^^^^^^^^^^^^^^^
+
+Use :meth:`Tibs.split_at` when you want to partition a value at one or more bit
+positions without repeating slice bounds::
+
+    >>> t = Tibs('0b101100')
+    >>> head, tail = t.split_at(3)
+    >>> head, tail
+    (Tibs('0b101'), Tibs('0b100'))
+    >>> flags, length, payload = t.split_at([2, 5])
+    >>> flags, length, payload
+    (Tibs('0b10'), Tibs('0b110'), Tibs('0b0'))
+
+The positions use normal bit offsets. Negative positions count from the end,
+and duplicate positions create empty pieces. The positions must be in
+nondecreasing order after negative positions are normalized.
+
+``Mutibs`` has the same method, returning ``Mutibs`` pieces.
+
 
 Information methods
 ^^^^^^^^^^^^^^^^^^^

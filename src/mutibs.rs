@@ -13,7 +13,7 @@ use crate::view::{MutableView, View};
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PySlice, PyType};
+use pyo3::types::{PyBool, PySlice, PyTuple, PyType};
 use std::ops::Not;
 
 ///     A mutable container of binary data.
@@ -1907,6 +1907,32 @@ impl Mutibs {
     #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
     pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
         BitCollection::collect_chunks(self, chunk_size, count)
+    }
+
+    /// Split at one or more bit positions.
+    ///
+    /// ``pos`` may be a single integer or an iterable of integers. Negative
+    /// positions count from the end. Positions must be in nondecreasing order
+    /// after normalization, and each position must be in the range
+    /// ``0`` through ``len(self)``, inclusive.
+    ///
+    /// The returned pieces are new ``Mutibs`` objects, matching normal
+    /// ``Mutibs`` slice behavior.
+    ///
+    /// :param int | Iterable[int] pos: The bit position or positions where the split should occur.
+    /// :return: A tuple of ``Mutibs`` pieces.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b101100').split_at(3)
+    ///     (Mutibs('0b101'), Mutibs('0b100'))
+    ///     >>> Mutibs('0b101100').split_at([2, 5])
+    ///     (Mutibs('0b10'), Mutibs('0b110'), Mutibs('0b0'))
+    ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
+    pub fn split_at(&self, py: Python<'_>, pos: &Bound<'_, PyAny>) -> PyResult<Py<PyTuple>> {
+        let pieces = BitCollection::collect_split_at(self, pos)?;
+        Ok(PyTuple::new(py, pieces)?.unbind())
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
