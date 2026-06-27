@@ -1,12 +1,12 @@
 # Release Notes
 
-### Unreleased: version 0.11.0.
+### June 27th 2026: version 0.11.0.
 
 Backwardly incompatible changes
 
 * Restored `Tibs.__hash__`, reversing the change made in version 0.10.0.
   `Tibs` is now hashable again, while `Mutibs` remains unhashable.
-* Instead equality no longer promotes strings, bytes or iterables to bit containers.
+* Instead, equality no longer promotes strings, bytes or iterables to bit containers.
   `Tibs` and `Mutibs` compare equal to each other when their bit sequences
   match, but expressions such as `Tibs('0xf') == '0b1111'` now return `False`.
   Use `Tibs('0b1111')`, `Mutibs('0b1111')`, or representation properties such
@@ -19,11 +19,16 @@ Added
   boundary.
 * Added `Dtype.pack`, `Dtype.pack_values`, `Dtype.unpack`,
   `Dtype.unpack_values` and `Dtype.unpack_values_iter`.
+* Added `DtypeKind.Bool` and `DtypeKind.Bits`. `Dtype("bool")` is a fixed
+  one-bit dtype that packs `True`, `False`, `0` and `1`, and unpacks to Python
+  `bool`. `Dtype("bitsN")` packs fixed-length bit sequences and unpacks them as
+  immutable `Tibs` values.
 
 Fixes
 
 * `Dtype` instances now compare and hash by kind, length and byte order instead
   of by object identity.
+* Byte order is now rejected for every non-numeric dtype kind.
 
 
 ### June 20th 2026: version 0.10.0.
