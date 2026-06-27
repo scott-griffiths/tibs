@@ -2932,7 +2932,7 @@ impl Mutibs {
     ///
     pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = validate_shift(&*slf, n)?;
-        slf.as_mut_bitvec_ref().shift_left(shift);
+        slf.as_mut_bitvec_ref().shift_start(shift);
         Ok(())
     }
 
@@ -2952,7 +2952,7 @@ impl Mutibs {
     ///
     pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         let shift = validate_shift(&*slf, n)?;
-        slf.as_mut_bitvec_ref().shift_right(shift);
+        slf.as_mut_bitvec_ref().shift_end(shift);
         Ok(())
     }
 
