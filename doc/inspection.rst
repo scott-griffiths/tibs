@@ -55,8 +55,6 @@ The positions use normal bit offsets. Negative positions count from the end,
 and duplicate positions create empty pieces. The positions must be in
 nondecreasing order after negative positions are normalized.
 
-``Mutibs`` has the same method, returning ``Mutibs`` pieces.
-
 
 Information methods
 ^^^^^^^^^^^^^^^^^^^
@@ -74,7 +72,7 @@ To count the number of times a bit value or sequence of bits occurs use the :met
     >>> Tibs('0xef').count(1, 0, 4)
     3
 
-Counting should be fast, especially when just counting the number ``1`` or ``0``.
+Counting should be very fast, especially when just counting the number of ``1`` or ``0`` bits.
 
 find / rfind
 ============
@@ -91,11 +89,11 @@ the match, or ``None`` if no match is found::
     >>> t.find('0b111')
     None
 
-The pattern can be anything that can be promoted to a ``Tibs``: a binary string,
+The pattern can be anything that can be promoted to a ``Tibs`` - a binary string,
 bytes, a list of bool-like values, or another ``Tibs``.
 
 The optional ``start`` and ``end`` arguments restrict the search to a slice of
-the data, using the same half-open convention as Python slicing. If you know the
+the data. If you know the
 pattern can only start on a byte boundary, set ``byte_aligned=True``. This is
 often faster for scanning binary files or network frames::
 
@@ -134,8 +132,8 @@ front::
     5
 
 There is also :meth:`Tibs.rfind_all_iter`, which yields matches from right to
-left. Iterator forms are only available on ``Tibs``; convert a ``Mutibs`` with
-:meth:`Mutibs.to_tibs` first if you need them.
+left. Iterator forms are only available on ``Tibs`` - convert from a ``Mutibs`` with
+:meth:`Mutibs.to_tibs` first if you need to use them.
 
 starts_with / ends_with
 =======================

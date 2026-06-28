@@ -79,9 +79,7 @@ but it's more natural to use automatic promotion ::
 
 This automatic promotion of these types to Tibs is quite pervasive in the library, and is generally recommended
 for conciseness and clarity.
-Equality is the main exception: ``Tibs`` and ``Mutibs`` compare equal only to other ``Tibs`` or ``Mutibs``
-instances, not to strings, bytes or iterables.
-Another exception is when performance is critical and not having the small overhead of examining the type and dispatching to
+An exception is when performance is critical and not having the small overhead of examining the type and dispatching to
 another method is significant — in this rare case using an explicit ``from_`` method for construction is preferred.
 
 
@@ -125,16 +123,17 @@ To convert to a ``bytes`` object we need to change the length, for example by ex
     >>> (t + '0x0').bytes
     b'AE\xc0'
 
+Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
+before being used to create a 24-bit value that we could interpret as ``bytes``.
+
 This is a common enough operations that the :meth:`Tibs.to_padded_bytes` method is provided::
 
     >>> t.to_padded_bytes()
     b'AE\xc0'
 
-Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
-before being used to create a 24-bit value that we could interpret as ``bytes``.
 
 When you have one of these lossless representations, you can always reconstruct the original Tibs - there is a 1:1 relationship.
-So ``t == Tibs.from_bin(t.to_bin())`` will always be true.
+So ``t == Tibs.from_bin(t.bin)`` will always be true.
 
 
 Data interpretations
@@ -189,24 +188,7 @@ The matching interpretation methods decode values back from a bit sequence::
 
     >>> samples.to_values("u12")
     [0, 103, 2048, 4095]
-    >>> samples.to_value("u12", 12, 24)
-    103
 
-Boolean and bit-sequence dtypes are useful when records mix flags with fields
-that should stay as bits::
-
-    >>> flags = Tibs.from_values("bool", [True, False, 1, 0])
-    >>> flags.bin
-    '1010'
-    >>> Tibs.from_values("bits3", ["0b101", "0b010"]).to_values("bits3")
-    [Tibs('0b101'), Tibs('0b010')]
-
-If the dtype will be reused, creating it once can make the code read more naturally::
-
-    >>> sample_dtype = Dtype("u12")
-    >>> samples = sample_dtype.pack_values([0, 103, 2048, 4095])
-    >>> sample_dtype.unpack(samples, 12, 24)
-    103
 
 For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
 when byte order matters::

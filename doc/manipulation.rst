@@ -135,7 +135,8 @@ interpretations::
 The value must fit in the current length. Floating-point assignment uses the
 current length too, so it is only available for 16, 32 and 64-bit ``Mutibs``.
 
-For little-endian or LSB0 interpretations, assign through a mutable view instead::
+For little-endian or LSB0 interpretations, assign through a mutable view instead
+(we'll cover :class:`MutableView` later)::
 
     >>> m = Mutibs.from_u(99, 16, Endianness.Little)
     >>> m.le.u
@@ -144,29 +145,12 @@ For little-endian or LSB0 interpretations, assign through a mutable view instead
     >>> m.le.u
     45
 
-Mutable views can also select labelled fields and assign through the same
-properties. The field endpoints are inclusive and interpreted using the view's
-current bit order. They can be given in either order, but both endpoints must be
-zero or positive. Plain ``Mutibs.field`` uses the default MSB0 labels::
-
-    >>> m = Mutibs('0x23a11234')
-    >>> m.field(0, 7).hex = '42'
-    >>> m
-    Mutibs('0x42a11234')
-    >>> m.lsb0.le.field(31, 16).u = 0x5678
-    >>> m
-    Mutibs('0x42a17856')
-
-Unlike assignment on the source ``Mutibs``, assignment through a
-:class:`MutableView` cannot change the view's length. This keeps byte-order,
-bit-order and field views as fixed mappings onto existing source bits. Use the
-source ``Mutibs`` or slice assignment when the shape needs to change.
 
 Reordering bits
 ===============
 
-Use :meth:`Mutibs.reverse` to reverse the full sequence, or
-:meth:`Mutibs.rotate_left` and :meth:`Mutibs.rotate_right` to rotate either the
+Use :meth:`Mutibs.reverse` to reverse the full sequence.
+Use :meth:`Mutibs.rotate_left` and :meth:`Mutibs.rotate_right` to rotate either the
 whole sequence or a selected range::
 
     >>> m = Mutibs('0b10110010')
