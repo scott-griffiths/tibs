@@ -599,7 +599,7 @@ impl Mutibs {
     ///     >>> m
     ///     Mutibs('0x0002')
     ///
-    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order, bit_order)")]
+    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=None, bit_order=None)")]
     pub fn view(
         slf: PyRef<'_, Self>,
         byte_order: Option<Endianness>,
@@ -2128,7 +2128,7 @@ impl Mutibs {
     ///     >>> Mutibs.decode(Mutibs('0b101').encode())
     ///     Mutibs('0b101')
     ///
-    #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=Codec.Auto)")]
+    #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=None)")]
     pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
         <Mutibs as BitCollection>::encode(self, codec)
     }

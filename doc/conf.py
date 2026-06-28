@@ -76,11 +76,18 @@ from bs4 import BeautifulSoup
 
 
 def process_in_page_toc(app, exception):
+    if exception is not None or getattr(app.builder, "format", None) != "html":
+        return
+
     for pagename in app.env.found_docs:
         if not isinstance(pagename, str):
             continue
 
-        with (Path(app.outdir) / f"{pagename}.html").open("r") as f:
+        html_path = Path(app.outdir) / f"{pagename}.html"
+        if not html_path.exists():
+            continue
+
+        with html_path.open("r") as f:
             # Parse HTML using BeautifulSoup html parser
             soup = BeautifulSoup(f.read(), "html.parser")
 
@@ -89,7 +96,7 @@ def process_in_page_toc(app, exception):
                     # Modify the toc-nav span element here
                     span.string = span.string.split(".")[-1]
 
-        with (Path(app.outdir) / f"{pagename}.html").open("w") as f:
+        with html_path.open("w") as f:
             # Write back HTML
             f.write(str(soup))
 

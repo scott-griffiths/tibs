@@ -6,8 +6,8 @@ Tibs vs Mutibs
 * Tibs instances cannot change after they are created. This lets you use them as keys in dictionaries,
   they can be hashed and used in sets.
 * Methods that return iterators over the data are available for Tibs, but not Mutibs. This is because for
-  a Mutibs the data could change while the iterator is live. To use these methods on a Mutibs first convert
-  to a Tibs.
+  a ``Mutibs`` the data could change while the iterator is live. To use these methods on a ``Mutibs`` first
+  convert to a ``Tibs``.
 
 
 Efficiency
@@ -68,7 +68,7 @@ in place. We could have instead used a ``Tibs``, and returned a new value on eac
             is_prime = is_prime.unset_at(range(i * i, limit, i))  # No mutation
 
 The :meth:`Tibs.unset_at` method returns a brand new ``Tibs`` on each iteration. Most
-of the time in this version is spent allocating memory each new ``Tibs``,
+of the time in this version is spent allocating memory for each new ``Tibs``,
 which is only being used to generate the next value before being destroyed.
 
 On my laptop the mutating version runs about 30x faster; calculating the primes below
@@ -77,7 +77,7 @@ On my laptop the mutating version runs about 30x faster; calculating the primes 
 Don't incrementally build a Tibs
 """"""""""""""""""""""""""""""""
 
-There is a well known anti-pattern in Python for constructing strings where you incrementally
+There is a well-known anti-pattern in Python for constructing strings where you incrementally
 build up a long string::
 
     s = ""

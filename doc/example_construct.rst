@@ -11,4 +11,4 @@ Let's say you have a binary format specification and you'd like to generate data
 
 While this is a useful example, using Tibs for this doesn't scale well to complex formats so I'd recommend
 a more specialist library.
-See for example construct, or the bitformat and bitstring libraries which both use tibs internally.
+For example, see Construct, bitformat or bitstring. The bitformat and bitstring libraries both use tibs internally.

@@ -505,7 +505,7 @@ impl MutableView {
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
     #[new]
-    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=None, bit_order=None)")]
     pub fn py_new(
         source: PyRef<'_, Mutibs>,
         byte_order: Option<Endianness>,
@@ -540,7 +540,7 @@ impl MutableView {
     ///     '10101010'
     ///
     #[classmethod]
-    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=None, bit_order=None)")]
     pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: PyRef<'_, Mutibs>,
@@ -887,7 +887,7 @@ impl View {
     ///     '3412'
     ///
     #[new]
-    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (source, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=None, bit_order=None)")]
     pub fn py_new(
         source: &Bound<'_, PyAny>,
         byte_order: Option<Endianness>,
@@ -928,7 +928,7 @@ impl View {
     ///     '0000'
     ///
     #[classmethod]
-    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=Endianness.Unspecified, bit_order=BitOrder.Msb0)")]
+    #[pyo3(signature = (source, indices, byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=None, bit_order=None)")]
     pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: &Bound<'_, PyAny>,

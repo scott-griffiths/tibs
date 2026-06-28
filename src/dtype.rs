@@ -149,7 +149,7 @@ impl Dtype {
     ///     Dtype('f32_le')
     ///
     #[new]
-    #[pyo3(signature = (spec, /), text_signature = "($self, spec, /)")]
+    #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     pub fn py_new(spec: &str) -> PyResult<Self> {
         Self::parse_spec(spec)
     }
@@ -169,7 +169,7 @@ impl Dtype {
     ///     Dtype('u16_le')
     ///
     #[classmethod]
-    #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "(cls, kind, length, byte_order)")]
+    #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "(cls, kind, length, byte_order=None)")]
     pub fn from_params(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         kind: DtypeKind,

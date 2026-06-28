@@ -112,6 +112,8 @@ needs the data length to be a multiple of 8::
     >>> t.bin
     '01000001010001011100'
     >>> t.bytes
+    Traceback (most recent call last):
+    ...
     ValueError: Cannot interpret as bytes - length of 20 is not a multiple of 8 bits.
 
 .. note::
@@ -126,7 +128,7 @@ To convert to a ``bytes`` object we need to change the length, for example by ex
 Here we used the hex string ``'0x0'`` where a ``Tibs`` was expected, so it was promoted to a 4-bit ``Tibs``
 before being used to create a 24-bit value that we could interpret as ``bytes``.
 
-This is a common enough operations that the :meth:`Tibs.to_padded_bytes` method is provided::
+This is a common enough operation that the :meth:`Tibs.to_padded_bytes` method is provided::
 
     >>> t.to_padded_bytes()
     b'AE\xc0'
@@ -154,7 +156,7 @@ For example there are many ways for a ``Tibs`` to be constructed from the unsign
     u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
     u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
 
-These are three different ``Tibs``, but they all can have equal interpretations::
+These are three different ``Tibs``, but they can all have equal interpretations::
 
     >>> set([u1, u2, u3])
     {Tibs('0b00011'), Tibs('0x0003'), Tibs('0x0300')}
@@ -226,11 +228,12 @@ not available for ``Mutibs`` as its data could change while the iterator is acti
 
     >>> m = Mutibs('0xb2')
     >>> m *= 3
-    >>> for c in m.chunks(12): print(c.hex)
+    >>> for c in m.chunks(12):
+    ...     print(c.hex)
     b2b
     2b2
-    >>> for c in m.to_tibs().chunks_iter(12): print(c.hex)
-    ...
+    >>> for c in m.to_tibs().chunks_iter(12):
+    ...     print(c.hex)
     b2b
     2b2
 

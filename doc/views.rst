@@ -22,8 +22,8 @@ Interpretations of the bit data also have the usual meanings in Python::
     b'\xab\xcd'
 
 
-It's not uncommon though for a file format or protocol to specify using a different byte order or bit numbering
-convention to the Python default. For these cases we can create a ``View``  or a ``MutableView``.
+It's not uncommon though for a file format or protocol to specify a different byte order or bit numbering
+convention from the Python default. For these cases we can create a ``View`` or a ``MutableView``.
 
 For example, let's create a four-byte ``Tibs`` and interpret it as an unsigned int::
 
@@ -58,7 +58,7 @@ This is all quite a lot of typing, so a more convenient way to create a view fro
 These can be combined. For example ``t.lsb0.le`` means that bit labels are LSB0,
 and whole-byte values should be interpreted as little-endian.
 
-So for the above example, if we also use the :attr:`Tibs.u` property instead of ``.to_u()`` to make it much more convenient ::
+For the example above, the :attr:`Tibs.u` property makes the little-endian interpretation more concise::
 
     >>> t.view(Endianness.Little).to_u()
     1
@@ -126,9 +126,9 @@ The ``msb0`` and ``lsb0`` views control how bit labels are interpreted within
 each byte.
 
 ``msb0`` is the default convention used by normal indexing and slicing, where
-the most significant bit of the byte (the left-most bit) is bit 0, with the right-most
+the most significant bit of the byte (the leftmost bit) is bit 0, with the rightmost
 bit being bit 7. For ``lsb0``, which is used in some specifications, the least significant
-bit of the byte (the right-most bit) is bit 0, and the left-most bit is bit 7.
+bit of the byte (the rightmost bit) is bit 0, and the leftmost bit is bit 7.
 
 One way to see the difference is to materialize the view::
 
@@ -147,11 +147,11 @@ Let's go through these one at a time:
 * ``t.bin`` -> ``00000001_00000000``. This is the standard Python indexing view. The bit
   indices are just counting up from 0 on the LHS to 15 on the RHS.
 * ``t.le.bin`` -> ``00000000_00000001``. The byte-wise little-endian view. The byte
-  order is swapped by the view, so the right-most byte has the most significant bits and the
-  left-most byte as the least significant bits, but
+  order is swapped by the view, so the rightmost byte has the most significant bits and the
+  leftmost byte has the least significant bits, but
   the bits within each byte are unchanged.
 * ``t.lsb0.bin`` -> ``10000000_00000000``. The Least Significant Bit Zero (LSB0) view.
-  In the source byte, label 0 refers to the right-most bit rather than the left-most bit.
+  In the source byte, label 0 refers to the rightmost bit rather than the leftmost bit.
   When the view is materialized, each byte is therefore read from right to left, while the
   byte order itself is unchanged.
 * ``t.lsb0.le.bin`` -> ``00000000_10000000``. Finally we can combine them (in either order)

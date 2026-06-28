@@ -59,6 +59,9 @@ Float values are encoded using the supported IEEE widths: 16, 32 and 64 bits.
 The selected bit range for :meth:`Tibs.to_values` and
 :meth:`Dtype.unpack_values` must be a whole number of dtype values.
 
+``Dtype`` instances are immutable. They compare and hash by kind, length and
+byte order, so they can be reused as dictionary keys or set members.
+
 
 .. autoclass:: tibs.Dtype
    :members:

@@ -10,7 +10,7 @@ Enums
 
 This specifies the byte order to use when creating or interpreting some whole-byte values.
 
-The default is generally ``Endianness.Unspecified`` which means that values are considered bit-wise big-endian.
+The default is generally ``Endianness.Unspecified`` which means that values are considered bitwise big-endian.
 This is equivalent to ``Endianness.Big`` for whole-byte values, but can be used for any length.
 
 Floats and integer values can be constructed and interpreted as big- or little-endian by using the appropriate
@@ -46,7 +46,7 @@ extraction, see :doc:`views`.
    :undoc-members:
 
 Each :class:`Dtype` instance has a 'kind' which controls how to create and interpret values.
-For example ``DtypeKind.Float`` is used for floating point data types.
+For example ``DtypeKind.Float`` is used for floating-point data types.
 
 Unless you are creating or dealing with data types programmatically, you probably won't need to
 use this enum directly.
