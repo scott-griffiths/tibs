@@ -34,7 +34,7 @@ The full documentation is available on [Read the Docs](https://mutibs.readthedoc
 pip install tibs
 ```
 
-Tibs works with Python 3.8 and later. There are pre-built wheels for most common
+Tibs works with Python 3.10 and later. There are pre-built wheels for most common
 platforms; if there are issues then please let me know.
 
 
@@ -106,7 +106,7 @@ design, but the project is already performant and stable enough to be used as th
 library, and it has millions of downloads per month.
 
 There are over 600 unit tests, including Hypothesis tests and performance benchmarks.
-The Rust extension is built with PyO3 and supports Python 3.8 and later.
+The Rust extension is built with PyO3 and supports Python 3.10 and later.
 
 
 For more examples and the full API reference, see the

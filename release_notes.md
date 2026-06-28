@@ -2,6 +2,12 @@
 
 ### Unreleased: version 0.12.0.
 
+Backwardly incompatible changes
+
+* Minimum Python version now 3.10 instead of 3.8
+
+Added
+
 * Added `Tibs.split_at()` and `Mutibs.split_at()` for partitioning a bit
   sequence at one or more bit positions.
 

@@ -58,7 +58,7 @@ To install use ::
 
 
 There are pre-built wheels for most configurations - if there are issues then please let me know.
-Tibs works with Python 3.8 and later.
+Tibs works with Python 3.10 and later.
 
 
 The rest of this manual will talk about all the major features of the library, but will not
