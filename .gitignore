@@ -17,6 +17,7 @@ target/
 # Generated documentation
 doc/_build/
 html/
+doc/logo_generator/outputs
 
 # Local root scratch files
 /temp_*
