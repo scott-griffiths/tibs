@@ -101,19 +101,18 @@ For more information see the full [documentation](https://mutibs.readthedocs.io/
 
 ## Project status
 
-Tibs is currently beta: API changes are still possible when they improve the
-design, but the project is already performant and stable enough to be used as the core of the bitstring
-library, and it has millions of downloads per month.
+Tibs is currently at the 1.0 beta stage: the intended stable API is largely in
+place, but this pre-release still reserves room for final API adjustments before
+1.0.0 final. The project is already performant and stable enough to be used as
+the core of the bitstring library, and it has millions of downloads per month.
 
-There are over 600 unit tests, including Hypothesis tests and performance benchmarks.
+There are over 700 unit tests, including Hypothesis tests and performance benchmarks.
 The Rust extension is built with PyO3 and supports Python 3.10 and later.
 
 
 For more examples and the full API reference, see the
 [documentation](https://mutibs.readthedocs.io/en/latest/). The runnable examples
 also live in the [`examples/`](examples/) directory.
-
-I hope to release version 1.0 before the end of 2026.
 
 
 ## Credits

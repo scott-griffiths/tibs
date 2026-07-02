@@ -1,6 +1,6 @@
 # Release Notes
 
-### Unreleased: version 0.12.0.
+### Unreleased: version 1.0.0-beta.0.
 
 Backwardly incompatible changes
 
@@ -8,6 +8,8 @@ Backwardly incompatible changes
 
 Added
 
+* Moved the project to the first 1.0 beta release, marking the intended stable
+  API as largely in place while keeping room for final pre-1.0 adjustments.
 * Added `Tibs.split_at()` and `Mutibs.split_at()` for partitioning a bit
   sequence at one or more bit positions.
 

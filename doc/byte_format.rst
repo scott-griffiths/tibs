@@ -17,7 +17,7 @@ means a stream parser can concatenate encoded values without losing boundary inf
 
 The compatibility contract has two parts:
 
-* Future versions of Tibs will continue to decode complete values written by earlier stable versions.
+* Future versions of Tibs will continue to decode complete values written by earlier stable 1.x versions.
 * ``encode(Codec.Raw)`` is the canonical byte-for-byte representation of a logical bit sequence.
 
 Use ``Codec.Raw`` for persistent keys, serialized hashes, and protocols where the exact bytes are
