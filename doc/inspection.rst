@@ -3,7 +3,8 @@
 Inspections
 -----------
 
-Once you've created a ``Tibs`` you can treat it very like an array of bits.
+Once you've created a ``Tibs`` you can treat it very like an array of bits, with standard
+Python indexing and slicing, as well as finding, counting and other useful methods.
 
 Indexing and slicing
 ^^^^^^^^^^^^^^^^^^^^
@@ -35,25 +36,6 @@ A ``Mutibs`` can also have bits and slices set::
     >>> m[-4:] = '0xbeef'
     >>> m
     Mutibs('0x7f0beef')
-
-
-Splitting at positions
-^^^^^^^^^^^^^^^^^^^^^^
-
-Use :meth:`Tibs.split_at` when you want to partition a value at one or more bit
-positions without repeating slice bounds::
-
-    >>> t = Tibs('0b101100')
-    >>> head, tail = t.split_at(3)
-    >>> head, tail
-    (Tibs('0b101'), Tibs('0b100'))
-    >>> flags, length, payload = t.split_at([2, 5])
-    >>> flags, length, payload
-    (Tibs('0b10'), Tibs('0b110'), Tibs('0b0'))
-
-The positions use normal bit offsets. Negative positions count from the end,
-and duplicate positions create empty pieces. The positions must be in
-nondecreasing order after negative positions are normalized.
 
 
 Information methods
@@ -163,3 +145,22 @@ The :meth:`Tibs.any` and :meth:`Tibs.all` methods mirror Python's built-in
 They are most useful when the bit sequence itself is the data, for example when
 checking whether a mask has any flags set, or whether every flag in a required
 set is present.
+
+
+Splitting at positions
+^^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes instead of using slices, if you want to partition a value at one or more bit
+positions use :meth:`Tibs.split_at`::
+
+    >>> t = Tibs('0b101100')
+    >>> head, tail = t.split_at(3)
+    >>> head, tail
+    (Tibs('0b101'), Tibs('0b100'))
+    >>> flags, length, payload = t.split_at([2, 5])
+    >>> flags, length, payload
+    (Tibs('0b10'), Tibs('0b110'), Tibs('0b0'))
+
+The positions use normal bit offsets. Negative positions count from the end,
+and duplicate positions create empty pieces. The positions must be in
+nondecreasing order after negative positions are normalized.

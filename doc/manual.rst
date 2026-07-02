@@ -46,7 +46,7 @@ These classes efficiently hold arbitrary length binary data; they can be constru
 from bytes, ints, floats, binary and hex strings, random data, and bools. They can then be
 sliced, spliced, searched, replaced, rotated, reversed, byte-swapped, set, unset,
 appended, extended, indexed, counted, concatenated, chunked, and joined back together,
-before being interpreted as bytes, ints, floats, binary and hex strings, and bools.
+before being interpreted as bytes, ints, floats, bools, binary and hex strings.
 
 
 Getting started

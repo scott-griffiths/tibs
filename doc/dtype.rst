@@ -45,6 +45,12 @@ unpacked as Python ``bool`` objects. ``bitsN`` values use normal Tibs promotion,
 so they can be packed from :class:`Tibs`, :class:`Mutibs`, strings, bytes-like
 objects, or bool iterables, and are unpacked as immutable :class:`Tibs` objects.
 
+.. note::
+    Lengths are consistently in bits throughout the tibs library. This can surprise in one place in
+    particular — the ``bytesN`` dtype string is ``N`` *bits* long, so ``"bytes32"`` is 4 bytes, and not 32 bytes.
+
+
+
 For integer and floating-point dtypes, append ``_le`` or ``_be`` to specify
 byte order for whole-byte values::
 

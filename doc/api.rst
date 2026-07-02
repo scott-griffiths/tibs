@@ -12,8 +12,7 @@ The public API is grouped into:
 * :doc:`mutibs` — A mutable sequence of bits.
 * :doc:`dtype` — Fixed-width data type descriptions used for packing and
   unpacking values.
-* :doc:`view` — Immutable and mutable interpretation wrappers for byte order,
-  bit order and labelled fields.
+* :doc:`view` — Wrappers for byte order, bit order and labelled fields.
 * :doc:`other` — Enum classes for byte order, bit order, dtypes and codecs.
 
 .. toctree::

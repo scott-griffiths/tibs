@@ -16,12 +16,9 @@ and :meth:`Tibs.chunks_iter`, as well as iterating over the instance directly, a
 not available for Mutibs. This is because the underlying data could change while the iterator is active.
 To use these methods call :meth:`Mutibs.to_tibs` first to create an immutable copy.
 
-The Python protocol methods include most of those from ``Tibs``. Differences are:
+The Python protocol methods include most of those from ``Tibs``. Additions are:
 
-* ``str(m)``, ``repr(m)``, ``len(m)``, ``bytes(m)`` and ``copy.copy(m)`` are available.
-* ``[]`` can index, slice, assign to bits or slices, and delete bits or slices.
-* ``==`` and ``!=`` compare by bit value, but ``Mutibs`` instances are not hashable.
-* Direct iteration is not available; use :meth:`Mutibs.to_tibs` first.
+* ``[]`` can also assign to bits or slices.
 * ``+=`` concatenates in place, e.g. ``m += '0b1'``.
 * ``*=`` repeats in place, e.g. ``m *= 6``.
 * ``<<=`` and ``>>=`` shift in place.

@@ -29,9 +29,10 @@ can be a big win. For example if slices are taken from a ``Tibs`` they don't nee
 copy any data::
 
     t = Tibs.from_bytes(b'a_large_amount_of_data')
-    first_half = t[:len(t)//2]
+    first_half, second_half = t.split_at(len(t)//2)
 
-The ``first_half`` doesn't own a separate copy of the data here - it shares storage with ``t``.
+The two different halves here don't own a separate copy of the data here - they share storage with ``t`` so
+this split is very quick and doesn't depend on the size of the data.
 If we had used a ``Mutibs`` then a data copy would have had to happen.
 
 For another example of shared storage, in the following code each chunk reuses
@@ -98,7 +99,7 @@ Constructing incrementally isn't very efficient as it throws away all the interm
     for u in range(256):
         t = t + Tibs.from_u(u, 8)  # Not recommended
 
-We have two ways to fix this. Either use a ``Mutibs`` and append to it::
+We have a few ways to fix this. Either use a ``Mutibs`` and append to it::
 
     m = Mutibs()
     for u in range(256):
@@ -107,3 +108,7 @@ We have two ways to fix this. Either use a ``Mutibs`` and append to it::
 or use the :meth:`Tibs.from_joined` constructor to create it all in one go::
 
     t = Tibs.from_joined((Tibs.from_u(u, 8) for u in range(256)))
+
+or in this particular case as the data types are all the same we can use simply::
+
+    t = Tibs.from_values("u8", range(256))
