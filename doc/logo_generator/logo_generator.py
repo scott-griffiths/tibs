@@ -4,7 +4,6 @@ import json
 import math
 import re
 import shutil
-import zipfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -12,7 +11,6 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(".")
 OUT = ROOT / "outputs"
-PLUGIN_DIR = OUT / "tibs-transition-figma-plugin"
 ANIMATED_PREVIEW = "tibs-transition-preview.png"
 DOC_LOGO = Path(__file__).resolve().parents[1] / "tibs.png"
 
@@ -25,7 +23,7 @@ CONFIG = {
     "start_hold_ms": 600,
     "trace_duration_ms": 1000,
     "duration_ms": 500,
-    "initial_delay_ms": 250,
+    "initial_delay_ms": 0,
     "final_hold_ms": 3600000,
     "stroke_width": 40,
     "corner_radius": 8,
@@ -113,9 +111,14 @@ def frame_times_millis(config: dict = DEFAULTS) -> list[float]:
         start_hold + i * trace_duration / (trace_count - 1) for i in range(1, trace_count)
     ]
     transition_start = start_hold + trace_duration + pause_duration
-    transition_times = [
-        transition_start + i * transition_duration / (transition_count - 1) for i in range(transition_count)
-    ]
+    if pause_duration <= 0:
+        transition_times = [
+            transition_start + (i + 1) * transition_duration / transition_count for i in range(transition_count)
+        ]
+    else:
+        transition_times = [
+            transition_start + i * transition_duration / (transition_count - 1) for i in range(transition_count)
+        ]
     return trace_times + transition_times
 
 
@@ -287,41 +290,45 @@ def trace_square_specs(
 ) -> tuple[list[dict], list[dict]]:
     y_bot = y_top + box
     x1 = x0 + box
-    x_mid = x0 + box / 2
-    d = clamp(progress) * box * 4
+    travel = max(0.0, box - float(config["stroke_width"]) / 2)
+    d = clamp(progress) * travel
     paths: list[dict] = []
 
     def add_segment(segment_name: str, start: tuple[float, float], end: tuple[float, float]) -> None:
         if dist(start, end) > 0.01:
             paths.append(static_spec(f"{name}-{segment_name}", [start, end], roundable=False))
 
-    if d > 0:
-        add_segment("bottom-right", (x_mid, y_bot), (min(x1, x_mid + d), y_bot))
-    if d > box * 0.5:
-        add_segment("right", (x1, y_bot), (x1, max(y_top, y_bot - (d - box * 0.5))))
-    if d > box * 1.5:
-        add_segment("top", (x1, y_top), (max(x0, x1 - (d - box * 1.5)), y_top))
-    if d > box * 2.5:
-        add_segment("left", (x0, y_top), (x0, min(y_bot, y_top + (d - box * 2.5))))
-    if d > box * 3.5:
-        add_segment("bottom-left", (x0, y_bot), (min(x_mid, x0 + (d - box * 3.5)), y_bot))
-
-    if d <= box * 0.5:
-        head = (x_mid + d, y_bot)
-    elif d <= box * 1.5:
-        head = (x1, y_bot - (d - box * 0.5))
-    elif d <= box * 2.5:
-        head = (x1 - (d - box * 1.5), y_top)
-    elif d <= box * 3.5:
-        head = (x0, y_top + (d - box * 2.5))
-    else:
-        head = (x0 + (d - box * 3.5), y_bot)
+    add_segment("bottom", (x0, y_bot), (x0 + d, y_bot))
+    add_segment("right", (x1, y_bot), (x1, y_bot - d))
+    add_segment("top", (x1, y_top), (x1 - d, y_top))
+    add_segment("left", (x0, y_top), (x0, y_top + d))
 
     rects = [
         rect_spec(
-            f"{name}-tracer",
-            head[0],
-            head[1],
+            f"{name}-bottom-tracer",
+            x0 + d,
+            y_bot,
+            float(config["stroke_width"]),
+            float(config["corner_radius"]),
+        ),
+        rect_spec(
+            f"{name}-right-tracer",
+            x1,
+            y_bot - d,
+            float(config["stroke_width"]),
+            float(config["corner_radius"]),
+        ),
+        rect_spec(
+            f"{name}-top-tracer",
+            x1 - d,
+            y_top,
+            float(config["stroke_width"]),
+            float(config["corner_radius"]),
+        ),
+        rect_spec(
+            f"{name}-left-tracer",
+            x0,
+            y_top + d,
             float(config["stroke_width"]),
             float(config["corner_radius"]),
         )
@@ -330,7 +337,7 @@ def trace_square_specs(
 
 
 def trace_shapes(progress: float, config: dict = DEFAULTS) -> dict:
-    progress = ease_in_out_sine(progress)
+    progress = clamp(progress)
     if progress >= 0.999:
         return transition_shapes(0.0, config)
 
@@ -356,7 +363,7 @@ def trace_shapes(progress: float, config: dict = DEFAULTS) -> dict:
 
 
 def transition_shapes(raw_t: float, config: dict = DEFAULTS) -> dict:
-    p = ease_in_out_sine(raw_t)
+    p = ease_out_cubic(raw_t)
 
     box = float(config["box_size"])
     gap = float(config["box_gap"])
@@ -466,8 +473,8 @@ def svg_frame(raw_t: float, config: dict = DEFAULTS, include_background: bool = 
     if include_background and not is_transparent(bg):
         parts.append(f'<rect id="background" width="{width}" height="{height}" fill="{bg}"/>')
     if border_enabled(config):
-        parts.append(svg_shapes_group(shapes, stroke, radius, str(config["border_color"]), border_size(config), "tibs-border"))
-    parts.append(svg_shapes_group(shapes, stroke, radius, color, 0, "tibs"))
+        parts.append(svg_shapes_group(shapes, stroke, radius, str(config["border_color"]), 0, "tibs-border"))
+    parts.append(svg_shapes_group(shapes, stroke, radius, color, border_size(config) if border_enabled(config) else 0, "tibs"))
     parts.append("</svg>")
     return "".join(parts)
 
@@ -477,38 +484,60 @@ def svg_shapes_group(
     stroke: float,
     radius: float,
     fill: str,
-    expansion: float,
+    inset: float,
     group_id: str,
 ) -> str:
     parts = [f'<g id="{group_id}" fill="{fill}">']
-    render_stroke = stroke + expansion * 2
-    render_radius = radius + expansion
+    render_stroke = max(0.0, stroke - inset * 2)
+    render_radius = max(0.0, radius - inset)
     for item in shapes["paths"]:
         op = item["opacity"]
-        if op <= 0.001:
+        if op <= 0.001 or render_stroke <= 0.001:
             continue
-        parts.append(svg_segment_rect(item["name"], item["points"], render_stroke, render_radius, op, item.get("extension")))
+        parts.append(
+            svg_segment_rect(
+                item["name"],
+                item["points"],
+                render_stroke,
+                render_radius,
+                op,
+                inset_extension(item.get("extension"), inset),
+            )
+        )
     for item in shapes.get("rects", []):
         op = item["opacity"]
         if op <= 0.001:
             continue
-        x = item["x"] - expansion
-        y = item["y"] - expansion
-        width = item["width"] + expansion * 2
-        height = item["height"] + expansion * 2
-        item_radius = item["radius"] + expansion
+        x = item["x"] + inset
+        y = item["y"] + inset
+        width = max(0.0, item["width"] - inset * 2)
+        height = max(0.0, item["height"] - inset * 2)
+        if width <= 0.001 or height <= 0.001:
+            continue
+        item_radius = max(0.0, item["radius"] - inset)
         parts.append(
             f'<rect id="{item["name"]}" x="{x:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}" rx="{item_radius:.2f}" opacity="{op:.3f}"/>'
         )
     dot = shapes["dot"]
     if dot["opacity"] > 0.001 and dot["r"] > 0.001:
-        size = dot["r"] * 2 + expansion * 2
+        size = max(0.0, dot["r"] * 2 - inset * 2)
+        if size <= 0.001:
+            parts.append("</g>")
+            return "".join(parts)
         dot_radius = min(render_radius, size / 2)
         parts.append(
             f'<rect id="{dot["name"]}" x="{dot["cx"] - size / 2:.2f}" y="{dot["cy"] - size / 2:.2f}" width="{size:.2f}" height="{size:.2f}" rx="{dot_radius:.2f}" opacity="{dot["opacity"]:.3f}"/>'
         )
     parts.append("</g>")
     return "".join(parts)
+
+
+def inset_extension(extension: object, inset: float) -> float | tuple[float, float] | None:
+    if extension is None:
+        return None
+    if isinstance(extension, (list, tuple)):
+        return (max(0.0, float(extension[0]) - inset), max(0.0, float(extension[1]) - inset))
+    return max(0.0, float(extension) - inset)
 
 
 def svg_segment_rect(
@@ -545,35 +574,7 @@ def segment_extensions(extension: object, default: float) -> tuple[float, float]
     return value, value
 
 
-def svg_frames_sheet(config: dict = DEFAULTS) -> str:
-    fw, fh = config["width"], config["height"]
-    frame_count = total_frame_count(config)
-    cols = 4
-    gap = 36
-    label_h = 24
-    rows = math.ceil(frame_count / cols)
-    width = cols * fw + (cols - 1) * gap
-    height = rows * (fh + label_h) + (rows - 1) * gap
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">',
-        '<rect width="100%" height="100%" fill="#111111"/>',
-    ]
-    for i in range(frame_count):
-        x = (i % cols) * (fw + gap)
-        y = (i // cols) * (fh + label_h + gap)
-        raw_t = frame_raw_t(i, config)
-        parts.append(f'<g id="frame-{i:02d}" transform="translate({x},{y})">')
-        parts.append(svg_frame(raw_t, config, include_background=True))
-        millis = timeline_millis(raw_t, config)
-        parts.append(
-            f'<text x="8" y="{fh + 17}" fill="#BBBBBB" font-family="Inter, Arial, sans-serif" font-size="14">frame {i + 1:02d} / {millis}ms</text>'
-        )
-        parts.append("</g>")
-    parts.append("</svg>")
-    return "".join(parts)
-
-
-PLUGIN_GENERATOR_JS = r"""
+PREVIEW_GENERATOR_JS = r"""
 const DEFAULTS = {
   width: 800,
   height: 360,
@@ -582,7 +583,7 @@ const DEFAULTS = {
   startHoldMs: 400,
   traceDurationMs: 650,
   durationMs: 1100,
-  initialDelayMs: 250,
+  initialDelayMs: 0,
   strokeWidth: 30,
   cornerRadius: 4,
   boxSize: 112,
@@ -666,8 +667,14 @@ function frameTimesMillis(config) {
     times.push(startHold + (i * traceDuration) / (traceCount - 1));
   }
   const transitionStart = startHold + traceDuration + pauseDuration;
-  for (let i = 0; i < transitionCount; i++) {
-    times.push(transitionStart + (i * transitionDuration) / (transitionCount - 1));
+  if (pauseDuration <= 0) {
+    for (let i = 0; i < transitionCount; i++) {
+      times.push(transitionStart + ((i + 1) * transitionDuration) / transitionCount);
+    }
+  } else {
+    for (let i = 0; i < transitionCount; i++) {
+      times.push(transitionStart + (i * transitionDuration) / (transitionCount - 1));
+    }
   }
   return times;
 }
@@ -798,7 +805,7 @@ function rotateEndpoint(pivot, length, startAngle, endAngle, progress) {
 }
 
 function transitionShapes(rawT, config) {
-  const p = easeInOutSine(rawT);
+  const p = easeOutCubic(rawT);
   const box = Number(config.boxSize);
   const gap = Number(config.boxGap);
   const yTop = Number(config.originY);
@@ -849,8 +856,8 @@ function transitionShapes(rawT, config) {
 function traceSquareSpecs(name, x0, yTop, box, progress, config) {
   const yBot = yTop + box;
   const x1 = x0 + box;
-  const xMid = x0 + box / 2;
-  const d = clamp(progress) * box * 4;
+  const travel = Math.max(0, box - Number(config.strokeWidth) / 2);
+  const d = clamp(progress) * travel;
   const paths = [];
 
   function addSegment(segmentName, start, end) {
@@ -859,33 +866,24 @@ function traceSquareSpecs(name, x0, yTop, box, progress, config) {
     }
   }
 
-  if (d > 0) addSegment('bottom-right', [xMid, yBot], [Math.min(x1, xMid + d), yBot]);
-  if (d > box * 0.5) addSegment('right', [x1, yBot], [x1, Math.max(yTop, yBot - (d - box * 0.5))]);
-  if (d > box * 1.5) addSegment('top', [x1, yTop], [Math.max(x0, x1 - (d - box * 1.5)), yTop]);
-  if (d > box * 2.5) addSegment('left', [x0, yTop], [x0, Math.min(yBot, yTop + (d - box * 2.5))]);
-  if (d > box * 3.5) addSegment('bottom-left', [x0, yBot], [Math.min(xMid, x0 + (d - box * 3.5)), yBot]);
-
-  let head;
-  if (d <= box * 0.5) {
-    head = [xMid + d, yBot];
-  } else if (d <= box * 1.5) {
-    head = [x1, yBot - (d - box * 0.5)];
-  } else if (d <= box * 2.5) {
-    head = [x1 - (d - box * 1.5), yTop];
-  } else if (d <= box * 3.5) {
-    head = [x0, yTop + (d - box * 2.5)];
-  } else {
-    head = [x0 + (d - box * 3.5), yBot];
-  }
+  addSegment('bottom', [x0, yBot], [x0 + d, yBot]);
+  addSegment('right', [x1, yBot], [x1, yBot - d]);
+  addSegment('top', [x1, yTop], [x1 - d, yTop]);
+  addSegment('left', [x0, yTop], [x0, yTop + d]);
 
   return {
     paths,
-    rects: [rectSpec(`${name}-tracer`, head[0], head[1], Number(config.strokeWidth), Number(config.cornerRadius))]
+    rects: [
+      rectSpec(`${name}-bottom-tracer`, x0 + d, yBot, Number(config.strokeWidth), Number(config.cornerRadius)),
+      rectSpec(`${name}-right-tracer`, x1, yBot - d, Number(config.strokeWidth), Number(config.cornerRadius)),
+      rectSpec(`${name}-top-tracer`, x1 - d, yTop, Number(config.strokeWidth), Number(config.cornerRadius)),
+      rectSpec(`${name}-left-tracer`, x0, yTop + d, Number(config.strokeWidth), Number(config.cornerRadius))
+    ]
   };
 }
 
 function traceShapes(progress, config) {
-  progress = easeInOutSine(progress);
+  progress = clamp(progress);
   if (progress >= 0.999) return transitionShapes(0, config);
 
   const box = Number(config.boxSize);
@@ -937,37 +935,48 @@ function svgFrame(rawT, config, includeBackground = true) {
     parts.push(`<rect id="background" width="${config.width}" height="${config.height}" fill="${config.background}"/>`);
   }
   if (borderEnabled(config)) {
-    parts.push(shapesGroupSvg(shapes, config.strokeWidth, config.cornerRadius, config.borderColor, borderSize(config), 'tibs-border'));
+    parts.push(shapesGroupSvg(shapes, config.strokeWidth, config.cornerRadius, config.borderColor, 0, 'tibs-border'));
   }
-  parts.push(shapesGroupSvg(shapes, config.strokeWidth, config.cornerRadius, config.color, 0, 'tibs'));
+  parts.push(shapesGroupSvg(shapes, config.strokeWidth, config.cornerRadius, config.color, borderEnabled(config) ? borderSize(config) : 0, 'tibs'));
   parts.push('</svg>');
   return parts.join('');
 }
 
-function shapesGroupSvg(shapes, stroke, radius, fill, expansion, groupId) {
+function shapesGroupSvg(shapes, stroke, radius, fill, inset, groupId) {
   const parts = [`<g id="${groupId}" fill="${fill}">`];
-  const renderStroke = Number(stroke) + expansion * 2;
-  const renderRadius = Number(radius) + expansion;
+  const renderStroke = Math.max(0, Number(stroke) - inset * 2);
+  const renderRadius = Math.max(0, Number(radius) - inset);
   for (const item of shapes.paths) {
-    if (item.opacity <= 0.001) continue;
-    parts.push(segmentRectSvg(item.name, item.points, renderStroke, renderRadius, item.opacity, item.extension));
+    if (item.opacity <= 0.001 || renderStroke <= 0.001) continue;
+    parts.push(segmentRectSvg(item.name, item.points, renderStroke, renderRadius, item.opacity, insetExtension(item.extension, inset)));
   }
   for (const item of shapes.rects || []) {
     if (item.opacity <= 0.001) continue;
-    const x = item.x - expansion;
-    const y = item.y - expansion;
-    const width = item.width + expansion * 2;
-    const height = item.height + expansion * 2;
-    const itemRadius = item.radius + expansion;
+    const x = item.x + inset;
+    const y = item.y + inset;
+    const width = Math.max(0, item.width - inset * 2);
+    const height = Math.max(0, item.height - inset * 2);
+    if (width <= 0.001 || height <= 0.001) continue;
+    const itemRadius = Math.max(0, item.radius - inset);
     parts.push(`<rect id="${item.name}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="${itemRadius.toFixed(2)}" opacity="${item.opacity.toFixed(3)}"/>`);
   }
   if (shapes.dot.opacity > 0.001 && shapes.dot.r > 0.001) {
-    const size = shapes.dot.r * 2 + expansion * 2;
+    const size = Math.max(0, shapes.dot.r * 2 - inset * 2);
+    if (size <= 0.001) {
+      parts.push('</g>');
+      return parts.join('');
+    }
     const dotRadius = Math.min(renderRadius, size / 2);
     parts.push(`<rect id="${shapes.dot.name}" x="${(shapes.dot.cx - size / 2).toFixed(2)}" y="${(shapes.dot.cy - size / 2).toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" rx="${dotRadius.toFixed(2)}" opacity="${shapes.dot.opacity.toFixed(3)}"/>`);
   }
   parts.push('</g>');
   return parts.join('');
+}
+
+function insetExtension(extension, inset) {
+  if (extension === null || extension === undefined) return null;
+  if (Array.isArray(extension)) return [Math.max(0, Number(extension[0]) - inset), Math.max(0, Number(extension[1]) - inset)];
+  return Math.max(0, Number(extension) - inset);
 }
 
 function segmentRectSvg(name, points, stroke, radius, opacity, extension = null) {
@@ -989,187 +998,6 @@ function segmentExtensions(extension, defaultValue) {
   const value = Number(extension);
   return [value, value];
 }
-"""
-
-
-PLUGIN_CODE_JS = (
-    PLUGIN_GENERATOR_JS
-    + r"""
-
-figma.showUI(__html__, { width: 320, height: 900, themeColors: true });
-
-figma.ui.onmessage = async (message) => {
-  if (message.type !== 'generate') return;
-  const initialDelay = numberOrDefault(message.config.initialDelayMs, DEFAULTS.initialDelayMs);
-  const config = {
-    ...DEFAULTS,
-    ...message.config,
-    frameCount: Math.max(2, Math.min(80, Math.round(Number(message.config.frameCount) || DEFAULTS.frameCount))),
-    traceFrameCount: Math.max(2, Math.min(80, Math.round(Number(message.config.traceFrameCount) || DEFAULTS.traceFrameCount))),
-    startHoldMs: Math.max(0, Math.round(Number(message.config.startHoldMs) || DEFAULTS.startHoldMs)),
-    traceDurationMs: Math.max(100, Math.round(Number(message.config.traceDurationMs) || DEFAULTS.traceDurationMs)),
-    durationMs: Math.max(100, Math.round(Number(message.config.durationMs) || DEFAULTS.durationMs)),
-    initialDelayMs: Math.max(0, Math.round(initialDelay)),
-    strokeWidth: Math.max(1, Number(message.config.strokeWidth) || DEFAULTS.strokeWidth),
-    cornerRadius: Math.max(0, Number(message.config.cornerRadius) || DEFAULTS.cornerRadius),
-    borderSize: Math.max(0, numberOrDefault(message.config.borderSize, DEFAULTS.borderSize)),
-    borderColor: message.config.borderColor || DEFAULTS.borderColor
-  };
-
-  const page = figma.createPage();
-  page.name = `tibs transition ${totalFrameCount(config)}f`;
-  figma.currentPage = page;
-
-  const gap = 56;
-  const cols = 4;
-  const created = [];
-  const times = frameTimesMillis(config);
-  const framesToCreate = totalFrameCount(config);
-  for (let i = 0; i < framesToCreate; i++) {
-    const rawT = frameRawT(i, config);
-    const millis = Math.round(times[i]);
-    const frame = figma.createFrame();
-    frame.name = `tibs ${String(i + 1).padStart(2, '0')} - ${millis}ms`;
-    frame.resize(config.width, config.height);
-    frame.x = (i % cols) * (config.width + gap);
-    frame.y = Math.floor(i / cols) * (config.height + gap);
-    frame.fills = isTransparent(config.background) ? [] : [{ type: 'SOLID', color: hexToRgb(config.background) }];
-
-    const node = figma.createNodeFromSvg(svgFrame(rawT, config, false));
-    node.name = `editable vectors ${String(i + 1).padStart(2, '0')}`;
-    node.x = 0;
-    node.y = 0;
-    frame.appendChild(node);
-    page.appendChild(frame);
-    created.push(frame);
-  }
-
-  figma.currentPage.selection = created;
-  figma.viewport.scrollAndZoomIntoView(created);
-  figma.closePlugin(`Created ${created.length} editable vector frames with trace and transition timing.`);
-};
-
-function hexToRgb(hex) {
-  const cleaned = String(hex || '#000000').replace('#', '').trim();
-  const full = cleaned.length === 3
-    ? cleaned.split('').map((ch) => ch + ch).join('')
-    : cleaned.padEnd(6, '0').slice(0, 6);
-  return {
-    r: parseInt(full.slice(0, 2), 16) / 255,
-    g: parseInt(full.slice(2, 4), 16) / 255,
-    b: parseInt(full.slice(4, 6), 16) / 255
-  };
-}
-"""
-)
-
-
-PLUGIN_UI_HTML = r"""<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    :root {
-      color-scheme: light dark;
-      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 12px;
-    }
-    body {
-      margin: 0;
-      padding: 16px;
-      background: var(--figma-color-bg);
-      color: var(--figma-color-text);
-    }
-    label {
-      display: grid;
-      gap: 6px;
-      margin-bottom: 12px;
-      font-weight: 600;
-    }
-    input {
-      height: 32px;
-      border: 1px solid var(--figma-color-border);
-      border-radius: 6px;
-      padding: 0 9px;
-      background: var(--figma-color-bg-secondary);
-      color: var(--figma-color-text);
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    button {
-      width: 100%;
-      height: 36px;
-      border: 0;
-      border-radius: 6px;
-      background: var(--figma-color-bg-brand);
-      color: var(--figma-color-text-onbrand);
-      font-weight: 700;
-      cursor: pointer;
-    }
-    p {
-      color: var(--figma-color-text-secondary);
-      line-height: 1.45;
-      margin: 0 0 14px;
-    }
-  </style>
-</head>
-<body>
-  <p>Generates editable vector frames from traced boxes to tibs. Re-run with new values to iterate.</p>
-  <div class="row">
-    <label>Stroke<input id="strokeWidth" type="number" min="1" step="1" value="30"></label>
-    <label>Radius<input id="cornerRadius" type="number" min="0" step="1" value="4"></label>
-  </div>
-  <div class="row">
-    <label>Trace frames<input id="traceFrameCount" type="number" min="2" max="80" step="1" value="28"></label>
-    <label>Start hold<input id="startHoldMs" type="number" min="0" step="50" value="400"></label>
-  </div>
-  <div class="row">
-    <label>Trace duration<input id="traceDurationMs" type="number" min="100" step="50" value="650"></label>
-    <label>Pause<input id="initialDelayMs" type="number" min="0" step="50" value="250"></label>
-  </div>
-  <div class="row">
-    <label>Morph frames<input id="frameCount" type="number" min="2" max="80" step="1" value="28"></label>
-    <label>Morph duration<input id="durationMs" type="number" min="100" step="50" value="1100"></label>
-  </div>
-  <div class="row">
-    <label>Box size<input id="boxSize" type="number" min="20" step="1" value="112"></label>
-    <label>Spacing<input id="boxGap" type="number" min="0" step="1" value="38"></label>
-  </div>
-  <div class="row">
-    <label>X<input id="originX" type="number" step="1" value="155"></label>
-    <label>Y<input id="originY" type="number" step="1" value="128"></label>
-  </div>
-  <div class="row">
-    <label>T top left<input id="tBarLeft" type="number" min="0" step="1" value="30"></label>
-    <label>T top right<input id="tBarRight" type="number" min="0" step="1" value="50"></label>
-  </div>
-  <div class="row">
-    <label>T foot<input id="tFootRight" type="number" min="0" step="1" value="70"></label>
-    <label>Ascender<input id="ascenderHeight" type="number" min="0" step="1" value="42"></label>
-  </div>
-  <div class="row">
-    <label>T ascender<input id="tAscenderHeight" type="number" min="0" step="1" value="42"></label>
-    <label>I top<input id="iTopLeft" type="number" min="0" step="1" value="24"></label>
-  </div>
-  <div class="row">
-    <label>Border size<input id="borderSize" type="number" min="0" step="0.5" value="3"></label>
-    <label>Border color<input id="borderColor" value="#0f5f9a"></label>
-  </div>
-  <label>Fill color<input id="color" value="#281DF6"></label>
-  <label>Background<input id="background" value="#000000"></label>
-  <button id="generate">Generate Frames</button>
-  <script>
-    document.getElementById('generate').onclick = () => {
-      const ids = ['strokeWidth', 'cornerRadius', 'traceFrameCount', 'startHoldMs', 'traceDurationMs', 'frameCount', 'durationMs', 'initialDelayMs', 'boxSize', 'boxGap', 'originX', 'originY', 'tBarLeft', 'tBarRight', 'tFootRight', 'ascenderHeight', 'tAscenderHeight', 'iTopLeft', 'borderSize', 'borderColor', 'color', 'background'];
-      const config = Object.fromEntries(ids.map((id) => [id, document.getElementById(id).value]));
-      parent.postMessage({ pluginMessage: { type: 'generate', config } }, '*');
-    };
-  </script>
-</body>
-</html>
 """
 
 
@@ -1258,7 +1086,7 @@ PREVIEW_HTML = (
     <label>Start hold<input id="startHoldMs" type="number" min="0" step="50" value="400"></label>
     <label>Trace duration<input id="traceDurationMs" type="number" min="100" step="50" value="650"></label>
     <label>Morph duration<input id="durationMs" type="number" min="100" step="50" value="1100"></label>
-    <label>Pause<input id="initialDelayMs" type="number" min="0" step="50" value="250"></label>
+    <label>Pause<input id="initialDelayMs" type="number" min="0" step="50" value="0"></label>
     <label>Box size<input id="boxSize" type="number" min="20" step="1" value="112"></label>
     <label>Spacing<input id="boxGap" type="number" min="0" step="1" value="38"></label>
     <label>X<input id="originX" type="number" step="1" value="155"></label>
@@ -1280,7 +1108,7 @@ PREVIEW_HTML = (
   </main>
   <script>
 """
-    + PLUGIN_GENERATOR_JS
+    + PREVIEW_GENERATOR_JS
     + r"""
     const stage = document.getElementById('stage');
     let start = performance.now();
@@ -1338,32 +1166,6 @@ PREVIEW_HTML = (
 </html>
 """
 )
-
-
-README = """# tibs transition
-
-This package contains an editable vector rebuild of the supplied animated PNG, starting with three solid bottom-center blocks that trace out the boxes before the boxes transition to `tibs`.
-
-The animation starts with a short hold on three solid stroke-width squares at the bottom center of each box, then traces the three hollow boxes in sync by moving those squares anticlockwise around five legs: bottom center to bottom right, up the right side, across the top, down the left side, and back along the bottom to center. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
-
-## Best Figma path
-
-1. In Figma, choose `Plugins > Development > Import plugin from manifest...`.
-2. Select `tibs-transition-figma-plugin/manifest.json`.
-3. Run `Plugins > Development > tibs transition generator`.
-4. Adjust stroke, corner radius, color, spacing, size, trace timing, morph timing, and frame counts in the plugin UI, then generate.
-
-The plugin creates editable vector frames on a new Figma page. The trace and morph phases each use a shared ease-in-out sine timing curve sampled into 28 frames by default. The animated PNG and browser preview hold on the initial frame for `start_hold_ms`, then pause on the hollow boxes for `initial_delay_ms` before the morph starts. The animated PNG plays once and then holds on the final frame.
-
-The preview and rendered PNG support a configurable border around the logo. Configure border size and border color in the preview/plugin controls. Set border size to `0` to disable the border.
-
-## Other files
-
-- `tibs-transition-frames.svg`: all generated frames in a grid, importable into Figma as vectors.
-- `tibs-transition-preview.html`: browser preview with live controls for stroke, radius, color, spacing, size, and duration.
-- `tibs_transition_generator.py`: configurable Python generator for regenerating the package.
-- `tibs-transition-preview.png`: non-editable animated PNG preview of the generated animation. It plays once and then holds on the final frame. Use this file in web pages with the normal `image/png` MIME type. The generator also copies this file to `doc/tibs.png`.
-"""
 
 
 def draw_line_antialias(
@@ -1435,10 +1237,11 @@ def hex_to_rgba(hex_color: str, opacity: float = 1.0) -> tuple[int, int, int, in
     )
 
 
-def scaled_extension(extension: object, scale: int) -> float | tuple[float, float] | None:
-    if isinstance(extension, (list, tuple)):
-        return (extension[0] * scale, extension[1] * scale)
-    return None if extension is None else extension * scale
+def scaled_extension(extension: object, scale: int, inset: float = 0.0) -> float | tuple[float, float] | None:
+    adjusted = inset_extension(extension, inset)
+    if isinstance(adjusted, tuple):
+        return (adjusted[0] * scale, adjusted[1] * scale)
+    return None if adjusted is None else adjusted * scale
 
 
 def draw_shapes_layer(
@@ -1447,12 +1250,12 @@ def draw_shapes_layer(
     config: dict,
     fill_color: str,
     scale: int,
-    expansion: float = 0.0,
+    inset: float = 0.0,
 ) -> None:
-    stroke = int(round((config["stroke_width"] + expansion * 2) * scale))
-    radius = (config["corner_radius"] + expansion) * scale
+    stroke = int(round(max(0.0, config["stroke_width"] - inset * 2) * scale))
+    radius = max(0.0, config["corner_radius"] - inset) * scale
     for item in shapes["paths"]:
-        if item["opacity"] <= 0.001:
+        if item["opacity"] <= 0.001 or stroke <= 0:
             continue
         pts = [(x * scale, y * scale) for x, y in item["points"]]
         draw_line_antialias(
@@ -1461,21 +1264,25 @@ def draw_shapes_layer(
             hex_to_rgba(fill_color, item["opacity"]),
             stroke,
             radius,
-            scaled_extension(item.get("extension"), scale),
+            scaled_extension(item.get("extension"), scale, inset),
         )
     for item in shapes.get("rects", []):
         if item["opacity"] <= 0.001:
+            continue
+        width = max(0.0, item["width"] - inset * 2)
+        height = max(0.0, item["height"] - inset * 2)
+        if width <= 0.001 or height <= 0.001:
             continue
         item_layer = Image.new("RGBA", layer.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(item_layer)
         draw.rounded_rectangle(
             (
-                (item["x"] - expansion) * scale,
-                (item["y"] - expansion) * scale,
-                (item["x"] + item["width"] + expansion) * scale,
-                (item["y"] + item["height"] + expansion) * scale,
+                (item["x"] + inset) * scale,
+                (item["y"] + inset) * scale,
+                (item["x"] + inset + width) * scale,
+                (item["y"] + inset + height) * scale,
             ),
-            radius=(item["radius"] + expansion) * scale,
+            radius=max(0.0, item["radius"] - inset) * scale,
             fill=hex_to_rgba(fill_color, item["opacity"]),
         )
         layer.alpha_composite(item_layer)
@@ -1484,7 +1291,9 @@ def draw_shapes_layer(
         dot_layer = Image.new("RGBA", layer.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(dot_layer)
         cx, cy = dot["cx"] * scale, dot["cy"] * scale
-        size = (dot["r"] * 2 + expansion * 2) * scale
+        size = max(0.0, dot["r"] * 2 - inset * 2) * scale
+        if size <= 0.001:
+            return
         r = min(radius, size / 2)
         draw.rounded_rectangle(
             (cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2),
@@ -1500,37 +1309,12 @@ def render_frame_png(raw_t: float, config: dict = DEFAULTS, scale: int = 2) -> I
     shapes = frame_shapes(raw_t, config)
     if border_enabled(config):
         border_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw_shapes_layer(border_layer, shapes, config, str(config["border_color"]), scale, border_size(config))
+        draw_shapes_layer(border_layer, shapes, config, str(config["border_color"]), scale)
         img.alpha_composite(border_layer)
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw_shapes_layer(layer, shapes, config, str(config["color"]), scale)
+    draw_shapes_layer(layer, shapes, config, str(config["color"]), scale, border_size(config) if border_enabled(config) else 0)
     img.alpha_composite(layer)
     return img.resize((width, height), Image.Resampling.LANCZOS)
-
-
-def render_contact_png(config: dict = DEFAULTS) -> Image.Image:
-    cols = 4
-    thumb_scale = 0.5
-    fw = int(config["width"] * thumb_scale)
-    fh = int(config["height"] * thumb_scale)
-    label_h = 24
-    gap = 18
-    frame_count = total_frame_count(config)
-    rows = math.ceil(frame_count / cols)
-    sheet = Image.new(
-        "RGBA",
-        (cols * fw + (cols - 1) * gap, rows * (fh + label_h) + (rows - 1) * gap),
-        (17, 17, 17, 255),
-    )
-    draw = ImageDraw.Draw(sheet)
-    for i in range(frame_count):
-        raw_t = frame_raw_t(i, config)
-        frame = render_frame_png(raw_t, config).resize((fw, fh), Image.Resampling.LANCZOS)
-        x = (i % cols) * (fw + gap)
-        y = (i // cols) * (fh + label_h + gap)
-        sheet.alpha_composite(frame, (x, y))
-        draw.text((x + 6, y + fh + 5), f"{i + 1:02d}  {timeline_millis(raw_t, config)}ms", fill=(190, 190, 190, 255))
-    return sheet
 
 
 def js_config(config: dict) -> dict:
@@ -1602,51 +1386,12 @@ def with_input_defaults(html: str, config: dict) -> str:
     return html
 
 
-def build_readme(config: dict) -> str:
-    return README + """
-
-## Regenerate
-
-Edit the hard-coded `CONFIG` block at the top of `tibs_transition_generator.py`, then run the generator with no command-line options:
-
-```bash
-python3 tibs_transition_generator.py
-```
-"""
-
-
 def write_outputs(config: dict) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
-
-    plugin_code = with_js_defaults(PLUGIN_CODE_JS, config)
-    plugin_ui = with_input_defaults(PLUGIN_UI_HTML, config)
     preview_html = with_input_defaults(with_js_defaults(PREVIEW_HTML, config), config)
     preview_html = preview_html.replace("aspect-ratio: 800 / 360;", f"aspect-ratio: {config['width']} / {config['height']};")
 
-    (OUT / "tibs-transition-frames.svg").write_text(svg_frames_sheet(config), encoding="utf-8")
     (OUT / "tibs-transition-preview.html").write_text(preview_html, encoding="utf-8")
-    (OUT / "README-tibs-transition.md").write_text(build_readme(config), encoding="utf-8")
-
-    (PLUGIN_DIR / "manifest.json").write_text(
-        json.dumps(
-            {
-                "name": "tibs transition generator",
-                "id": "tibs-transition-generator-local",
-                "api": "1.0.0",
-                "main": "code.js",
-                "ui": "ui.html",
-                "editorType": ["figma"],
-                "documentAccess": "dynamic-page",
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (PLUGIN_DIR / "code.js").write_text(plugin_code, encoding="utf-8")
-    (PLUGIN_DIR / "ui.html").write_text(plugin_ui, encoding="utf-8")
-
     frames = [render_frame_png(frame_raw_t(i, config), config) for i in range(total_frame_count(config))]
     frame_times = frame_times_millis(config)
     durations = [max(1, round(frame_times[i + 1] - frame_times[i])) for i in range(len(frame_times) - 1)]
@@ -1661,26 +1406,7 @@ def write_outputs(config: dict) -> None:
         loop=1,
     )
     shutil.copy2(animated_preview, DOC_LOGO)
-    render_contact_png(config).save(OUT / "tibs-transition-contact.png")
 
-    script_copy = OUT / "tibs_transition_generator.py"
-    source = Path(__file__).resolve()
-    if source != script_copy.resolve():
-        shutil.copy2(source, script_copy)
-
-    zip_path = OUT / "tibs-transition-package.zip"
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in [
-            OUT / "README-tibs-transition.md",
-            OUT / "tibs-transition-frames.svg",
-            OUT / "tibs-transition-preview.html",
-            OUT / ANIMATED_PREVIEW,
-            OUT / "tibs_transition_generator.py",
-            PLUGIN_DIR / "manifest.json",
-            PLUGIN_DIR / "code.js",
-            PLUGIN_DIR / "ui.html",
-        ]:
-            zf.write(path, path.relative_to(OUT))
 
 
 if __name__ == "__main__":

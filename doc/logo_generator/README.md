@@ -6,33 +6,28 @@ your priorities should be. A bespoke animated logo with cat art is an important 
 
 # tibs transition
 
-This package contains an editable vector rebuild of the supplied animated PNG, starting with three solid bottom-center blocks that trace out the boxes before the boxes transition to `tibs`.
+This package contains an editable vector rebuild of the supplied animated PNG, starting with one solid block in each corner of the three boxes before the boxes transition to `tibs`.
 
-The animation starts with a short hold on three solid stroke-width squares at the bottom center of each box, then traces the three hollow boxes in sync by moving those squares anticlockwise around five legs: bottom center to bottom right, up the right side, across the top, down the left side, and back along the bottom to center. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
+The animation starts with a short hold on twelve solid stroke-width squares: one at each corner of the three boxes. The corner blocks then trace the hollow boxes in sync, moving anticlockwise with each block travelling along only one side. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
 
-## Best Figma path
+## Outputs
 
-1. In Figma, choose `Plugins > Development > Import plugin from manifest...`.
-2. Select `tibs-transition-figma-plugin/manifest.json`.
-3. Run `Plugins > Development > tibs transition generator`.
-4. Adjust stroke, corner radius, color, spacing, size, trace timing, morph timing, and frame counts in the plugin UI, then generate.
+Run `logo_generator.py` to generate the animated PNG and browser preview.
 
-The plugin creates editable vector frames on a new Figma page. The trace and morph phases each use a shared ease-in-out sine timing curve sampled into 28 frames by default. The animated PNG and browser preview hold on the initial frame for `start_hold_ms`, then pause on the hollow boxes for `initial_delay_ms` before the morph starts. The animated PNG plays once and then holds on the final frame.
+The trace phase runs linearly, while the morph starts at full speed and eases out into the final frame. Both phases are sampled into 28 frames by default. The animated PNG and browser preview hold on the initial frame for `start_hold_ms`; if `initial_delay_ms` is greater than zero, they also pause on the hollow boxes before the morph starts. The animated PNG plays once and then holds on the final frame.
 
-The preview and rendered PNG support a configurable border around the logo. Configure border size and border color in the preview/plugin controls. Set border size to `0` to disable the border.
+The preview and rendered PNG support a configurable border inside the logo. Configure border size and border color in the preview controls. Increasing the border size does not change the logo's outer dimensions. Set border size to `0` to disable the border.
 
-## Other files
+## Files
 
-- `tibs-transition-frames.svg`: all generated frames in a grid, importable into Figma as vectors.
 - `tibs-transition-preview.html`: browser preview with live controls for stroke, radius, color, spacing, size, and duration.
-- `tibs_transition_generator.py`: configurable Python generator for regenerating the package.
 - `tibs-transition-preview.png`: non-editable animated PNG preview of the generated animation. It plays once and then holds on the final frame. Use this file in web pages with the normal `image/png` MIME type. The generator also copies this file to `doc/tibs.png`.
 
 
 ## Regenerate
 
-Edit the hard-coded `CONFIG` block at the top of `tibs_transition_generator.py`, then run the generator with no command-line options:
+Edit the hard-coded `CONFIG` block at the top of `logo_generator.py`, then run the generator with no command-line options:
 
 ```bash
-python3 tibs_transition_generator.py
+python3 logo_generator.py
 ```
