@@ -6,18 +6,20 @@ your priorities should be. A bespoke animated logo with cat art is an important 
 
 # tibs transition
 
-This package contains an editable vector rebuild of the supplied animated PNG, simplified into a one-way transition from three boxes to `tibs`.
+This package contains an editable vector rebuild of the supplied animated PNG, starting with three solid bottom-center blocks that trace out the boxes before the boxes transition to `tibs`.
 
-The animation uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
+The animation starts with a short hold on three solid stroke-width squares at the bottom center of each box, then traces the three hollow boxes in sync by moving those squares anticlockwise around five legs: bottom center to bottom right, up the right side, across the top, down the left side, and back along the bottom to center. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
 
 ## Best Figma path
 
 1. In Figma, choose `Plugins > Development > Import plugin from manifest...`.
 2. Select `tibs-transition-figma-plugin/manifest.json`.
 3. Run `Plugins > Development > tibs transition generator`.
-4. Adjust stroke, corner radius, color, spacing, size, duration, and frame count in the plugin UI, then generate.
+4. Adjust stroke, corner radius, color, spacing, size, trace timing, morph timing, and frame counts in the plugin UI, then generate.
 
-The plugin creates editable vector frames on a new Figma page. The frames use one shared ease-in-out sine timing curve sampled into 28 frames by default. The animated PNG and browser preview hold on the first frame for `initial_delay_ms` before the transition starts. The animated PNG plays once and then holds on the final frame.
+The plugin creates editable vector frames on a new Figma page. The trace and morph phases each use a shared ease-in-out sine timing curve sampled into 28 frames by default. The animated PNG and browser preview hold on the initial frame for `start_hold_ms`, then pause on the hollow boxes for `initial_delay_ms` before the morph starts. The animated PNG plays once and then holds on the final frame.
+
+The preview and rendered PNG support a configurable border around the logo. Configure border size and border color in the preview/plugin controls. Set border size to `0` to disable the border.
 
 ## Other files
 
