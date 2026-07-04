@@ -45,6 +45,37 @@ impl Dtype {
                 kind.repr_name()
             )));
         }
+        match kind {
+            DtypeKind::Float if !matches!(length, 16 | 32 | 64) => {
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of type {} must have length 16, 32 or 64 bits. Received {}.",
+                    kind.repr_name(),
+                    length
+                )));
+            }
+            DtypeKind::Bytes if !length.is_multiple_of(8) => {
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of type {} must have a length that is a multiple of 8 bits. Received {}.",
+                    kind.repr_name(),
+                    length
+                )));
+            }
+            DtypeKind::Hex if !length.is_multiple_of(4) => {
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of type {} must have a length that is a multiple of 4 bits. Received {}.",
+                    kind.repr_name(),
+                    length
+                )));
+            }
+            DtypeKind::Oct if !length.is_multiple_of(3) => {
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of type {} must have a length that is a multiple of 3 bits. Received {}.",
+                    kind.repr_name(),
+                    length
+                )));
+            }
+            _ => {}
+        }
         if byte_order != ByteOrder::Unspecified {
             match kind {
                 DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float => {

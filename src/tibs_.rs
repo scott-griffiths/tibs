@@ -5,8 +5,8 @@ use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    bytes_like_to_vec, compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned,
+    str_to_bv, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -245,9 +245,10 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
             )),
         },
         DtypeKind::Bits => validate_dtype_value_length(dtype, value.extract::<Tibs>()?.to_bitvec()),
-        DtypeKind::Bytes => {
-            bv_from_bytes_slice(value.extract::<Vec<u8>>()?, Some(0), Some(dtype.length))
-        }
+        DtypeKind::Bytes => validate_dtype_value_length(
+            dtype,
+            bv_from_bytes_slice(bytes_like_to_vec(value)?, None, None)?,
+        ),
         DtypeKind::Bin => {
             validate_dtype_value_length(dtype, bv_from_bin(&value.extract::<String>()?)?)
         }
@@ -1478,7 +1479,7 @@ impl Tibs {
     #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
-        data: Vec<u8>,
+        data: &Bound<'_, PyAny>,
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
@@ -1490,7 +1491,7 @@ impl Tibs {
             Some(offset) => Some(validate_length(offset)?),
             None => None,
         };
-        let bv = bv_from_bytes_slice(data, offset, length)?;
+        let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }
 

@@ -2,7 +2,7 @@ use crate::core::BitCollection;
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
-    bv_from_u128,
+    bv_from_u128, bytes_like_to_vec,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -705,8 +705,8 @@ impl MutableView {
 
     /// Write the viewed bits from a bytes-like object without changing the view length.
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
-    pub fn write_bytes(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
-        let viewed = bv_from_bytes_slice(data, None, None)?;
+    pub fn write_bytes(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<()> {
+        let viewed = bv_from_bytes_slice(bytes_like_to_vec(data)?, None, None)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
 
@@ -821,7 +821,7 @@ impl MutableView {
     }
 
     #[setter(bytes)]
-    fn write_bytes_property(&self, py: Python<'_>, data: Vec<u8>) -> PyResult<()> {
+    fn write_bytes_property(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<()> {
         self.write_bytes(py, data)
     }
 

@@ -4,8 +4,8 @@ use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_length,
-    validate_logical_op_lengths, validate_shift, validate_slice,
+    bytes_like_to_vec, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
 use crate::view::{MutableView, View};
@@ -992,8 +992,8 @@ impl Mutibs {
     ///     Mutibs('0x41')
     ///
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
-    pub fn write_bytes(&mut self, data: Vec<u8>) -> PyResult<()> {
-        let bv = bv_from_bytes_slice(data, None, None)?;
+    pub fn write_bytes(&mut self, data: &Bound<'_, PyAny>) -> PyResult<()> {
+        let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, None, None)?;
         self.replace_with_bv(bv);
         Ok(())
     }
@@ -1011,7 +1011,7 @@ impl Mutibs {
     }
 
     #[setter(bytes)]
-    fn write_bytes_property(&mut self, data: Vec<u8>) -> PyResult<()> {
+    fn write_bytes_property(&mut self, data: &Bound<'_, PyAny>) -> PyResult<()> {
         self.write_bytes(data)
     }
 
@@ -1410,7 +1410,7 @@ impl Mutibs {
     #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
-        data: Vec<u8>,
+        data: &Bound<'_, PyAny>,
         offset: Option<i64>,
         length: Option<i64>,
     ) -> PyResult<Self> {
@@ -1422,7 +1422,7 @@ impl Mutibs {
             Some(offset) => Some(validate_length(offset)?),
             None => None,
         };
-        let bv = bv_from_bytes_slice(data, offset, length)?;
+        let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }
 

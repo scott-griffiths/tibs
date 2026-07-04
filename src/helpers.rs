@@ -724,6 +724,19 @@ pub(crate) fn bv_from_bytes_slice(
     Ok(bs[offset..offset + length].to_bitvec())
 }
 
+pub(crate) fn bytes_like_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+    if data.is_instance_of::<PyBytes>()
+        || data.is_instance_of::<PyByteArray>()
+        || data.is_instance_of::<PyMemoryView>()
+    {
+        data.extract::<Vec<u8>>()
+    } else {
+        Err(PyTypeError::new_err(
+            "Expected a bytes-like object: bytes, bytearray or memoryview.",
+        ))
+    }
+}
+
 #[inline]
 pub(crate) fn bv_from_u128(value: u128, length: usize, is_little_endian: bool) -> PyResult<BV> {
     if length == 0 || length > 128 {
