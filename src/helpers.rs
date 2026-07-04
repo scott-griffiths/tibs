@@ -170,7 +170,6 @@ pub(crate) fn collect_find_all_positions(
     py: Python<'_>,
     haystack: &BS,
     needle: &BS,
-    _haystack_len: usize,
     start: usize,
     end: usize,
     byte_aligned: bool,
@@ -754,7 +753,7 @@ pub(crate) fn bv_from_u128(value: u128, length: usize, is_little_endian: bool) -
             "Value {value} does not fit in {length} bits."
         )));
     }
-    let mut bv = BV::repeat(false, length as usize);
+    let mut bv = BV::repeat(false, length);
     if is_little_endian {
         bv.store_le(value);
     } else {
@@ -788,7 +787,7 @@ pub(crate) fn bv_from_i128(value: i128, length: usize, is_little_endian: bool) -
         )));
     }
     let repeat_bit = value < 0;
-    let mut bv = BV::repeat(repeat_bit, length as usize);
+    let mut bv = BV::repeat(repeat_bit, length);
     if is_little_endian {
         bv.store_le(value);
     } else {

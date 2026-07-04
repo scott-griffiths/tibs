@@ -785,7 +785,6 @@ impl Tibs {
             py,
             slf.as_bitslice(),
             needle.as_bitslice(),
-            haystack_len,
             start,
             end,
             byte_aligned,

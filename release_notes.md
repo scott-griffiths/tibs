@@ -5,15 +5,16 @@
 Backwardly incompatible changes
 
 * Minimum Python version now 3.10 instead of 3.8
-* Renamed the `Endianness` enum to `ByteOrder`. The constructor keyword remains
-  `byte_order`, and dtype suffixes remain `_le` and `_be`.
+* Renamed the `Endianness` enum to `ByteOrder` as it's more consistent.
 
 Added
 
-* Moved the project to the first 1.0 beta release, marking the intended stable
-  API as largely in place while keeping room for final pre-1.0 adjustments.
 * Added `Tibs.split_at()` and `Mutibs.split_at()` for partitioning a bit
   sequence at one or more bit positions.
+
+Fixed
+
+* Fix LSB0 view value ordering.
 
 
 ### June 27th 2026: version 0.11.0.

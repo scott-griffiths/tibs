@@ -1877,7 +1877,6 @@ impl Mutibs {
             py,
             self.as_bitslice(),
             needle.as_bitslice(),
-            haystack_len,
             start,
             end,
             byte_aligned,
