@@ -6,9 +6,9 @@ your priorities should be. A bespoke animated logo with cat art is an important 
 
 # tibs transition
 
-This package contains an editable vector rebuild of the supplied animated PNG, starting with one solid block in each corner of the three boxes before the boxes transition to `tibs`.
+This package contains an editable vector rebuild of the supplied animated PNG, starting with one solid block on the top side of each box before the boxes transition to `tibs`.
 
-The animation starts with a short hold on twelve solid stroke-width squares: one at each corner of the three boxes. The corner blocks then trace the hollow boxes in sync, moving anticlockwise with each block travelling along only one side. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
+The animation starts with a short hold on three solid stroke-width squares: one on the top side of each box, adjusted for any inside border. The outer boxes trace anticlockwise around the full perimeter while the middle box traces as a mirror image. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
 
 ## Outputs
 

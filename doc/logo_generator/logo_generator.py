@@ -287,49 +287,52 @@ def trace_square_specs(
     box: float,
     progress: float,
     config: dict = DEFAULTS,
+    reverse: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     y_bot = y_top + box
     x1 = x0 + box
-    travel = max(0.0, box - float(config["stroke_width"]) / 2)
-    d = clamp(progress) * travel
+    block = float(config["stroke_width"])
+    offset = max(0.0, block - border_size(config) * 2)
+    if reverse:
+        points = [
+            (x0 + offset, y_top),
+            (x1, y_top),
+            (x1, y_bot),
+            (x0, y_bot),
+            (x0, y_top),
+        ]
+    else:
+        points = [
+            (x1 - offset, y_top),
+            (x0, y_top),
+            (x0, y_bot),
+            (x1, y_bot),
+            (x1, y_top),
+        ]
+    total_travel = sum(dist(start, end) for start, end in zip(points, points[1:]))
+    d = clamp(progress) * total_travel
     paths: list[dict] = []
 
     def add_segment(segment_name: str, start: tuple[float, float], end: tuple[float, float]) -> None:
         if dist(start, end) > 0.01:
             paths.append(static_spec(f"{name}-{segment_name}", [start, end], roundable=False))
 
-    add_segment("bottom", (x0, y_bot), (x0 + d, y_bot))
-    add_segment("right", (x1, y_bot), (x1, y_bot - d))
-    add_segment("top", (x1, y_top), (x1 - d, y_top))
-    add_segment("left", (x0, y_top), (x0, y_top + d))
+    head = points[0]
+    remaining = d
+    for index, (start, end) in enumerate(zip(points, points[1:])):
+        segment_length = dist(start, end)
+        if remaining <= 0:
+            break
+        head = end if remaining >= segment_length else point_toward(start, end, remaining)
+        add_segment(f"trace-{index}", start, head)
+        remaining -= segment_length
 
     rects = [
         rect_spec(
-            f"{name}-bottom-tracer",
-            x0 + d,
-            y_bot,
-            float(config["stroke_width"]),
-            float(config["corner_radius"]),
-        ),
-        rect_spec(
-            f"{name}-right-tracer",
-            x1,
-            y_bot - d,
-            float(config["stroke_width"]),
-            float(config["corner_radius"]),
-        ),
-        rect_spec(
             f"{name}-top-tracer",
-            x1 - d,
-            y_top,
-            float(config["stroke_width"]),
-            float(config["corner_radius"]),
-        ),
-        rect_spec(
-            f"{name}-left-tracer",
-            x0,
-            y_top + d,
-            float(config["stroke_width"]),
+            head[0],
+            head[1],
+            block,
             float(config["corner_radius"]),
         )
     ]
@@ -350,8 +353,8 @@ def trace_shapes(progress: float, config: dict = DEFAULTS) -> dict:
 
     paths: list[dict] = []
     rects: list[dict] = []
-    for name, x0 in [("left-box", lx0), ("middle-box", bx0), ("right-box", sx0)]:
-        box_paths, box_rects = trace_square_specs(name, x0, y_top, box, progress, config)
+    for name, x0, reverse in [("left-box", lx0, False), ("middle-box", bx0, True), ("right-box", sx0, False)]:
+        box_paths, box_rects = trace_square_specs(name, x0, y_top, box, progress, config, reverse)
         paths.extend(box_paths)
         rects.extend(box_rects)
 
@@ -853,11 +856,17 @@ function transitionShapes(rawT, config) {
   };
 }
 
-function traceSquareSpecs(name, x0, yTop, box, progress, config) {
+function traceSquareSpecs(name, x0, yTop, box, progress, config, reverse = false) {
   const yBot = yTop + box;
   const x1 = x0 + box;
-  const travel = Math.max(0, box - Number(config.strokeWidth) / 2);
-  const d = clamp(progress) * travel;
+  const block = Number(config.strokeWidth);
+  const offset = Math.max(0, block - borderSize(config) * 2);
+  const points = reverse
+    ? [[x0 + offset, yTop], [x1, yTop], [x1, yBot], [x0, yBot], [x0, yTop]]
+    : [[x1 - offset, yTop], [x0, yTop], [x0, yBot], [x1, yBot], [x1, yTop]];
+  const totalTravel = points.slice(0, -1).reduce((total, point, index) => total + dist(point, points[index + 1]), 0);
+  let remaining = clamp(progress) * totalTravel;
+  let head = points[0];
   const paths = [];
 
   function addSegment(segmentName, start, end) {
@@ -866,18 +875,20 @@ function traceSquareSpecs(name, x0, yTop, box, progress, config) {
     }
   }
 
-  addSegment('bottom', [x0, yBot], [x0 + d, yBot]);
-  addSegment('right', [x1, yBot], [x1, yBot - d]);
-  addSegment('top', [x1, yTop], [x1 - d, yTop]);
-  addSegment('left', [x0, yTop], [x0, yTop + d]);
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index];
+    const end = points[index + 1];
+    const segmentLength = dist(start, end);
+    if (remaining <= 0) break;
+    head = remaining >= segmentLength ? end : pointToward(start, end, remaining);
+    addSegment(`trace-${index}`, start, head);
+    remaining -= segmentLength;
+  }
 
   return {
     paths,
     rects: [
-      rectSpec(`${name}-bottom-tracer`, x0 + d, yBot, Number(config.strokeWidth), Number(config.cornerRadius)),
-      rectSpec(`${name}-right-tracer`, x1, yBot - d, Number(config.strokeWidth), Number(config.cornerRadius)),
-      rectSpec(`${name}-top-tracer`, x1 - d, yTop, Number(config.strokeWidth), Number(config.cornerRadius)),
-      rectSpec(`${name}-left-tracer`, x0, yTop + d, Number(config.strokeWidth), Number(config.cornerRadius))
+      rectSpec(`${name}-top-tracer`, head[0], head[1], block, Number(config.cornerRadius))
     ]
   };
 }
@@ -894,8 +905,8 @@ function traceShapes(progress, config) {
   const sx0 = bx0 + box + gap;
   const paths = [];
   const rects = [];
-  for (const [name, x0] of [['left-box', lx0], ['middle-box', bx0], ['right-box', sx0]]) {
-    const specs = traceSquareSpecs(name, x0, yTop, box, progress, config);
+  for (const [name, x0, reverse] of [['left-box', lx0, false], ['middle-box', bx0, true], ['right-box', sx0, false]]) {
+    const specs = traceSquareSpecs(name, x0, yTop, box, progress, config, reverse);
     paths.push(...specs.paths);
     rects.push(...specs.rects);
   }
