@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, "..")
 import pytest
-from tibs import Tibs, Mutibs
+from tibs import BitOrder, ByteOrder, Dtype, DtypeKind, MutableView, Tibs, Mutibs, View
 
 
 class TestTibsCreation:
@@ -760,3 +760,222 @@ def test_bit_ops_unequal_offsets():
     assert list(left | right) == expected_or
     assert list(left & right) == expected_and
     assert list(left ^ right) == expected_xor
+
+
+class TestAdditionalCoverage:
+    def test_tibs_set_unset_and_inverted_return_new_instances(self):
+        t = Tibs("0b10110010")
+
+        assert t.set_at(range(1, 8, 2)) == Tibs("0b11110111")
+        assert Tibs("0b11111111").unset_at([-1, -3, 0]) == Tibs("0b01111010")
+        assert Tibs("0b10000001").inverted(range(1, 7)) == Tibs("0b11111111")
+        assert t == Tibs("0b10110010")
+
+    def test_reverse_iterators_have_obvious_order_and_limits(self):
+        t = Tibs("0b1010110010")
+
+        assert list(t.rfind_all_iter("0b10")) == [8, 5, 2, 0]
+        assert [chunk.bin for chunk in t.rchunks_iter(3)] == ["010", "110", "010", "1"]
+        assert [chunk.bin for chunk in t.rchunks_iter(3, count=2)] == ["010", "110"]
+
+    def test_tibs_byte_swapped_slice_returns_new_instance(self):
+        t = Tibs("0x001122334455")
+
+        assert t.byte_swapped(start=8, end=40) == Tibs("0x004433221155")
+        assert t.byte_swapped(2, start=8, end=40) == Tibs("0x002211443355")
+        assert t == Tibs("0x001122334455")
+
+    def test_to_raw_data_reports_offset_and_length_for_unaligned_slice(self):
+        t = Tibs("0x123456")[4:20]
+
+        raw_bytes, offset, length = t.to_raw_data()
+
+        assert raw_bytes == b"\x12\x34\x56"
+        assert offset == 4
+        assert length == 16
+        assert t == Tibs("0x2345")
+
+    def test_mutibs_append_pop_and_empty_pop_error(self):
+        m = Mutibs("0b10")
+
+        assert m.append(1) is None
+        assert m == Tibs("0b101")
+        assert m.pop() is True
+        assert m.pop() is False
+        assert m == Tibs("0b1")
+
+        empty = Mutibs()
+        with pytest.raises(IndexError):
+            empty.pop()
+
+    def test_mutibs_as_tibs_moves_data_out_and_empties_source(self):
+        m = Mutibs("0x1234")
+
+        moved = m.as_tibs()
+
+        assert moved == Tibs("0x1234")
+        assert m == Tibs()
+        assert len(m) == 0
+
+    def test_mutibs_as_raw_data_moves_data_out_and_empties_source(self):
+        m = Mutibs("0x1234")
+
+        assert m.as_raw_data() == (b"\x12\x34", 0, 16)
+        assert m == Tibs()
+        assert len(m) == 0
+
+    def test_mutable_view_field_write_updates_underlying_source(self):
+        m = Mutibs("0x0000")
+        field = m.lsb0.le.field(15, 8)
+
+        assert field.u == 0
+        field.u = 0xab
+
+        assert field.u == 0xab
+        assert m == Mutibs("0x00ab")
+
+    def test_shift_operators_zero_fill_and_keep_length(self):
+        t = Tibs("0b1011")
+
+        assert t << 2 == Tibs("0b1100")
+        assert t >> 2 == Tibs("0b0010")
+        assert t == Tibs("0b1011")
+
+        m = Mutibs("0b1011")
+        m <<= 2
+        assert m == Tibs("0b1100")
+        m >>= 2
+        assert m == Tibs("0b0011")
+
+    def test_reflected_add_and_multiply_accept_promotable_values(self):
+        assert "0b11" + Tibs("0b00") == Tibs("0b1100")
+        assert 3 * Tibs("0b10") == Tibs("0b101010")
+        assert Mutibs("0b01") * 3 == Tibs("0b010101")
+
+    def test_mutibs_decode_malformed_zstd_with_impossible_padding_raises_value_error(self):
+        malformed = bytes.fromhex("110d28b52ffd240001000099e9d851")
+        with pytest.raises(ValueError):
+            Mutibs.decode(malformed)
+
+
+class TestDtypeViewMutableViewEdgeCoverage:
+    def test_dtype_spec_is_normalized_and_usable(self):
+        d = Dtype("  U16_LE  ")
+
+        assert repr(d) == "Dtype('u16_le')"
+        assert d.kind is DtypeKind.Uint
+        assert d.length == 16
+        assert d.byte_order is ByteOrder.Little
+        assert d.pack(0x1234) == Tibs("0x3412")
+        assert d.unpack("0x3412") == 0x1234
+
+    def test_dtype_from_params_accepts_none_byte_order_and_properties_are_read_only(self):
+        d = Dtype.from_params(DtypeKind.Int, 8, None)
+
+        assert repr(d) == "Dtype('i8')"
+        assert d.byte_order is ByteOrder.Unspecified
+
+        for name in ("kind", "length", "byte_order"):
+            with pytest.raises(AttributeError):
+                setattr(d, name, None)
+
+    def test_dtype_unpack_methods_accept_negative_ranges_and_bytes_like_inputs(self):
+        d = Dtype("u8")
+        bits = Tibs.from_bytes(b"\x01\x02\x03\x04")
+
+        assert d.unpack(bits, -24, -16) == 2
+        assert d.unpack_values(bits, -24, -8) == [2, 3]
+        assert list(d.unpack_values_iter(bits, -32, -8)) == [1, 2, 3]
+        assert d.unpack_values(bytearray(b"\x05\x06")) == [5, 6]
+        assert d.unpack_values(memoryview(b"\x07\x08")) == [7, 8]
+
+    def test_dtype_pack_values_reports_late_item_overflow(self):
+        with pytest.raises(OverflowError):
+            Dtype("u4").pack_values([1, 2, 16])
+
+    def test_view_from_indices_empty_selection_is_empty_and_unusable_as_number(self):
+        v = View.from_indices(Tibs("0xff"), [])
+
+        assert len(v) == 0
+        assert v.bin == ""
+        assert v.to_tibs() == Tibs()
+        assert v.to_mutibs() == Mutibs()
+
+        with pytest.raises(ValueError):
+            _ = v.u
+        with pytest.raises(ValueError):
+            v.field(0, 0)
+
+    def test_view_from_indices_respects_layout_for_two_byte_selection(self):
+        source = Tibs("0x1234")
+
+        lsb0 = View.from_indices(source, range(16), bit_order=BitOrder.Lsb0)
+        little = View.from_indices(source, range(16), byte_order=ByteOrder.Little)
+
+        assert lsb0.hex == "3412"
+        assert little.hex == "3412"
+        assert lsb0.to_tibs() == little.to_tibs() == Tibs("0x3412")
+
+    def test_view_non_byte_field_rejects_byte_oriented_reinterpretation(self):
+        field = Tibs("0xff").field(0, 3)
+
+        assert field.bin == "1111"
+        with pytest.raises(ValueError):
+            _ = field.le
+        with pytest.raises(ValueError):
+            _ = field.lsb0
+
+    def test_mutable_view_empty_selection_allows_empty_write_only(self):
+        m = Mutibs("0xff")
+        v = MutableView.from_indices(m, [])
+
+        assert len(v) == 0
+        assert v.bin == ""
+        assert v.write_bin("") is None
+        assert m == Mutibs("0xff")
+
+        with pytest.raises(ValueError):
+            v.write_bin("1")
+
+    def test_mutable_view_sparse_byte_write_updates_selected_source_bits(self):
+        m = Mutibs("0x0000")
+        v = MutableView.from_indices(m, [0, 2, 4, 6, 8, 10, 12, 14])
+
+        assert v.bytes == b"\x00"
+        v.bytes = b"\xff"
+
+        assert v.bytes == b"\xff"
+        assert m == Mutibs("0xaaaa")
+
+    def test_mutable_view_revalidates_selected_indices_after_source_shrinks(self):
+        m = Mutibs("0xff")
+        v = MutableView.from_indices(m, [6, 7])
+
+        assert v.bin == "11"
+        del m[6:]
+
+        with pytest.raises(ValueError):
+            len(v)
+        with pytest.raises(ValueError):
+            _ = v.bin
+
+    def test_mutable_view_signed_write_failure_leaves_source_unchanged(self):
+        m = Mutibs.from_zeros(8)
+
+        m.view().i = -1
+        assert m == Mutibs("0xff")
+
+        original = m.to_tibs()
+        with pytest.raises(OverflowError):
+            m.view().i = -129
+
+        assert m == original
+
+    def test_mutable_view_to_mutibs_materializes_copy(self):
+        m = Mutibs("0x1234")
+
+        copy = m.lsb0.to_mutibs()
+        copy[0] = True
+
+        assert copy == Mutibs("0xb412")
+        assert m == Mutibs("0x1234")

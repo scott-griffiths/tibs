@@ -442,6 +442,18 @@ def test_set_multiple_positions():
     assert a == Tibs('0b1010')
 
 
+def test_set_multiple_positions_tuple():
+    a = Mutibs('0b0000')
+    a.set((0, 2))
+    a.unset((2,))
+    assert a == Tibs('0b1000')
+
+    b = Mutibs.from_ones(4)
+    with pytest.raises(IndexError):
+        b.unset((0, 99))
+    assert b == Tibs('0b1111')
+
+
 def test_set_mixed_indices():
     # Setting with mixed positive and negative indices
     a = Mutibs('0b0000')
