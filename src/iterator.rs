@@ -36,7 +36,7 @@ impl BoolIterator {
 pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
     pub haystack_len: usize,
-    pub needle: Tibs,
+    pub search_needle: Tibs,
     pub start: usize,
     pub end: usize,
     pub byte_aligned: bool,
@@ -57,7 +57,7 @@ impl FindAllIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<Option<usize>> {
-        let needle_len = slf.needle.len();
+        let needle_len = slf.search_needle.len();
         if needle_len == 0 {
             return Ok(None);
         }
@@ -96,8 +96,8 @@ impl FindAllIterator {
         let byte_aligned = slf.byte_aligned;
         let step = slf.step; // Needed to update slf.current_pos later
 
-        // This block limits the scope of haystack_rs and needle_rs.
-        // The immutable borrows of slf (to access slf.haystack and slf.needle)
+        // This block limits the scope of haystack_rs and search_needle.
+        // The immutable borrows of slf (to access slf.haystack and slf.search_needle)
         // will end when this block finishes.
         let find_result = {
             let haystack_rs = slf.haystack.borrow(py);
@@ -108,10 +108,10 @@ impl FindAllIterator {
                 if current_pos <= slf.start || current_pos > slf.end {
                     return Ok(None);
                 }
-                helpers::rfind_bitvec_with_lps_aligned(
+                helpers::rfind_bitvec_with_reversed_lps_aligned(
                     py,
                     haystack_rs.as_bitslice(),
-                    slf.needle.as_bitslice(),
+                    slf.search_needle.as_bitslice(),
                     lps,
                     slf.start,
                     current_pos,
@@ -126,7 +126,7 @@ impl FindAllIterator {
                 helpers::find_bitvec_with_lps_aligned(
                     py,
                     haystack_rs.as_bitslice(),
-                    slf.needle.as_bitslice(),
+                    slf.search_needle.as_bitslice(),
                     lps,
                     current_pos,
                     slf.end,

@@ -840,11 +840,16 @@ impl Tibs {
             (Some(haystack.into_owned()), Some(needle.into_owned()), base)
         });
         let py = slf.py();
-        let lps = { compute_lps(py, needle.to_bitslice())? };
+        let using_byte_search = byte_haystack.is_some();
+        let lps = if using_byte_search {
+            Vec::new()
+        } else {
+            compute_lps(py, needle.as_bitslice())?
+        };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             haystack_len,
-            needle,
+            search_needle: needle,
             lps,
             start,
             end,
@@ -907,11 +912,19 @@ impl Tibs {
             (Some(haystack.into_owned()), Some(needle.into_owned()), base)
         });
         let py = slf.py();
-        let lps = { compute_lps(py, needle.to_bitslice())? };
+        let using_byte_search = byte_haystack.is_some();
+        let (search_needle, lps) = if using_byte_search {
+            (needle, Vec::new())
+        } else {
+            let reversed_needle =
+                Tibs::from_bv(needle.as_bitslice().iter().by_vals().rev().collect());
+            let lps = compute_lps(py, reversed_needle.as_bitslice())?;
+            (reversed_needle, lps)
+        };
         let iter_obj = FindAllIterator {
             haystack: slf.into(),
             haystack_len,
-            needle,
+            search_needle,
             lps,
             start,
             end,

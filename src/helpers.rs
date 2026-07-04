@@ -145,25 +145,20 @@ pub(crate) fn rfind_bitvec_aligned(
 ) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    let lps = compute_lps(py, needle)?;
-    rfind_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
-}
-
-pub(crate) fn rfind_bitvec_with_lps_aligned(
-    py: Python<'_>,
-    haystack: &BS,
-    needle: &BS,
-    lps: &[usize],
-    start: usize,
-    end: usize,
-    alignment_mod8: Option<usize>,
-) -> PyResult<Option<usize>> {
-    debug_assert!(end >= start);
-    debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
         return Ok(found);
     }
-    rfind_bitvec_impl_with_lps_aligned(py, haystack, needle, lps, start, end, alignment_mod8)
+    let reversed_needle: BV = needle.iter().by_vals().rev().collect();
+    let reversed_lps = compute_lps(py, reversed_needle.as_bitslice())?;
+    rfind_bitvec_with_reversed_lps_aligned(
+        py,
+        haystack,
+        reversed_needle.as_bitslice(),
+        &reversed_lps,
+        start,
+        end,
+        alignment_mod8,
+    )
 }
 
 pub(crate) fn collect_find_all_positions(
@@ -379,22 +374,20 @@ fn try_find_byte_search(
     Some(found.map(|index| (start_byte + index) * 8))
 }
 
-fn rfind_bitvec_impl_with_lps_aligned(
+pub(crate) fn rfind_bitvec_with_reversed_lps_aligned(
     py: Python<'_>,
     haystack: &BS,
-    needle: &BS,
-    _lps: &[usize],
+    reversed_needle: &BS,
+    reversed_lps: &[usize],
     start: usize,
     end: usize,
     alignment_mod8: Option<usize>,
 ) -> PyResult<Option<usize>> {
-    if needle.is_empty() || needle.len() > end - start {
+    if reversed_needle.is_empty() || reversed_needle.len() > end - start {
         return Ok(None);
     }
 
-    let needle_len = needle.len();
-    let reversed_needle: BV = needle.iter().by_vals().rev().collect();
-    let reversed_lps = compute_lps(py, reversed_needle.as_bitslice())?;
+    let needle_len = reversed_needle.len();
     let search_len = end - start;
     let mut i = 0;
     let mut j = 0;
