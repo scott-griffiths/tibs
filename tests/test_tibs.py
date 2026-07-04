@@ -466,7 +466,7 @@ def test_rfind_all():
 
 
 def test_endianness_i():
-    t1 = Tibs.from_i(3, 16, Endianness.Big)
+    t1 = Tibs.from_i(3, 16, ByteOrder.Big)
     assert t1.bin == '0000000000000011'
     t2 = Tibs.from_i(3, 16, ByteOrder.Little)
     assert t2.bin == '0000001100000000'
