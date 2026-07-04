@@ -857,6 +857,19 @@ class TestAdditionalCoverage:
         with pytest.raises(ValueError):
             Mutibs.decode(malformed)
 
+    def test_bytes_apis_reject_integer_sequences(self):
+        for cls in (Tibs, Mutibs):
+            for value in ([0x61, 0x62], (0x61, 0x62)):
+                with pytest.raises(TypeError):
+                    cls.from_bytes(value)
+
+        m = Mutibs("0x0000")
+        for value in ([0x61, 0x62], (0x61, 0x62)):
+            with pytest.raises(TypeError):
+                m.write_bytes(value)
+            with pytest.raises(TypeError):
+                m.view().write_bytes(value)
+
 
 class TestDtypeViewMutableViewEdgeCoverage:
     def test_dtype_spec_is_normalized_and_usable(self):
@@ -892,6 +905,65 @@ class TestDtypeViewMutableViewEdgeCoverage:
     def test_dtype_pack_values_reports_late_item_overflow(self):
         with pytest.raises(OverflowError):
             Dtype("u4").pack_values([1, 2, 16])
+
+    def test_dtype_bytes_pack_rejects_overlong_values(self):
+        for value in (b"abc", bytearray(b"abc"), memoryview(b"abc")):
+            with pytest.raises(ValueError):
+                Dtype("bytes16").pack(value)
+            with pytest.raises(ValueError):
+                Tibs.from_value("bytes16", value)
+            with pytest.raises(ValueError):
+                Mutibs.from_value("bytes16", value)
+
+    def test_dtype_bytes_pack_values_rejects_overlong_items(self):
+        value_sets = [
+            [b"ab", b"abc"],
+            [bytearray(b"ab"), bytearray(b"abc")],
+            [memoryview(b"ab"), memoryview(b"abc")],
+        ]
+
+        for values in value_sets:
+            with pytest.raises(ValueError):
+                Dtype("bytes16").pack_values(values)
+            with pytest.raises(ValueError):
+                Tibs.from_values("bytes16", values)
+            with pytest.raises(ValueError):
+                Mutibs.from_values("bytes16", values)
+
+    def test_dtype_bytes_pack_rejects_integer_sequences(self):
+        for value in ([0x61, 0x62], (0x61, 0x62)):
+            with pytest.raises(TypeError):
+                Dtype("bytes16").pack(value)
+            with pytest.raises(TypeError):
+                Tibs.from_value("bytes16", value)
+            with pytest.raises(TypeError):
+                Mutibs.from_value("bytes16", value)
+
+    def test_dtype_float_specs_reject_unsupported_widths_at_construction(self):
+        for length in (8, 24, 128):
+            with pytest.raises(ValueError):
+                Dtype(f"f{length}")
+            with pytest.raises(ValueError):
+                Dtype.from_params(DtypeKind.Float, length)
+
+    def test_dtype_bytes_specs_reject_non_byte_widths_at_construction(self):
+        for length in (1, 7, 9):
+            with pytest.raises(ValueError):
+                Dtype(f"bytes{length}")
+            with pytest.raises(ValueError):
+                Dtype.from_params(DtypeKind.Bytes, length)
+
+    def test_dtype_text_specs_reject_non_digit_aligned_widths_at_construction(self):
+        cases = [
+            ("hex", DtypeKind.Hex, 7),
+            ("oct", DtypeKind.Oct, 8),
+        ]
+
+        for prefix, kind, length in cases:
+            with pytest.raises(ValueError):
+                Dtype(f"{prefix}{length}")
+            with pytest.raises(ValueError):
+                Dtype.from_params(kind, length)
 
     def test_view_from_indices_empty_selection_is_empty_and_unusable_as_number(self):
         v = View.from_indices(Tibs("0xff"), [])

@@ -106,7 +106,7 @@ place, but this pre-release still reserves room for final API adjustments before
 1.0.0 final. The project is already performant and stable enough to be used as
 the core of the bitstring library, and it has millions of downloads per month.
 
-There are over 700 unit tests, including Hypothesis tests and performance benchmarks.
+There are over 800 unit tests, including Hypothesis tests and performance benchmarks.
 The Rust extension is built with PyO3 and supports Python 3.10 and later.
 
 
