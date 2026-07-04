@@ -10,14 +10,12 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
-fn reverse_bits_within_bytes(source: &BS) -> BV {
-    let mut viewed = BV::with_capacity(source.len());
-    for byte in source.chunks(8) {
-        for bit in byte.iter().rev() {
-            viewed.push(*bit);
-        }
+fn byte_order_for_field_len(byte_order: ByteOrder, field_len: usize) -> ByteOrder {
+    if field_len.is_multiple_of(8) {
+        byte_order
+    } else {
+        ByteOrder::Unspecified
     }
-    viewed
 }
 
 fn view_bits_from_physical_bits(
@@ -25,15 +23,17 @@ fn view_bits_from_physical_bits(
     byte_order: ByteOrder,
     bit_order: BitOrder,
 ) -> PyResult<BV> {
-    let bits = match bit_order {
-        BitOrder::Msb0 => source.to_bitvec(),
-        BitOrder::Lsb0 => reverse_bits_within_bytes(source),
-    };
+    let len = source.len();
+    let byte_order = byte_order_for_field_len(byte_order, len);
+    let mut selected = BV::with_capacity(len);
+    for index in field_source_indices(bit_order, byte_order, 0, len) {
+        selected.push(source[index]);
+    }
 
     if byte_order == ByteOrder::Little {
-        BitCollection::byte_swap_copy(&Tibs::from_bv(bits), None).map(|tibs| tibs.to_bitvec())
+        BitCollection::byte_swap_copy(&Tibs::from_bv(selected), None).map(|tibs| tibs.to_bitvec())
     } else {
-        Ok(bits)
+        Ok(selected)
     }
 }
 
@@ -42,16 +42,22 @@ fn physical_bits_from_view_bits(
     byte_order: ByteOrder,
     bit_order: BitOrder,
 ) -> PyResult<BV> {
-    let bits = if byte_order == ByteOrder::Little {
+    let len = viewed.len();
+    let byte_order = byte_order_for_field_len(byte_order, len);
+    let selected = if byte_order == ByteOrder::Little {
         BitCollection::byte_swap_copy(&Tibs::from_bv(viewed), None)?.to_bitvec()
     } else {
         viewed
     };
 
-    Ok(match bit_order {
-        BitOrder::Msb0 => bits,
-        BitOrder::Lsb0 => reverse_bits_within_bytes(bits.as_bitslice()),
-    })
+    let mut physical = BV::repeat(false, len);
+    for (bit_index, source_index) in field_source_indices(bit_order, byte_order, 0, len)
+        .into_iter()
+        .enumerate()
+    {
+        physical.set(source_index, selected[bit_index]);
+    }
+    Ok(physical)
 }
 
 fn physical_index_for_label(bit_order: BitOrder, label: usize) -> usize {
@@ -176,7 +182,7 @@ fn selected_source_bits(source: &BS, indices: &[usize], view_name: &str) -> PyRe
 ///         >>> t.le.u
 ///         1
 ///         >>> t.lsb0.hex
-///         '8000'
+///         '0001'
 ///
 #[pyclass(module = "tibs", frozen)]
 pub struct View {
@@ -237,17 +243,11 @@ impl View {
             return Ok(self.source.clone());
         }
 
-        let tibs = if self.bit_order == BitOrder::Lsb0 {
-            Tibs::from_bv(reverse_bits_within_bytes(self.source.to_bitslice()))
-        } else {
-            self.source.clone()
-        };
-
-        if self.byte_order == ByteOrder::Little {
-            BitCollection::byte_swap_copy(&tibs, None)
-        } else {
-            Ok(tibs)
-        }
+        Ok(Tibs::from_bv(view_bits_from_physical_bits(
+            self.source.to_bitslice(),
+            self.byte_order,
+            self.bit_order,
+        )?))
     }
 }
 

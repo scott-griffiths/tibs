@@ -277,23 +277,66 @@ def test_view_to_methods_use_byte_order_for_numeric_interpretation():
     assert f.le.f == 1.5
 
 
-def test_view_to_methods_use_bit_order_for_materialized_bits():
-    t = Tibs("0b00010010")
+def test_view_to_methods_use_lsb0_value_order():
+    single_byte = Tibs("0b00010010").lsb0
+
+    assert single_byte.to_bin() == "00010010"
+    assert single_byte.to_hex() == "12"
+    assert single_byte.to_u() == 0x12
+
+    t = Tibs("0x1234")
     v = t.lsb0
 
-    assert v.to_bin() == "01001000"
-    assert v.bin == "01001000"
-    assert v.to_hex() == "48"
-    assert v.hex == "48"
-    assert v.to_bytes() == b"\x48"
-    assert bytes(v) == b"\x48"
-    assert v.bytes == b"\x48"
-    assert v.to_u() == 0x48
-    assert v.to_tibs() == Tibs("0x48")
-    assert v.to_mutibs() == Mutibs("0x48")
+    assert v.to_bin() == "0011010000010010"
+    assert v.bin == "0011010000010010"
+    assert v.to_hex() == "3412"
+    assert v.hex == "3412"
+    assert v.to_bytes() == b"\x34\x12"
+    assert bytes(v) == b"\x34\x12"
+    assert v.bytes == b"\x34\x12"
+    assert v.to_u() == 0x3412
+    assert v.to_tibs() == Tibs("0x3412")
+    assert v.to_mutibs() == Mutibs("0x3412")
 
-    assert Tibs("0x123456").lsb0.to_oct() == Tibs("0x482c6a").to_oct()
-    assert Tibs("0x123456").lsb0.oct == Tibs("0x482c6a").oct
+    assert Tibs("0x123456").lsb0.to_oct() == Tibs("0x563412").to_oct()
+    assert Tibs("0x123456").lsb0.oct == Tibs("0x563412").oct
+
+
+def test_view_whole_value_matches_full_width_field():
+    t = Tibs("0x0100")
+    views = [t.view(), t.le, t.lsb0, t.lsb0.le]
+
+    for view in views:
+        field = view.field(0, len(view) - 1)
+        assert view.bin == field.bin
+        assert view.hex == field.hex
+        assert view.u == field.u
+
+
+def test_lsb0_little_endian_bit_zero_displays_as_value_lsb():
+    m = Mutibs.from_zeros(32)
+    v = m.lsb0.le
+
+    v.field(0, 0).u = 1
+
+    assert v.bin == "00000000000000000000000000000001"
+    assert v.u == 1
+    assert m.hex == "01000000"
+
+
+@pytest.mark.parametrize("view_name", ["lsb0", "lsb0.le"])
+def test_mutable_lsb0_whole_view_write_matches_bit_zero_field(view_name):
+    via_field = Mutibs.from_zeros(32)
+    via_whole = Mutibs.from_zeros(32)
+
+    field_view = via_field.lsb0.le if view_name == "lsb0.le" else via_field.lsb0
+    whole_view = via_whole.lsb0.le if view_name == "lsb0.le" else via_whole.lsb0
+
+    field_view.field(0, 0).u = 1
+    whole_view.u = 1
+
+    assert whole_view.bin == "00000000000000000000000000000001"
+    assert via_whole == via_field == Mutibs("0x01000000")
 
 
 def test_views_do_not_have_to_padded_bytes():
@@ -305,20 +348,20 @@ def test_mutable_view_reflects_current_source_value():
     m = Mutibs("0x12")
     v = m.lsb0
 
-    assert v.to_hex() == "48"
+    assert v.to_hex() == "12"
 
     m[0] = True
-    assert v.to_bin() == "01001001"
+    assert v.to_bin() == "10010010"
 
 
 def test_explicit_view_constructor_snapshots_mutibs_source():
     m = Mutibs("0x12")
     v = View(m, bit_order=BitOrder.Lsb0)
 
-    assert v.to_hex() == "48"
+    assert v.to_hex() == "12"
 
     m[0] = True
-    assert v.to_bin() == "01001000"
+    assert v.to_bin() == "00010010"
 
 
 def test_mutable_view_write_u_uses_view_layout():
@@ -357,7 +400,7 @@ def test_mutable_view_lsb0_write_u_uses_bit_order_layout():
     m.lsb0.u = 0x12
 
     assert m.lsb0.u == 0x12
-    assert m == Mutibs("0x48")
+    assert m == Mutibs("0x12")
 
 
 def test_mutable_view_combined_layout_write_u_roundtrips():
@@ -366,7 +409,7 @@ def test_mutable_view_combined_layout_write_u_roundtrips():
     m.lsb0.le.u = 0x1234
 
     assert m.lsb0.le.u == 0x1234
-    assert m == Mutibs("0x2c48")
+    assert m == Mutibs("0x3412")
 
 
 def test_mutable_view_representation_setters_preserve_length_and_use_layout():
@@ -388,7 +431,7 @@ def test_mutable_view_representation_setters_preserve_length_and_use_layout():
     assert len(bits) == 8
     assert bytes(bits.lsb0) == b"\x12"
     assert bits.lsb0.bin == "00010010"
-    assert bits == Mutibs("0x48")
+    assert bits == Mutibs("0x12")
 
     octal = Mutibs.from_zeros(6)
     octal.view().oct = "17"
@@ -673,9 +716,9 @@ def test_bin_views():
     t = Tibs('0x0100')
     assert t.bin == '0000000100000000'
     assert t.msb0.bin == '0000000100000000'
-    assert t.lsb0.bin == '1000000000000000'
+    assert t.lsb0.bin == '0000000000000001'
     assert t.le.bin == '0000000000000001'
-    assert t.le.lsb0.bin == '0000000010000000'
+    assert t.le.lsb0.bin == '0000000000000001'
 
 
 def test_bin_field_views():

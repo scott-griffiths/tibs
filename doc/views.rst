@@ -130,33 +130,58 @@ the most significant bit of the byte (the leftmost bit) is bit 0, with the right
 bit being bit 7. For ``lsb0``, which is used in some specifications, the least significant
 bit of the byte (the rightmost bit) is bit 0, and the leftmost bit is bit 7.
 
-One way to see the difference is to materialize the view::
+The easiest way to see the difference is to extract labelled fields from one
+byte::
 
-    >>> t = Tibs('0x0100')
+    >>> t = Tibs('0x12')
     >>> t.bin
+    '00010010'
+    >>> t.field(0, 3).bin
+    '0001'
+    >>> t.lsb0.field(0, 3).bin
+    '0010'
+    >>> t.lsb0.field(4, 7).bin
+    '0001'
+
+The plain :meth:`~Tibs.field` call uses MSB0 labels, so labels ``0..3`` select
+the left-hand nibble. The ``lsb0`` view uses LSB0 labels, so labels ``0..3``
+select the right-hand nibble. In both cases the returned field is displayed as a
+normal value, with the most significant bit on the left.
+
+The same value-display rule applies to whole views. Representation methods such
+as :attr:`~View.bin`, :attr:`~View.hex` and :meth:`~View.to_tibs` show the value
+denoted by the view, not a physical traversal of the source bits. For a whole
+view, this is the same ordering you would get from
+``view.field(0, len(view) - 1)``::
+
+    >>> word = Tibs('0x0100')
+    >>> word.bin
     '0000000100000000'
-    >>> t.le.bin
+    >>> word.lsb0.bin
     '0000000000000001'
-    >>> t.lsb0.bin
-    '1000000000000000'
-    >>> t.lsb0.le.bin
-    '0000000010000000'
+    >>> word.lsb0.field(0, len(word) - 1).bin
+    '0000000000000001'
 
-Let's go through these one at a time:
+For full-width multi-byte values, ``lsb0`` can therefore look like a
+little-endian value display: bit label 0 is the least significant bit of the
+whole value, so it appears on the RHS. Use the original ``Tibs`` or ``Mutibs``
+when you want ordinary source-order indexing and slicing; use ``field()`` when
+you want specification labels.
 
-* ``t.bin`` -> ``00000001_00000000``. This is the standard Python indexing view. The bit
-  indices are just counting up from 0 on the LHS to 15 on the RHS.
-* ``t.le.bin`` -> ``00000000_00000001``. The byte-wise little-endian view. The byte
-  order is swapped by the view, so the rightmost byte has the most significant bits and the
-  leftmost byte has the least significant bits, but
-  the bits within each byte are unchanged.
-* ``t.lsb0.bin`` -> ``10000000_00000000``. The Least Significant Bit Zero (LSB0) view.
-  In the source byte, label 0 refers to the rightmost bit rather than the leftmost bit.
-  When the view is materialized, each byte is therefore read from right to left, while the
-  byte order itself is unchanged.
-* ``t.lsb0.le.bin`` -> ``00000000_10000000``. Finally we can combine them (in either order)
-  to both traverse the bytes from right to left and the bits in the byte from right to left.
-  The overall effect is to reverse the bit order.
+The physical storage is still unchanged unless you write through a
+:class:`MutableView`. Combining ``lsb0`` and ``le`` is common for register and
+packet specifications that number bits from the least significant bit and store
+multi-byte fields little-endian. Setting bit label 0 in that view makes it
+appear on the RHS of the interpreted value, even though the source bit lives in
+the first stored byte::
+
+    >>> m = Mutibs.from_zeros(32)
+    >>> v = m.lsb0.le
+    >>> v.field(0, 0).u = 1
+    >>> v.bin
+    '00000000000000000000000000000001'
+    >>> m.hex
+    '01000000'
 
 
 For ordinary Python indexing and slicing, use the ``Tibs`` or ``Mutibs`` directly.
