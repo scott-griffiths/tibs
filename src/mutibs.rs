@@ -1777,7 +1777,7 @@ impl Mutibs {
 
     /// Return whether the current Mutibs starts with prefix.
     ///
-    /// :param Tibs prefix: The bits to search for.
+    /// :param object prefix: The bits to search for. This can be anything promotable to ``Tibs``.
     /// :return: True if the Mutibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -1799,7 +1799,7 @@ impl Mutibs {
 
     /// Return whether the current Mutibs ends with suffix.
     ///
-    /// :param Tibs suffix: The bits to search for.
+    /// :param object suffix: The bits to search for. This can be anything promotable to ``Tibs``.
     /// :return: True if the Mutibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -1817,7 +1817,7 @@ impl Mutibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param Tibs needle: The Tibs to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
@@ -1843,7 +1843,7 @@ impl Mutibs {
 
     /// Find all occurrences of a bit sequence.
     ///
-    /// :param Tibs needle: The Tibs to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
@@ -1927,7 +1927,7 @@ impl Mutibs {
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
@@ -1939,7 +1939,7 @@ impl Mutibs {
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
@@ -1951,7 +1951,7 @@ impl Mutibs {
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     /// :raises ValueError: if the two Mutibs have differing lengths.
     ///
@@ -2294,7 +2294,7 @@ impl Mutibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param Tibs needle: The bits to find.
+    /// :param object needle: The bits to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
@@ -2607,7 +2607,7 @@ impl Mutibs {
 
     /// Concatenate Mutibs and return a new Mutibs.
     ///
-    /// :param Tibs other: The bits to append.
+    /// :param object other: The bits to append. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     ///
     /// .. code-block:: pycon
@@ -2628,7 +2628,7 @@ impl Mutibs {
 
     /// Concatenate Mutibs and return a new Mutibs.
     ///
-    /// :param Tibs other: The bits to prepend.
+    /// :param object other: The bits to prepend. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
@@ -2641,7 +2641,7 @@ impl Mutibs {
 
     /// Concatenate in-place.
     ///
-    /// :param Tibs other: The bits to append.
+    /// :param object other: The bits to append. This can be anything promotable to ``Tibs``.
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -2702,7 +2702,7 @@ impl Mutibs {
 
     /// Extend the current Mutibs in-place.
     ///
-    /// :param Tibs bs: The bits to extend with.
+    /// :param object bs: The bits to extend with. This can be anything promotable to ``Tibs``.
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -2748,7 +2748,7 @@ impl Mutibs {
     /// Note that this method is inherently slower than :meth:`extend` and
     /// should be avoided in performance critical code. See also :meth:`from_joined`.
     ///
-    /// :param Tibs bs: The bits to prepend to the current Mutibs.
+    /// :param object bs: The bits to prepend to the current Mutibs. This can be anything promotable to ``Tibs``.
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -2780,8 +2780,8 @@ impl Mutibs {
 
     /// Search and replace in-place.
     ///
-    /// :param Tibs old: The bits to search for.
-    /// :param Tibs new: The bits to replace with.
+    /// :param object old: The bits to search for. This can be anything promotable to ``Tibs``.
+    /// :param object new: The bits to replace with. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
@@ -2828,8 +2828,8 @@ impl Mutibs {
     ///
     /// This is the non-inplace version of :meth:`replace`.
     ///
-    /// :param Tibs old: The bits to search for.
-    /// :param Tibs new: The bits to replace with.
+    /// :param object old: The bits to search for. This can be anything promotable to ``Tibs``.
+    /// :param object new: The bits to replace with. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
@@ -2865,7 +2865,7 @@ impl Mutibs {
     /// Clips to start or end if insert position is out of range.
     ///
     /// :param int pos: The bit position to insert at.
-    /// :param Tibs bs: The bits to insert.
+    /// :param object bs: The bits to insert. This can be anything promotable to ``Tibs``.
     /// :return: None
     ///
     /// .. code-block:: pycon
@@ -2895,7 +2895,7 @@ impl Mutibs {
     /// This is the non-inplace version of :meth:`insert`.
     ///
     /// :param int pos: The bit position to insert at. Clips to the start or end if out of range.
-    /// :param Tibs bs: The bits to insert.
+    /// :param object bs: The bits to insert. This can be anything promotable to ``Tibs``.
     /// :return: A new Mutibs.
     ///
     /// .. code-block:: pycon
@@ -2995,7 +2995,7 @@ impl Mutibs {
 
     /// In-place bit-wise 'and'.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: None
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
@@ -3005,7 +3005,7 @@ impl Mutibs {
 
     /// In-place bit-wise 'or'.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: None
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
@@ -3015,7 +3015,7 @@ impl Mutibs {
 
     /// In-place bit-wise 'xor'.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: None
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///

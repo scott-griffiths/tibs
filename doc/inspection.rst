@@ -114,8 +114,9 @@ front::
     5
 
 There is also :meth:`Tibs.rfind_all_iter`, which yields matches from right to
-left. Iterator forms are only available on ``Tibs`` - convert from a ``Mutibs`` with
-:meth:`Mutibs.to_tibs` first if you need to use them.
+left. Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
+use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
+to move the data if you no longer need the mutable object.
 
 starts_with / ends_with
 =======================

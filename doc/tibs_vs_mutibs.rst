@@ -39,7 +39,7 @@ For another example of shared storage, in the following code each chunk reuses
 the data in ``t``::
 
     t = Tibs.from_random(8_000_000_000)
-    for chunk in t.chunks(8000):
+    for chunk in t.chunks_iter(8000):
         ...
 
 No data needs to be copied as it knows the original can't change in value.

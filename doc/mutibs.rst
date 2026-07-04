@@ -14,7 +14,8 @@ likely to be small in most use cases.
 Methods on Tibs which produce an iterator over the data, such as :meth:`Tibs.find_all_iter`
 and :meth:`Tibs.chunks_iter`, as well as iterating over the instance directly, are
 not available for Mutibs. This is because the underlying data could change while the iterator is active.
-To use these methods call :meth:`Mutibs.to_tibs` first to create an immutable copy.
+To use these methods call :meth:`Mutibs.to_tibs` first to create an immutable copy, or
+:meth:`Mutibs.as_tibs` to move the data if you no longer need the mutable object.
 
 The Python protocol methods include most of those from ``Tibs``. Additions are:
 

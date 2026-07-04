@@ -10,6 +10,35 @@ Mutating and copy methods
 Many of these methods have siblings which do the same task but don't modify the instance and
 instead return a new copy. These 'copy' methods are also available on the immutable ``Tibs``.
 
+For example, :meth:`Mutibs.reverse` changes the existing object and returns
+``None``::
+
+    >>> m = Mutibs('0b101100')
+    >>> result = m.reverse()
+    >>> result is None
+    True
+    >>> m
+    Mutibs('0b001101')
+
+The copy-returning form leaves the original value alone::
+
+    >>> t = Tibs('0b101100')
+    >>> r = t.reversed()
+    >>> t
+    Tibs('0b101100')
+    >>> r
+    Tibs('0b001101')
+
+The same copy-returning methods are also available on ``Mutibs`` when you want a
+new mutable value without changing the original::
+
+    >>> m = Mutibs('0b101100')
+    >>> r = m.reversed()
+    >>> m
+    Mutibs('0b101100')
+    >>> r
+    Mutibs('0b001101')
+
 .. csv-table::
    :header: "Mutibs mutating methods", "Tibs/Mutibs copy equivalent"
 

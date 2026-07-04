@@ -27,19 +27,20 @@ implementations improve. Explicit ``Codec.Rice`` and ``Codec.Zstd`` outputs are 
 values, but compressed output is not the canonical key form. Forward compatibility is not
 guaranteed: older versions may reject encodings introduced later.
 
-The base implementation does a good job at the smaller bit sequences that compression
-algorithms would be very inefficient at storing, for example all bit sequences up to 6 bits long are encoded
-into a single byte. For longer sequences the raw codec overhead is still small.
+The compact inline forms do a good job at the smaller bit sequences that compression
+algorithms would be very inefficient at storing. For example, all bit sequences up
+to 6 bits long are encoded into a single byte by the default ``Codec.Auto`` path.
+For longer sequences the explicit raw codec overhead is still small.
 
 The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data. The same bytes can be
 decoded as either class, and the decoded objects have the same logical bits. For byte-for-byte
 stable keys, use the same explicit codec for both objects, normally ``Codec.Raw``.
 
 .. csv-table::
-   :header: "Tibs length", "Raw encoded byte overhead"
+   :header: "Tibs length", "``encode(Codec.Raw)`` overhead"
 
-   0 to 6 bits, +0 bytes
-   7 to 64 bits, +1 byte
+   0 bits, +1 byte
+   1 to 64 bits, +2 bytes
    65 to 1016 bits, +2 bytes
    1017 to 131064 bits, +3 bytes
    ... , ...

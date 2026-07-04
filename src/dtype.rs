@@ -230,7 +230,7 @@ impl Dtype {
 
     /// Decode one value from a bit sequence.
     ///
-    /// :param Tibs bits: The bit sequence to decode.
+    /// :param object bits: The bit sequence to decode. This can be anything promotable to ``Tibs``.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(bits).
     /// :return: The decoded Python value.
@@ -258,7 +258,7 @@ impl Dtype {
     ///
     /// The selected range must be a whole number of dtype values.
     ///
-    /// :param Tibs bits: The bit sequence to decode.
+    /// :param object bits: The bit sequence to decode. This can be anything promotable to ``Tibs``.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(bits).
     /// :return: A list of decoded Python values.
@@ -284,7 +284,7 @@ impl Dtype {
     ///
     /// The selected range must be a whole number of dtype values.
     ///
-    /// :param Tibs bits: The bit sequence to decode.
+    /// :param object bits: The bit sequence to decode. This can be anything promotable to ``Tibs``.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(bits).
     /// :return: An iterator yielding decoded Python values.

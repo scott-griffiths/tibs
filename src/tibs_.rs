@@ -750,7 +750,7 @@ impl Tibs {
 
     /// Find all occurrences of a bit sequence.
     ///
-    /// :param Tibs needle: The bit sequence to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
@@ -793,7 +793,7 @@ impl Tibs {
 
     /// Find all occurrences of a bit sequence, returning an iterator of bit positions.
     ///
-    /// :param Tibs needle: The bit sequence to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
@@ -804,7 +804,8 @@ impl Tibs {
     /// All occurrences of needle are found, even if they overlap.
     ///
     /// Note that this method is not available for :class:`Mutibs` as its value could change while the
-    /// generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_tibs`.
+    /// generator is still active. For that case, convert to a :class:`Tibs` first with
+    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.as_tibs` if you no longer need the mutable object.
     ///
     /// .. code-block:: pycon
     ///
@@ -867,7 +868,7 @@ impl Tibs {
 
     /// Find all occurrences of a bit sequence in reverse, returning an iterator of bit positions.
     ///
-    /// :param Tibs needle: The bit sequence to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
@@ -878,7 +879,8 @@ impl Tibs {
     /// All occurrences of needle are found, even if they overlap.
     ///
     /// Note that this method is not available for :class:`Mutibs` as its value could change while the
-    /// generator is still active. For that case you should convert to a :class:`Tibs` first with :meth:`Mutibs.to_tibs`.
+    /// generator is still active. For that case, convert to a :class:`Tibs` first with
+    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.as_tibs` if you no longer need the mutable object.
     ///
     /// .. code-block:: pycon
     ///
@@ -1606,7 +1608,7 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param Tibs needle: The bit sequence to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
@@ -1646,7 +1648,7 @@ impl Tibs {
     ///
     /// Returns the bit position if found, or None if not found.
     ///
-    /// :param Tibs needle: The bit sequence to find.
+    /// :param object needle: The bit sequence to find. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
@@ -1673,7 +1675,7 @@ impl Tibs {
 
     /// Return whether the current Tibs starts with prefix.
     ///
-    /// :param Tibs prefix: The bits to search for.
+    /// :param object prefix: The bits to search for. This can be anything promotable to ``Tibs``.
     /// :return: True if the Tibs starts with the prefix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -1689,7 +1691,7 @@ impl Tibs {
 
     /// Return whether the current Tibs ends with suffix.
     ///
-    /// :param Tibs suffix: The bits to search for.
+    /// :param object suffix: The bits to search for. This can be anything promotable to ``Tibs``.
     /// :return: True if the Tibs ends with the suffix, otherwise False.
     ///
     /// .. code-block:: pycon
@@ -1846,7 +1848,7 @@ impl Tibs {
     /// This is the immutable equivalent of :meth:`Mutibs.insert`.
     ///
     /// :param int pos: The bit position to insert at. Clips to the start or end if out of range.
-    /// :param Tibs bs: The bits to insert.
+    /// :param object bs: The bits to insert. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     ///
     /// .. code-block:: pycon
@@ -1866,8 +1868,8 @@ impl Tibs {
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.replace`.
     ///
-    /// :param Tibs old: The bits to search for.
-    /// :param Tibs new: The bits to replace with.
+    /// :param object old: The bits to search for. This can be anything promotable to ``Tibs``.
+    /// :param object new: The bits to replace with. This can be anything promotable to ``Tibs``.
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
@@ -1995,7 +1997,7 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     ///
-    /// :param Tibs other: The bits to append.
+    /// :param object other: The bits to append. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     ///
     /// .. code-block:: pycon
@@ -2013,7 +2015,7 @@ impl Tibs {
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
     ///
-    /// :param Tibs other: The bits to prepend.
+    /// :param object other: The bits to prepend. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
@@ -2026,7 +2028,7 @@ impl Tibs {
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
@@ -2041,7 +2043,7 @@ impl Tibs {
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
@@ -2056,7 +2058,7 @@ impl Tibs {
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
     ///
-    /// :param Tibs other: The other bits.
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
     /// :return: A new Tibs.
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
