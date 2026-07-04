@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{DtypeKind, Endianness};
+use crate::enums::{ByteOrder, DtypeKind};
 use crate::helpers;
 use crate::tibs_::{Tibs, py_from_value_parts};
 use memchr::memmem;
@@ -212,7 +212,7 @@ pub struct ValuesIterator {
     pub(crate) bits_object: Py<Tibs>,
     pub(crate) dtype_kind: DtypeKind,
     pub(crate) dtype_length: usize,
-    pub(crate) byte_order: Endianness,
+    pub(crate) byte_order: ByteOrder,
     pub(crate) chunk_size: usize,
     pub(crate) current_pos: usize,
     pub(crate) end_pos: usize,

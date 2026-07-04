@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, Endianness, Codec
+from tibs import Tibs, Mutibs, ByteOrder, Codec
 
 
 def test_creation():
@@ -1454,10 +1454,10 @@ def test_tibs_byte_swapped_with_slice():
     assert b == Tibs('0x004433221155')
 
 
-def test_from_u_bad_endianness_type():
+def test_from_u_bad_byte_order_type():
     with pytest.raises(TypeError):
         a = Mutibs.from_u(101, 16, "asdf")
-    a = Mutibs.from_u(101, 16, Endianness.Unspecified)
+    a = Mutibs.from_u(101, 16, ByteOrder.Unspecified)
     assert a.to_u() == 101
 
 
@@ -1558,13 +1558,13 @@ def test_numeric_write_methods_do_not_accept_endianness():
     m = Mutibs.from_zeros(16)
 
     with pytest.raises(TypeError):
-        m.write_u(3, Endianness.Little)
+        m.write_u(3, ByteOrder.Little)
 
     with pytest.raises(TypeError):
-        m.write_i(-3, Endianness.Little)
+        m.write_i(-3, ByteOrder.Little)
 
     with pytest.raises(TypeError):
-        m.write_f(1.25, Endianness.Little)
+        m.write_f(1.25, ByteOrder.Little)
 
 
 def test_contains():
@@ -1604,9 +1604,9 @@ def test_replace_negative_count():
 
 def test_float_endianness():
     m1 = Mutibs.from_f(3.5, 32)
-    m2 = Mutibs.from_f(3.5, 32, Endianness.Unspecified)
-    m3 = Mutibs.from_f(3.5, 32, Endianness.Big)
-    m4 = Mutibs.from_f(3.5, 32, Endianness.Little)
+    m2 = Mutibs.from_f(3.5, 32, ByteOrder.Unspecified)
+    m3 = Mutibs.from_f(3.5, 32, ByteOrder.Big)
+    m4 = Mutibs.from_f(3.5, 32, ByteOrder.Little)
     assert m1.to_f() == m2.to_f() == 3.5
     assert m4.le.f == 3.5
     assert m3.be.to_f() == 3.5

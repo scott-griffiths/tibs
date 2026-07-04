@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, Endianness, Dtype, DtypeKind
+from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind
 
 def test_creation():
     d = Dtype("u8")
@@ -12,7 +12,7 @@ def test_parse_little_endian_uint():
     d = Dtype("u8_le")
     assert d.kind is DtypeKind.Uint
     assert d.length == 8
-    assert d.byte_order is Endianness.Little
+    assert d.byte_order is ByteOrder.Little
 
 
 @pytest.mark.parametrize(
@@ -22,10 +22,10 @@ def test_parse_little_endian_uint():
         ("f32_be", DtypeKind.Float),
     ],
 )
-def test_endian_dtype_specs(spec, kind):
+def test_byte_order_dtype_specs(spec, kind):
     d = Dtype(spec)
     assert d.kind is kind
-    assert d.byte_order is not Endianness.Unspecified
+    assert d.byte_order is not ByteOrder.Unspecified
 
 
 @pytest.mark.parametrize(
@@ -42,14 +42,14 @@ def test_endian_dtype_specs(spec, kind):
 def test_dtype_kind_specs(spec, kind):
     d = Dtype(spec)
     assert d.kind is kind
-    assert d.byte_order is Endianness.Unspecified
+    assert d.byte_order is ByteOrder.Unspecified
 
 
 def test_from_params():
-    d = Dtype.from_params(DtypeKind.Uint, 16, Endianness.Little)
+    d = Dtype.from_params(DtypeKind.Uint, 16, ByteOrder.Little)
     assert d.kind is DtypeKind.Uint
     assert d.length == 16
-    assert d.byte_order is Endianness.Little
+    assert d.byte_order is ByteOrder.Little
 
 
 def test_bool_from_params_requires_length_one():
@@ -124,13 +124,13 @@ def test_invalid_specs(spec):
 )
 def test_byte_order_rejected_for_non_numeric_kinds(kind, length):
     with pytest.raises(ValueError, match="byte order"):
-        Dtype.from_params(kind, length, Endianness.Little)
+        Dtype.from_params(kind, length, ByteOrder.Little)
 
 
 def test_from_value_float():
     d = Dtype("f16_le")
     t = Tibs.from_value(d, 14.5)
-    t2 = Tibs.from_f(14.5, 16, Endianness.Little)
+    t2 = Tibs.from_f(14.5, 16, ByteOrder.Little)
     assert t == t2
 
 

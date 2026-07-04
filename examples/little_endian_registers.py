@@ -1,4 +1,4 @@
-from tibs import Endianness, Tibs
+from tibs import ByteOrder, Tibs
 
 
 REGISTER_NAMES = [
@@ -18,7 +18,7 @@ def read_registers(register_dump):
 
 def write_registers(registers):
     return Tibs.from_joined(
-        Tibs.from_u(registers[name], 16, Endianness.Little)
+        Tibs.from_u(registers[name], 16, ByteOrder.Little)
         for name in REGISTER_NAMES
     ).bytes
 

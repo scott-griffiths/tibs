@@ -3,35 +3,35 @@ use pyo3::prelude::*;
 
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Endianness {
+pub enum ByteOrder {
     Unspecified,
     Big,
     Little,
 }
 
-impl Endianness {
+impl ByteOrder {
     pub(crate) fn repr_name(self) -> &'static str {
         match self {
-            Endianness::Unspecified => "Endianness.Unspecified",
-            Endianness::Big => "Endianness.Big",
-            Endianness::Little => "Endianness.Little",
+            ByteOrder::Unspecified => "ByteOrder.Unspecified",
+            ByteOrder::Big => "ByteOrder.Big",
+            ByteOrder::Little => "ByteOrder.Little",
         }
     }
 
-    pub fn is_little_endian(optional_endianness: Option<Self>, length: usize) -> PyResult<bool> {
-        match optional_endianness {
-            Some(Endianness::Big) => {
+    pub fn is_little_endian(optional_byte_order: Option<Self>, length: usize) -> PyResult<bool> {
+        match optional_byte_order {
+            Some(ByteOrder::Big) => {
                 if length % 8 != 0 {
                     return Err(PyValueError::new_err(format!(
-                        "Cannot create a big byte-endian value with a length of {length} bits. It must be a whole number of bytes long."
+                        "Cannot create a big-endian byte-order value with a length of {length} bits. It must be a whole number of bytes long."
                     )));
                 }
                 Ok(false)
             }
-            Some(Endianness::Little) => {
+            Some(ByteOrder::Little) => {
                 if length % 8 != 0 {
                     return Err(PyValueError::new_err(format!(
-                        "Cannot create a little byte-endian value with a length of {length} bits. It must be a whole number of bytes long."
+                        "Cannot create a little-endian byte-order value with a length of {length} bits. It must be a whole number of bytes long."
                     )));
                 }
                 Ok(true)

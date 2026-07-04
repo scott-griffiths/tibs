@@ -1,6 +1,6 @@
 use crate::core::{BitCollection, count_bitslice};
 use crate::dtype::{Dtype, extract_dtype};
-use crate::enums::{BitOrder, Codec, DtypeKind, Endianness};
+use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
@@ -221,17 +221,17 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
     match dtype.kind {
         DtypeKind::Float => {
             let is_little_endian =
-                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
             bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)
         }
         DtypeKind::Uint => {
             let is_little_endian =
-                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
             bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian)
         }
         DtypeKind::Int => {
             let is_little_endian =
-                Endianness::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
             bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian)
         }
         DtypeKind::Bool => match helpers::convert_to_bool(value) {
@@ -298,7 +298,7 @@ pub(crate) fn py_from_value_parts(
     py: Python<'_>,
     dtype_kind: DtypeKind,
     dtype_length: usize,
-    byte_order: Endianness,
+    byte_order: ByteOrder,
     value: &Tibs,
 ) -> PyResult<Py<PyAny>> {
     if value.len() != dtype_length {
@@ -311,15 +311,15 @@ pub(crate) fn py_from_value_parts(
 
     match dtype_kind {
         DtypeKind::Float => {
-            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
             BitCollection::to_f64(value, is_little_endian)?.into_py_any(py)
         }
         DtypeKind::Uint => {
-            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
             BitCollection::to_u128(value, is_little_endian)?.into_py_any(py)
         }
         DtypeKind::Int => {
-            let is_little_endian = Endianness::is_little_endian(Some(byte_order), dtype_length)?;
+            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
             BitCollection::to_i128(value, is_little_endian)?.into_py_any(py)
         }
         DtypeKind::Bool => value.as_bitslice()[0].into_py_any(py),
@@ -464,22 +464,22 @@ impl Tibs {
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
-    /// :param Endianness byte_order: The byte order used when interpreting whole-byte values. Defaults to ``Endianness.Unspecified``.
+    /// :param ByteOrder byte_order: The byte order used when interpreting whole-byte values. Defaults to ``ByteOrder.Unspecified``.
     /// :param BitOrder bit_order: The bit numbering order used for field labels. Defaults to ``BitOrder.Msb0``.
     /// :return: A new :class:`View`.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0x0100').view(byte_order=Endianness.Little).u
+    ///     >>> Tibs('0x0100').view(byte_order=ByteOrder.Little).u
     ///     1
     ///
-    #[pyo3(signature = (byte_order = Endianness::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=None, bit_order=None)")]
+    #[pyo3(signature = (byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=None, bit_order=None)")]
     pub fn view(
         slf: PyRef<'_, Self>,
-        byte_order: Option<Endianness>,
+        byte_order: Option<ByteOrder>,
         bit_order: Option<BitOrder>,
     ) -> PyResult<View> {
-        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
+        let byte_order = byte_order.unwrap_or(ByteOrder::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
         View::validate_layout(slf.len(), byte_order, bit_order)?;
         Ok(View::from_tibs(slf.clone(), byte_order, bit_order))
@@ -487,34 +487,30 @@ impl Tibs {
 
     /// Return a little-endian byte-order view.
     ///
-    /// Equivalent to ``view(byte_order=Endianness.Little)``.
+    /// Equivalent to ``view(byte_order=ByteOrder.Little)``.
     ///
     /// The ``Tibs`` length must be a whole number of bytes.
     ///
     #[getter]
     pub fn le(slf: PyRef<'_, Self>) -> PyResult<View> {
-        View::validate_layout(slf.len(), Endianness::Little, BitOrder::Msb0)?;
+        View::validate_layout(slf.len(), ByteOrder::Little, BitOrder::Msb0)?;
         Ok(View::from_tibs(
             slf.clone(),
-            Endianness::Little,
+            ByteOrder::Little,
             BitOrder::Msb0,
         ))
     }
 
     /// Return a big-endian byte-order view.
     ///
-    /// Equivalent to ``view(byte_order=Endianness.Big)``.
+    /// Equivalent to ``view(byte_order=ByteOrder.Big)``.
     ///
     /// The ``Tibs`` length must be a whole number of bytes.
     ///
     #[getter]
     pub fn be(slf: PyRef<'_, Self>) -> PyResult<View> {
-        View::validate_layout(slf.len(), Endianness::Big, BitOrder::Msb0)?;
-        Ok(View::from_tibs(
-            slf.clone(),
-            Endianness::Big,
-            BitOrder::Msb0,
-        ))
+        View::validate_layout(slf.len(), ByteOrder::Big, BitOrder::Msb0)?;
+        Ok(View::from_tibs(slf.clone(), ByteOrder::Big, BitOrder::Msb0))
     }
 
     /// Return an LSB0 bit-order view.
@@ -527,10 +523,10 @@ impl Tibs {
     ///
     #[getter]
     pub fn lsb0(slf: PyRef<'_, Self>) -> PyResult<View> {
-        View::validate_layout(slf.len(), Endianness::Unspecified, BitOrder::Lsb0)?;
+        View::validate_layout(slf.len(), ByteOrder::Unspecified, BitOrder::Lsb0)?;
         Ok(View::from_tibs(
             slf.clone(),
-            Endianness::Unspecified,
+            ByteOrder::Unspecified,
             BitOrder::Lsb0,
         ))
     }
@@ -546,7 +542,7 @@ impl Tibs {
     pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
         Ok(View::from_tibs(
             slf.clone(),
-            Endianness::Unspecified,
+            ByteOrder::Unspecified,
             BitOrder::Msb0,
         ))
     }
@@ -563,7 +559,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
     pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<View> {
-        View::from_tibs(slf.clone(), Endianness::Unspecified, BitOrder::Msb0).field(a, b)
+        View::from_tibs(slf.clone(), ByteOrder::Unspecified, BitOrder::Msb0).field(a, b)
     }
 
     /// Iterate over the bits of the Tibs, yielding each bit as a boolean.
@@ -1144,7 +1140,7 @@ impl Tibs {
     ///
     /// :param int u: An unsigned integer.
     /// :param int length: The bit length to create. Can be up to 128.
-    /// :param Endianness byte_order: The byte order used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
@@ -1155,15 +1151,15 @@ impl Tibs {
     ///     Tibs('0x0f')
     ///
     #[classmethod]
-    #[pyo3(signature = (u, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, u, /, length, byte_order=None)")]
+    #[pyo3(signature = (u, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, u, /, length, byte_order=None)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
         u: u128,
         length: i64,
-        byte_order: Option<Endianness>,
+        byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
-        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
+        let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?))
     }
 
@@ -1202,7 +1198,7 @@ impl Tibs {
     ///
     /// :param int i: A signed integer.
     /// :param int length: The bit length to create. Can be up to 128.
-    /// :param Endianness byte_order: The byte order used to store the integer. Defaults to Endianness.Unspecified.
+    /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// :raises ValueError: if the integer doesn't fit in the length given.
@@ -1213,15 +1209,15 @@ impl Tibs {
     ///     Tibs('0xe')
     ///
     #[classmethod]
-    #[pyo3(signature = (i, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, i, /, length, byte_order=None)")]
+    #[pyo3(signature = (i, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, i, /, length, byte_order=None)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
         i: i128,
         length: i64,
-        byte_order: Option<Endianness>,
+        byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
-        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
+        let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
         Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?))
     }
 
@@ -1260,7 +1256,7 @@ impl Tibs {
     ///
     /// :param float f: A floating point value.
     /// :param int length: The bit length to create. Must be 16, 32 or 64.
-    /// :param Endianness byte_order: The byte order used to store the float. Defaults to Endianness.Unspecified.
+    /// :param ByteOrder byte_order: The byte order used to store the float. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
     /// .. code-block:: pycon
@@ -1269,15 +1265,15 @@ impl Tibs {
     ///     Tibs('0x3fc00000')
     ///
     #[classmethod]
-    #[pyo3(signature = (f, /, length, byte_order = Endianness::Unspecified), text_signature = "(cls, f, /, length, byte_order=None)")]
+    #[pyo3(signature = (f, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, f, /, length, byte_order=None)")]
     pub fn from_f(
         _cls: &Bound<'_, PyType>,
         f: f64,
         length: i64,
-        byte_order: Option<Endianness>,
+        byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
-        let is_little_endian = Endianness::is_little_endian(byte_order, length)?;
+        let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
         let bv = bv_from_f64(f, length, is_little_endian)?;
         Ok(Tibs::from_bv(bv))
     }

@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::enums::{DtypeKind, Endianness};
+use crate::enums::{ByteOrder, DtypeKind};
 use crate::helpers::validate_slice;
 use crate::iterator::ValuesIterator;
 use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
@@ -27,11 +27,11 @@ use std::hash::{Hash, Hasher};
 pub struct Dtype {
     pub(crate) kind: DtypeKind,
     pub(crate) length: usize,
-    pub(crate) byte_order: Endianness,
+    pub(crate) byte_order: ByteOrder,
 }
 
 impl Dtype {
-    fn from_parts(kind: DtypeKind, length: i64, byte_order: Endianness) -> PyResult<Self> {
+    fn from_parts(kind: DtypeKind, length: i64, byte_order: ByteOrder) -> PyResult<Self> {
         if length <= 0 {
             return Err(PyValueError::new_err(format!(
                 "Dtype length must be greater than zero, but received {}.",
@@ -45,7 +45,7 @@ impl Dtype {
                 kind.repr_name()
             )));
         }
-        if byte_order != Endianness::Unspecified {
+        if byte_order != ByteOrder::Unspecified {
             match kind {
                 DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float => {
                     if !length.is_multiple_of(8) {
@@ -73,11 +73,11 @@ impl Dtype {
     fn parse_spec(spec: &str) -> PyResult<Self> {
         let spec = spec.trim().to_ascii_lowercase();
         let (base, byte_order) = if let Some(base) = spec.strip_suffix("_le") {
-            (base, Endianness::Little)
+            (base, ByteOrder::Little)
         } else if let Some(base) = spec.strip_suffix("_be") {
-            (base, Endianness::Big)
+            (base, ByteOrder::Big)
         } else {
-            (spec.as_str(), Endianness::Unspecified)
+            (spec.as_str(), ByteOrder::Unspecified)
         };
 
         if base == "bool" {
@@ -158,25 +158,25 @@ impl Dtype {
     ///
     /// :param DtypeKind kind: The kind of value to encode or decode.
     /// :param int length: The number of bits used by one value.
-    /// :param Endianness byte_order: The byte order for integer and floating-point values. Defaults to ``Endianness.Unspecified``.
+    /// :param ByteOrder byte_order: The byte order for integer and floating-point values. Defaults to ``ByteOrder.Unspecified``.
     /// :return: A new ``Dtype``.
     ///
     /// :raises ValueError: if ``length`` is not greater than zero, if ``DtypeKind.Bool`` is given a length other than 1, if byte order is used with a non-numeric kind, or if byte order is used with a non-byte length.
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Dtype.from_params(DtypeKind.Uint, 16, Endianness.Little)
+    ///     >>> Dtype.from_params(DtypeKind.Uint, 16, ByteOrder.Little)
     ///     Dtype('u16_le')
     ///
     #[classmethod]
-    #[pyo3(signature = (kind, length, byte_order = Endianness::Unspecified), text_signature = "(cls, kind, length, byte_order=None)")]
+    #[pyo3(signature = (kind, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, kind, length, byte_order=None)")]
     pub fn from_params(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         kind: DtypeKind,
         length: i64,
-        byte_order: Option<Endianness>,
+        byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
-        let byte_order = byte_order.unwrap_or(Endianness::Unspecified);
+        let byte_order = byte_order.unwrap_or(ByteOrder::Unspecified);
         Self::from_parts(kind, length, byte_order)
     }
 
@@ -194,7 +194,7 @@ impl Dtype {
 
     /// The byte order used by integer and floating-point values.
     #[getter]
-    fn byte_order(&self) -> Endianness {
+    fn byte_order(&self) -> ByteOrder {
         self.byte_order
     }
 
@@ -329,9 +329,9 @@ impl Dtype {
 
     pub fn __repr__(&self) -> String {
         let byte_order_str = match self.byte_order {
-            Endianness::Unspecified => "",
-            Endianness::Little => "_le",
-            Endianness::Big => "_be",
+            ByteOrder::Unspecified => "",
+            ByteOrder::Little => "_le",
+            ByteOrder::Big => "_be",
         };
         let spec = match self.kind {
             DtypeKind::Uint => format!("u{}{}", self.length, byte_order_str),

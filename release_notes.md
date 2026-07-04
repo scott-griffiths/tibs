@@ -5,6 +5,8 @@
 Backwardly incompatible changes
 
 * Minimum Python version now 3.10 instead of 3.8
+* Renamed the `Endianness` enum to `ByteOrder`. The constructor keyword remains
+  `byte_order`, and dtype suffixes remain `_le` and `_be`.
 
 Added
 

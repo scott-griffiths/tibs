@@ -42,7 +42,7 @@ Some examples::
     e = Tibs.from_i(-384, 20)
 
     # From an unsigned integer. For whole-byte lengths a byte order can be used.
-    f = Tibs.from_u(3, 32, byte_order=Endianness.Little)
+    f = Tibs.from_u(3, 32, byte_order=ByteOrder.Little)
 
     # Floating point values need to have a length of 16, 32 or 64.
     g = Tibs.from_f(-0.125, 16)
@@ -154,7 +154,7 @@ For example there are many ways for a ``Tibs`` to be constructed from the unsign
 
     u1 = Tibs.from_u(3, 5)   # binary 00011
     u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
-    u3 = Tibs.from_u(3, 16, Endianness.Little)  # binary 00000011_00000000
+    u3 = Tibs.from_u(3, 16, ByteOrder.Little)  # binary 00000011_00000000
 
 These are three different ``Tibs``, but they can all have equal interpretations::
 
@@ -193,7 +193,8 @@ The matching interpretation methods decode values back from a bit sequence::
 
 
 For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
-when byte order matters::
+when byte order matters. These suffixes mean little-endian and big-endian byte
+order respectively::
 
     >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
     '3412cdab'

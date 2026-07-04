@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, Endianness, Codec
+from tibs import Tibs, Mutibs, ByteOrder, Codec
 import random
 
 def test_from_bin():
@@ -200,7 +200,7 @@ def test_negative_length_with_byte_endianness_reports_negative_length():
         ):
             method = getattr(cls, method_name)
             with pytest.raises(ValueError, match="Negative bit length"):
-                method(value, -1, Endianness.Big)
+                method(value, -1, ByteOrder.Big)
 
 
 def test_from_i():
@@ -468,7 +468,7 @@ def test_rfind_all():
 def test_endianness_i():
     t1 = Tibs.from_i(3, 16, Endianness.Big)
     assert t1.bin == '0000000000000011'
-    t2 = Tibs.from_i(3, 16, Endianness.Little)
+    t2 = Tibs.from_i(3, 16, ByteOrder.Little)
     assert t2.bin == '0000001100000000'
     assert t1.to_i() == 3
     assert t1.be.i == 3
@@ -477,15 +477,15 @@ def test_endianness_i():
 
 def test_endianness_u():
     t1 = Tibs.from_u(10001, 32)
-    t2 = Tibs.from_u(10001, 32, Endianness.Big)
-    t3 = Tibs.from_u(10001, 32, Endianness.Little)
+    t2 = Tibs.from_u(10001, 32, ByteOrder.Big)
+    t3 = Tibs.from_u(10001, 32, ByteOrder.Little)
     assert t1 == t2
     assert t1 != t3
     assert t2.to_u() == 10001
     assert t3.to_u() != 10001
     assert t3.le.to_u() == 10001
     with pytest.raises(ValueError):
-        _ = Tibs.from_u(999, 31, Endianness.Big)
+        _ = Tibs.from_u(999, 31, ByteOrder.Big)
     with pytest.raises(ValueError):
         _ = Tibs('0x123').be.u
 

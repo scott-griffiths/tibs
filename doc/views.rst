@@ -39,9 +39,9 @@ A little-endian interpretation essentially reverses the byte order, so the least
 significant byte is the first one. Without changing the data at all, we can create
 a ``View`` which wraps it, and then use the interpretation on that ``View`` ::
 
-    >>> v = t.view(Endianness.Little)
+    >>> v = t.view(ByteOrder.Little)
     >>> v
-    View(Tibs('0x01000000'), Endianness.Little, BitOrder.Msb0)
+    View(Tibs('0x01000000'), ByteOrder.Little, BitOrder.Msb0)
     >>> v.to_hex()
     '00000001'
     >>> v.to_u()
@@ -60,7 +60,7 @@ and whole-byte values should be interpreted as little-endian.
 
 For the example above, the :attr:`Tibs.u` property makes the little-endian interpretation more concise::
 
-    >>> t.view(Endianness.Little).to_u()
+    >>> t.view(ByteOrder.Little).to_u()
     1
     >>> t.le.u  # Same thing, but using properties
     1
@@ -91,7 +91,7 @@ Byte order
 Byte order only applies to whole-byte values. When you construct a value from an
 integer or float you can choose the byte order used to store it::
 
-    >>> t = Tibs.from_u(666, 16, byte_order=Endianness.Little)
+    >>> t = Tibs.from_u(666, 16, byte_order=ByteOrder.Little)
     >>> t
     Tibs('0x9a02')
 
@@ -108,14 +108,14 @@ The little-endian view gives the intended interpretation::
 
 This works for floats and bytes too::
 
-    >>> x = Tibs.from_f(1984.3, 64, byte_order=Endianness.Little)
+    >>> x = Tibs.from_f(1984.3, 64, byte_order=ByteOrder.Little)
     >>> x.f
     4.667261455589845e-62
     >>> x.le.f
     1984.3
 
-The default byte order is ``Endianness.Unspecified``. For whole-byte data this is
-the same interpretation as ``Endianness.Big``, but it can also be used for
+The default byte order is ``ByteOrder.Unspecified``. For whole-byte data this is
+the same interpretation as ``ByteOrder.Big``, but it can also be used for
 non-whole-byte data. The explicit ``be`` and ``le`` views require a whole number
 of bytes.
 
@@ -170,7 +170,7 @@ Mutable views
 A :class:`MutableView` can also write interpreted values back into the source
 ``Mutibs`` without changing its length. The view supplies the layout::
 
-    >>> m = Mutibs.from_u(99, 16, byte_order=Endianness.Little)
+    >>> m = Mutibs.from_u(99, 16, byte_order=ByteOrder.Little)
     >>> m.le.u
     99
     >>> m.le.write_u(45)
@@ -278,7 +278,7 @@ order from the header. The selected field bytes are ``12 34``, and the integer
 interpretation is ``0x3412``::
 
     >>> header.field(31, 16)
-    View(Tibs('0x1234'), Endianness.Little, BitOrder.Msb0)
+    View(Tibs('0x1234'), ByteOrder.Little, BitOrder.Msb0)
     >>> header.field(31, 16).u
     13330
 
@@ -286,7 +286,7 @@ If the extracted field is not a whole number of bytes, byte order no longer has 
 meaning and is dropped::
 
     >>> header.field(11, 0)
-    View(Tibs('0x123'), Endianness.Unspecified, BitOrder.Msb0)
+    View(Tibs('0x123'), ByteOrder.Unspecified, BitOrder.Msb0)
     >>> header.field(11, 0).u
     291
 

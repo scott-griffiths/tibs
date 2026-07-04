@@ -52,7 +52,9 @@ objects, or bool iterables, and are unpacked as immutable :class:`Tibs` objects.
 
 
 For integer and floating-point dtypes, append ``_le`` or ``_be`` to specify
-byte order for whole-byte values::
+byte order for whole-byte values. The suffixes use the conventional endian
+abbreviations: ``_le`` means little-endian byte order, and ``_be`` means
+big-endian byte order::
 
     >>> Dtype("u16_le")
     Dtype('u16_le')

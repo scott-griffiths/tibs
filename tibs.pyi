@@ -6,10 +6,10 @@ _DtypeLike = Union["Dtype", str]
 _DtypeValue = Union[int, float, str, bytes, bool, "Tibs"]
 
 
-class Endianness:
-    Unspecified: ClassVar[Endianness]
-    Big: ClassVar[Endianness]
-    Little: ClassVar[Endianness]
+class ByteOrder:
+    Unspecified: ClassVar[ByteOrder]
+    Big: ClassVar[ByteOrder]
+    Little: ClassVar[ByteOrder]
 
 
 class BitOrder:
@@ -44,7 +44,7 @@ class Dtype:
             cls,
             kind: DtypeKind,
             length: int,
-            byte_order: Endianness = Endianness.Unspecified
+            byte_order: ByteOrder = ByteOrder.Unspecified
     ) -> Dtype: ...
 
     @property
@@ -54,7 +54,7 @@ class Dtype:
     def length(self) -> int: ...
 
     @property
-    def byte_order(self) -> Endianness: ...
+    def byte_order(self) -> ByteOrder: ...
 
     def pack(self, value: Any, /) -> Tibs: ...
 
@@ -78,7 +78,7 @@ class View:
     def __init__(
             self,
             source: Tibs | Mutibs,
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> None: ...
 
@@ -87,13 +87,13 @@ class View:
             cls,
             source: Tibs | Mutibs,
             indices: Iterable[int],
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> View: ...
 
     def view(
             self,
-            byte_order: Endianness | None = None,
+            byte_order: ByteOrder | None = None,
             bit_order: BitOrder | None = None
     ) -> View: ...
 
@@ -110,7 +110,7 @@ class View:
     def msb0(self) -> View: ...
 
     @property
-    def byte_order(self) -> Endianness: ...
+    def byte_order(self) -> ByteOrder: ...
 
     @property
     def bit_order(self) -> BitOrder: ...
@@ -169,7 +169,7 @@ class MutableView:
     def __init__(
             self,
             source: Mutibs,
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> None: ...
 
@@ -178,13 +178,13 @@ class MutableView:
             cls,
             source: Mutibs,
             indices: Iterable[int],
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> MutableView: ...
 
     def view(
             self,
-            byte_order: Endianness | None = None,
+            byte_order: ByteOrder | None = None,
             bit_order: BitOrder | None = None
     ) -> MutableView: ...
 
@@ -201,7 +201,7 @@ class MutableView:
     def msb0(self) -> MutableView: ...
 
     @property
-    def byte_order(self) -> Endianness: ...
+    def byte_order(self) -> ByteOrder: ...
 
     @property
     def bit_order(self) -> BitOrder: ...
@@ -302,7 +302,7 @@ class Tibs:
 
     def view(
             self,
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> View: ...
 
@@ -371,7 +371,7 @@ class Tibs:
     def to_values(self, dtype: _DtypeLike, start: int | None = None, end: int | None = None) -> list[_DtypeValue]: ...
 
     @classmethod
-    def from_u(cls, u: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Tibs: ...
+    def from_u(cls, u: int, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Tibs: ...
 
     def to_u(self, start: int | None = None, end: int | None = None) -> int: ...
 
@@ -379,7 +379,7 @@ class Tibs:
     def u(self) -> int: ...
 
     @classmethod
-    def from_i(cls, i: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Tibs: ...
+    def from_i(cls, i: int, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Tibs: ...
 
     def to_i(self, start: int | None = None, end: int | None = None) -> int: ...
 
@@ -387,7 +387,7 @@ class Tibs:
     def i(self) -> int: ...
 
     @classmethod
-    def from_f(cls, f: float, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Tibs: ...
+    def from_f(cls, f: float, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Tibs: ...
 
     def to_f(self, start: int | None = None, end: int | None = None) -> float: ...
 
@@ -535,7 +535,7 @@ class Mutibs:
 
     def view(
             self,
-            byte_order: Endianness = Endianness.Unspecified,
+            byte_order: ByteOrder = ByteOrder.Unspecified,
             bit_order: BitOrder = BitOrder.Msb0
     ) -> MutableView: ...
 
@@ -612,7 +612,7 @@ class Mutibs:
     def as_raw_data(self) -> tuple[bytes, int, int]: ...
 
     @classmethod
-    def from_u(cls, u: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Mutibs: ...
+    def from_u(cls, u: int, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Mutibs: ...
 
     def to_u(self, start: int | None = None, end: int | None = None) -> int: ...
 
@@ -625,7 +625,7 @@ class Mutibs:
     def u(self, value: int) -> None: ...
 
     @classmethod
-    def from_i(cls, i: int, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Mutibs: ...
+    def from_i(cls, i: int, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Mutibs: ...
 
     def to_i(self, start: int | None = None, end: int | None = None) -> int: ...
 
@@ -638,7 +638,7 @@ class Mutibs:
     def i(self, value: int) -> None: ...
 
     @classmethod
-    def from_f(cls, f: float, /, length: int, byte_order: Endianness = Endianness.Unspecified) -> Mutibs: ...
+    def from_f(cls, f: float, /, length: int, byte_order: ByteOrder = ByteOrder.Unspecified) -> Mutibs: ...
 
     def to_f(self, start: int | None = None, end: int | None = None) -> float: ...
 
