@@ -24,6 +24,7 @@ Interpretations of the bit data also have the usual meanings in Python::
 
 It's not uncommon though for a file format or protocol to specify a different byte order or bit numbering
 convention from the Python default. For these cases we can create a ``View`` or a ``MutableView``.
+For a slower background explanation of byte order and bit labels, see :doc:`byte_and_bit_order`.
 
 For example, let's create a four-byte ``Tibs`` and interpret it as an unsigned int::
 

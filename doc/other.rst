@@ -16,7 +16,7 @@ This is equivalent to ``ByteOrder.Big`` for whole-byte values, but can be used f
 Floats and integer values can be constructed and interpreted as big- or little-endian byte-order values by using the appropriate
 enum value with ``from_`` and ``to_`` methods, for example see :meth:`Tibs.from_f` and :meth:`Mutibs.to_u`.
 The :attr:`Tibs.le` and :attr:`Tibs.be` view properties are usually the most convenient way to interpret an
-existing value.
+existing value. For more information on byte order and bit labels, see :doc:`byte_and_bit_order`.
 
 
 ----
@@ -35,7 +35,7 @@ This matches normal ``Tibs`` indexing and slicing.
 the least significant bit. Use the :attr:`Tibs.lsb0` view property when a specification uses this numbering.
 
 Bit order is about labels, not about the stored data changing. For a longer introduction and examples of field
-extraction, see :doc:`views`.
+extraction, see :doc:`byte_and_bit_order` and :doc:`views`.
 
 
 ----
