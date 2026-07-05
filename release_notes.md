@@ -1,6 +1,9 @@
 # Release Notes
 
-### Unreleased: version 1.0.0-beta.0.
+### July 5th 2026: version 0.12.0
+
+This is effectively the first beta before a 1.0 release. I don't plan to change
+the API or add new features before the 1.0 release.
 
 Backwardly incompatible changes
 

@@ -103,7 +103,7 @@ For more information see the full [documentation](https://mutibs.readthedocs.io/
 
 Tibs is currently at the 1.0 beta stage: the intended stable API is largely in
 place, but this pre-release still reserves room for final API adjustments before
-1.0.0 final. The project is already performant and stable enough to be used as
+1.0.0. The project is already performant and stable enough to be used as
 the core of the bitstring library, and it has millions of downloads per month.
 
 There are over 800 unit tests, including Hypothesis tests and performance benchmarks.

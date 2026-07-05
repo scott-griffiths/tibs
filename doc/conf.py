@@ -11,7 +11,7 @@ year = datetime.datetime.utcfromtimestamp(
 project = "tibs"
 copyright = f"2025 - {year}, Scott Griffiths"
 author = "Scott Griffiths"
-release = "1.0.0-beta.0"
+release = "0.12"
 
 extensions = [
     "sphinx.ext.autodoc",
