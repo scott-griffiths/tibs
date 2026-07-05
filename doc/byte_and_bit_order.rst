@@ -121,19 +121,14 @@ you how to find fields described by bit labels.
 
 With those rules, the stored bytes and field labels line up like this::
 
-    stored byte:       23          a1          12          34
+    stored byte:       2 3         a 1         1 2         3 4
     stored bits:    0010 0011   1010 0001   0001 0010   0011 0100
-    LSB0 labels:       7..0        15..8       23..16      31..24
+    LSB0 labels:    7  ..   0   15  ..  8   23 ..  16   31 ..  24
 
-    field(31, 16):                            [0001 0010] [0011 0100]
-    field(15, 12):              [1010]
+    field(31, 16):                         [0001 0010] [0011 0100]
+    field(15, 12):             [1010]
 
-``field(31, 16)`` selects the source bytes ``12 34``. Since the field is
-interpreted little-endian, ``0x12`` is the low byte and ``0x34`` is the high
-byte::
-
-    0x12 + (0x34 << 8) = 0x3412 = 13330
-
+``field(31, 16)`` selects the source bytes ``12 34``.
 ``field(15, 12)`` selects labels 15 through 12, which are the high nibble
 ``1010`` of the stored byte ``a1``.
 
@@ -143,14 +138,14 @@ least significant byte on the right::
 
     register view:     34          12          a1          23
     register bits:  0011 0100   0001 0010   1010 0001   0010 0011
-    bit labels:        31..24      23..16      15..8       7..0
+    bit labels:     31 ..  24   23 ..  16   15  ..  8   7  ..   0
 
 This is the same data, not a different stored byte sequence. It is a common
 reason for LSB0 labels: when the register is drawn this way, field labels are
 contiguous across the page, while bit label 0 is still the least significant
 bit of the lowest-addressed byte. In that diagram, ``field(31, 16)`` visibly
 covers the register bytes ``34 12``; in stored order those bytes are still
-``12 34``, so the little-endian integer is ``0x3412``.
+``12 34``.
 
 Note that a specification can be big-endian with MSB0
 labels, little-endian with LSB0 labels, or another combination. It's important
@@ -185,6 +180,12 @@ For example::
     13330
     >>> header.field(15, 12).bin
     '1010'
+
+``field(31, 16)`` selects the stored bytes ``12 34``. Since the field is
+interpreted little-endian, ``0x12`` is the low byte and ``0x34`` is the high
+byte. That is why ``.hex`` returns ``'3412'`` and ``.u`` returns ``13330``::
+
+    0x12 + (0x34 << 8) = 0x3412 = 13330
 
 The view does not mutate the original data. It supplies the interpretation
 needed for labelled fields and whole-byte values. For practical details and
