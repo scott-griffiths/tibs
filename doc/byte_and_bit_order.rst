@@ -20,45 +20,47 @@ Why ordering terms exist
 Bytes have a natural order in memory, files and network packets. If a file
 contains two bytes, one byte comes first and the other comes second.
 
-Integers and floats also have significance. In the hexadecimal value ``0x1234``,
-``0x12`` is the more significant byte and ``0x34`` is the less significant byte.
+Integers and floats also have significance. In the two byte hexadecimal value ``0x0005``,
+``0x00`` is the more significant byte and ``0x05`` is the less significant byte.
 A format must choose which of those bytes is stored first.
 
-Specifications may also label bits in a byte. One specification might call the
-leftmost bit "bit 0"; another might call the rightmost bit "bit 0". The stored
-byte can be identical, but the labels used to describe fields are different.
+If you are not dealing only with whole bytes, you also need to label the bits in a byte.
+One specification might call the leftmost bit "bit 0"; another might call the rightmost bit "bit 0".
+The stored byte can be identical, but the labels used to describe fields are different.
 
 
 Byte order
 ^^^^^^^^^^
 
-Byte order is also called endianness. It only matters when a values are a whole number of bytes and more
+Byte order is also called endianness. It only matters when a value is a whole number of bytes and more
 than one byte.
 
-For the 16-bit value ``0x1234`` the two bytes are ``0x12`` and ``0x34``.
+For the 16-bit value ``0x0005`` the two bytes are ``0x00`` and ``0x05``.
 Big-endian order stores the most significant byte first::
 
-    value:          0x1234
-    stored bytes:   12                 34
+    value:          0x0005
+    stored bytes:   00                 05
                     more significant   less significant
 
 Little-endian order stores the least significant byte first::
 
-    value:          0x1234
-    stored bytes:   34                 12
+    value:          0x0005
+    stored bytes:   05                 00
                     less significant   more significant
 
 The bytes are not changed. The interpretation of the byte sequence is what
 changes::
 
-    >>> Tibs.from_hex('1234').u
-    4660
-    >>> Tibs.from_hex('3412').le.u
-    4660
+    >>> Tibs.from_hex('0005').u
+    5
+    >>> Tibs.from_hex('0500').le.u
+    5
 
-In both cases the interpreted integer is ``0x1234``. The first example stores
-the bytes in big-endian order. The second stores them in little-endian order and
-uses a little-endian interpretation.
+In both cases the interpreted integer is ``0x0005``.
+The first example has the bytes in big-endian order and uses the ``u`` property to interpret as an unsigned integer.
+
+The second example creates the ``Tibs`` from a little-endian order. It then uses the ``le`` property to create a little-endian
+view on the data before using ``u`` to get the unsigned integer interpretation.
 
 For a one-byte value there is no byte order question. For a non-whole-byte value,
 there are no complete bytes to reorder.
@@ -117,17 +119,56 @@ For example, a 32-bit register value may be stored as four bytes::
 The byte order tells you how to interpret whole-byte fields. The bit order tells
 you how to find fields described by bit labels.
 
-Those two rules are independent. A specification can be big-endian with MSB0
-labels, little-endian with LSB0 labels, or another combination. The important
-step is to read the specification carefully and identify both conventions.
+With those rules, the stored bytes and field labels line up like this::
+
+    stored byte:       23          a1          12          34
+    stored bits:    0010 0011   1010 0001   0001 0010   0011 0100
+    LSB0 labels:       7..0        15..8       23..16      31..24
+
+    field(31, 16):                            [0001 0010] [0011 0100]
+    field(15, 12):              [1010]
+
+``field(31, 16)`` selects the source bytes ``12 34``. Since the field is
+interpreted little-endian, ``0x12`` is the low byte and ``0x34`` is the high
+byte::
+
+    0x12 + (0x34 << 8) = 0x3412 = 13330
+
+``field(15, 12)`` selects labels 15 through 12, which are the high nibble
+``1010`` of the stored byte ``a1``.
+
+Many standards draw the same 32-bit register in significance order instead of
+storage order. That view puts the most significant byte on the left and the
+least significant byte on the right::
+
+    register view:     34          12          a1          23
+    register bits:  0011 0100   0001 0010   1010 0001   0010 0011
+    bit labels:        31..24      23..16      15..8       7..0
+
+This is the same data, not a different stored byte sequence. It is a common
+reason for LSB0 labels: when the register is drawn this way, field labels are
+contiguous across the page, while bit label 0 is still the least significant
+bit of the lowest-addressed byte. In that diagram, ``field(31, 16)`` visibly
+covers the register bytes ``34 12``; in stored order those bytes are still
+``12 34``, so the little-endian integer is ``0x3412``.
+
+Note that a specification can be big-endian with MSB0
+labels, little-endian with LSB0 labels, or another combination. It's important
+to read the specification carefully to identify both conventions.
 
 
 How this maps to tibs
 ^^^^^^^^^^^^^^^^^^^^^
 
-Normal ``Tibs`` and ``Mutibs`` indexing is always source-order. Index ``0`` is
-the first stored bit, slices run left to right, and the underlying data is not
-rearranged just because a different interpretation is useful.
+Normal ``Tibs`` and ``Mutibs`` indexing is always source-order.
+
+For ``Tibs`` and ``Mutibs`` instances, element access and slicing using ``[]`` are
+always MSB0, and it follows the usual Python conventions for slicing, indexing and extended slices.
+Index ``0`` is the first stored bit, slices run left to right.
+
+For ``View`` and ``MutableView`` instance the ``field`` method is used for access instead of ``[]``.
+This has quite different semantics - the start and end points can't be negative, and they are inclusive.
+This means that ``.field(a, b)`` is the same as ``field(b, a)``.
 
 Use views when a specification needs a different interpretation:
 
@@ -138,6 +179,8 @@ Use views when a specification needs a different interpretation:
 For example::
 
     >>> header = Tibs('0x23a11234').lsb0.le
+    >>> header.field(31, 16).hex
+    '3412'
     >>> header.field(31, 16).u
     13330
     >>> header.field(15, 12).bin
