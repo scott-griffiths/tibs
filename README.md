@@ -68,7 +68,7 @@ Tibs('0xac804f4b')
 >>> flags, size, payload = packet.split_at([4, 16])
 >>> flags.bin
 '1010'
->>> size.to_u()
+>>> size.u
 3200
 >>> payload.bytes
 b'OK'

@@ -48,6 +48,8 @@ sliced, spliced, searched, replaced, rotated, reversed, byte-swapped, set, unset
 appended, extended, indexed, counted, concatenated, chunked, and joined back together,
 before being interpreted as bytes, ints, floats, bools, binary and hex strings.
 
+Interpreting data with different endianness (byte order) or reversed bit numbering (LSB0) can
+be done using :doc:`views`. 
 
 Getting started
 ^^^^^^^^^^^^^^^

@@ -41,35 +41,35 @@ impl Dtype {
         let length = length as usize;
         if kind == DtypeKind::Bool && length != 1 {
             return Err(PyValueError::new_err(format!(
-                "A Dtype of type {} must have length 1.",
+                "A Dtype of kind {} must have length 1.",
                 kind.repr_name()
             )));
         }
         match kind {
             DtypeKind::Float if !matches!(length, 16 | 32 | 64) => {
                 return Err(PyValueError::new_err(format!(
-                    "A Dtype of type {} must have length 16, 32 or 64 bits. Received {}.",
+                    "A Dtype of kind {} must have length 16, 32 or 64 bits. Received {}.",
                     kind.repr_name(),
                     length
                 )));
             }
             DtypeKind::Bytes if !length.is_multiple_of(8) => {
                 return Err(PyValueError::new_err(format!(
-                    "A Dtype of type {} must have a length that is a multiple of 8 bits. Received {}.",
+                    "A Dtype of kind {} must have a length that is a multiple of 8 bits. Received {}.",
                     kind.repr_name(),
                     length
                 )));
             }
             DtypeKind::Hex if !length.is_multiple_of(4) => {
                 return Err(PyValueError::new_err(format!(
-                    "A Dtype of type {} must have a length that is a multiple of 4 bits. Received {}.",
+                    "A Dtype of kind {} must have a length that is a multiple of 4 bits. Received {}.",
                     kind.repr_name(),
                     length
                 )));
             }
             DtypeKind::Oct if !length.is_multiple_of(3) => {
                 return Err(PyValueError::new_err(format!(
-                    "A Dtype of type {} must have a length that is a multiple of 3 bits. Received {}.",
+                    "A Dtype of kind {} must have a length that is a multiple of 3 bits. Received {}.",
                     kind.repr_name(),
                     length
                 )));
@@ -88,7 +88,7 @@ impl Dtype {
                 }
                 _ => {
                     return Err(PyValueError::new_err(format!(
-                        "A byte order cannot be specified for a Dtype of type {}.",
+                        "A byte order cannot be specified for a Dtype of kind {}.",
                         kind.repr_name()
                     )));
                 }
