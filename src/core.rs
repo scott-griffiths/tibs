@@ -6,6 +6,7 @@ use bitvec::prelude::*;
 use half::f16;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::fmt;
 
 #[inline]
@@ -29,6 +30,16 @@ fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
             let current = bytes.get(byte_index).copied().unwrap_or(0);
             (current >> shift) | (previous << (8 - shift))
         }
+    }
+}
+
+#[inline]
+fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
+    let remainder = len_bits & 7;
+    if remainder != 0
+        && let Some(last) = bytes.last_mut()
+    {
+        *last &= 0xffu8 << (8 - remainder);
     }
 }
 
@@ -532,28 +543,64 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     #[inline]
     fn to_padded_byte_data(&self) -> Vec<u8> {
-        if self.is_empty() {
+        let len_bits = self.len();
+        if len_bits == 0 {
             return Vec::new();
         }
+
+        if let Some(bytes) = self.byte_aligned_raw_data() {
+            let mut out = bytes.to_vec();
+            mask_padding_bits(&mut out, len_bits);
+            return out;
+        }
+
+        let new_len = (len_bits + 7) & !7;
+        let mut bv = BV::with_capacity(new_len);
+        bv.extend_from_bitslice(self.as_bitslice());
+        bv.resize(new_len, false);
+        bv.into_vec()
+    }
+
+    #[inline]
+    fn to_py_bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
         let len_bits = self.len();
-        match self.as_bitslice().domain() {
-            // Fast path: element-aligned and length is a multiple of 8
-            bitvec::domain::Domain::Region {
-                head: None,
-                body,
-                tail: None,
-            } if len_bits.is_multiple_of(8) => {
-                // Already byte-aligned; copy the bytes directly.
-                body.to_vec()
+        if !len_bits.is_multiple_of(8) {
+            return Err(PyValueError::new_err(format!(
+                "Cannot interpret as bytes - length of {len_bits} is not a multiple of 8 bits."
+            )));
+        }
+        self.to_padded_py_bytes(py)
+    }
+
+    #[inline]
+    fn to_padded_py_bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        if self.is_empty() {
+            return Ok(PyBytes::new(py, &[]).unbind());
+        }
+        let len_bits = self.len();
+        if let Some(bytes) = self.byte_aligned_raw_data() {
+            if len_bits.is_multiple_of(8) {
+                return Ok(PyBytes::new(py, bytes).unbind());
             }
-            // Repack by extending from the bitslice and zero-padding on the right.
-            _ => {
-                let new_len = (len_bits + 7) & !7;
-                let mut bv = BV::with_capacity(new_len);
-                bv.extend_from_bitslice(self.as_bitslice());
-                bv.resize(new_len, false);
-                bv.into_vec()
-            }
+            return PyBytes::new_with(py, bytes.len(), |out| {
+                out.copy_from_slice(bytes);
+                mask_padding_bits(out, len_bits);
+                Ok(())
+            })
+            .map(|bytes| bytes.unbind());
+        }
+
+        let bytes = self.to_padded_byte_data();
+        Ok(PyBytes::new(py, &bytes).unbind())
+    }
+
+    #[inline]
+    fn byte_aligned_raw_data(&self) -> Option<&[u8]> {
+        let (bytes, bit_offset, len_bits) = self.raw_data_ref()?;
+        if bit_offset == 0 {
+            Some(&bytes[..len_bits.div_ceil(8)])
+        } else {
+            None
         }
     }
 

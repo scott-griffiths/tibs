@@ -15,7 +15,7 @@ use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PySlice, PyTuple, PyType};
+use pyo3::types::{PyBool, PyBytes, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -1565,12 +1565,17 @@ impl Tibs {
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_bytes(&self, start: Option<isize>, end: Option<isize>) -> PyResult<Vec<u8>> {
+    pub fn to_bytes(
+        &self,
+        py: Python<'_>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyBytes>> {
         if start.is_none() && end.is_none() {
-            return BitCollection::to_byte_data(self);
+            return BitCollection::to_py_bytes(self, py);
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_byte_data(&self.get_slice_unchecked(start, end - start))
+        BitCollection::to_py_bytes(&self.get_slice_unchecked(start, end - start), py)
     }
 
     /// Return the Tibs as a bytes object, padding the right-hand side with zero bits.
@@ -1584,14 +1589,17 @@ impl Tibs {
     ///
     /// :return: The padded bytes representation.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_padded_bytes(&self, start: Option<isize>, end: Option<isize>) -> PyResult<Vec<u8>> {
+    pub fn to_padded_bytes(
+        &self,
+        py: Python<'_>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyBytes>> {
         if start.is_none() && end.is_none() {
-            return Ok(BitCollection::to_padded_byte_data(self));
+            return BitCollection::to_padded_py_bytes(self, py);
         }
         let (start, end) = validate_slice(self.len(), start, end)?;
-        Ok(BitCollection::to_padded_byte_data(
-            &self.get_slice_unchecked(start, end - start),
-        ))
+        BitCollection::to_padded_py_bytes(&self.get_slice_unchecked(start, end - start), py)
     }
 
     /// Read-only property of the ``bytes`` representation of the Tibs.
@@ -1601,8 +1609,8 @@ impl Tibs {
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
     #[getter]
-    fn bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(self)
+    fn bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        BitCollection::to_py_bytes(self, py)
     }
 
     /// Find first occurrence of a bit sequence.
@@ -2216,8 +2224,8 @@ impl Tibs {
     ///
     /// :return: The bytes representation.
     /// :raises ValueError: if the length is not a multiple of 8.
-    pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
-        self.to_bytes(None, None)
+    pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        BitCollection::to_py_bytes(self, py)
     }
 
     /// Return new Tibs consisting of n concatenations of self.

@@ -8,7 +8,7 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+use pyo3::types::{PyBytes, PyType};
 
 fn byte_order_for_field_len(byte_order: ByteOrder, field_len: usize) -> ByteOrder {
     if field_len.is_multiple_of(8) {
@@ -694,12 +694,12 @@ impl MutableView {
     }
 
     /// Return the viewed bits as bytes.
-    pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(&self.to_tibs_view(py)?)
+    pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        BitCollection::to_py_bytes(&self.to_tibs_view(py)?, py)
     }
 
     /// Return the viewed bits as bytes.
-    pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+    pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
         self.to_bytes(py)
     }
 
@@ -816,7 +816,7 @@ impl MutableView {
 
     /// Return the viewed bits as bytes.
     #[getter]
-    fn bytes(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+    fn bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
         self.to_bytes(py)
     }
 
@@ -1115,13 +1115,13 @@ impl View {
     ///
     /// :return: A ``bytes`` value.
     ///
-    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
-        BitCollection::to_byte_data(&self.to_tibs_view()?)
+    pub fn to_bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        BitCollection::to_py_bytes(&self.to_tibs_view()?, py)
     }
 
     /// Return the viewed bits as bytes.
-    pub fn __bytes__(&self) -> PyResult<Vec<u8>> {
-        self.to_bytes()
+    pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        self.to_bytes(py)
     }
 
     /// Materialize the view as a new :class:`Tibs`.
@@ -1199,8 +1199,8 @@ impl View {
     /// Equivalent to using :meth:`~to_bytes`.
     ///
     #[getter]
-    fn bytes(&self) -> PyResult<Vec<u8>> {
-        self.to_bytes()
+    fn bytes(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        self.to_bytes(py)
     }
 
     /// Extract a field using inclusive bit labels.

@@ -25,6 +25,8 @@ POP_BYTES = SEARCH_BYTES[:6_250]
 SEARCH_TIBS = Tibs.from_bytes(SEARCH_BYTES)
 OTHER_TIBS = Tibs.from_bytes(OTHER_BYTES)
 COUNT_TIBS = Tibs.from_bytes(COUNT_BYTES)
+COUNT_TIBS_MINUS_THREE = COUNT_TIBS[:-3]
+COUNT_BYTES_MINUS_THREE_PADDED = COUNT_BYTES[:-1] + bytes([COUNT_BYTES[-1] & 0b1111_1000])
 BIT_LIST = list(SEARCH_TIBS[:50_000])
 
 CHUNK_SOURCE = Tibs.from_joined(
@@ -90,6 +92,16 @@ def test_counting(benchmark):
 
     total = benchmark(counting)
     assert total > 0
+
+
+def test_to_bytes_aligned(benchmark):
+    result = benchmark(COUNT_TIBS.to_bytes)
+    assert result == COUNT_BYTES
+
+
+def test_to_padded_bytes_unaligned(benchmark):
+    result = benchmark(COUNT_TIBS_MINUS_THREE.to_padded_bytes)
+    assert result == COUNT_BYTES_MINUS_THREE_PADDED
 
 
 def test_random_generation(benchmark):
