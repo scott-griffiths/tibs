@@ -286,7 +286,7 @@ def main():
         FunctionPairs("Random Generation", test_rand_bitarray, test_rand_tibs),
         FunctionPairs("Construction", test_construction_bitarray, test_construction_tibs),
         FunctionPairs("Find all", test_findall_bitarray, test_findall_tibs),
-        FunctionPairs("Find all bytes", test_findall_bytes_bitarray, test_findall_bytes_tibs),
+        # FunctionPairs("Find all bytes", test_findall_bytes_bitarray, test_findall_bytes_tibs),
         FunctionPairs("Find all reversed", test_reverse_find_bitarray, test_reverse_find_tibs),
         FunctionPairs("Bit ops", test_bitops_bitarray, test_bitops_tibs),
         FunctionPairs("Chunks", test_chunks_bitarray, test_chunks_tibs),

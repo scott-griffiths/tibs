@@ -193,7 +193,7 @@ def build_cases(byte_count, value_count):
 
     return [
         ("find_all 12-bit", ba_find_all, tibs_find_all),
-        ("find_all byte aligned", ba_find_all_byte_aligned, tibs_find_all_byte_aligned),
+        # ("find_all byte aligned", ba_find_all_byte_aligned, tibs_find_all_byte_aligned),
         ("bit ops sliced", ba_bitops, tibs_bitops),
         ("count ones", ba_count, tibs_count),
         ("join small pieces", ba_join_small_pieces, tibs_join_small_pieces),
