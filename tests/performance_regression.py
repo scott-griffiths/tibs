@@ -27,6 +27,7 @@ OTHER_TIBS = Tibs.from_bytes(OTHER_BYTES)
 COUNT_TIBS = Tibs.from_bytes(COUNT_BYTES)
 COUNT_TIBS_MINUS_THREE = COUNT_TIBS[:-3]
 COUNT_BYTES_MINUS_THREE_PADDED = COUNT_BYTES[:-1] + bytes([COUNT_BYTES[-1] & 0b1111_1000])
+COUNT_BITS_MINUS_SIX = len(COUNT_BYTES) * 8 - 6
 BIT_LIST = list(SEARCH_TIBS[:50_000])
 
 CHUNK_SOURCE = Tibs.from_joined(
@@ -102,6 +103,11 @@ def test_to_bytes_aligned(benchmark):
 def test_to_padded_bytes_unaligned(benchmark):
     result = benchmark(COUNT_TIBS_MINUS_THREE.to_padded_bytes)
     assert result == COUNT_BYTES_MINUS_THREE_PADDED
+
+
+def test_from_bytes_unaligned(benchmark):
+    result = benchmark(Tibs.from_bytes, COUNT_BYTES, 3, COUNT_BITS_MINUS_SIX)
+    assert result == COUNT_TIBS[3:-3]
 
 
 def test_random_generation(benchmark):

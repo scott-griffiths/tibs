@@ -3,6 +3,22 @@ import pytest
 from tibs import Tibs, Mutibs, ByteOrder, Codec
 import random
 
+
+def _reference_bits_from_bytes(data, offset=0, length=None):
+    bit_string = "".join(f"{byte:08b}" for byte in data)
+    if length is None:
+        length = len(bit_string) - offset
+    return bit_string[offset:offset + length]
+
+
+def _reference_padded_bytes(bit_string):
+    if not bit_string:
+        return b""
+    padding = (-len(bit_string)) % 8
+    padded = bit_string + "0" * padding
+    return int(padded, 2).to_bytes(len(padded) // 8, "big")
+
+
 def test_from_bin():
     a = Tibs.from_bin('010')
     b = Tibs.from_string('0b010')
@@ -315,6 +331,34 @@ def test_from_bytes_offsets():
     assert f == a
     g = Mutibs.from_bytes(x, 0, 0)
     assert g == Tibs()
+
+
+@pytest.mark.parametrize("cls", (Tibs, Mutibs))
+def test_from_bytes_offset_length_matches_reference(cls):
+    data = b"\x01\x23\x45\x67\x89\xab\xcd\xef"
+    data_length = len(data) * 8
+    for offset in range(0, 16):
+        for length in (0, 1, 2, 7, 8, 9, 15, 16, 17, 31, data_length - offset):
+            if offset + length > data_length:
+                continue
+            bits = cls.from_bytes(data, offset, length)
+            expected = _reference_bits_from_bytes(data, offset, length)
+            assert bits.to_bin() == expected
+            assert bits.to_padded_bytes() == _reference_padded_bytes(expected)
+
+
+def test_to_padded_bytes_unaligned_slices_match_reference():
+    data = b"\x01\x23\x45\x67\x89\xab\xcd\xef"
+    data_length = len(data) * 8
+    bits = Tibs.from_bytes(data)
+    for start in range(0, 16):
+        for length in (0, 1, 2, 7, 8, 9, 15, 16, 17, 31, data_length - start):
+            if start + length > data_length:
+                continue
+            expected_bits = _reference_bits_from_bytes(data, start, length)
+            expected = _reference_padded_bytes(expected_bits)
+            assert bits[start:start + length].to_padded_bytes() == expected
+            assert bits.to_padded_bytes(start, start + length) == expected
 
 
 def test_from_bytes_errors():

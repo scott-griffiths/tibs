@@ -712,7 +712,7 @@ pub(crate) fn bv_from_bytes_slice(
         )));
     }
     let length = length.unwrap_or(data_length - offset);
-    let Some(end) = offset.checked_add(length).filter(|&end| end <= data_length) else {
+    let Some(_end) = offset.checked_add(length).filter(|&end| end <= data_length) else {
         return Err(PyValueError::new_err(format!(
             "Length of {length} with offset of {offset} is greater than the data length ({data_length} bits)."
         )));
@@ -720,8 +720,67 @@ pub(crate) fn bv_from_bytes_slice(
     if offset == 0 && length == data_length {
         return Ok(BV::from_vec(data));
     }
-    let bs = BS::from_slice(&data);
-    Ok(bs[offset..end].to_bitvec())
+    if length == 0 {
+        return Ok(BV::new());
+    }
+
+    let byte_offset = offset / 8;
+    let bit_offset = offset & 7;
+    let byte_len = length.div_ceil(8);
+    let mut bytes = if bit_offset == 0 {
+        data[byte_offset..byte_offset + byte_len].to_vec()
+    } else {
+        let input_len = (bit_offset + length).div_ceil(8);
+        shifted_padded_bytes(
+            &data[byte_offset..byte_offset + input_len],
+            bit_offset,
+            length,
+        )
+    };
+
+    mask_padding_bits(&mut bytes, length);
+    let mut bv = BV::from_vec(bytes);
+    bv.truncate(length);
+    Ok(bv)
+}
+
+#[inline]
+fn shifted_padded_bytes(data: &[u8], bit_offset: usize, len_bits: usize) -> Vec<u8> {
+    let mut out = vec![0u8; len_bits.div_ceil(8)];
+    copy_shifted_bytes(data, bit_offset, &mut out);
+    out
+}
+
+#[inline]
+pub(crate) fn copy_shifted_bytes(data: &[u8], bit_offset: usize, out: &mut [u8]) {
+    debug_assert!((1..8).contains(&bit_offset));
+    debug_assert!(data.len() >= out.len());
+    let Some((last, prefix)) = out.split_last_mut() else {
+        return;
+    };
+
+    let right_shift = 8 - bit_offset;
+    for (index, byte) in prefix.iter_mut().enumerate() {
+        *byte = (data[index] << bit_offset) | (data[index + 1] >> right_shift);
+    }
+
+    let last_index = prefix.len();
+    let next = if data.len() > last_index + 1 {
+        data[last_index + 1]
+    } else {
+        0
+    };
+    *last = (data[last_index] << bit_offset) | (next >> right_shift);
+}
+
+#[inline]
+fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
+    let remainder = len_bits & 7;
+    if remainder != 0
+        && let Some(last) = bytes.last_mut()
+    {
+        *last &= 0xffu8 << (8 - remainder);
+    }
 }
 
 pub(crate) fn bytes_like_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {

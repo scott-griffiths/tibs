@@ -1,5 +1,5 @@
 use crate::enums::Codec;
-use crate::helpers::{BS, BV, bv_from_zeros, validate_index};
+use crate::helpers::{BS, BV, bv_from_zeros, copy_shifted_bytes, validate_index};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -41,6 +41,15 @@ fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
     {
         *last &= 0xffu8 << (8 - remainder);
     }
+}
+
+#[inline]
+fn copy_unaligned_padded_bytes(bytes: &[u8], bit_offset: usize, len_bits: usize, out: &mut [u8]) {
+    debug_assert!((1..8).contains(&bit_offset));
+    debug_assert_eq!(out.len(), len_bits.div_ceil(8));
+
+    copy_shifted_bytes(bytes, bit_offset, out);
+    mask_padding_bits(out, len_bits);
 }
 
 #[inline]
@@ -553,6 +562,13 @@ pub(crate) trait BitCollection: Sized + Clone {
             mask_padding_bits(&mut out, len_bits);
             return out;
         }
+        if let Some((bytes, bit_offset, _)) = self.raw_data_ref()
+            && bit_offset != 0
+        {
+            let mut out = vec![0u8; len_bits.div_ceil(8)];
+            copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, &mut out);
+            return out;
+        }
 
         let new_len = (len_bits + 7) & !7;
         let mut bv = BV::with_capacity(new_len);
@@ -585,6 +601,15 @@ pub(crate) trait BitCollection: Sized + Clone {
             return PyBytes::new_with(py, bytes.len(), |out| {
                 out.copy_from_slice(bytes);
                 mask_padding_bits(out, len_bits);
+                Ok(())
+            })
+            .map(|bytes| bytes.unbind());
+        }
+        if let Some((bytes, bit_offset, _)) = self.raw_data_ref()
+            && bit_offset != 0
+        {
+            return PyBytes::new_with(py, len_bits.div_ceil(8), |out| {
+                copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
                 Ok(())
             })
             .map(|bytes| bytes.unbind());
