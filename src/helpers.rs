@@ -704,9 +704,6 @@ pub(crate) fn bv_from_bytes_slice(
     offset: Option<usize>,
     length: Option<usize>,
 ) -> PyResult<BV> {
-    if length.is_none() && offset.is_none() {
-        return Ok(BV::from_vec(data));
-    }
     let offset = offset.unwrap_or(0);
     let data_length = data.len() * 8;
     if offset > data_length {
@@ -715,13 +712,16 @@ pub(crate) fn bv_from_bytes_slice(
         )));
     }
     let length = length.unwrap_or(data_length - offset);
-    if offset + length > data_length {
+    let Some(end) = offset.checked_add(length).filter(|&end| end <= data_length) else {
         return Err(PyValueError::new_err(format!(
             "Length of {length} with offset of {offset} is greater than the data length ({data_length} bits)."
         )));
+    };
+    if offset == 0 && length == data_length {
+        return Ok(BV::from_vec(data));
     }
     let bs = BS::from_slice(&data);
-    Ok(bs[offset..offset + length].to_bitvec())
+    Ok(bs[offset..end].to_bitvec())
 }
 
 pub(crate) fn bytes_like_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
