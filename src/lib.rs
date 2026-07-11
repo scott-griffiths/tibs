@@ -2,14 +2,14 @@
 #![allow(clippy::len_zero)]
 #![allow(clippy::collapsible_if)]
 
-pub mod core;
-pub mod dtype;
-pub mod enums;
-pub mod helpers;
-pub mod iterator;
-pub mod mutibs;
-pub mod tibs_;
-pub mod view;
+mod core;
+mod dtype;
+mod enums;
+mod helpers;
+mod iterator;
+mod mutibs;
+mod tibs_;
+mod view;
 
 use pyo3::prelude::*;
 
