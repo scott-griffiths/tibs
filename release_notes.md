@@ -1,5 +1,19 @@
 # Release Notes
 
+### Unreleased: version 0.13.0 (or possibly 1.0)
+
+Backwardly incompatible changes
+
+* Tightened automatic promotion to `Tibs` and `Mutibs`. Constructors and other
+  bit-sequence arguments now accept only unambiguous inputs: existing
+  `Tibs`/`Mutibs` objects, strings, `bytes`/`bytearray`/`memoryview`, and strict
+  list or tuple bit patterns containing only `True`, `False`, `0` or `1`.
+  Arbitrary iterables, file-like objects such as `io.BytesIO`, `array.array`,
+  and numeric lists such as `[1, 2, 3]` no longer silently convert through
+  truthiness. Use `from_bools(...)` for truthy iterables, `from_bytes(...)` for
+  explicit byte data, and `from_values(...)` for fixed-width numeric values.
+
+
 ### July 5th 2026: version 0.12.0
 
 This is effectively the first beta before a 1.0 release. I don't plan to change
