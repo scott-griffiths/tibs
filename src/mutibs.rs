@@ -1,3 +1,4 @@
+use crate::codec as tibs_codec;
 use crate::core::{BitCollection, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
@@ -2114,7 +2115,7 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Self> {
-        <Mutibs as BitCollection>::decode_bytes(b)
+        tibs_codec::decode_bytes::<Mutibs>(b)
     }
 
     /// Encode the Mutibs as a bytes instance.
@@ -2136,7 +2137,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=None)")]
     pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
-        <Mutibs as BitCollection>::encode(self, codec)
+        tibs_codec::encode(self, codec)
     }
 
     /// Set one or many bits set to 1.

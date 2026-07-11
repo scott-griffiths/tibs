@@ -1,3 +1,4 @@
+use crate::codec as tibs_codec;
 use crate::core::{BitCollection, count_bitslice};
 use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
@@ -2179,7 +2180,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Tibs> {
-        <Tibs as BitCollection>::decode_bytes(b)
+        tibs_codec::decode_bytes::<Tibs>(b)
     }
 
     /// Encode the tibs as a bytes instance.
@@ -2208,7 +2209,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (codec=Codec::Auto), text_signature = "($self, codec=None)")]
     pub fn encode(&self, codec: Option<Codec>) -> PyResult<Vec<u8>> {
-        <Tibs as BitCollection>::encode(self, codec)
+        tibs_codec::encode(self, codec)
     }
 
     /// Return the instance with every bit inverted.
