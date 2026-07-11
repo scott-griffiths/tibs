@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+import array
+import io
+
 import pytest
 from hypothesis import given
 import hypothesis.strategies as st
@@ -123,6 +126,33 @@ def test_from_iterable():
     assert a == Tibs('0b1011')
     a = Tibs.from_bools((True,))
     assert a.to_bin() == "1"
+
+
+def test_constructor_strict_bit_pattern_promotion():
+    for cls in (Tibs, Mutibs):
+        assert cls([True, False, 1, 0]) == Tibs("0b1010")
+        assert cls((True, False, 1, 0)) == Tibs("0b1010")
+
+
+def test_constructor_rejects_ambiguous_iterables():
+    for cls in (Tibs, Mutibs):
+        with pytest.raises(TypeError, match="from_values"):
+            cls([1, 2, 3])
+
+        iterator = iter([1, 0, 1])
+        with pytest.raises(TypeError, match="from_bools"):
+            cls(iterator)
+        assert cls.from_bools(iter([1, 0, 1])) == Tibs("0b101")
+
+        stream = io.BytesIO(b"\x01\x02")
+        with pytest.raises(TypeError, match="from_bytes"):
+            cls(stream)
+        assert stream.tell() == 0
+
+        byte_array = array.array("B", [1, 2, 3])
+        with pytest.raises(TypeError, match="from_bytes"):
+            cls(byte_array)
+        assert cls.from_bytes(memoryview(byte_array)) == Tibs("0x010203")
 
 
 def test_mul_by_zero():
@@ -266,6 +296,7 @@ def test_joined_from_iterable():
     i = iter(v)
     b = Tibs.from_joined(v)
     assert b == Tibs('0b011')
+    assert Tibs.from_joined(["0b1", [0, 1], b"\xff"]) == Tibs("0b10111111111")
 
 
 def test_promotion_from_mutibs():

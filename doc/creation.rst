@@ -65,7 +65,7 @@ So for example ::
     t = Tibs([1, 0, 1])   # Same as Tibs.from_bools([1, 0, 1])
     u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
 
-These types (string, iterables and bytes/bytearray/memoryview) can also be automatically promoted to ``Tibs``.
+These types (string, strict list/tuple bit patterns and bytes/bytearray/memoryview) can also be automatically promoted to ``Tibs``.
 Most methods that
 take a bit sequence will also accept another type they can promote in this way. So, for example, if you want to count
 how many times the bit pattern ``101`` appears in a random bit sequence you could write::
@@ -76,6 +76,14 @@ how many times the bit pattern ``101`` appears in a random bit sequence you coul
 but it's more natural to use automatic promotion ::
 
     c = t.count([1, 0, 1])
+
+The list and tuple shorthand is intentionally strict: only ``True``, ``False``, ``0`` and ``1`` are accepted. Use
+:meth:`Tibs.from_bools` when you want to convert arbitrary truthy values or an arbitrary iterator to bits. Use
+:meth:`Tibs.from_values` for numeric values with a fixed width, for example ``Tibs.from_values("u8", [1, 2, 3])``.
+File-like objects such as ``io.BytesIO`` are not read implicitly; pass the bytes you want explicitly, for example
+``Tibs.from_bytes(stream.getvalue())``, ``Tibs.from_bytes(stream.read())`` or ``Tibs.from_bytes(stream.getbuffer())``.
+Similarly, pass ``memoryview(arr)`` to :meth:`Tibs.from_bytes` for an ``array.array`` only when that raw byte
+representation is intended.
 
 This automatic promotion of these types to Tibs is quite pervasive in the library, and is generally recommended
 for conciseness and clarity.

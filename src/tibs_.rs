@@ -15,7 +15,7 @@ use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PySlice, PyTuple, PyType};
+use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -1755,9 +1755,17 @@ impl Tibs {
                     helpers::count_bitvec(py, haystack, v.as_bitslice())
                 }
             }
-            Err(_) => Err(PyValueError::new_err(
-                "Cannot convert value to 0, 1 or a Tibs",
-            )),
+            Err(err) => {
+                if err.is_instance_of::<PyTypeError>(py)
+                    && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
+                {
+                    Err(err)
+                } else {
+                    Err(PyValueError::new_err(
+                        "Cannot convert value to 0, 1 or a Tibs",
+                    ))
+                }
+            }
         }
     }
 

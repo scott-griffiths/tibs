@@ -201,7 +201,7 @@ class TestSliceAssignment:
         with pytest.raises(TypeError):
             a[1:2] = A()
         with pytest.raises(ValueError):
-            a[1:4:-1] = [1, 2]
+            a[1:4:-1] = [1, 0]
 
 
 def test_adding():

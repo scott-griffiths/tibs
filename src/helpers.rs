@@ -870,6 +870,38 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     Ok(bv)
 }
 
+fn bv_from_strict_bit_items<'py>(
+    len: usize,
+    items: impl Iterator<Item = Bound<'py, PyAny>>,
+) -> PyResult<BV> {
+    let mut bv = BV::with_capacity(len);
+
+    for (index, item) in items.enumerate() {
+        let Some(bit) = convert_to_bool(&item) else {
+            let type_name = py_type_name(&item);
+            let repr = match item.repr() {
+                Ok(repr) => repr.to_string(),
+                Err(_) => "<unrepresentable>".to_string(),
+            };
+            return Err(PyTypeError::new_err(format!(
+                "Implicit bit patterns only accept True, False, 0 or 1; item at index {index} is {repr} of type <{type_name}>. Use from_bools(...) to convert truthy values, from_values(...) to pack numeric values, or from_bytes(...) for bytes."
+            )));
+        };
+        bv.push(bit);
+    }
+    Ok(bv)
+}
+
+fn bv_from_strict_bit_pattern(any: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
+    if let Ok(list) = any.cast::<PyList>() {
+        return bv_from_strict_bit_items(list.len(), list.iter()).map(Some);
+    }
+    if let Ok(tuple) = any.cast::<PyTuple>() {
+        return bv_from_strict_bit_items(tuple.len(), tuple.iter()).map(Some);
+    }
+    Ok(None)
+}
+
 unsafe fn bv_from_py_sequence_items(
     py: Python<'_>,
     len: usize,
@@ -973,6 +1005,13 @@ pub(crate) fn str_to_bv(s: String) -> PyResult<BV> {
     Ok(result)
 }
 
+fn py_type_name(any: &Bound<'_, PyAny>) -> String {
+    match any.get_type().name() {
+        Ok(name) => name.to_string(),
+        Err(_) => "<unknown>".to_string(),
+    }
+}
+
 pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     // Is it a string?
     if let Ok(any_string) = any.extract::<String>() {
@@ -989,17 +1028,16 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
         return Ok(BV::from_vec(any_bytes));
     }
 
-    // Is it an iterable that we can convert each element to a bool?
-    if any.try_iter().is_ok() {
-        return bv_from_bools(any);
+    // Is it an explicit bit pattern shorthand?
+    if let Some(bv) = bv_from_strict_bit_pattern(any)? {
+        return Ok(bv);
     }
-    let type_name = match any.get_type().name() {
-        Ok(name) => name.to_string(),
-        Err(_) => "<unknown>".to_string(),
-    };
+    let type_name = py_type_name(any);
     let mut err = format!("Cannot promote object of type <{type_name}> to a Tibs/Mutibs object. ");
     if any.is_instance_of::<PyInt>() {
         err.push_str("Perhaps you want to use the class methods 'from_zeros()', 'from_ones()' or 'from_random()'?");
+    } else {
+        err.push_str("Use from_bytes(...) for bytes-like data, from_bools(...) for truthy iterables, or from_values(...) for typed numeric values.");
     };
     Err(PyTypeError::new_err(err))
 }

@@ -1260,7 +1260,11 @@ def test_auto_conversions():
     assert isinstance(b, Mutibs) and b == Tibs(b'123')
     b = a + [1, 0]
     assert isinstance(b, Mutibs) and b == Tibs('0b10')
-    b = a + (1, 0, 'steve')
+    b = a + (1, 0, True)
+    assert isinstance(b, Mutibs) and b == Tibs('0b101')
+    with pytest.raises(TypeError):
+        _ = a + (1, 0, 'steve')
+    b = a + Mutibs.from_bools((1, 0, 'steve'))
     assert isinstance(b, Mutibs) and b == Tibs('0b101')
 
 
@@ -1369,6 +1373,8 @@ def test_count_edge_cases():
     assert m.count([1, 1], 2, 10) == m[2:10].count([1, 1])
     assert m.count(0, -4) == m[-4:].count(0)
     assert m.count([1, 1, 1, 1]) == 1
+    with pytest.raises(TypeError):
+        m.count([1, 2])
     assert m.count(m) == 1
     assert m.count(m + [0]) == 0
     with pytest.raises(ValueError):

@@ -370,6 +370,8 @@ def test_count_expanded():
     assert b == 8
     b = a.count([1, 1])
     assert b == 0
+    with pytest.raises(TypeError):
+        a.count([1, 2])
 
 
 def test_count_with_range():

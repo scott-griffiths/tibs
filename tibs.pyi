@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import Any, ClassVar, overload, Iterable, Iterator, SupportsIndex, Union
 
-_TibsLike = Union["Tibs", "Mutibs", str, bytes, bytearray, memoryview, Iterable[Any]]
+_BitPattern = list[bool | int] | tuple[bool | int, ...]
+_TibsLike = Union["Tibs", "Mutibs", str, bytes, bytearray, memoryview, _BitPattern]
 _DtypeLike = Union["Dtype", str]
 _DtypeValue = Union[int, float, str, bytes, bool, "Tibs"]
 

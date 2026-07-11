@@ -13,7 +13,7 @@ use crate::view::{MutableView, View};
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PySlice, PyTuple, PyType};
+use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::ops::Not;
 
 ///     A mutable container of binary data.
@@ -2262,9 +2262,17 @@ impl Mutibs {
                     helpers::count_bitvec(py, haystack, v.as_bitslice())
                 }
             }
-            Err(_) => Err(PyValueError::new_err(
-                "Cannot convert value to 0, 1 or a Tibs",
-            )),
+            Err(err) => {
+                if err.is_instance_of::<PyTypeError>(py)
+                    && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
+                {
+                    Err(err)
+                } else {
+                    Err(PyValueError::new_err(
+                        "Cannot convert value to 0, 1 or a Tibs",
+                    ))
+                }
+            }
         }
     }
 
