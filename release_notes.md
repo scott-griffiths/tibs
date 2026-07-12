@@ -1,8 +1,8 @@
 # Release Notes
 
-### Unrelease: version 1.0.0
+### July 12th: version 1.0.0
 
-This is the first stable 1.0 release. The documented public API is now intended
+This is the first stable release. The documented public API is now intended
 to remain compatible across future 1.x releases.
 
 Backwardly incompatible changes

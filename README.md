@@ -101,7 +101,7 @@ For more information see the full [documentation](https://tibs.readthedocs.io/en
 
 ## Project status
 
-Tibs has reached the 1.0.0 stable API milestone. Documented public behavior is
+Tibs has reached the 1.0 stable API milestone. Documented public behavior is
 intended to remain compatible across future 1.x releases, while still allowing
 bug fixes and carefully considered improvements. The project is already
 performant and stable enough to be used as the core of the bitstring library,
