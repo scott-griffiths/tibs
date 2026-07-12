@@ -80,10 +80,10 @@ jobs:
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip libatomic1
-            pip3 install -U pip pytest hypothesis pytest-benchmark
+            pip3 install -U --only-binary=:all: pip pytest hypothesis pytest-benchmark
           run: |
             set -e
-            pip3 install tibs --no-index --find-links dist --force-reinstall --no-deps
+            pip3 install tibs --only-binary=:all: --no-index --find-links dist --force-reinstall --no-deps
             pytest
 
   musllinux:
@@ -148,8 +148,8 @@ jobs:
             set -e
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install pytest hypothesis pytest-benchmark
-            pip install tibs --no-index --find-links dist --force-reinstall --no-deps
+            pip install --only-binary=:all: pytest hypothesis pytest-benchmark
+            pip install tibs --only-binary=:all: --no-index --find-links dist --force-reinstall --no-deps
             pytest
 
   windows:
