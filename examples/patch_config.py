@@ -1,60 +1,29 @@
 from tibs import Tibs
 
 
-ENABLED_BIT = 0
-DEBUG_BIT = 1
-MODE = slice(2, 5)
-RETRY_LIMIT = slice(5, 9)
-TIMEOUT_SECONDS = slice(9, 16)
-
-
-def build_config(enabled, debug, mode, retry_limit, timeout_seconds):
-    return Tibs.from_joined([
-        [enabled, debug],
-        Tibs.from_u(mode, 3),
-        Tibs.from_u(retry_limit, 4),
-        Tibs.from_u(timeout_seconds, 7),
-    ])
-
-
-def parse_config(config):
-    return {
-        "enabled": config[ENABLED_BIT],
-        "debug": config[DEBUG_BIT],
-        "mode": config[MODE].u,
-        "retry_limit": config[RETRY_LIMIT].u,
-        "timeout_seconds": config[TIMEOUT_SECONDS].u,
-    }
-
-
-config = build_config(
-    enabled=True,
-    debug=False,
-    mode=1,
-    retry_limit=3,
-    timeout_seconds=65,
-)
+config = Tibs.from_joined([
+    [True, False],       # Enabled, debug.
+    Tibs.from_u(1, 3),  # Mode.
+    Tibs.from_u(3, 4),  # Retry limit.
+    Tibs.from_u(65, 7),  # Timeout in seconds.
+])
 
 assert config.hex == "89c1"
-assert parse_config(config) == {
-    "enabled": True,
-    "debug": False,
-    "mode": 1,
-    "retry_limit": 3,
-    "timeout_seconds": 65,
-}
+assert config[0] is True
+assert config[1] is False
+assert config[2:5].u == 1
+assert config[5:9].u == 3
+assert config[9:16].u == 65
 
 patched = config.to_mutibs()
-patched.unset(ENABLED_BIT)
-patched.set(DEBUG_BIT)
-patched[MODE] = Tibs.from_u(4, 3)
-patched[RETRY_LIMIT] = Tibs.from_u(10, 4)
+patched.unset(0)
+patched.set(1)
+patched[2:5] = Tibs.from_u(4, 3)
+patched[5:9] = Tibs.from_u(10, 4)
 
 assert patched.hex == "6541"
-assert parse_config(patched) == {
-    "enabled": False,
-    "debug": True,
-    "mode": 4,
-    "retry_limit": 10,
-    "timeout_seconds": 65,
-}
+assert patched[0] is False
+assert patched[1] is True
+assert patched[2:5].u == 4
+assert patched[5:9].u == 10
+assert patched[9:16].u == 65

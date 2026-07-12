@@ -11,5 +11,5 @@ six bytes.
 .. literalinclude:: ../examples/sensor_samples.py
    :language: python
 
-The example trims the byte stream to the number of complete samples before
-chunking it. That is useful when a real transport pads the final byte or record.
+For custom integer widths, ``from_values`` and ``to_values`` keep the packing
+logic focused on the data width instead of on manual slicing.
