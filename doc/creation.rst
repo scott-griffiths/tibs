@@ -57,12 +57,12 @@ Promotion to Tibs
 ^^^^^^^^^^^^^^^^^
 
 The ``__init__`` method can also be called directly, which is often more convenient, if ever so slightly slower.
-This will look at the type of object it's been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`,
-:meth:`Tibs.from_bools` or :meth:`Tibs.from_bytes` for strings, iterables and bytes-like types respectively.
+This will look at the type of object it's been given and try to promote it to a Tibs by delegating to :meth:`Tibs.from_string`
+or :meth:`Tibs.from_bytes` for strings and bytes-like types, or by accepting strict list/tuple bit patterns directly.
 So for example ::
 
     s = Tibs('0xabc')     # Same as Tibs.from_string('0xabc')
-    t = Tibs([1, 0, 1])   # Same as Tibs.from_bools([1, 0, 1])
+    t = Tibs([1, 0, 1])   # Strict list/tuple bit-pattern shorthand
     u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
 
 These types (string, strict list/tuple bit patterns and bytes/bytearray/memoryview) can also be automatically promoted to ``Tibs``.
@@ -160,9 +160,9 @@ There are also a number of data interpretations that complement the data represe
 Unlike the data representations, the interpretations can have a many-to-one relationship.
 For example there are many ways for a ``Tibs`` to be constructed from the unsigned integer 3::
 
-    u1 = Tibs.from_u(3, 5)   # binary 00011
-    u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
-    u3 = Tibs.from_u(3, 16, ByteOrder.Little)  # binary 00000011_00000000
+    >>> u1 = Tibs.from_u(3, 5)   # binary 00011
+    >>> u2 = Tibs.from_u(3, 16)  # binary 00000000_00000011
+    >>> u3 = Tibs.from_u(3, 16, ByteOrder.Little)  # binary 00000011_00000000
 
 These are three different ``Tibs``, but they can all have equal interpretations::
 
@@ -206,6 +206,40 @@ order respectively::
 
     >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
     '3412cdab'
+
+
+Encoding as bytes
+^^^^^^^^^^^^^^^^^
+
+You can use :meth:`Tibs.to_bytes` and :meth:`Tibs.from_bytes` to store and retrieve whole-byte
+bit sequences. If it isn't whole byte then :meth:`Tibs.to_padded_bytes` will add zero bits to
+the end to make up to a whole number of bytes, but this then can't be round-tripped back to a ``Tibs``
+as the bit length information has been lost.
+
+For an arbitrary-length ``Tibs`` that needs to round-trip
+through bytes by itself, use :meth:`Tibs.encode` and :meth:`Tibs.decode`::
+
+    >>> t = Tibs('0b001110')
+    >>> encoded = t.encode()
+    >>> encoded
+    b'\xce'
+    >>> Tibs.decode(encoded)
+    Tibs('0b001110')
+
+The encoded form stores the bit length as well as the data, so it can reconstruct
+values whose length is not a multiple of eight. Various compression and storage codec options are
+provided and it is very efficient at storing short sequences and compressing sparse data. ::
+
+    >>> m = Mutibs.from_zeros(1_000_000_000)
+    >>> m.set([4, 876, 999_999_999])
+    >>> encoded = m.encode()
+    >>> encoded
+    b'\x0e\x0c\xe6\x00\x00\x00 \x00\x00\xd9\xfa\xe6\xb1\xa4\x80'
+    >>> t = Tibs.decode(encoded)
+    >>> t.find_all([1])
+    [4, 876, 999999999]
+
+The detailed byte format is described in :doc:`byte_format`.
 
 
 Switching between Tibs and Mutibs

@@ -68,11 +68,11 @@ the match, or ``None`` if no match is found::
     3
     >>> t.rfind('0b101')
     7
-    >>> t.find('0b111')
-    None
+    >>> t.find('0b111') is None
+    True
 
 The pattern can be anything that can be promoted to a ``Tibs`` - a binary string,
-bytes, a list of bool-like values, or another ``Tibs``.
+bytes, a strict list/tuple bit pattern, or another ``Tibs``.
 
 The optional ``start`` and ``end`` arguments restrict the search to a slice of
 the data. If you know the

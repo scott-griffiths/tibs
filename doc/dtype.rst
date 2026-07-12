@@ -43,7 +43,8 @@ long and has no length suffix.
 ``bool`` values can be packed from ``True``, ``False``, ``0`` or ``1``, and are
 unpacked as Python ``bool`` objects. ``bitsN`` values use normal Tibs promotion,
 so they can be packed from :class:`Tibs`, :class:`Mutibs`, strings, bytes-like
-objects, or bool iterables, and are unpacked as immutable :class:`Tibs` objects.
+objects, or strict list/tuple bit patterns, and are unpacked as immutable
+:class:`Tibs` objects.
 
 .. note::
     Lengths are consistently in bits throughout the tibs library. This can surprise in one place in
