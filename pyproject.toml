@@ -12,7 +12,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
@@ -66,4 +66,4 @@ features = ["pyo3/extension-module", "pyo3/abi3-py310"]
 
 [project.urls]
 homepage = "https://github.com/scott-griffiths/tibs"
-documentation = "https://mutibs.readthedocs.io/"
+documentation = "https://tibs.readthedocs.io/"

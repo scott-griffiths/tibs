@@ -11,7 +11,7 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/tibs?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/tibs/)
 [![CI badge](https://github.com/scott-griffiths/tibs/actions/workflows/new_ci.yaml/badge.svg)](https://github.com/scott-griffiths/tibs/actions/workflows/new_ci.yaml)
-[![Docs](https://img.shields.io/readthedocs/mutibs?logo=readthedocs&logoColor=white)](https://mutibs.readthedocs.io/en/latest/)
+[![Docs](https://img.shields.io/readthedocs/tibs?logo=readthedocs&logoColor=white)](https://tibs.readthedocs.io/en/latest/)
 ![PyPI - License](https://img.shields.io/pypi/l/tibs)
 &nbsp; &nbsp;
 [![Pepy Total Downloads](https://img.shields.io/pepy/dt/tibs?logo=python&logoColor=white&labelColor=blue&color=blue)](https://www.pepy.tech/projects/tibs)
@@ -26,7 +26,7 @@ the [bitstring](https://github.com/scott-griffiths/bitstring) library.
 
 # Documentation
 
-The full documentation is available on [Read the Docs](https://mutibs.readthedocs.io/en/latest/).
+The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
 
 ## Install
 
@@ -97,21 +97,22 @@ This only scratches the surface: the docs cover construction from ints, floats, 
 and strings; endianness; searching and replacing; rotations; bit indexing; and more
 worked examples.
 
-For more information see the full [documentation](https://mutibs.readthedocs.io/en/latest/).
+For more information see the full [documentation](https://tibs.readthedocs.io/en/latest/).
 
 ## Project status
 
-Tibs is currently at the 1.0 beta stage: the intended stable API is largely in
-place, but this pre-release still reserves room for final API adjustments before
-1.0.0. The project is already performant and stable enough to be used as
-the core of the bitstring library, and it has millions of downloads per month.
+Tibs has reached the 1.0.0 stable API milestone. Documented public behavior is
+intended to remain compatible across future 1.x releases, while still allowing
+bug fixes and carefully considered improvements. The project is already
+performant and stable enough to be used as the core of the bitstring library,
+and it has millions of downloads per month.
 
 There are over 800 unit tests, including Hypothesis tests and performance benchmarks.
 The Rust extension is built with PyO3 and supports Python 3.10 and later.
 
 
 For more examples and the full API reference, see the
-[documentation](https://mutibs.readthedocs.io/en/latest/). The runnable examples
+[documentation](https://tibs.readthedocs.io/en/latest/). The runnable examples
 also live in the [`examples/`](examples/) directory.
 
 

@@ -1,7 +1,13 @@
 [package]
 name = "tibs"
-version = "0.12.0"
+version = "1.0.0"
 edition = "2024"
+description = "A sleek Python library for binary data."
+license = "MIT"
+repository = "https://github.com/scott-griffiths/tibs"
+homepage = "https://github.com/scott-griffiths/tibs"
+documentation = "https://tibs.readthedocs.io/"
+readme = "README.md"
 
 [lib]
 name = "tibs"
