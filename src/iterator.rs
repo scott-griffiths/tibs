@@ -50,6 +50,70 @@ pub struct FindAllIterator {
     pub byte_current: usize,
 }
 
+impl FindAllIterator {
+    pub(crate) fn new(
+        slf: PyRef<'_, Tibs>,
+        needle: Tibs,
+        start: Option<isize>,
+        end: Option<isize>,
+        byte_aligned: bool,
+        is_reverse: bool,
+    ) -> PyResult<Py<Self>> {
+        if needle.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "No bits were provided to find.",
+            ));
+        }
+
+        let (start, end) = helpers::validate_slice(slf.len(), start, end)?;
+        let haystack_len = slf.len();
+        let step = if byte_aligned { 8 } else { 1 };
+        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+        let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
+            slf.as_bitslice(),
+            needle.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+        )
+        .map_or((None, None, 0), |(haystack, needle, base)| {
+            (Some(haystack.into_owned()), Some(needle.into_owned()), base)
+        });
+
+        let py = slf.py();
+        let using_byte_search = byte_haystack.is_some();
+        let (search_needle, lps) = if using_byte_search {
+            (needle, Vec::new())
+        } else if is_reverse {
+            let reversed_needle =
+                Tibs::from_bv(needle.as_bitslice().iter().by_vals().rev().collect());
+            let lps = helpers::compute_lps(py, reversed_needle.as_bitslice())?;
+            (reversed_needle, lps)
+        } else {
+            let lps = helpers::compute_lps(py, needle.as_bitslice())?;
+            (needle, lps)
+        };
+
+        let iter_obj = Self {
+            haystack: slf.into(),
+            haystack_len,
+            search_needle,
+            lps,
+            start,
+            end,
+            byte_aligned,
+            step,
+            current_pos: if is_reverse { end } else { start },
+            is_reverse,
+            byte_haystack,
+            byte_needle,
+            byte_base,
+            byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
+        };
+        Py::new(py, iter_obj)
+    }
+}
+
 #[pymethods]
 impl FindAllIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {

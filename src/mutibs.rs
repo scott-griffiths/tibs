@@ -747,13 +747,7 @@ impl Mutibs {
     /// :return: The binary representation.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_bin(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return Ok(BitCollection::to_binary(self));
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        Ok(BitCollection::to_binary(
-            &self.get_slice_unchecked(start, end - start),
-        ))
+        self.map_slice(start, end, |bits| Ok(BitCollection::to_binary(bits)))
     }
 
     /// Replace the current bits from a binary string.
@@ -822,11 +816,7 @@ impl Mutibs {
     /// :raises ValueError: if the length is not a multiple of 3.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_oct(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_octal(self);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_octal(&self.get_slice_unchecked(start, end - start))
+        self.map_slice(start, end, BitCollection::to_octal)
     }
 
     /// Replace the current bits from an octal string.
@@ -896,11 +886,7 @@ impl Mutibs {
     /// :raises ValueError: if the length is not a multiple of 4.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_hex(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_hexadecimal(self);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_hexadecimal(&self.get_slice_unchecked(start, end - start))
+        self.map_slice(start, end, BitCollection::to_hexadecimal)
     }
 
     /// Replace the current bits from a hexadecimal string.
@@ -955,11 +941,7 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyBytes>> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_py_bytes(self, py);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_py_bytes(&self.get_slice_unchecked(start, end - start), py)
+        self.map_slice(start, end, |bits| BitCollection::to_py_bytes(bits, py))
     }
 
     /// Return the Mutibs as a bytes object, padding the right-hand side with zero bits.
@@ -979,11 +961,9 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyBytes>> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_padded_py_bytes(self, py);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_padded_py_bytes(&self.get_slice_unchecked(start, end - start), py)
+        self.map_slice(start, end, |bits| {
+            BitCollection::to_padded_py_bytes(bits, py)
+        })
     }
 
     /// Replace the current bits from a bytes-like object.
@@ -1115,11 +1095,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_u128(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_u128(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_u128(bits, false))
     }
 
     /// Write the current bits from an unsigned integer without changing the length.
@@ -1200,11 +1176,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_i128(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_i128(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_i128(bits, false))
     }
 
     /// Write the current bits from a signed integer without changing the length.
@@ -1285,11 +1257,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_f(&self, start: Option<isize>, end: Option<isize>) -> PyResult<f64> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_f64(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_f64(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_f64(bits, false))
     }
 
     /// Write the current bits from a floating point number without changing the length.

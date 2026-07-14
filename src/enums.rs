@@ -21,7 +21,7 @@ impl ByteOrder {
     pub fn is_little_endian(optional_byte_order: Option<Self>, length: usize) -> PyResult<bool> {
         match optional_byte_order {
             Some(ByteOrder::Big) => {
-                if length % 8 != 0 {
+                if !length.is_multiple_of(8) {
                     return Err(PyValueError::new_err(format!(
                         "Cannot create a big-endian byte-order value with a length of {length} bits. It must be a whole number of bytes long."
                     )));
@@ -29,7 +29,7 @@ impl ByteOrder {
                 Ok(false)
             }
             Some(ByteOrder::Little) => {
-                if length % 8 != 0 {
+                if !length.is_multiple_of(8) {
                     return Err(PyValueError::new_err(format!(
                         "Cannot create a little-endian byte-order value with a length of {length} bits. It must be a whole number of bytes long."
                     )));

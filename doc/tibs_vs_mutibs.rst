@@ -31,7 +31,7 @@ copy any data::
     t = Tibs.from_bytes(b'a_large_amount_of_data')
     first_half, second_half = t.split_at(len(t)//2)
 
-The two different halves here don't own a separate copy of the data here - they share storage with ``t`` so
+The two different halves don't own a separate copy of the data here - they share storage with ``t`` so
 this split is very quick and doesn't depend on the size of the data.
 If we had used a ``Mutibs`` then a data copy would have had to happen.
 

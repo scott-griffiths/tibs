@@ -1,4 +1,6 @@
-use crate::helpers::{BS, BV, bv_from_zeros, copy_shifted_bytes, validate_index};
+use crate::helpers::{
+    BS, BV, bv_from_zeros, copy_shifted_bytes, mask_padding_bits, validate_index, validate_slice,
+};
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
@@ -29,16 +31,6 @@ fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
             let current = bytes.get(byte_index).copied().unwrap_or(0);
             (current >> shift) | (previous << (8 - shift))
         }
-    }
-}
-
-#[inline]
-fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
-    let remainder = len_bits & 7;
-    if remainder != 0
-        && let Some(last) = bytes.last_mut()
-    {
-        *last &= 0xffu8 << (8 - remainder);
     }
 }
 
@@ -145,75 +137,60 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn logical_or(&self, other: &impl BitCollection) -> Self {
+    fn logical_op(
+        &self,
+        other: &impl BitCollection,
+        byte_op: impl Fn(u8, u8) -> u8 + Copy,
+        bitslice_op: impl FnOnce(&mut BV, &BS),
+    ) -> Self {
         debug_assert!(self.len() == other.len());
 
         let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
             (self.raw_data_ref(), other.raw_data_ref())
         else {
             let mut result = self.to_bitvec();
-            result |= other.as_bitslice();
+            bitslice_op(&mut result, other.as_bitslice());
             return Self::from_bv(result);
         };
 
-        if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a | b).collect();
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
+        let data = if lhs_offset == rhs_offset {
+            lhs.iter()
+                .zip(rhs.iter())
+                .map(|(&a, &b)| byte_op(a, b))
+                .collect()
         } else {
-            let data =
-                logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, |a, b| a | b);
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
-        }
+            logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, byte_op)
+        };
+        Self::from_bv(BV::from_vec(data)).get_slice_unchecked(lhs_offset, self.len())
+    }
+
+    #[inline]
+    fn logical_or(&self, other: &impl BitCollection) -> Self {
+        self.logical_op(other, |a, b| a | b, |result, bits| *result |= bits)
     }
 
     #[inline]
     fn logical_and(&self, other: &impl BitCollection) -> Self {
-        debug_assert!(self.len() == other.len());
-
-        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
-            (self.raw_data_ref(), other.raw_data_ref())
-        else {
-            let mut result = self.to_bitvec();
-            result &= other.as_bitslice();
-            return Self::from_bv(result);
-        };
-
-        if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a & b).collect();
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
-        } else {
-            let data =
-                logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, |a, b| a & b);
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
-        }
+        self.logical_op(other, |a, b| a & b, |result, bits| *result &= bits)
     }
 
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
-        debug_assert!(self.len() == other.len());
+        self.logical_op(other, |a, b| a ^ b, |result, bits| *result ^= bits)
+    }
 
-        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
-            (self.raw_data_ref(), other.raw_data_ref())
-        else {
-            let mut result = self.to_bitvec();
-            result ^= other.as_bitslice();
-            return Self::from_bv(result);
-        };
-
-        if lhs_offset == rhs_offset {
-            let data: Vec<u8> = lhs.iter().zip(rhs.iter()).map(|(&a, &b)| a ^ b).collect();
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
-        } else {
-            let data =
-                logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, |a, b| a ^ b);
-            let bv = BV::from_vec(data);
-            Self::from_bv(bv).get_slice_unchecked(lhs_offset, self.len())
+    #[inline]
+    fn map_slice<R>(
+        &self,
+        start: Option<isize>,
+        end: Option<isize>,
+        f: impl FnOnce(&Self) -> PyResult<R>,
+    ) -> PyResult<R> {
+        if start.is_none() && end.is_none() {
+            return f(self);
         }
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        f(&self.get_slice_unchecked(start, end - start))
     }
 
     fn to_string(&self) -> String {

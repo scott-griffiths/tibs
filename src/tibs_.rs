@@ -6,8 +6,8 @@ use crate::helpers;
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    bytes_like_to_vec, compute_lps, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned,
-    str_to_bv, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -167,6 +167,12 @@ impl Tibs {
             )?
         };
         Ok(found)
+    }
+
+    fn copy_with_mutation(&self, f: impl FnOnce(&mut Mutibs) -> PyResult<()>) -> PyResult<Self> {
+        let mut out = self.to_mutibs();
+        f(&mut out)?;
+        Ok(out.to_tibs())
     }
 }
 
@@ -421,9 +427,7 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Tibs> {
-        let mut out = self.to_mutibs();
-        out.apply_byte_swap(byte_length, start, end)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_byte_swap(byte_length, start, end))
     }
 
     /// Return a copy of the raw byte information.
@@ -822,50 +826,7 @@ impl Tibs {
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        // TODO: For single bits we could use more specialised methods
-        // See https://docs.rs/bitvec/1.0.1/bitvec/slice/struct.BitSlice.html#method.iter_ones
-        let (start, end) = validate_slice(slf.len(), start, end)?;
-        let haystack_len = slf.len();
-        let is_reverse = false;
-        let step = if byte_aligned { 8 } else { 1 };
-        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-        let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
-            slf.as_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            alignment_mod8,
-        )
-        .map_or((None, None, 0), |(haystack, needle, base)| {
-            (Some(haystack.into_owned()), Some(needle.into_owned()), base)
-        });
-        let py = slf.py();
-        let using_byte_search = byte_haystack.is_some();
-        let lps = if using_byte_search {
-            Vec::new()
-        } else {
-            compute_lps(py, needle.as_bitslice())?
-        };
-        let iter_obj = FindAllIterator {
-            haystack: slf.into(),
-            haystack_len,
-            search_needle: needle,
-            lps,
-            start,
-            end,
-            byte_aligned,
-            step,
-            current_pos: if is_reverse { end } else { start },
-            is_reverse,
-            byte_haystack,
-            byte_needle,
-            byte_base,
-            byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
-        };
-        Py::new(py, iter_obj)
+        FindAllIterator::new(slf, needle, start, end, byte_aligned, false)
     }
 
     /// Find all occurrences of a bit sequence in reverse, returning an iterator of bit positions.
@@ -897,51 +858,7 @@ impl Tibs {
         end: Option<isize>,
         byte_aligned: bool,
     ) -> PyResult<Py<FindAllIterator>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let (start, end) = validate_slice(slf.len(), start, end)?;
-        let haystack_len = slf.len();
-        let is_reverse = true;
-        let step = if byte_aligned { 8 } else { 1 };
-        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-        let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
-            slf.as_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            alignment_mod8,
-        )
-        .map_or((None, None, 0), |(haystack, needle, base)| {
-            (Some(haystack.into_owned()), Some(needle.into_owned()), base)
-        });
-        let py = slf.py();
-        let using_byte_search = byte_haystack.is_some();
-        let (search_needle, lps) = if using_byte_search {
-            (needle, Vec::new())
-        } else {
-            let reversed_needle =
-                Tibs::from_bv(needle.as_bitslice().iter().by_vals().rev().collect());
-            let lps = compute_lps(py, reversed_needle.as_bitslice())?;
-            (reversed_needle, lps)
-        };
-        let iter_obj = FindAllIterator {
-            haystack: slf.into(),
-            haystack_len,
-            search_needle,
-            lps,
-            start,
-            end,
-            byte_aligned,
-            step,
-            current_pos: if is_reverse { end } else { start },
-            is_reverse,
-            byte_haystack,
-            byte_needle,
-            byte_base,
-            byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
-        };
-        Py::new(py, iter_obj)
+        FindAllIterator::new(slf, needle, start, end, byte_aligned, true)
     }
 
     /// The bit length of the Tibs.
@@ -1193,11 +1110,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_u128(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_u128(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_u128(bits, false))
     }
 
     /// Read-only property of the unsigned integer representation of the Tibs.
@@ -1251,11 +1164,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_i128(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_i128(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_i128(bits, false))
     }
 
     /// Read-only property of the signed integer representation of the Tibs.
@@ -1310,11 +1219,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_f(&self, start: Option<isize>, end: Option<isize>) -> PyResult<f64> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_f64(self, false);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_f64(&self.get_slice_unchecked(start, end - start), false)
+        self.map_slice(start, end, |bits| BitCollection::to_f64(bits, false))
     }
 
     /// Read-only property of the floating point representation of the Tibs.
@@ -1353,13 +1258,7 @@ impl Tibs {
     /// :return: The binary representation.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_bin(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return Ok(BitCollection::to_binary(self));
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        Ok(BitCollection::to_binary(
-            &self.get_slice_unchecked(start, end - start),
-        ))
+        self.map_slice(start, end, |bits| Ok(BitCollection::to_binary(bits)))
     }
 
     /// Read-only property of the binary representation of the Tibs.
@@ -1400,11 +1299,7 @@ impl Tibs {
     /// :raises ValueError: if the length is not a multiple of 3.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_oct(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_octal(self);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_octal(&self.get_slice_unchecked(start, end - start))
+        self.map_slice(start, end, BitCollection::to_octal)
     }
 
     /// Read-only property of the octal representation of the Tibs.
@@ -1446,11 +1341,7 @@ impl Tibs {
     /// :raises ValueError: if the length is not a multiple of 4.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
     pub fn to_hex(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_hexadecimal(self);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_hexadecimal(&self.get_slice_unchecked(start, end - start))
+        self.map_slice(start, end, BitCollection::to_hexadecimal)
     }
 
     /// Read-only property of the hexadecimal representation of the Tibs.
@@ -1572,11 +1463,7 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyBytes>> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_py_bytes(self, py);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_py_bytes(&self.get_slice_unchecked(start, end - start), py)
+        self.map_slice(start, end, |bits| BitCollection::to_py_bytes(bits, py))
     }
 
     /// Return the Tibs as a bytes object, padding the right-hand side with zero bits.
@@ -1596,11 +1483,9 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyBytes>> {
-        if start.is_none() && end.is_none() {
-            return BitCollection::to_padded_py_bytes(self, py);
-        }
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        BitCollection::to_padded_py_bytes(&self.get_slice_unchecked(start, end - start), py)
+        self.map_slice(start, end, |bits| {
+            BitCollection::to_padded_py_bytes(bits, py)
+        })
     }
 
     /// Read-only property of the ``bytes`` representation of the Tibs.
@@ -1816,9 +1701,7 @@ impl Tibs {
     ///     Tibs('0b01010')
     ///
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let mut out = self.to_mutibs();
-        out.apply_set_positions(true, pos)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_set_positions(true, pos))
     }
 
     /// Return a new Tibs with one or many bits set to 0.
@@ -1835,9 +1718,7 @@ impl Tibs {
     ///     Tibs('0b10101')
     ///
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let mut out = self.to_mutibs();
-        out.apply_set_positions(false, pos)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_set_positions(false, pos))
     }
 
     /// Return a new Tibs with selected bits inverted.
@@ -1856,9 +1737,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let mut out = self.to_mutibs();
-        out.apply_invert_positions(pos)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_invert_positions(pos))
     }
 
     /// Insert bits at position pos and return a new Tibs.
@@ -1877,9 +1756,7 @@ impl Tibs {
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
-        let mut out = self.to_mutibs();
-        out.apply_insert_bits(pos, &bs)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_insert_bits(pos, &bs))
     }
 
     /// Search and replace and return a new Tibs.
@@ -1913,9 +1790,10 @@ impl Tibs {
     ) -> PyResult<Self> {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
-        let mut out = self.to_mutibs();
-        let _ = out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(move |out| {
+            out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
+            Ok(())
+        })
     }
 
     /// Create and return a mutable copy of the Tibs as a Mutibs instance.
@@ -2134,9 +2012,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
     pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
-        let mut out = self.to_mutibs();
-        out.apply_rotation(n, start, end, true)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_rotation(n, start, end, true))
     }
 
     /// Return a new Tibs with the bits rotated to the right.
@@ -2161,9 +2037,7 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Self> {
-        let mut out = self.to_mutibs();
-        out.apply_rotation(n, start, end, false)?;
-        Ok(out.to_tibs())
+        self.copy_with_mutation(|out| out.apply_rotation(n, start, end, false))
     }
 
     /// Create a Tibs by decoding bytes created via Tibs.encode()

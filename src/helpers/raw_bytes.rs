@@ -122,7 +122,7 @@ pub(crate) fn copy_shifted_bytes(data: &[u8], bit_offset: usize, out: &mut [u8])
 }
 
 #[inline]
-fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
+pub(crate) fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
     let remainder = len_bits & 7;
     if remainder != 0
         && let Some(last) = bytes.last_mut()
