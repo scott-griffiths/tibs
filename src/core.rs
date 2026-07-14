@@ -43,22 +43,102 @@ fn copy_unaligned_padded_bytes(bytes: &[u8], bit_offset: usize, len_bits: usize,
     mask_padding_bits(out, len_bits);
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum LogicalOp {
+    Or,
+    And,
+    Xor,
+}
+
+impl LogicalOp {
+    #[inline]
+    fn byte(self, lhs: u8, rhs: u8) -> u8 {
+        match self {
+            LogicalOp::Or => lhs | rhs,
+            LogicalOp::And => lhs & rhs,
+            LogicalOp::Xor => lhs ^ rhs,
+        }
+    }
+
+    #[inline]
+    fn word(self, lhs: u64, rhs: u64) -> u64 {
+        match self {
+            LogicalOp::Or => lhs | rhs,
+            LogicalOp::And => lhs & rhs,
+            LogicalOp::Xor => lhs ^ rhs,
+        }
+    }
+
+    #[inline]
+    fn bitslice(self, result: &mut BV, rhs: &BS) {
+        match self {
+            LogicalOp::Or => *result |= rhs,
+            LogicalOp::And => *result &= rhs,
+            LogicalOp::Xor => *result ^= rhs,
+        }
+    }
+}
+
+#[inline]
+fn read_be_u64(bytes: &[u8], index: usize) -> u64 {
+    u64::from_be_bytes(bytes[index..index + 8].try_into().unwrap())
+}
+
+#[inline]
+fn logical_op_with_matching_bytes(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(&left, &right)| op.byte(left, right))
+        .collect()
+}
+
 #[inline]
 fn logical_op_with_aligned_bytes(
     lhs: &[u8],
     lhs_offset: usize,
     rhs: &[u8],
     rhs_offset: usize,
-    op: impl Fn(u8, u8) -> u8,
+    op: LogicalOp,
 ) -> Vec<u8> {
     debug_assert!(lhs_offset < 8);
     debug_assert!(rhs_offset < 8);
 
     let rhs_shift = rhs_offset as isize - lhs_offset as isize;
-    lhs.iter()
-        .enumerate()
-        .map(|(index, &left)| op(left, align_byte(rhs, index, rhs_shift)))
-        .collect()
+    let mut out = Vec::with_capacity(lhs.len());
+    let mut index = 0;
+    match rhs_shift.cmp(&0) {
+        std::cmp::Ordering::Equal => {
+            return logical_op_with_matching_bytes(lhs, rhs, op);
+        }
+        std::cmp::Ordering::Greater => {
+            let left_shift = rhs_shift as u32;
+            let right_shift = 8 - left_shift;
+            while index + 8 <= lhs.len() && index + 8 <= rhs.len() {
+                let next = rhs.get(index + 8).copied().unwrap_or(0) as u64;
+                let aligned = (read_be_u64(rhs, index) << left_shift) | (next >> right_shift);
+                let word = op.word(read_be_u64(lhs, index), aligned);
+                out.extend_from_slice(&word.to_be_bytes());
+                index += 8;
+            }
+        }
+        std::cmp::Ordering::Less => {
+            let right_shift = (-rhs_shift) as u32;
+            while index + 8 <= lhs.len() && index + 8 <= rhs.len() {
+                let previous = if index == 0 { 0 } else { rhs[index - 1] as u64 };
+                let aligned =
+                    (read_be_u64(rhs, index) >> right_shift) | (previous << (64 - right_shift));
+                let word = op.word(read_be_u64(lhs, index), aligned);
+                out.extend_from_slice(&word.to_be_bytes());
+                index += 8;
+            }
+        }
+    }
+    out.extend(
+        (index..lhs.len())
+            .map(|byte_index| op.byte(lhs[byte_index], align_byte(rhs, byte_index, rhs_shift))),
+    );
+    out
 }
 
 pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
@@ -137,46 +217,38 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn logical_op(
-        &self,
-        other: &impl BitCollection,
-        byte_op: impl Fn(u8, u8) -> u8 + Copy,
-        bitslice_op: impl FnOnce(&mut BV, &BS),
-    ) -> Self {
+    fn logical_op(&self, other: &impl BitCollection, op: LogicalOp) -> Self {
         debug_assert!(self.len() == other.len());
 
         let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
             (self.raw_data_ref(), other.raw_data_ref())
         else {
             let mut result = self.to_bitvec();
-            bitslice_op(&mut result, other.as_bitslice());
+            op.bitslice(&mut result, other.as_bitslice());
             return Self::from_bv(result);
         };
 
         let data = if lhs_offset == rhs_offset {
-            lhs.iter()
-                .zip(rhs.iter())
-                .map(|(&a, &b)| byte_op(a, b))
-                .collect()
+            logical_op_with_matching_bytes(lhs, rhs, op)
         } else {
-            logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, byte_op)
+            logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, op)
         };
         Self::from_bv(BV::from_vec(data)).get_slice_unchecked(lhs_offset, self.len())
     }
 
     #[inline]
     fn logical_or(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, |a, b| a | b, |result, bits| *result |= bits)
+        self.logical_op(other, LogicalOp::Or)
     }
 
     #[inline]
     fn logical_and(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, |a, b| a & b, |result, bits| *result &= bits)
+        self.logical_op(other, LogicalOp::And)
     }
 
     #[inline]
     fn logical_xor(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, |a, b| a ^ b, |result, bits| *result ^= bits)
+        self.logical_op(other, LogicalOp::Xor)
     }
 
     #[inline]
