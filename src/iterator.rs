@@ -82,13 +82,20 @@ impl FindAllIterator {
 
         let py = slf.py();
         let using_byte_search = byte_haystack.is_some();
+        let using_small_search = needle.len() <= 64;
         let (search_needle, lps) = if using_byte_search {
             (needle, Vec::new())
         } else if is_reverse {
             let reversed_needle =
                 Tibs::from_bv(needle.as_bitslice().iter().by_vals().rev().collect());
-            let lps = helpers::compute_lps(py, reversed_needle.as_bitslice())?;
+            let lps = if using_small_search {
+                Vec::new()
+            } else {
+                helpers::compute_lps(py, reversed_needle.as_bitslice())?
+            };
             (reversed_needle, lps)
+        } else if using_small_search {
+            (needle, Vec::new())
         } else {
             let lps = helpers::compute_lps(py, needle.as_bitslice())?;
             (needle, lps)

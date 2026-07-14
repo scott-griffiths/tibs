@@ -51,6 +51,27 @@ def test_search_unaligned_sparse_pattern(benchmark):
     assert benchmark(run) >= 0
 
 
+def test_find_unaligned_sparse_pattern(benchmark):
+    def run():
+        return SEARCH_TIBS.find("0xabc")
+
+    assert benchmark(run) is not None
+
+
+def test_find_all_iter_unaligned_sparse_pattern(benchmark):
+    def run():
+        return len(list(SEARCH_TIBS.find_all_iter("0xabc")))
+
+    assert benchmark(run) >= 0
+
+
+def test_count_unaligned_sparse_pattern(benchmark):
+    def run():
+        return SEARCH_TIBS.count("0xabc")
+
+    assert benchmark(run) >= 0
+
+
 def test_search_byte_aligned_pattern(benchmark):
     def run():
         return len(SEARCH_TIBS.find_all("0xabcd", byte_aligned=True))

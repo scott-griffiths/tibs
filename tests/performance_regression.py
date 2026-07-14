@@ -46,6 +46,30 @@ def test_find_all_bits(benchmark):
     assert count >= 0
 
 
+def test_find_all_iter_bits(benchmark):
+    def find_all_iter():
+        return len(list(SEARCH_TIBS.find_all_iter("0xabc")))
+
+    count = benchmark(find_all_iter)
+    assert count >= 0
+
+
+def test_reverse_find_all_iter_bits(benchmark):
+    def reverse_find_all_iter():
+        return len(list(SEARCH_TIBS.rfind_all_iter("0xdeade")))
+
+    count = benchmark(reverse_find_all_iter)
+    assert count >= 0
+
+
+def test_count_bit_pattern(benchmark):
+    def count_bit_pattern():
+        return SEARCH_TIBS.count("0xabc")
+
+    count = benchmark(count_bit_pattern)
+    assert count >= 0
+
+
 def test_find_all_byte_aligned(benchmark):
     def find_all_byte_aligned():
         return len(Tibs.from_bytes(SEARCH_BYTES).find_all("0xabcd", byte_aligned=True))

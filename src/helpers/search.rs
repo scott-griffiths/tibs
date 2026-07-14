@@ -46,9 +46,8 @@ pub(crate) fn find_bitvec(
 ) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
-    let lps = compute_lps(py, needle)?;
     let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-    find_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
+    find_bitvec_aligned(py, haystack, needle, start, end, alignment_mod8)
 }
 
 pub(crate) fn find_bitvec_aligned(
@@ -61,8 +60,14 @@ pub(crate) fn find_bitvec_aligned(
 ) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
+    if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
+        return Ok(found);
+    }
+    if needle.len() <= 64 {
+        return find_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
+    }
     let lps = compute_lps(py, needle)?;
-    find_bitvec_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
+    find_bitvec_impl_with_lps_aligned(py, haystack, needle, &lps, start, end, alignment_mod8)
 }
 
 pub(crate) fn find_bitvec_with_lps_aligned(
@@ -79,6 +84,9 @@ pub(crate) fn find_bitvec_with_lps_aligned(
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
         return Ok(found);
     }
+    if needle.len() <= 64 {
+        return find_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
+    }
     find_bitvec_impl_with_lps_aligned(py, haystack, needle, lps, start, end, alignment_mod8)
 }
 
@@ -94,6 +102,16 @@ pub(crate) fn rfind_bitvec_aligned(
     debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
         return Ok(found);
+    }
+    if needle.len() <= 64 {
+        return rfind_bitvec_small(
+            py,
+            haystack,
+            SmallPattern::reversed(needle),
+            start,
+            end,
+            alignment_mod8,
+        );
     }
     let reversed_needle: BV = needle.iter().by_vals().rev().collect();
     let reversed_lps = compute_lps(py, reversed_needle.as_bitslice())?;
@@ -211,11 +229,121 @@ fn collect_single_bit_positions(
     Ok(matches)
 }
 
-#[inline]
-fn bits_to_u64(bits: &BS) -> u64 {
-    debug_assert!(bits.len() <= 64);
-    bits.iter()
-        .fold(0u64, |value, bit| (value << 1) | (*bit as u64))
+#[derive(Clone, Copy)]
+struct SmallPattern {
+    target: u64,
+    mask: u64,
+    len: usize,
+}
+
+impl SmallPattern {
+    fn new(needle: &BS) -> Self {
+        Self::from_bits(needle.iter().by_vals())
+    }
+
+    fn reversed(needle: &BS) -> Self {
+        Self::from_bits(needle.iter().by_vals().rev())
+    }
+
+    fn from_bits(bits: impl ExactSizeIterator<Item = bool>) -> Self {
+        let len = bits.len();
+        debug_assert!(len <= 64);
+        let target = bits.fold(0, |value, bit| (value << 1) | bit as u64);
+        let mask = u64::MAX.checked_shr((64 - len) as u32).unwrap_or(0);
+        Self { target, mask, len }
+    }
+}
+
+fn for_each_small_match<F>(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+    mut on_match: F,
+) -> PyResult<()>
+where
+    F: FnMut(usize) -> bool,
+{
+    let pattern = SmallPattern::new(needle);
+    if pattern.len == 0 || pattern.len > end - start {
+        return Ok(());
+    }
+
+    let mut window = 0u64;
+    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
+
+    for pos in start..end {
+        window = ((window << 1) | (haystack[pos] as u64)) & pattern.mask;
+        if pos + 1 >= start + pattern.len {
+            let match_pos = pos + 1 - pattern.len;
+            if window == pattern.target && matches_alignment(match_pos, alignment_mod8) {
+                if !on_match(match_pos) {
+                    return Ok(());
+                }
+            }
+        }
+
+        if pos >= check_at {
+            py.check_signals()?;
+            check_at = pos.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
+        }
+    }
+
+    Ok(())
+}
+
+fn find_bitvec_small(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Option<usize>> {
+    debug_assert!(needle.len() <= 64);
+    let mut found = None;
+    for_each_small_match(py, haystack, needle, start, end, alignment_mod8, |pos| {
+        found = Some(pos);
+        false
+    })?;
+    Ok(found)
+}
+
+fn rfind_bitvec_small(
+    py: Python<'_>,
+    haystack: &BS,
+    pattern: SmallPattern,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Option<usize>> {
+    if pattern.len == 0 || pattern.len > end - start {
+        return Ok(None);
+    }
+
+    let search_len = end - start;
+    let mut window = 0u64;
+    let mut check_at = SIGNAL_CHECK_INTERVAL.min(search_len);
+
+    for index in 0..search_len {
+        let pos = end - 1 - index;
+        window = ((window << 1) | (haystack[pos] as u64)) & pattern.mask;
+        if index + 1 >= pattern.len
+            && window == pattern.target
+            && matches_alignment(pos, alignment_mod8)
+        {
+            return Ok(Some(pos));
+        }
+
+        if index >= check_at {
+            py.check_signals()?;
+            check_at = index.saturating_add(SIGNAL_CHECK_INTERVAL).min(search_len);
+        }
+    }
+
+    Ok(None)
 }
 
 fn collect_find_all_positions_small(
@@ -227,37 +355,22 @@ fn collect_find_all_positions_small(
     alignment_mod8: Option<usize>,
 ) -> PyResult<Vec<u64>> {
     debug_assert!((2..=64).contains(&needle.len()));
-    if needle.len() > end - start {
-        return Ok(Vec::new());
-    }
-
-    let needle_len = needle.len();
-    let mask = if needle_len == 64 {
-        u64::MAX
-    } else {
-        (1u64 << needle_len) - 1
-    };
-    let target = bits_to_u64(needle);
-    let mut window = 0u64;
     let mut matches = Vec::new();
-    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
-
-    for pos in start..end {
-        window = ((window << 1) | (haystack[pos] as u64)) & mask;
-        if pos + 1 >= start + needle_len {
-            let match_pos = pos + 1 - needle_len;
-            if window == target && matches_alignment(match_pos, alignment_mod8) {
-                matches.push(match_pos as u64);
-            }
-        }
-
-        if pos >= check_at {
-            py.check_signals()?;
-            check_at = pos.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
-        }
-    }
-
+    for_each_small_match(py, haystack, needle, start, end, alignment_mod8, |pos| {
+        matches.push(pos as u64);
+        true
+    })?;
     Ok(matches)
+}
+
+fn count_bitvec_small(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResult<usize> {
+    debug_assert!((1..=64).contains(&needle.len()));
+    let mut count = 0;
+    for_each_small_match(py, haystack, needle, 0, haystack.len(), None, |_| {
+        count += 1;
+        true
+    })?;
+    Ok(count)
 }
 
 fn collect_find_all_positions_kmp(
@@ -345,6 +458,16 @@ pub(crate) fn rfind_bitvec_with_reversed_lps_aligned(
     if reversed_needle.is_empty() || reversed_needle.len() > end - start {
         return Ok(None);
     }
+    if reversed_needle.len() <= 64 {
+        return rfind_bitvec_small(
+            py,
+            haystack,
+            SmallPattern::new(reversed_needle),
+            start,
+            end,
+            alignment_mod8,
+        );
+    }
 
     let needle_len = reversed_needle.len();
     let search_len = end - start;
@@ -430,6 +553,9 @@ fn find_bitvec_impl_with_lps_aligned(
 pub(crate) fn count_bitvec(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResult<usize> {
     if needle.is_empty() || needle.len() > haystack.len() {
         return Ok(0);
+    }
+    if needle.len() <= 64 {
+        return count_bitvec_small(py, haystack, needle);
     }
     let lps = compute_lps(py, needle)?;
     let needle_len = needle.len();
