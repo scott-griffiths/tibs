@@ -37,16 +37,22 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     // the C API avoids creating a Bound<PyAny> wrapper for every bit.
     if let Ok(list) = iterable.cast::<PyList>() {
         return unsafe {
-            bv_from_py_sequence_items(iterable.py(), list.len(), |index| {
-                ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t)
-            })
+            bv_from_py_sequence_items(
+                iterable.py(),
+                list.len(),
+                |index| ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t),
+                py_truthy,
+            )
         };
     }
     if let Ok(tuple) = iterable.cast::<PyTuple>() {
         return unsafe {
-            bv_from_py_sequence_items(iterable.py(), tuple.len(), |index| {
-                ffi::PyTuple_GetItem(tuple.as_ptr(), index as ffi::Py_ssize_t)
-            })
+            bv_from_py_sequence_items(
+                iterable.py(),
+                tuple.len(),
+                |index| ffi::PyTuple_GetItem(tuple.as_ptr(), index as ffi::Py_ssize_t),
+                py_truthy,
+            )
         };
     }
 
@@ -60,34 +66,28 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     Ok(bv)
 }
 
-fn bv_from_strict_bit_items<'py>(
-    len: usize,
-    items: impl Iterator<Item = Bound<'py, PyAny>>,
-) -> PyResult<BV> {
-    let mut bv = BV::with_capacity(len);
-
-    for (index, item) in items.enumerate() {
-        let Some(bit) = convert_to_bool(&item) else {
-            let type_name = py_type_name(&item);
-            let repr = match item.repr() {
-                Ok(repr) => repr.to_string(),
-                Err(_) => "<unrepresentable>".to_string(),
-            };
-            return Err(PyTypeError::new_err(format!(
-                "Implicit bit patterns only accept True, False, 0 or 1; item at index {index} is {repr} of type <{type_name}>. Use from_bools(...) to convert truthy values, from_values(...) to pack numeric values, or from_bytes(...) for bytes."
-            )));
-        };
-        bv.push(bit);
-    }
-    Ok(bv)
-}
-
 fn bv_from_strict_bit_pattern(any: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
     if let Ok(list) = any.cast::<PyList>() {
-        return bv_from_strict_bit_items(list.len(), list.iter()).map(Some);
+        return unsafe {
+            bv_from_py_sequence_items(
+                any.py(),
+                list.len(),
+                |index| ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t),
+                |_py, index, item| strict_bit(index, &Bound::from_borrowed_ptr(any.py(), item)),
+            )
+            .map(Some)
+        };
     }
     if let Ok(tuple) = any.cast::<PyTuple>() {
-        return bv_from_strict_bit_items(tuple.len(), tuple.iter()).map(Some);
+        return unsafe {
+            bv_from_py_sequence_items(
+                any.py(),
+                tuple.len(),
+                |index| ffi::PyTuple_GetItem(tuple.as_ptr(), index as ffi::Py_ssize_t),
+                |_py, index, item| strict_bit(index, &Bound::from_borrowed_ptr(any.py(), item)),
+            )
+            .map(Some)
+        };
     }
     Ok(None)
 }
@@ -96,6 +96,7 @@ unsafe fn bv_from_py_sequence_items(
     py: Python<'_>,
     len: usize,
     mut get_item: impl FnMut(usize) -> *mut ffi::PyObject,
+    mut convert_other: impl FnMut(Python<'_>, usize, *mut ffi::PyObject) -> PyResult<bool>,
 ) -> PyResult<BV> {
     // The callers pass list/tuple indices in bounds, so borrowed item pointers
     // are valid while the GIL is held. Pack directly into Msb0 bytes to avoid
@@ -113,12 +114,7 @@ unsafe fn bv_from_py_sequence_items(
         } else if item == py_false {
             false
         } else {
-            match unsafe { ffi::PyObject_IsTrue(item) } {
-                0 => false,
-                1 => true,
-                -1 => return Err(PyErr::fetch(py)),
-                _ => unreachable!("PyObject_IsTrue only returns -1, 0, or 1"),
-            }
+            convert_other(py, index, item)?
         };
         if bit {
             bytes[index / 8] |= 0x80 >> (index & 7);
@@ -127,6 +123,29 @@ unsafe fn bv_from_py_sequence_items(
     let mut bv = BV::from_vec(bytes);
     bv.truncate(len);
     Ok(bv)
+}
+
+fn py_truthy(py: Python<'_>, _index: usize, item: *mut ffi::PyObject) -> PyResult<bool> {
+    match unsafe { ffi::PyObject_IsTrue(item) } {
+        0 => Ok(false),
+        1 => Ok(true),
+        -1 => Err(PyErr::fetch(py)),
+        _ => unreachable!("PyObject_IsTrue only returns -1, 0, or 1"),
+    }
+}
+
+fn strict_bit(index: usize, item: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let Some(bit) = convert_to_bool(item) else {
+        let type_name = py_type_name(item);
+        let repr = match item.repr() {
+            Ok(repr) => repr.to_string(),
+            Err(_) => "<unrepresentable>".to_string(),
+        };
+        return Err(PyTypeError::new_err(format!(
+            "Implicit bit patterns only accept True, False, 0 or 1; item at index {index} is {repr} of type <{type_name}>. Use from_bools(...) to convert truthy values, from_values(...) to pack numeric values, or from_bytes(...) for bytes."
+        )));
+    };
+    Ok(bit)
 }
 
 fn py_type_name(any: &Bound<'_, PyAny>) -> String {

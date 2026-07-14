@@ -36,6 +36,11 @@ CHUNK_SOURCE = Tibs.from_joined(
 _value_rng = random.Random(0xB17)
 VALUE_WORDS = [_value_rng.randrange(1 << 16) for _ in range(20_000)]
 VALUE_BYTES = Tibs.from_values("u16", VALUE_WORDS).to_bytes()
+_bulk_set_rng = random.Random("tibs-bulk-set")
+BULK_SET_POSITIONS = [
+    [_bulk_set_rng.randrange(len(SEARCH_TIBS)) for _ in range(8)]
+    for _ in range(20_000)
+]
 
 
 def test_find_all_bits(benchmark):
@@ -150,6 +155,17 @@ def test_copy_and_slice_delete(benchmark):
 
     result = benchmark(copy_and_delete)
     assert len(result) == len(SEARCH_TIBS) - 10_000
+
+
+def test_bulk_index_set(benchmark):
+    def bulk_index_set():
+        result = Mutibs.from_zeros(len(SEARCH_TIBS))
+        for positions in BULK_SET_POSITIONS:
+            result.set(positions)
+        return result
+
+    result = benchmark(bulk_index_set)
+    assert result.count(1) > 0
 
 
 def test_joined_construction(benchmark):

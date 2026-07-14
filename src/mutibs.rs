@@ -238,13 +238,17 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn set_from_sequence(&mut self, value: bool, indices: Vec<isize>) -> PyResult<()> {
-        let mut validated = Vec::with_capacity(indices.len());
-        for idx in indices {
-            validated.push(validate_index(idx, self.len())?);
+    pub(crate) fn set_from_sequence(
+        &mut self,
+        value: bool,
+        mut indices: Vec<isize>,
+    ) -> PyResult<()> {
+        let len = self.len();
+        for index in &mut indices {
+            *index = validate_index(*index, len)? as isize;
         }
-        for idx in validated {
-            self.as_mut_bitvec_ref().set(idx, value);
+        for index in indices {
+            self.as_mut_bitvec_ref().set(index as usize, value);
         }
         Ok(())
     }
