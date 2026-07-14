@@ -154,6 +154,10 @@ pub(crate) fn collect_find_all_positions(
         return Ok(matches);
     }
 
+    if needle.len() <= 64 {
+        return collect_find_all_positions_small(py, haystack, needle, start, end, alignment_mod8);
+    }
+
     collect_find_all_positions_kmp(py, haystack, needle, start, end, alignment_mod8)
 }
 
@@ -201,6 +205,55 @@ fn collect_single_bit_positions(
                 py.check_signals()?;
                 check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
             }
+        }
+    }
+
+    Ok(matches)
+}
+
+#[inline]
+fn bits_to_u64(bits: &BS) -> u64 {
+    debug_assert!(bits.len() <= 64);
+    bits.iter()
+        .fold(0u64, |value, bit| (value << 1) | (*bit as u64))
+}
+
+fn collect_find_all_positions_small(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Vec<u64>> {
+    debug_assert!((2..=64).contains(&needle.len()));
+    if needle.len() > end - start {
+        return Ok(Vec::new());
+    }
+
+    let needle_len = needle.len();
+    let mask = if needle_len == 64 {
+        u64::MAX
+    } else {
+        (1u64 << needle_len) - 1
+    };
+    let target = bits_to_u64(needle);
+    let mut window = 0u64;
+    let mut matches = Vec::new();
+    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
+
+    for pos in start..end {
+        window = ((window << 1) | (haystack[pos] as u64)) & mask;
+        if pos + 1 >= start + needle_len {
+            let match_pos = pos + 1 - needle_len;
+            if window == target && matches_alignment(match_pos, alignment_mod8) {
+                matches.push(match_pos as u64);
+            }
+        }
+
+        if pos >= check_at {
+            py.check_signals()?;
+            check_at = pos.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
         }
     }
 
