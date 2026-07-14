@@ -7,9 +7,9 @@ use pyo3::prelude::*;
 
 #[pyclass]
 pub struct BoolIterator {
-    pub(crate) bits: Py<Tibs>,
-    pub(crate) index: isize,
-    pub(crate) length: isize,
+    pub(crate) bits: Tibs,
+    pub(crate) index: usize,
+    pub(crate) length: usize,
 }
 
 #[pymethods]
@@ -18,17 +18,18 @@ impl BoolIterator {
         slf
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<bool>> {
+    fn __next__(&mut self) -> Option<bool> {
         if self.index < self.length {
-            // It's probably pretty inefficient borrowing on each iterator.
-            // It may make more sense to buffer some values in advance.
-            let bits = self.bits.borrow(py);
-            let result = bits.get_index(self.index);
+            let result = self.bits.as_bitslice()[self.index];
             self.index += 1;
-            result.map(Some)
+            Some(result)
         } else {
-            Ok(None)
+            None
         }
+    }
+
+    fn __length_hint__(&self) -> usize {
+        self.length - self.index
     }
 }
 

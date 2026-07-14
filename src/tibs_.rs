@@ -1,5 +1,5 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, count_bitslice};
+use crate::core::{BitCollection, concatenate_bitcollections, count_bitslice};
 use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
@@ -19,7 +19,6 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::ops::Not;
 use std::sync::Arc;
 
 impl Hash for Tibs {
@@ -84,8 +83,9 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
-        // Materialize a single owned copy of the current logical view.
-        self.as_bitslice().to_bitvec()
+        let mut result = BV::from_vec(<Self as BitCollection>::to_padded_byte_data(self));
+        result.truncate(self.length);
+        result
     }
 
     #[inline]
@@ -579,11 +579,11 @@ impl Tibs {
     ///
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<BoolIterator>> {
         let py = slf.py();
-        let length = slf.len() as isize;
+        let length = slf.len();
         Py::new(
             py,
             BoolIterator {
-                bits: slf.into(),
+                bits: slf.clone(),
                 index: 0,
                 length,
             },
@@ -1903,10 +1903,7 @@ impl Tibs {
     ///
     pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + other.len());
-        data.extend_from_bitslice(self.to_bitslice());
-        data.extend_from_bitslice(other.as_bitslice());
-        Ok(Tibs::from_bv(data))
+        Ok(Tibs::from_bv(concatenate_bitcollections(self, &other)))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -1916,10 +1913,7 @@ impl Tibs {
     ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        let mut data = BV::with_capacity(other.len() + self.len());
-        data.extend_from_bitslice(other.as_bitslice());
-        data.extend_from_bitslice(self.to_bitslice());
-        Ok(Tibs::from_bv(data))
+        Ok(Tibs::from_bv(concatenate_bitcollections(&other, self)))
     }
 
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -2100,7 +2094,7 @@ impl Tibs {
         if self.to_bitslice().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Tibs."));
         }
-        Ok(Tibs::from_bv(self.to_bitvec().not()))
+        Ok(BitCollection::invert_copy(self))
     }
 
     /// Return the Tibs as a bytes object.

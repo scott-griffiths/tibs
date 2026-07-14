@@ -1,5 +1,5 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, count_bitslice};
+use crate::core::{BitCollection, concatenate_bitcollections, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
@@ -69,8 +69,7 @@ impl Mutibs {
 
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
-        // Materialize a single owned copy of the current logical view.
-        self.as_bitvec_ref().to_bitvec()
+        self.data.clone()
     }
 
     #[inline]
@@ -150,12 +149,38 @@ impl Mutibs {
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         } else if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
+            if start.is_multiple_of(8)
+                && value.len().is_multiple_of(8)
+                && let bitvec::domain::Domain::Region {
+                    head: None,
+                    body,
+                    tail: None,
+                } = value.domain()
+            {
+                let start_byte = start / 8;
+                self.data.as_raw_mut_slice()[start_byte..start_byte + body.len()]
+                    .copy_from_slice(body);
+                return;
+            }
             self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value);
         } else {
             let tail = self.as_mut_bitvec_ref().split_off(end);
             self.as_mut_bitvec_ref().truncate(start);
             self.as_mut_bitvec_ref().extend_from_bitslice(value);
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
+        }
+    }
+
+    fn delete_slice(&mut self, start: usize, end: usize) {
+        if start.is_multiple_of(8) && end.is_multiple_of(8) {
+            let new_len = self.len() - (end - start);
+            let mut bytes = std::mem::take(&mut self.data).into_vec();
+            bytes.drain(start / 8..end / 8);
+            let mut data = BV::from_vec(bytes);
+            data.truncate(new_len);
+            self.data = data;
+        } else {
+            self.data.drain(start..end);
         }
     }
 
@@ -1719,8 +1744,7 @@ impl Mutibs {
 
             if step == 1 {
                 if stop > start {
-                    self.as_mut_bitvec_ref()
-                        .drain(start as usize..stop as usize);
+                    self.delete_slice(start as usize, stop as usize);
                 }
             } else {
                 // Collect indices to remove, then remove from highest to lowest.
@@ -2450,7 +2474,7 @@ impl Mutibs {
         if self.as_bitvec_ref().is_empty() {
             return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
         }
-        Ok(Mutibs::from_bv(self.to_bitvec().not()))
+        Ok(BitCollection::invert_copy(self))
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -2605,10 +2629,7 @@ impl Mutibs {
         // accept a Tibs, then correct types with wrong values (e.g. a malformed string)
         // will fail and return a TypeError instead of ValueError which we can't control.
         let other = Tibs::extract(other.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + other.len());
-        data.extend_from_bitslice(self.as_bitvec_ref());
-        data.extend_from_bitslice(other.as_bitslice());
-        Ok(Mutibs::from_bv(data))
+        Ok(Mutibs::from_bv(concatenate_bitcollections(self, &other)))
     }
 
     /// Concatenate Mutibs and return a new Mutibs.
@@ -2618,10 +2639,7 @@ impl Mutibs {
     ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        let mut data = BV::with_capacity(self.len() + other.len());
-        data.extend_from_bitslice(other.as_bitslice());
-        data.extend_from_bitslice(self.as_bitvec_ref());
-        Ok(Mutibs::from_bv(data))
+        Ok(Mutibs::from_bv(concatenate_bitcollections(&other, self)))
     }
 
     /// Concatenate in-place.

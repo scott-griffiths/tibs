@@ -99,6 +99,59 @@ def test_bit_operations(benchmark):
     assert result_length == 24_999_500
 
 
+def test_concatenation(benchmark):
+    result = benchmark(lambda: SEARCH_TIBS + OTHER_TIBS)
+    assert len(result) == len(SEARCH_TIBS) + len(OTHER_TIBS)
+
+
+def test_invert_all(benchmark):
+    result = benchmark(lambda: ~SEARCH_TIBS)
+    assert result.count(1) == len(SEARCH_TIBS) - SEARCH_TIBS.count(1)
+
+
+def test_reverse_bits(benchmark):
+    result = benchmark(SEARCH_TIBS.reversed)
+    assert result[0] == SEARCH_TIBS[-1]
+    assert result[-1] == SEARCH_TIBS[0]
+
+
+def test_shift_left(benchmark):
+    result = benchmark(lambda: SEARCH_TIBS << 13)
+    assert result[:-13] == SEARCH_TIBS[13:]
+    assert result[-13:] == Tibs.from_zeros(13)
+
+
+def test_bool_list_conversion(benchmark):
+    result = benchmark(list, SEARCH_TIBS)
+    assert len(result) == len(SEARCH_TIBS)
+    assert sum(result) == SEARCH_TIBS.count(1)
+
+
+def test_copy_and_slice_set(benchmark):
+    replacement = Tibs.from_ones(10_000)
+    start = (len(SEARCH_TIBS) - len(replacement)) // 2
+
+    def copy_and_set():
+        result = SEARCH_TIBS.to_mutibs()
+        result[start : start + len(replacement)] = replacement
+        return result
+
+    result = benchmark(copy_and_set)
+    assert result[start : start + len(replacement)].all()
+
+
+def test_copy_and_slice_delete(benchmark):
+    start = (len(SEARCH_TIBS) - 10_000) // 2
+
+    def copy_and_delete():
+        result = SEARCH_TIBS.to_mutibs()
+        del result[start : start + 10_000]
+        return result
+
+    result = benchmark(copy_and_delete)
+    assert len(result) == len(SEARCH_TIBS) - 10_000
+
+
 def test_joined_construction(benchmark):
     def joined_construction():
         piece = Tibs("0b10101")
