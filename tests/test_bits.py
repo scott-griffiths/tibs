@@ -299,6 +299,16 @@ def test_joined_from_iterable():
     assert Tibs.from_joined(["0b1", [0, 1], b"\xff"]) == Tibs("0b10111111111")
 
 
+def test_joined_repeated_bit_containers():
+    expected = Tibs('0b101101101101')
+    for cls in (Tibs, Mutibs):
+        assert cls.from_joined([Tibs('0b101')] * 4) == expected
+        assert cls.from_joined([Mutibs('0b101')] * 4) == expected
+
+    # Equal but distinct objects use the general list path.
+    assert Tibs.from_joined([Tibs('0b101') for _ in range(4)]) == expected
+
+
 def test_promotion_from_mutibs():
     m = Mutibs('0x123')
     t = Tibs(m)

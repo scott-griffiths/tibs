@@ -13,6 +13,7 @@ use crate::view::{MutableView, View};
 
 use crate::helpers;
 use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
+use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::ops::Not;
@@ -83,6 +84,12 @@ impl Mutibs {
     }
 
     pub(crate) fn joined_bv_from_iterable(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
+        if let Ok(list) = iterable.cast::<PyList>()
+            && let Some(bv) = Self::joined_bv_from_repeated_list(list)
+        {
+            return Ok(bv);
+        }
+
         // Walk the iterable once to collect bit views and compute the final
         // length, so the destination BitVec can be allocated exactly once.
         let iter = iterable.try_iter()?;
@@ -92,6 +99,30 @@ impl Mutibs {
             Self::push_joined_part(&mut parts, &mut total_len, item?)?;
         }
         Self::join_parts(parts, total_len)
+    }
+
+    fn joined_bv_from_repeated_list(list: &Bound<'_, PyList>) -> Option<BV> {
+        let count = list.len();
+        if count == 0 {
+            return Some(BV::new());
+        }
+
+        // All indices are in bounds, and list items remain valid while the GIL is held.
+        let first = unsafe { ffi::PyList_GetItem(list.as_ptr(), 0) };
+        for index in 1..count {
+            if unsafe { ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t) } != first {
+                return None;
+            }
+        }
+
+        let item = unsafe { Bound::from_borrowed_ptr(list.py(), first) };
+        if let Ok(tibs) = item.extract::<PyRef<Tibs>>() {
+            Some(tibs.as_bitslice().repeat(count))
+        } else if let Ok(mutibs) = item.extract::<PyRef<Mutibs>>() {
+            Some(mutibs.as_bitslice().repeat(count))
+        } else {
+            None
+        }
     }
 
     fn push_joined_part<'py>(
@@ -253,12 +284,65 @@ impl Mutibs {
         Ok(())
     }
 
+    fn set_from_list(&mut self, value: bool, list: &Bound<'_, PyList>) -> PyResult<()> {
+        const STACK_CAPACITY: usize = 16;
+
+        let count = list.len();
+        if count <= STACK_CAPACITY {
+            let mut indices = [0usize; STACK_CAPACITY];
+            self.validate_list_indices(list, &mut indices[..count])?;
+            for &index in &indices[..count] {
+                self.as_mut_bitvec_ref().set(index, value);
+            }
+        } else {
+            let mut indices = vec![0usize; count];
+            self.validate_list_indices(list, &mut indices)?;
+            for index in indices {
+                self.as_mut_bitvec_ref().set(index, value);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_list_indices(
+        &self,
+        list: &Bound<'_, PyList>,
+        indices: &mut [usize],
+    ) -> PyResult<()> {
+        debug_assert_eq!(list.len(), indices.len());
+        let py = list.py();
+        let len = self.len();
+        for (position, index) in indices.iter_mut().enumerate() {
+            // The index is in bounds and the borrowed item remains valid while
+            // the list is held under the GIL.
+            let item = unsafe { ffi::PyList_GetItem(list.as_ptr(), position as ffi::Py_ssize_t) };
+            let value = if unsafe { ffi::PyLong_Check(item) } != 0 {
+                unsafe { ffi::PyLong_AsSsize_t(item) }
+            } else {
+                let indexed = unsafe { ffi::PyNumber_Index(item) };
+                if indexed.is_null() {
+                    return Err(PyErr::fetch(py));
+                }
+                let value = unsafe { ffi::PyLong_AsSsize_t(indexed) };
+                unsafe { ffi::Py_DECREF(indexed) };
+                value
+            };
+            if value == -1 && unsafe { !ffi::PyErr_Occurred().is_null() } {
+                return Err(PyErr::fetch(py));
+            }
+            *index = validate_index(value, len)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn apply_set_positions(
         &mut self,
         value: bool,
         pos: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        if let Ok(index) = pos.extract::<isize>() {
+        if let Ok(list) = pos.cast::<PyList>() {
+            self.set_from_list(value, list)?;
+        } else if let Ok(index) = pos.extract::<isize>() {
             if value {
                 self.set_index(index)?;
             } else {
