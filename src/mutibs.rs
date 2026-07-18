@@ -116,10 +116,14 @@ impl Mutibs {
         }
 
         let item = unsafe { Bound::from_borrowed_ptr(list.py(), first) };
+        // BitSlice::repeat panics on an empty slice, so return the empty
+        // result directly in that case.
         if let Ok(tibs) = item.extract::<PyRef<Tibs>>() {
-            Some(tibs.as_bitslice().repeat(count))
+            let bits = tibs.as_bitslice();
+            Some(if bits.is_empty() { BV::new() } else { bits.repeat(count) })
         } else if let Ok(mutibs) = item.extract::<PyRef<Mutibs>>() {
-            Some(mutibs.as_bitslice().repeat(count))
+            let bits = mutibs.as_bitslice();
+            Some(if bits.is_empty() { BV::new() } else { bits.repeat(count) })
         } else {
             None
         }
@@ -629,6 +633,13 @@ impl Mutibs {
         } else {
             stop
         };
+        // An empty range (e.g. range(1, 0) or range(0, 2, -1)) selects no
+        // positions, so there is nothing to validate or set.
+        if (step > 0 && positive_start >= positive_stop)
+            || (step < 0 && positive_start <= positive_stop)
+        {
+            return Ok(());
+        }
         if positive_start < 0 || positive_start >= len {
             return Err(PyIndexError::new_err("Start of slice out of bounds."));
         }

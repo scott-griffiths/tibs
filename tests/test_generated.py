@@ -1462,35 +1462,36 @@ class TestFuzzMutation:
 class TestFuzzFoundBugs:
     """Deterministic regressions for bugs found by the fuzz tests above.
 
-    These tests currently FAIL and document real defects; they should pass
-    once the underlying bugs are fixed.
+    Repeating the same empty container in from_joined used to panic in Rust,
+    as did passing empty ranges to the set/unset family of methods.
     """
 
     def test_from_joined_single_empty_item(self):
-        # A single-element list containing an empty Tibs panics in Rust
-        # ("Chunk width cannot be 0") instead of returning an empty Tibs.
-        # Both [] and [Tibs(), Tibs()] work correctly.
+        # A single-element list containing an empty Tibs used to panic in
+        # Rust ("Chunk width cannot be 0") via the repeated-list fast path.
         assert Tibs.from_joined([Tibs()]) == Tibs()
+        empty = Tibs()
+        assert Tibs.from_joined([empty, empty, empty]) == Tibs()
 
     def test_mutibs_from_joined_single_empty_item(self):
         assert Mutibs.from_joined([Mutibs()]) == Mutibs()
 
     def test_set_empty_ascending_range_is_noop(self):
         # range(1, 0) is empty in Python, so set() should change nothing.
-        # Currently panics in Rust ("range 1..0 out of bounds").
+        # It used to panic in Rust ("range 1..0 out of bounds").
         m = Mutibs.from_zeros(3)
         m.set(range(1, 0))
         assert m == Mutibs.from_zeros(3)
 
     def test_set_empty_descending_range_is_noop(self):
         # range(0, 2, -1) is empty in Python, so set() should change nothing.
-        # Currently panics in Rust ("range 3..1 out of bounds").
+        # It used to panic in Rust ("range 3..1 out of bounds").
         m = Mutibs.from_zeros(3)
         m.set(range(0, 2, -1))
         assert m == Mutibs.from_zeros(3)
 
     def test_unset_empty_descending_range_is_noop(self):
-        # Currently raises IndexError ("End of slice out of bounds.")
+        # This used to raise IndexError ("End of slice out of bounds.")
         # even though the range contains no positions.
         m = Mutibs.from_ones(1)
         m.unset(range(0, 1, -1))
