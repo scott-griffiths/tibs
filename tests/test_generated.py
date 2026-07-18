@@ -1051,3 +1051,453 @@ class TestDtypeViewMutableViewEdgeCoverage:
 
         assert copy == Mutibs("0xb412")
         assert m == Mutibs("0x1234")
+
+
+# ---------------------------------------------------------------------------
+# Property-based fuzz tests (hypothesis).
+#
+# Every generated Tibs/Mutibs is (optionally) built as a slice of a larger
+# parent object, so the underlying storage often starts mid-byte. Operations
+# are checked against a pure-Python list-of-bools / binary-string model.
+# ---------------------------------------------------------------------------
+
+from hypothesis import assume, given, settings
+import hypothesis.strategies as st
+
+FUZZ = settings(max_examples=75, deadline=None)
+
+
+def _ref_bin(bits):
+    return "".join("1" if b else "0" for b in bits)
+
+
+@st.composite
+def bool_lists(draw, min_size=0, max_size=200):
+    # Mix densities so low-entropy data stresses fallback search paths.
+    density = draw(st.sampled_from([2, 50, 98]))
+    n = draw(st.integers(min_size, max_size))
+    return [draw(st.integers(0, 99)) < density for _ in range(n)]
+
+
+@st.composite
+def padded_tibs(draw, min_size=0, max_size=200):
+    """A Tibs plus its reference bits, often stored at a bit offset."""
+    bits = draw(bool_lists(min_size=min_size, max_size=max_size))
+    pre = draw(bool_lists(max_size=13))
+    post = draw(bool_lists(max_size=13))
+    t = Tibs.from_bools(pre + bits + post)[len(pre):len(pre) + len(bits)]
+    return t, bits
+
+
+@st.composite
+def padded_mutibs(draw, min_size=0, max_size=200):
+    """A Mutibs plus its reference bits, often stored at a bit offset."""
+    bits = draw(bool_lists(min_size=min_size, max_size=max_size))
+    pre = draw(bool_lists(max_size=13))
+    post = draw(bool_lists(max_size=13))
+    m = Mutibs.from_bools(pre + bits + post)[len(pre):len(pre) + len(bits)]
+    return m, bits
+
+
+def _ref_occurrences(s, p):
+    return [i for i in range(len(s) - len(p) + 1) if s.startswith(p, i)]
+
+
+class TestFuzzSearch:
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_find_family_matches_string_reference(self, tb, data):
+        t, bits = tb
+        s = _ref_bin(bits)
+        # Needle: usually a real substring (so matches exist), sometimes random.
+        # Lengths deliberately straddle the 64-bit small/large search boundary.
+        nlen = data.draw(st.integers(1, min(len(bits), 90)), label="needle_len")
+        if data.draw(st.booleans(), label="from_haystack"):
+            at = data.draw(st.integers(0, len(bits) - nlen), label="at")
+            nbits = bits[at:at + nlen]
+        else:
+            nbits = data.draw(bool_lists(min_size=nlen, max_size=nlen))
+        needle = Tibs.from_bools(nbits)
+        p = _ref_bin(nbits)
+
+        occurrences = _ref_occurrences(s, p)
+        expected_find = occurrences[0] if occurrences else None
+        expected_rfind = occurrences[-1] if occurrences else None
+
+        assert t.find(needle) == expected_find
+        assert t.rfind(needle) == expected_rfind
+        assert t.find_all(needle) == occurrences
+        assert list(t.find_all_iter(needle)) == occurrences
+        assert list(t.rfind_all_iter(needle)) == occurrences[::-1]
+        assert t.count(needle) == len(occurrences)
+
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_find_with_bounds_and_byte_alignment(self, tb, data):
+        t, bits = tb
+        s = _ref_bin(bits)
+        nlen = data.draw(st.integers(1, min(len(bits), 70)), label="needle_len")
+        at = data.draw(st.integers(0, len(bits) - nlen), label="at")
+        nbits = bits[at:at + nlen]
+        needle = Tibs.from_bools(nbits)
+        p = _ref_bin(nbits)
+        start = data.draw(st.integers(0, len(bits)), label="start")
+        end = data.draw(st.integers(start, len(bits)), label="end")
+        aligned = data.draw(st.booleans(), label="aligned")
+
+        occurrences = [
+            i for i in _ref_occurrences(s, p)
+            if i >= start and i + nlen <= end and (not aligned or i % 8 == 0)
+        ]
+        assert t.find(needle, start, end, byte_aligned=aligned) == (
+            occurrences[0] if occurrences else None
+        )
+        assert t.rfind(needle, start, end, byte_aligned=aligned) == (
+            occurrences[-1] if occurrences else None
+        )
+        assert t.find_all(needle, start, end, byte_aligned=aligned) == occurrences
+
+    @FUZZ
+    @given(padded_tibs(), st.data())
+    def test_count_single_bit_with_bounds(self, tb, data):
+        t, bits = tb
+        start = data.draw(st.integers(0, len(bits)), label="start")
+        end = data.draw(st.integers(start, len(bits)), label="end")
+        assert t.count(1, start, end) == sum(bits[start:end])
+        assert t.count(0, start, end) == (end - start) - sum(bits[start:end])
+
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_replaced_matches_string_reference(self, tb, data):
+        t, bits = tb
+        s = _ref_bin(bits)
+        nlen = data.draw(st.integers(1, min(len(bits), 20)), label="old_len")
+        at = data.draw(st.integers(0, len(bits) - nlen), label="at")
+        old = bits[at:at + nlen]
+        new = data.draw(bool_lists(max_size=12), label="new")
+
+        # Left-to-right, non-overlapping replacement.
+        out, i = [], 0
+        while True:
+            j = s.find(_ref_bin(old), i)
+            if j == -1:
+                out.append(s[i:])
+                break
+            out.append(s[i:j])
+            out.append(_ref_bin(new))
+            i = j + nlen
+        expected = "".join(out)
+
+        replaced = t.replaced(Tibs.from_bools(old), Tibs.from_bools(new))
+        assert replaced.to_bin() == expected
+
+
+class TestFuzzSlicingAndViews:
+    @FUZZ
+    @given(padded_tibs(), st.data())
+    def test_step_slicing_matches_list(self, tb, data):
+        t, bits = tb
+        step = data.draw(st.sampled_from([-7, -3, -2, -1, 1, 2, 3, 7]), label="step")
+        start = data.draw(st.one_of(st.none(), st.integers(-len(bits) - 2, len(bits) + 2)), label="start")
+        stop = data.draw(st.one_of(st.none(), st.integers(-len(bits) - 2, len(bits) + 2)), label="stop")
+        assert t[start:stop:step].to_bin() == _ref_bin(bits[start:stop:step])
+
+    @FUZZ
+    @given(padded_tibs())
+    def test_to_bools_and_iteration_match(self, tb):
+        t, bits = tb
+        assert t.to_bools() == bits
+        assert list(t) == bits
+        assert t.to_bin() == _ref_bin(bits)
+        assert t.to_mutibs().to_bools() == bits
+
+    @FUZZ
+    @given(padded_tibs())
+    def test_reversed_matches_list(self, tb):
+        t, bits = tb
+        assert t.reversed().to_bin() == _ref_bin(bits[::-1])
+
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_rotations_match_reference(self, tb, data):
+        t, bits = tb
+        n = data.draw(st.integers(0, 2 * len(bits) + 8), label="n")
+        start = data.draw(st.integers(0, len(bits)), label="start")
+        end = data.draw(st.integers(start, len(bits)), label="end")
+
+        seg = bits[start:end]
+        if seg:
+            k = n % len(seg)
+            left = bits[:start] + seg[k:] + seg[:k] + bits[end:]
+            right = bits[:start] + (seg[-k:] + seg[:-k] if k else seg) + bits[end:]
+        else:
+            left = right = bits[:]
+        assert t.rotated_left(n, start, end).to_bin() == _ref_bin(left)
+        assert t.rotated_right(n, start, end).to_bin() == _ref_bin(right)
+
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_shifts_match_reference(self, tb, data):
+        t, bits = tb
+        n = data.draw(st.integers(0, len(bits) + 4), label="n")
+        shifted_left = bits[n:] + [False] * min(n, len(bits))
+        shifted_right = [False] * min(n, len(bits)) + bits[:max(len(bits) - n, 0)]
+        assert (t << n).to_bin() == _ref_bin(shifted_left)
+        assert (t >> n).to_bin() == _ref_bin(shifted_right)
+
+    @FUZZ
+    @given(padded_tibs(), st.data())
+    def test_split_at_and_chunks_match_reference(self, tb, data):
+        t, bits = tb
+        positions = sorted(data.draw(st.lists(st.integers(0, len(bits)), max_size=6), label="positions"))
+        parts = t.split_at(positions)
+        bounds = [0] + positions + [len(bits)]
+        assert [p.to_bin() for p in parts] == [
+            _ref_bin(bits[a:b]) for a, b in zip(bounds, bounds[1:])
+        ]
+
+        chunk_size = data.draw(st.integers(1, len(bits) + 3), label="chunk_size")
+        assert [c.to_bin() for c in t.chunks(chunk_size)] == [
+            _ref_bin(bits[i:i + chunk_size]) for i in range(0, len(bits), chunk_size)
+        ]
+
+    @FUZZ
+    @given(st.lists(padded_tibs(max_size=40), max_size=8))
+    def test_from_joined_matches_concatenation(self, items):
+        joined = Tibs.from_joined([t for t, _ in items])
+        assert joined.to_bin() == "".join(_ref_bin(bits) for _, bits in items)
+
+
+class TestFuzzLogicalAndNumeric:
+    @FUZZ
+    @given(st.data())
+    def test_logical_ops_match_reference(self, data):
+        n = data.draw(st.integers(1, 150), label="len")
+        a_bits = data.draw(bool_lists(min_size=n, max_size=n), label="a")
+        b_bits = data.draw(bool_lists(min_size=n, max_size=n), label="b")
+        pre_a = data.draw(bool_lists(max_size=13), label="pre_a")
+        pre_b = data.draw(bool_lists(max_size=13), label="pre_b")
+        a = Tibs.from_bools(pre_a + a_bits)[len(pre_a):]
+        b = Tibs.from_bools(pre_b + b_bits)[len(pre_b):]
+
+        assert (a & b).to_bools() == [x and y for x, y in zip(a_bits, b_bits)]
+        assert (a | b).to_bools() == [x or y for x, y in zip(a_bits, b_bits)]
+        assert (a ^ b).to_bools() == [x != y for x, y in zip(a_bits, b_bits)]
+        assert (~a).to_bools() == [not x for x in a_bits]
+
+    @FUZZ
+    @given(padded_tibs(min_size=1, max_size=120))
+    def test_u_and_i_match_reference(self, tb):
+        t, bits = tb
+        s = _ref_bin(bits)
+        u = int(s, 2)
+        assert t.to_u() == u
+        i = u - (1 << len(bits)) if bits[0] else u
+        assert t.to_i() == i
+        assert Tibs.from_u(u, len(bits)) == t
+        assert Tibs.from_i(i, len(bits)) == t
+
+    @FUZZ
+    @given(padded_tibs(min_size=8, max_size=128), st.data())
+    def test_byte_swapped_matches_reference(self, tb, data):
+        t, bits = tb
+        length = (len(bits) // 8) * 8
+        t = t[:length]
+        bits = bits[:length]
+        swapped = []
+        for chunk_start in range(length - 8, -8, -8):
+            swapped.extend(bits[chunk_start:chunk_start + 8])
+        assert t.byte_swapped().to_bin() == _ref_bin(swapped)
+
+    @FUZZ
+    @given(st.sampled_from(["u8", "u16", "u16_le", "i8", "i16_le", "u12", "i5"]), st.data())
+    def test_pack_unpack_values_roundtrip(self, dtype, data):
+        kind = dtype[0]
+        length = int(dtype[1:].split("_")[0])
+        if kind == "u":
+            values = data.draw(st.lists(st.integers(0, (1 << length) - 1), max_size=30), label="values")
+        else:
+            values = data.draw(
+                st.lists(st.integers(-(1 << (length - 1)), (1 << (length - 1)) - 1), max_size=30),
+                label="values",
+            )
+        packed = Tibs.from_values(dtype, values)
+        assert len(packed) == length * len(values)
+        assert packed.to_values(dtype) == values
+
+
+class TestFuzzMutation:
+    @FUZZ
+    @given(padded_mutibs(), st.data())
+    def test_setitem_slice_matches_list_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        start = data.draw(st.integers(0, len(ref)), label="start")
+        stop = data.draw(st.integers(start, len(ref)), label="stop")
+        # Include byte-multiple lengths to exercise the aligned fast path.
+        if data.draw(st.booleans(), label="same_length"):
+            vlen = stop - start
+        else:
+            vlen = data.draw(st.integers(0, 40), label="vlen")
+        value = data.draw(bool_lists(min_size=vlen, max_size=vlen), label="value")
+
+        m[start:stop] = Mutibs.from_bools(value) if value else Mutibs()
+        ref[start:stop] = value
+        assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(), st.data())
+    def test_delitem_matches_list_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        start = data.draw(st.integers(0, len(ref)), label="start")
+        stop = data.draw(st.integers(start, len(ref)), label="stop")
+        step = data.draw(st.sampled_from([None, 1, 2, 3]), label="step")
+        if step is None:
+            del m[start:stop]
+            del ref[start:stop]
+        else:
+            del m[start:stop:step]
+            del ref[start:stop:step]
+        assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(min_size=1), st.data())
+    def test_set_unset_positions_match_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        n = len(ref)
+        for _ in range(data.draw(st.integers(1, 4), label="rounds")):
+            choice = data.draw(st.sampled_from(["int", "list", "range"]), label="kind")
+            value = data.draw(st.booleans(), label="value")
+            if choice == "int":
+                pos = data.draw(st.integers(-n, n - 1), label="pos")
+                positions = [pos]
+                arg = pos
+            elif choice == "list":
+                positions = data.draw(st.lists(st.integers(-n, n - 1), max_size=20), label="positions")
+                arg = positions
+            else:
+                a = data.draw(st.integers(0, n - 1), label="a")
+                b = data.draw(st.integers(0, n), label="b")
+                step = data.draw(st.sampled_from([1, 2, 5, -1, -3]), label="step")
+                arg = range(a, b, step) if step > 0 else range(b - 1, a - 1, step) if b > 0 else range(0)
+                positions = list(arg)
+            if value:
+                m.set(arg)
+            else:
+                m.unset(arg)
+            for p in positions:
+                ref[p] = value
+        assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(), st.data())
+    def test_insert_and_extend_match_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        extra = data.draw(bool_lists(max_size=30), label="extra")
+        action = data.draw(st.sampled_from(["insert", "extend", "extend_left", "append_bool"]), label="action")
+        if action == "insert":
+            pos = data.draw(st.integers(0, len(ref)), label="pos")
+            m.insert(pos, Tibs.from_bools(extra))
+            ref[pos:pos] = extra
+        elif action == "extend":
+            m.extend(extra)
+            ref.extend(extra)
+        elif action == "extend_left":
+            m.extend_left(Tibs.from_bools(extra))
+            ref[0:0] = extra
+        else:
+            m.append(True)
+            ref.append(True)
+        assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(min_size=1), st.data())
+    def test_inplace_rotate_and_byteswap_match_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        start = data.draw(st.integers(0, len(ref)), label="start")
+        end = data.draw(st.integers(start, len(ref)), label="end")
+        n = data.draw(st.integers(0, 2 * len(ref)), label="n")
+        m.rotate_left(n, start, end)
+        seg = ref[start:end]
+        if seg:
+            k = n % len(seg)
+            ref[start:end] = seg[k:] + seg[:k]
+        assert m.to_bools() == ref
+
+        if len(ref) % 8 == 0 and len(ref) > 0:
+            m.byte_swap()
+            swapped = []
+            for chunk_start in range(len(ref) - 8, -8, -8):
+                swapped.extend(ref[chunk_start:chunk_start + 8])
+            ref = swapped
+            assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_immutable_set_at_and_inverted_match_model(self, tb, data):
+        t, bits = tb
+        n = len(bits)
+        positions = data.draw(st.lists(st.integers(-n, n - 1), max_size=15), label="positions")
+
+        expected = bits[:]
+        for p in positions:
+            expected[p] = True
+        assert t.set_at(positions).to_bools() == expected
+
+        expected = bits[:]
+        for p in positions:
+            expected[p] = False
+        assert t.unset_at(positions).to_bools() == expected
+
+        expected = bits[:]
+        for p in positions:
+            expected[p] = not expected[p]
+        assert t.inverted(positions).to_bools() == expected
+
+
+class TestFuzzFoundBugs:
+    """Deterministic regressions for bugs found by the fuzz tests above.
+
+    These tests currently FAIL and document real defects; they should pass
+    once the underlying bugs are fixed.
+    """
+
+    def test_from_joined_single_empty_item(self):
+        # A single-element list containing an empty Tibs panics in Rust
+        # ("Chunk width cannot be 0") instead of returning an empty Tibs.
+        # Both [] and [Tibs(), Tibs()] work correctly.
+        assert Tibs.from_joined([Tibs()]) == Tibs()
+
+    def test_mutibs_from_joined_single_empty_item(self):
+        assert Mutibs.from_joined([Mutibs()]) == Mutibs()
+
+    def test_set_empty_ascending_range_is_noop(self):
+        # range(1, 0) is empty in Python, so set() should change nothing.
+        # Currently panics in Rust ("range 1..0 out of bounds").
+        m = Mutibs.from_zeros(3)
+        m.set(range(1, 0))
+        assert m == Mutibs.from_zeros(3)
+
+    def test_set_empty_descending_range_is_noop(self):
+        # range(0, 2, -1) is empty in Python, so set() should change nothing.
+        # Currently panics in Rust ("range 3..1 out of bounds").
+        m = Mutibs.from_zeros(3)
+        m.set(range(0, 2, -1))
+        assert m == Mutibs.from_zeros(3)
+
+    def test_unset_empty_descending_range_is_noop(self):
+        # Currently raises IndexError ("End of slice out of bounds.")
+        # even though the range contains no positions.
+        m = Mutibs.from_ones(1)
+        m.unset(range(0, 1, -1))
+        assert m == Mutibs.from_ones(1)
+
+    def test_set_at_empty_range_is_noop(self):
+        # The non-mutating variants route through the same position handling.
+        t = Tibs.from_zeros(3)
+        assert t.set_at(range(1, 0)) == t
+        assert t.unset_at(range(0, 2, -1)) == t
