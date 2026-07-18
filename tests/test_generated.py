@@ -1378,15 +1378,19 @@ class TestFuzzMutation:
                 positions = data.draw(st.lists(st.integers(-n, n - 1), max_size=20), label="positions")
                 arg = positions
             else:
-                a = data.draw(st.integers(0, n - 1), label="a")
-                b = data.draw(st.integers(0, n), label="b")
+                # A range must behave exactly like the list of its contents,
+                # including negative values and out-of-bounds errors.
+                a = data.draw(st.integers(-2 * n - 2, 2 * n + 2), label="a")
+                b = data.draw(st.integers(-2 * n - 2, 2 * n + 2), label="b")
                 step = data.draw(st.sampled_from([1, 2, 5, -1, -3]), label="step")
-                arg = range(a, b, step) if step > 0 else range(b - 1, a - 1, step) if b > 0 else range(0)
+                arg = range(a, b, step)
                 positions = list(arg)
-            if value:
-                m.set(arg)
-            else:
-                m.unset(arg)
+            method = m.set if value else m.unset
+            if any(p < -n or p >= n for p in positions):
+                with pytest.raises(IndexError):
+                    method(arg)
+                continue  # Validation happens up front, so m is unchanged.
+            method(arg)
             for p in positions:
                 ref[p] = value
         assert m.to_bools() == ref
@@ -1502,3 +1506,34 @@ class TestFuzzFoundBugs:
         t = Tibs.from_zeros(3)
         assert t.set_at(range(1, 0)) == t
         assert t.unset_at(range(0, 2, -1)) == t
+
+    def test_set_range_negative_values_match_list_semantics(self):
+        # A range is interpreted exactly like the list of its contents, so
+        # negative values index from the end just as they do in a list.
+        m = Mutibs.from_zeros(4)
+        m.set(range(-2, 3))  # [-2, -1, 0, 1, 2]
+        assert m == Mutibs.from_bools([1, 1, 1, 1])
+
+        m = Mutibs.from_zeros(4)
+        m.set(range(-1, -3, -1))  # [-1, -2]
+        assert m == Mutibs.from_bools([0, 0, 1, 1])
+
+        m = Mutibs.from_zeros(4)
+        m.set(range(3, -5, -1))  # [3, 2, 1, 0, -1, -2, -3, -4]
+        assert m == Mutibs.from_ones(4)
+
+        m = Mutibs.from_ones(4)
+        m.unset(range(-1, -3, -1))
+        assert m == Mutibs.from_bools([1, 1, 0, 0])
+
+    def test_set_range_out_of_bounds_raises_and_leaves_unchanged(self):
+        m = Mutibs.from_zeros(4)
+        with pytest.raises(IndexError):
+            m.set(range(2, 8))
+        assert m == Mutibs.from_zeros(4)
+        with pytest.raises(IndexError):
+            m.set(range(-5, 2))
+        assert m == Mutibs.from_zeros(4)
+        with pytest.raises(IndexError):
+            m.set(range(6, 2, -1))
+        assert m == Mutibs.from_zeros(4)

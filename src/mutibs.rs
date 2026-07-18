@@ -619,68 +619,63 @@ impl Mutibs {
         stop: isize,
         step: isize,
     ) -> PyResult<()> {
-        let len = self.len() as isize;
-        if len == 0 {
-            return Ok(());
-        }
-        let positive_start = if start < 0 { start + len } else { start };
-        // For negative steps, Python ranges use stop=-1 as an exclusive sentinel
-        // so that index 0 is included (e.g. range(3, -1, -1) -> 3,2,1,0).
-        let positive_stop = if step < 0 && stop == -1 {
-            -1
-        } else if stop < 0 {
-            stop + len
-        } else {
-            stop
-        };
-        // An empty range (e.g. range(1, 0) or range(0, 2, -1)) selects no
-        // positions, so there is nothing to validate or set.
-        if (step > 0 && positive_start >= positive_stop)
-            || (step < 0 && positive_start <= positive_stop)
-        {
-            return Ok(());
-        }
-        if positive_start < 0 || positive_start >= len {
-            return Err(PyIndexError::new_err("Start of slice out of bounds."));
-        }
-        if (step > 0 && (positive_stop < 0 || positive_stop > len))
-            || (step < 0 && (positive_stop < -1 || positive_stop >= len))
-        {
-            return Err(PyIndexError::new_err("End of slice out of bounds."));
-        }
         if step == 0 {
             return Err(PyValueError::new_err("Step cannot be zero."));
         }
-        let len_isize = self.len() as isize;
-        let mut i = positive_start;
-
-        // Contiguous fast paths
-        if step == 1 {
-            let bv = self.as_mut_bitvec_ref();
-            bv[positive_start as usize..positive_stop as usize].fill(value);
+        // The arguments describe a Python range whose elements are the bit
+        // positions to change, exactly as if the range had been passed as a
+        // list: negative values index from the end, and empty ranges are
+        // no-ops.
+        if (step > 0 && start >= stop) || (step < 0 && start <= stop) {
             return Ok(());
         }
-        if step == -1 {
-            // logical i = start, start-1, ..., stop+1
-            let bv = self.as_mut_bitvec_ref();
-            bv[(positive_stop + 1) as usize..(positive_start + 1) as usize].fill(value);
-            return Ok(());
-        }
-        // General strided path
-        let bv = self.as_mut_bitvec_ref();
-        if step > 0 {
-            while i < positive_stop {
-                debug_assert!(i >= 0 && i < len_isize);
-                unsafe { bv.set_unchecked(i as usize, value) };
-                i += step;
-            }
+        let len = self.len();
+        validate_index(start, len)?;
+        // Every element lies between the first and the last, so validating
+        // those two covers the whole range. Use i128 so extreme range
+        // endpoints cannot overflow before they are rejected.
+        let count = if step > 0 {
+            (stop as i128 - start as i128 - 1) / step as i128 + 1
         } else {
-            while i > positive_stop {
-                debug_assert!(i >= 0 && i < len_isize);
-                debug_assert!(step < 0);
-                unsafe { bv.set_unchecked(i as usize, value) };
-                i += step; // step < 0
+            (start as i128 - stop as i128 - 1) / (-step) as i128 + 1
+        };
+        let last = start as i128 + step as i128 * (count - 1);
+        if last < -(len as i128) || last >= len as i128 {
+            return Err(PyIndexError::new_err(format!(
+                "Index of {last} is out of range for length of {len}"
+            )));
+        }
+        let last = last as isize;
+        let count = count as usize;
+        let len_isize = len as isize;
+        let bv = self.as_mut_bitvec_ref();
+
+        // Contiguous fast paths: the values form one interval, which wraps
+        // to at most two index regions.
+        if step == 1 || step == -1 {
+            let (lo, hi) = if step == 1 { (start, last) } else { (last, start) };
+            if lo >= 0 {
+                bv[lo as usize..(hi + 1) as usize].fill(value);
+            } else if hi < 0 {
+                bv[(lo + len_isize) as usize..(hi + len_isize + 1) as usize].fill(value);
+            } else {
+                bv[(lo + len_isize) as usize..len].fill(value);
+                bv[0..(hi + 1) as usize].fill(value);
             }
+            return Ok(());
+        }
+
+        // General strided path
+        let mut element = start;
+        for _ in 0..count {
+            let index = if element < 0 {
+                element + len_isize
+            } else {
+                element
+            } as usize;
+            debug_assert!(index < len);
+            unsafe { bv.set_unchecked(index, value) };
+            element += step;
         }
         Ok(())
     }

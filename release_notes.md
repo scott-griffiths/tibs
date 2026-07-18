@@ -15,9 +15,10 @@ Fixed
   storage of such objects does not always start on a byte boundary).
 * Fixed a crash in `from_joined` when the same empty container was repeated
   in a list.
-* Empty ranges passed to `set`, `unset`, `set_at` and `unset_at` (such as
-  `range(1, 0)` or `range(0, 2, -1)`) are now no-ops instead of crashing or
-  raising `IndexError`.
+* Ranges passed to `set`, `unset`, `set_at` and `unset_at` now behave exactly
+  like the list of their contents. Empty ranges (such as `range(1, 0)` or
+  `range(0, 2, -1)`) are no-ops instead of crashing, and negative range values
+  index from the end just as they do when passed in a list.
 
 Performance improvements
 
