@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, "..")
 import pytest
-from tibs import BitOrder, ByteOrder, Dtype, DtypeKind, MutableView, Tibs, Mutibs, View
+from tibs import BitOrder, ByteOrder, Codec, Dtype, DtypeKind, MutableView, Tibs, Mutibs, View
 
 
 class TestTibsCreation:
@@ -1071,6 +1071,18 @@ def _ref_bin(bits):
     return "".join("1" if b else "0" for b in bits)
 
 
+def _normalize_strict_bounds(length, start, end):
+    start = 0 if start is None else start
+    end = length if end is None else end
+    if start < 0:
+        start += length
+    if end < 0:
+        end += length
+    if not (0 <= start <= end <= length):
+        raise ValueError
+    return start, end
+
+
 @st.composite
 def bool_lists(draw, min_size=0, max_size=200):
     # Mix densities so low-entropy data stresses fallback search paths.
@@ -1158,6 +1170,60 @@ class TestFuzzSearch:
         assert t.find_all(needle, start, end, byte_aligned=aligned) == occurrences
 
     @FUZZ
+    @given(padded_tibs(min_size=1), st.data())
+    def test_find_with_negative_bounds_matches_strict_reference(self, tb, data):
+        t, bits = tb
+        s = _ref_bin(bits)
+        nlen = data.draw(st.integers(1, min(len(bits), 90)), label="needle_len")
+        if data.draw(st.booleans(), label="from_haystack"):
+            at = data.draw(st.integers(0, len(bits) - nlen), label="at")
+            nbits = bits[at:at + nlen]
+        else:
+            nbits = data.draw(bool_lists(min_size=nlen, max_size=nlen), label="needle")
+        needle = Tibs.from_bools(nbits)
+        p = _ref_bin(nbits)
+        start = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="start",
+        )
+        end = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="end",
+        )
+        aligned = data.draw(st.booleans(), label="byte_aligned")
+
+        try:
+            start_norm, end_norm = _normalize_strict_bounds(len(bits), start, end)
+        except ValueError:
+            with pytest.raises(ValueError):
+                t.find(needle, start, end, byte_aligned=aligned)
+            with pytest.raises(ValueError):
+                t.rfind(needle, start, end, byte_aligned=aligned)
+            with pytest.raises(ValueError):
+                t.find_all(needle, start, end, byte_aligned=aligned)
+            with pytest.raises(ValueError):
+                list(t.find_all_iter(needle, start, end, byte_aligned=aligned))
+            with pytest.raises(ValueError):
+                list(t.rfind_all_iter(needle, start, end, byte_aligned=aligned))
+            return
+
+        occurrences = [
+            i for i in range(start_norm, end_norm - nlen + 1)
+            if (not aligned or i % 8 == 0) and s.startswith(p, i)
+        ]
+        assert t.find(needle, start, end, byte_aligned=aligned) == (
+            occurrences[0] if occurrences else None
+        )
+        assert t.rfind(needle, start, end, byte_aligned=aligned) == (
+            occurrences[-1] if occurrences else None
+        )
+        assert t.find_all(needle, start, end, byte_aligned=aligned) == occurrences
+        assert list(t.find_all_iter(needle, start, end, byte_aligned=aligned)) == occurrences
+        assert list(t.rfind_all_iter(needle, start, end, byte_aligned=aligned)) == (
+            occurrences[::-1]
+        )
+
+    @FUZZ
     @given(padded_tibs(), st.data())
     def test_count_single_bit_with_bounds(self, tb, data):
         t, bits = tb
@@ -1165,6 +1231,32 @@ class TestFuzzSearch:
         end = data.draw(st.integers(start, len(bits)), label="end")
         assert t.count(1, start, end) == sum(bits[start:end])
         assert t.count(0, start, end) == (end - start) - sum(bits[start:end])
+
+    @FUZZ
+    @given(padded_tibs(), st.data())
+    def test_count_single_bit_with_negative_bounds_matches_reference(self, tb, data):
+        t, bits = tb
+        start = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="start",
+        )
+        end = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="end",
+        )
+
+        try:
+            start_norm, end_norm = _normalize_strict_bounds(len(bits), start, end)
+        except ValueError:
+            with pytest.raises(ValueError):
+                t.count(1, start, end)
+            with pytest.raises(ValueError):
+                t.count(0, start, end)
+            return
+
+        selected = bits[start_norm:end_norm]
+        assert t.count(1, start, end) == sum(selected)
+        assert t.count(0, start, end) == len(selected) - sum(selected)
 
     @FUZZ
     @given(padded_tibs(min_size=1), st.data())
@@ -1210,6 +1302,27 @@ class TestFuzzSlicingAndViews:
         assert list(t) == bits
         assert t.to_bin() == _ref_bin(bits)
         assert t.to_mutibs().to_bools() == bits
+
+    @FUZZ
+    @given(padded_tibs(max_size=256))
+    def test_to_raw_data_reconstructs_offset_slices(self, tb):
+        t, bits = tb
+
+        raw_bytes, offset, length = t.to_raw_data()
+
+        assert length == len(bits)
+        assert Tibs.from_bytes(raw_bytes, offset, length).to_bools() == bits
+
+    @FUZZ
+    @given(padded_mutibs(max_size=256))
+    def test_mutibs_as_raw_data_reconstructs_offset_slices_and_empties_source(self, mb):
+        m, bits = mb
+
+        raw_bytes, offset, length = m.as_raw_data()
+
+        assert length == len(bits)
+        assert Tibs.from_bytes(raw_bytes, offset, length).to_bools() == bits
+        assert m == Mutibs()
 
     @FUZZ
     @given(padded_tibs())
@@ -1267,6 +1380,23 @@ class TestFuzzSlicingAndViews:
         joined = Tibs.from_joined([t for t, _ in items])
         assert joined.to_bin() == "".join(_ref_bin(bits) for _, bits in items)
 
+    @FUZZ
+    @given(padded_tibs(max_size=80), st.data())
+    def test_view_from_indices_matches_selected_bits(self, tb, data):
+        t, bits = tb
+        if bits:
+            indices = data.draw(
+                st.lists(st.integers(0, len(bits) - 1), unique=True, max_size=25),
+                label="indices",
+            )
+        else:
+            indices = []
+
+        view = View.from_indices(t, indices)
+
+        assert view.bin == _ref_bin([bits[i] for i in indices])
+        assert view.to_tibs().to_bools() == [bits[i] for i in indices]
+
 
 class TestFuzzLogicalAndNumeric:
     @FUZZ
@@ -1284,6 +1414,29 @@ class TestFuzzLogicalAndNumeric:
         assert (a | b).to_bools() == [x or y for x, y in zip(a_bits, b_bits)]
         assert (a ^ b).to_bools() == [x != y for x, y in zip(a_bits, b_bits)]
         assert (~a).to_bools() == [not x for x in a_bits]
+
+    @FUZZ
+    @given(bool_lists(max_size=200), bool_lists(max_size=13), bool_lists(max_size=13))
+    def test_hash_matches_equality_for_different_offsets(self, bits, pre_a, pre_b):
+        a = Tibs.from_bools(pre_a + bits)[len(pre_a):]
+        b = Tibs.from_bools(pre_b + bits)[len(pre_b):]
+
+        assert a == b
+        assert hash(a) == hash(b)
+        assert {a: "value"}[b] == "value"
+
+    @FUZZ
+    @given(
+        padded_tibs(max_size=512),
+        st.sampled_from([Codec.Auto, Codec.Raw, Codec.Rice, Codec.Zstd]),
+    )
+    def test_encode_decode_roundtrip_preserves_offset_slices(self, tb, codec):
+        t, bits = tb
+
+        encoded = t.encode(codec)
+
+        assert Tibs.decode(encoded).to_bools() == bits
+        assert Mutibs.decode(encoded).to_bools() == bits
 
     @FUZZ
     @given(padded_tibs(min_size=1, max_size=120))
@@ -1344,6 +1497,31 @@ class TestFuzzMutation:
         m[start:stop] = Mutibs.from_bools(value) if value else Mutibs()
         ref[start:stop] = value
         assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(max_size=80), st.data())
+    def test_extended_slice_length_mismatch_leaves_value_unchanged(self, mb, data):
+        m, bits = mb
+        original = bits[:]
+        start = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="start",
+        )
+        stop = data.draw(
+            st.one_of(st.none(), st.integers(-len(bits) - 3, len(bits) + 3)),
+            label="stop",
+        )
+        step = data.draw(st.sampled_from([-5, -2, -1, 2, 3, 5]), label="step")
+        target_len = len(bits[slice(start, stop, step)])
+        value = data.draw(
+            bool_lists(min_size=target_len + 1, max_size=target_len + 1),
+            label="value",
+        )
+
+        with pytest.raises(ValueError):
+            m[slice(start, stop, step)] = Tibs.from_bools(value)
+
+        assert m.to_bools() == original
 
     @FUZZ
     @given(padded_mutibs(), st.data())
@@ -1415,6 +1593,43 @@ class TestFuzzMutation:
         else:
             m.append(True)
             ref.append(True)
+        assert m.to_bools() == ref
+
+    @FUZZ
+    @given(padded_mutibs(max_size=100))
+    def test_pop_matches_list_model(self, mb):
+        m, bits = mb
+        ref = bits[:]
+
+        while ref:
+            assert m.pop() is ref.pop()
+            assert m.to_bools() == ref
+
+        with pytest.raises(IndexError):
+            m.pop()
+
+    @FUZZ
+    @given(padded_mutibs(max_size=80), st.data())
+    def test_mutable_view_from_indices_write_matches_model(self, mb, data):
+        m, bits = mb
+        ref = bits[:]
+        if ref:
+            indices = data.draw(
+                st.lists(st.integers(0, len(ref) - 1), unique=True, max_size=25),
+                label="indices",
+            )
+        else:
+            indices = []
+        value = data.draw(
+            bool_lists(min_size=len(indices), max_size=len(indices)),
+            label="value",
+        )
+
+        view = MutableView.from_indices(m, indices)
+        view.bin = _ref_bin(value)
+
+        for index, bit in zip(indices, value):
+            ref[index] = bit
         assert m.to_bools() == ref
 
     @FUZZ
