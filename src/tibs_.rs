@@ -1403,6 +1403,30 @@ impl Tibs {
         Ok(Tibs::from_bv(bv))
     }
 
+    /// Return the bits as a list of bools.
+    ///
+    /// This is much faster than using ``list()`` on the Tibs, which iterates bit by bit.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    /// :return: A list of bools.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b101').to_bools()
+    ///     [True, False, True]
+    ///
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bools(
+        &self,
+        py: Python<'_>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyList>> {
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        helpers::bitslice_to_bool_list(py, &self.as_bitslice()[start..end])
+    }
+
     /// Create a new instance with all bits randomly set.
     ///
     /// :param int length: The number of bits to set. Must be non-negative.

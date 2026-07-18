@@ -111,6 +111,27 @@ def test_setitem_slice():
     assert a == Tibs('0b0100000')
 
 
+def test_setitem_slice_on_sliced_mutibs():
+    # Slicing can leave the underlying storage starting mid-byte; the
+    # byte-aligned fast paths must still write to the right place.
+    a = Mutibs.from_zeros(24)
+    b = a[4:20]
+    b[0:8] = Mutibs.from_bytes(b'\xff')
+    assert b.to_bin() == '1111111100000000'
+    b.set([8, -1])
+    assert b.to_bin() == '1111111110000001'
+    b.unset(0)
+    assert b.to_bin() == '0111111110000001'
+
+
+def test_delitem_slice_on_sliced_mutibs():
+    a = Mutibs.from_string('0b1010') + Mutibs.from_bytes(b'\xf0\x0f')
+    b = a[4:20]
+    expected = b.to_bin()
+    del b[0:8]
+    assert b.to_bin() == expected[8:]
+
+
 def test_setitem_slice_length_change():
     a = Mutibs('0b1010')
     a[1:3] = '0b111'

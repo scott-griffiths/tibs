@@ -1,5 +1,30 @@
 # Release Notes
 
+### Unreleased: version 1.1
+
+Added
+
+* Added `Tibs.to_bools()` and `Mutibs.to_bools()` for converting to a list of
+  bools. This is much faster than iterating with `list(...)`, and accepts the
+  usual optional `start` and `end` parameters.
+
+Fixed
+
+* Fixed byte-aligned slice assignment and slice deletion writing to the wrong
+  bits on a `Mutibs` created by slicing another `Mutibs` (the underlying
+  storage of such objects does not always start on a byte boundary).
+
+Performance improvements
+
+* `find`, `rfind`, `find_all` and `count` with patterns of up to 64 bits now
+  scan a byte at a time instead of a bit at a time.
+* `find`, `rfind` and the `find_all` iterators with patterns longer than 64
+  bits now use a fast 64-bit prefix scan with verification, falling back to
+  the previous algorithm only for highly repetitive data.
+* Setting and clearing bits by index with `set` and `unset` writes directly to
+  the underlying bytes.
+
+
 ### July 12th: version 1.0.0
 
 This is the first stable release. The documented public API is now intended

@@ -20,7 +20,8 @@ impl BoolIterator {
 
     fn __next__(&mut self) -> Option<bool> {
         if self.index < self.length {
-            let result = self.bits.as_bitslice()[self.index];
+            // SAFETY: index < length == bits.len(), and the Tibs is immutable.
+            let result = unsafe { *self.bits.as_bitslice().get_unchecked(self.index) };
             self.index += 1;
             Some(result)
         } else {

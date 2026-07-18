@@ -164,12 +164,48 @@ impl Mutibs {
 
     #[inline]
     pub fn set_index(&mut self, index: isize) -> PyResult<()> {
-        self.set_from_sequence(true, vec![index])
+        let index = validate_index(index, self.len())?;
+        self.write_bits_raw(&[index], true);
+        Ok(())
     }
 
     #[inline]
     pub fn unset_index(&mut self, index: isize) -> PyResult<()> {
-        self.set_from_sequence(false, vec![index])
+        let index = validate_index(index, self.len())?;
+        self.write_bits_raw(&[index], false);
+        Ok(())
+    }
+
+    /// The bit position within the underlying storage at which this Mutibs
+    /// starts. Usually zero, but slicing can produce a bit vector whose
+    /// storage begins mid-byte.
+    #[inline]
+    pub(crate) fn storage_head_offset(&self) -> usize {
+        match self.data.as_bitslice().domain() {
+            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region {
+                head: Some(elem), ..
+            } => elem.head().into_inner() as usize,
+            _ => 0,
+        }
+    }
+
+    /// Write already-validated bit indices directly into the underlying bytes.
+    #[inline]
+    fn write_bits_raw(&mut self, indices: &[usize], value: bool) {
+        let head = self.storage_head_offset();
+        let raw = self.data.as_raw_mut_slice();
+        if value {
+            for &index in indices {
+                let index = head + index;
+                raw[index >> 3] |= 0x80u8 >> (index & 7);
+            }
+        } else {
+            for &index in indices {
+                let index = head + index;
+                raw[index >> 3] &= !(0x80u8 >> (index & 7));
+            }
+        }
     }
 
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &BS) {
@@ -180,7 +216,8 @@ impl Mutibs {
             self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
         } else if end - start == value.len() {
             // This is an overwrite, so no need to move data around.
-            if start.is_multiple_of(8)
+            let storage_start = self.storage_head_offset() + start;
+            if storage_start.is_multiple_of(8)
                 && value.len().is_multiple_of(8)
                 && let bitvec::domain::Domain::Region {
                     head: None,
@@ -188,7 +225,7 @@ impl Mutibs {
                     tail: None,
                 } = value.domain()
             {
-                let start_byte = start / 8;
+                let start_byte = storage_start / 8;
                 self.data.as_raw_mut_slice()[start_byte..start_byte + body.len()]
                     .copy_from_slice(body);
                 return;
@@ -203,7 +240,9 @@ impl Mutibs {
     }
 
     fn delete_slice(&mut self, start: usize, end: usize) {
-        if start.is_multiple_of(8) && end.is_multiple_of(8) {
+        // The byte-drain fast path requires the storage to begin at a byte
+        // boundary, which slicing does not always preserve.
+        if self.storage_head_offset() == 0 && start.is_multiple_of(8) && end.is_multiple_of(8) {
             let new_len = self.len() - (end - start);
             let mut bytes = std::mem::take(&mut self.data).into_vec();
             bytes.drain(start / 8..end / 8);
@@ -278,8 +317,16 @@ impl Mutibs {
         for index in &mut indices {
             *index = validate_index(*index, len)? as isize;
         }
+        let head = self.storage_head_offset();
+        let raw = self.data.as_raw_mut_slice();
         for index in indices {
-            self.as_mut_bitvec_ref().set(index as usize, value);
+            let index = head + index as usize;
+            let mask = 0x80u8 >> (index & 7);
+            if value {
+                raw[index >> 3] |= mask;
+            } else {
+                raw[index >> 3] &= !mask;
+            }
         }
         Ok(())
     }
@@ -291,15 +338,11 @@ impl Mutibs {
         if count <= STACK_CAPACITY {
             let mut indices = [0usize; STACK_CAPACITY];
             self.validate_list_indices(list, &mut indices[..count])?;
-            for &index in &indices[..count] {
-                self.as_mut_bitvec_ref().set(index, value);
-            }
+            self.write_bits_raw(&indices[..count], value);
         } else {
             let mut indices = vec![0usize; count];
             self.validate_list_indices(list, &mut indices)?;
-            for index in indices {
-                self.as_mut_bitvec_ref().set(index, value);
-            }
+            self.write_bits_raw(&indices, value);
         }
         Ok(())
     }
@@ -1455,6 +1498,30 @@ impl Mutibs {
     pub fn from_bools(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bv = bv_from_bools(iterable)?;
         Ok(Mutibs::from_bv(bv))
+    }
+
+    /// Return the bits as a list of bools.
+    ///
+    /// This is much faster than using ``list()`` on the Mutibs, which iterates bit by bit.
+    ///
+    /// :param int | None start: Start bit position. Defaults to 0.
+    /// :param int | None end: End bit position. Defaults to len(self).
+    /// :return: A list of bools.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b101').to_bools()
+    ///     [True, False, True]
+    ///
+    #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
+    pub fn to_bools(
+        &self,
+        py: Python<'_>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyList>> {
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        helpers::bitslice_to_bool_list(py, &self.as_bitslice()[start..end])
     }
 
     /// Create a new instance with all bits randomly set.

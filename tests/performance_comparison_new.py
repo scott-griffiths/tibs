@@ -270,7 +270,7 @@ def build_cases(byte_count, value_count):
         return search_bits.tolist()
 
     def tibs_to_bool_list():
-        return list(search_tibs)
+        return search_tibs.to_bools()
 
     def ba_copy_slice_set():
         out = search_bits.copy()

@@ -406,6 +406,53 @@ def test_from_bools_generator():
     assert list(t) == bits
 
 
+def test_to_bools():
+    assert Tibs().to_bools() == []
+    assert Tibs('0b101').to_bools() == [True, False, True]
+    assert Mutibs('0b101').to_bools() == [True, False, True]
+    for length in [1, 7, 8, 9, 64, 100, 1000]:
+        t = Tibs.from_random(length, seed=b'to_bools')
+        assert t.to_bools() == list(t)
+        assert Tibs.from_bools(t.to_bools()) == t
+    t = Tibs.from_random(100, seed=b'to_bools')
+    assert t.to_bools(10, 50) == list(t)[10:50]
+    assert t.to_bools(-20) == list(t)[-20:]
+    assert t.to_bools(end=8) == list(t)[:8]
+    # Unaligned views must convert correctly too.
+    assert t[3:97].to_bools() == list(t)[3:97]
+    with pytest.raises(ValueError):
+        t.to_bools(50, 10)
+
+
+def test_find_long_needles():
+    # Needles over 64 bits take a different search path.
+    haystack = Tibs.from_random(2000, seed=b'long_needle')
+    for needle_length in [65, 100, 128, 200]:
+        for at in [0, 3, 777, 2000 - needle_length]:
+            needle = haystack[at:at + needle_length]
+            assert haystack.find(needle) is not None
+            assert haystack.rfind(needle) is not None
+            assert at in haystack.find_all(needle)
+    missing = Tibs.from_ones(65)
+    assert haystack.find(missing) is None
+    assert haystack.rfind(missing) is None
+
+
+def test_find_long_needles_low_entropy():
+    # Repetitive data exercises the prefix-filter fallback to KMP.
+    zeros = Tibs.from_zeros(10_000)
+    needle = Tibs.from_zeros(64) + Tibs('0b1')
+    assert zeros.find(needle) is None
+    assert zeros.rfind(needle) is None
+    haystack = zeros + Tibs('0b1')
+    assert haystack.find(needle) == 10_000 - 64
+    assert haystack.rfind(needle) == 10_000 - 64
+    all_zeros_needle = Tibs.from_zeros(65)
+    assert zeros.find(all_zeros_needle) == 0
+    assert zeros.rfind(all_zeros_needle) == 10_000 - 65
+    assert zeros.count(all_zeros_needle) == 10_000 - 64
+
+
 def test_count_expanded():
     a = Tibs('0xaaaa')
     b = a.count([1, 0, 1])

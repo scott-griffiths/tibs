@@ -102,6 +102,7 @@ A subset of these methods return lossless representations of the exact bit seque
 * :meth:`Tibs.to_oct()` / :attr:`Tibs.oct`. Converts to an octal string. Length must be a multiple of 3.
 * :meth:`Tibs.to_hex()` / :attr:`Tibs.hex`. Converts to a hexadecimal string. Length must be a multiple of 4.
 * :meth:`Tibs.to_bytes()` / :attr:`Tibs.bytes`. Converts to a ``bytes`` object. Length must be a multiple of 8.
+* :meth:`Tibs.to_bools()`. Converts to a list of ``bool`` values. Always available, and much faster than iterating bit by bit.
 
 There is also :meth:`Tibs.to_padded_bytes()`, which appends 0 to 7 zero bits on the right before converting
 to ``bytes``.
