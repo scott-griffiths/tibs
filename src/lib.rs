@@ -16,6 +16,7 @@ use pyo3::prelude::*;
 
 #[pymodule]
 fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__author__", "Scott Griffiths")?;
     m.add_class::<tibs_::Tibs>()?;
     m.add_class::<mutibs::Mutibs>()?;
     m.add_class::<enums::ByteOrder>()?;
