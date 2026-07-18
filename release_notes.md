@@ -1,6 +1,6 @@
 # Release Notes
 
-### Unreleased: version 1.1
+### July 18th 2026: version 1.1
 
 Added
 
@@ -31,7 +31,7 @@ Performance improvements
   the underlying bytes.
 
 
-### July 12th: version 1.0.0
+### July 12th 2026: version 1.0.0
 
 This is the first stable release. The documented public API is now intended
 to remain compatible across future 1.x releases.
