@@ -1757,47 +1757,46 @@ class TestBugHuntFailing:
     """Failing tests for bugs found by inspection and differential fuzzing.
     """
 
-    # --- Bug 1: in-place shifts panic when n > len -------------------------
+    # --- Bug 1: in-place shifts used to panic when n > len -----------------
     #
-    # Mutibs.__ilshift__ / __irshift__ pass the shift amount straight to
+    # Mutibs.__ilshift__ / __irshift__ passed the shift amount straight to
     # bitvec's shift_start / shift_end, which panic when the shift is larger
-    # than the bit length (src/mutibs.rs, __ilshift__/__irshift__). The
-    # non-inplace  <<  and  >>  operators clamp this case and return all
-    # zeros, and the in-place versions should behave identically. Instead a
-    # pyo3_runtime.PanicException (a BaseException!) escapes to Python.
+    # than the bit length. The non-inplace  <<  and  >>  operators clamp this
+    # case and return all zeros, and the in-place versions must match rather
+    # than let a pyo3_runtime.PanicException (a BaseException!) escape.
 
     def test_ilshift_larger_than_length_matches_lshift(self):
         # Tibs('0b10110') << 100 == Tibs.from_zeros(5), so <<= must match.
         m = Mutibs('0b10110')
-        m <<= 100  # currently panics: "shift must be less than the length"
+        m <<= 100
         assert m == Mutibs.from_zeros(5)
 
     def test_irshift_larger_than_length_matches_rshift(self):
         m = Mutibs('0b10110')
-        m >>= 100  # currently panics: "shift must be less than the length"
+        m >>= 100
         assert m == Mutibs.from_zeros(5)
 
     def test_ilshift_one_past_length(self):
-        # Smallest failing amount: len + 1. (n == len works and zero-fills.)
+        # Smallest formerly-panicking amount: len + 1. (n == len zero-fills.)
         m = Mutibs('0b1')
         m <<= 2
         assert m == Mutibs('0b0')
 
-    # --- Bug 2: find_all_iter panics with byte_aligned and a bounded end ---
+    # --- Bug 2: find_all_iter used to panic with byte_aligned + bounded end
     #
-    # In the forward FindAllIterator (src/iterator.rs), after yielding a
-    # byte-aligned match at pos the state becomes current_pos = pos + 8,
-    # which may exceed the requested `end`. The next __next__ call only
-    # guards current_pos against the haystack length, then calls the search
-    # helper with start > end, which panics slicing the haystack (e.g.
-    # "range 8..4 out of bounds: 20"). find_all with identical arguments
-    # returns normally, and the two are documented to agree.
+    # In the forward FindAllIterator, after yielding a byte-aligned match at
+    # pos the state becomes current_pos = pos + 8, which may exceed the
+    # requested `end`. The next __next__ call only guarded current_pos
+    # against the haystack length, then called the search helper with
+    # start > end, which panicked slicing the haystack (e.g. "range 8..4 out
+    # of bounds: 20"). find_all with identical arguments returns normally,
+    # and the two must agree.
 
     def test_find_all_iter_byte_aligned_bounded_end(self):
         t = Tibs.from_ones(20)
         expected = t.find_all('0b1', 0, 4, byte_aligned=True)
         assert expected == [0]
-        # Currently panics with pyo3_runtime.PanicException on the 2nd next()
+        # The 2nd next() used to panic with pyo3_runtime.PanicException.
         assert list(t.find_all_iter('0b1', 0, 4, byte_aligned=True)) == expected
 
     def test_find_all_iter_byte_aligned_match_near_end(self):
@@ -1818,23 +1817,23 @@ class TestBugHuntFailing:
                 got = list(t.find_all_iter(needle, start, end, byte_aligned=True))
                 assert got == expected, f"start={start} end={end}"
 
-    # --- Bug 3: position arguments reject documented Iterable inputs -------
+    # --- Bug 3: position arguments rejected documented Iterable inputs -----
     #
     # tibs.pyi declares pos as `SupportsIndex | Iterable[SupportsIndex]` (or
     # `| range`) for set/unset/set_at/unset_at and invert/inverted, and the
     # docstrings say "an iterable of bit positions". Generators, iterators
     # and sets are Iterables, and other APIs (split_at, from_bools,
-    # from_joined) accept them, but these methods raise TypeError because the
-    # implementation only extracts from sequences.
+    # from_joined) accept them, but these methods used to raise TypeError
+    # because the implementation only extracted from sequences.
 
     def test_mutibs_set_accepts_generator(self):
         m = Mutibs.from_zeros(4)
-        m.set(i for i in [1, 2])  # currently TypeError: not a 'Sequence'
+        m.set(i for i in [1, 2])
         assert m == Mutibs('0b0110')
 
     def test_mutibs_unset_accepts_iterator(self):
         m = Mutibs.from_ones(4)
-        m.unset(iter([0, 3]))  # currently TypeError: not a 'Sequence'
+        m.unset(iter([0, 3]))
         assert m == Mutibs('0b0110')
 
     def test_tibs_set_at_accepts_generator(self):
@@ -1852,3 +1851,37 @@ class TestBugHuntFailing:
 
     def test_tibs_inverted_accepts_iterator(self):
         assert Tibs('0b0000').inverted(iter([0, 2])) == Tibs('0b1010')
+
+    # --- Behaviour intentionally preserved by the fixes --------------------
+
+    def test_ishift_on_empty_mutibs_still_raises(self):
+        # Matches Tibs() << 1, which also raises ValueError.
+        m = Mutibs()
+        with pytest.raises(ValueError):
+            m <<= 1
+        with pytest.raises(ValueError):
+            m >>= 1
+
+    def test_set_non_iterable_still_raises_type_error(self):
+        m = Mutibs('0b00')
+        with pytest.raises(TypeError):
+            m.set(1.5)
+        with pytest.raises(TypeError):
+            m.invert(1.5)
+
+    def test_set_generator_with_bad_index_is_atomic(self):
+        # All positions are validated before any bit is written, matching
+        # the existing behaviour for lists and ranges.
+        m = Mutibs.from_zeros(4)
+        with pytest.raises(IndexError):
+            m.set(i for i in [1, 9])
+        assert m == Mutibs.from_zeros(4)
+
+    def test_set_generator_exception_propagates(self):
+        def positions():
+            yield 0
+            raise ZeroDivisionError
+
+        m = Mutibs('0b00')
+        with pytest.raises(ZeroDivisionError):
+            m.set(positions())

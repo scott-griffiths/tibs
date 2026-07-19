@@ -120,10 +120,18 @@ impl Mutibs {
         // result directly in that case.
         if let Ok(tibs) = item.extract::<PyRef<Tibs>>() {
             let bits = tibs.as_bitslice();
-            Some(if bits.is_empty() { BV::new() } else { bits.repeat(count) })
+            Some(if bits.is_empty() {
+                BV::new()
+            } else {
+                bits.repeat(count)
+            })
         } else if let Ok(mutibs) = item.extract::<PyRef<Mutibs>>() {
             let bits = mutibs.as_bitslice();
-            Some(if bits.is_empty() { BV::new() } else { bits.repeat(count) })
+            Some(if bits.is_empty() {
+                BV::new()
+            } else {
+                bits.repeat(count)
+            })
         } else {
             None
         }
@@ -382,6 +390,20 @@ impl Mutibs {
         Ok(())
     }
 
+    /// Collect bit positions from any iterable of ints, with a fast path for
+    /// sequences. Errors raised while iterating or converting items propagate.
+    fn collect_position_indices(pos: &Bound<'_, PyAny>) -> PyResult<Vec<isize>> {
+        if let Ok(indices) = pos.extract::<Vec<isize>>() {
+            return Ok(indices);
+        }
+        let capacity = pos.len().ok().unwrap_or(8);
+        let mut indices = Vec::with_capacity(capacity);
+        for item in pos.try_iter()? {
+            indices.push(item?.extract::<isize>()?);
+        }
+        Ok(indices)
+    }
+
     pub(crate) fn apply_set_positions(
         &mut self,
         value: bool,
@@ -407,7 +429,7 @@ impl Mutibs {
                 .unwrap_or(1);
             self.set_from_slice(value, start, stop, step)?;
         } else {
-            let indices = pos.extract::<Vec<isize>>()?;
+            let indices = Self::collect_position_indices(pos)?;
             self.set_from_sequence(value, indices)?;
         }
 
@@ -471,16 +493,18 @@ impl Mutibs {
                     let pos: usize = validate_index(pos, self.len())?;
                     let value = self.as_bitvec_ref()[pos];
                     self.as_mut_bitvec_ref().set(pos, !value);
-                } else if let Ok(pos_list) = p.extract::<Vec<isize>>() {
+                } else {
+                    if p.try_iter().is_err() {
+                        return Err(PyTypeError::new_err(
+                            "invert() argument must be an integer, an iterable of ints, or None",
+                        ));
+                    }
+                    let pos_list = Self::collect_position_indices(p)?;
                     for pos in pos_list {
                         let pos: usize = validate_index(pos, self.len())?;
                         let value = self.as_bitvec_ref()[pos];
                         self.as_mut_bitvec_ref().set(pos, !value);
                     }
-                } else {
-                    return Err(PyTypeError::new_err(
-                        "invert() argument must be an integer, an iterable of ints, or None",
-                    ));
                 }
             }
         }
@@ -653,7 +677,11 @@ impl Mutibs {
         // Contiguous fast paths: the values form one interval, which wraps
         // to at most two index regions.
         if step == 1 || step == -1 {
-            let (lo, hi) = if step == 1 { (start, last) } else { (last, start) };
+            let (lo, hi) = if step == 1 {
+                (start, last)
+            } else {
+                (last, start)
+            };
             if lo >= 0 {
                 bv[lo as usize..(hi + 1) as usize].fill(value);
             } else if hi < 0 {
@@ -3090,7 +3118,8 @@ impl Mutibs {
     ///     '110000'
     ///
     pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
-        let shift = validate_shift(&*slf, n)?;
+        // Shifting by the whole length or more zero-fills, matching __lshift__.
+        let shift = validate_shift(&*slf, n)?.min(slf.len());
         slf.as_mut_bitvec_ref().shift_start(shift);
         Ok(())
     }
@@ -3110,7 +3139,8 @@ impl Mutibs {
     ///     '000011'
     ///
     pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
-        let shift = validate_shift(&*slf, n)?;
+        // Shifting by the whole length or more zero-fills, matching __rshift__.
+        let shift = validate_shift(&*slf, n)?.min(slf.len());
         slf.as_mut_bitvec_ref().shift_end(shift);
         Ok(())
     }

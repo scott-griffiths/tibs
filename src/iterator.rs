@@ -37,7 +37,6 @@ impl BoolIterator {
 #[pyclass]
 pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
-    pub haystack_len: usize,
     pub search_needle: Tibs,
     pub start: usize,
     pub end: usize,
@@ -68,7 +67,6 @@ impl FindAllIterator {
         }
 
         let (start, end) = helpers::validate_slice(slf.len(), start, end)?;
-        let haystack_len = slf.len();
         let step = if byte_aligned { 8 } else { 1 };
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
         let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
@@ -105,7 +103,6 @@ impl FindAllIterator {
 
         let iter_obj = Self {
             haystack: slf.into(),
-            haystack_len,
             search_needle,
             lps,
             start,
@@ -134,7 +131,6 @@ impl FindAllIterator {
         if needle_len == 0 {
             return Ok(None);
         }
-        let haystack_len = slf.haystack_len;
         if let (Some(byte_haystack), Some(byte_needle)) = (&slf.byte_haystack, &slf.byte_needle) {
             let found = if slf.is_reverse {
                 if slf.byte_current == 0 {
@@ -191,9 +187,9 @@ impl FindAllIterator {
                     alignment_mod8,
                 )?
             } else {
-                if current_pos >= haystack_len
-                    || haystack_len.saturating_sub(current_pos) < needle_len
-                {
+                // A byte-aligned step can push current_pos past `end`, so the
+                // bound must be checked against `end`, not the haystack length.
+                if slf.end.saturating_sub(current_pos) < needle_len {
                     return Ok(None); // No space left for the needle or already past the end
                 }
                 helpers::find_bitvec_with_lps_aligned(
