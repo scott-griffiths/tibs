@@ -19,7 +19,6 @@ import sys
 import time
 from typing import Any
 
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tibs import Mutibs, Tibs
@@ -65,8 +64,8 @@ def make_bitarray(data):
 
 def same_bits(bitarray_result, tibs_result):
     return (
-        len(bitarray_result) == len(tibs_result)
-        and bitarray_result.tobytes() == tibs_result.to_padded_bytes()
+            len(bitarray_result) == len(tibs_result)
+            and bitarray_result.tobytes() == tibs_result.to_padded_bytes()
     )
 
 
@@ -94,10 +93,10 @@ def build_cases(byte_count, value_count):
     find_pattern_len = min(137, bit_count)
     find_pattern_start = (bit_count - find_pattern_len) // 3
     find_pattern_bits = search_bits[
-        find_pattern_start : find_pattern_start + find_pattern_len
+        find_pattern_start: find_pattern_start + find_pattern_len
     ]
     find_pattern_tibs = search_tibs[
-        find_pattern_start : find_pattern_start + find_pattern_len
+        find_pattern_start: find_pattern_start + find_pattern_len
     ]
 
     slice_start = min(3, bit_count)
@@ -160,14 +159,14 @@ def build_cases(byte_count, value_count):
         end = min(byte_count * 8, 500_000)
         for _ in range(50):
             combined = search_bits | other_bits
-            result = combined[10:end] & other_bits[9 : end - 1]
+            result = combined[10:end] & other_bits[9: end - 1]
         return result
 
     def tibs_bitops():
         end = min(byte_count * 8, 500_000)
         for _ in range(50):
             combined = search_tibs | other_tibs
-            result = combined[10:end] & other_tibs[9 : end - 1]
+            result = combined[10:end] & other_tibs[9: end - 1]
         return result
 
     def ba_count():
@@ -317,15 +316,29 @@ def build_cases(byte_count, value_count):
 
     def ba_unpack_u16():
         bits = make_bitarray(value_bytes)
-        return [ba2int(bits[index : index + 16]) for index in range(0, len(bits), 16)]
+        return [ba2int(bits[index: index + 16]) for index in range(0, len(bits), 16)]
 
     def tibs_unpack_u16():
         return Tibs.from_bytes(value_bytes).to_values("u16")
 
+    buffer_view_repeats = 2_000
+
+    def ba_buffer_view():
+        total = 0
+        for _ in range(buffer_view_repeats):
+            total += len(memoryview(search_bits))
+        return total
+
+    def tibs_buffer_view():
+        total = 0
+        for _ in range(buffer_view_repeats):
+            total += len(memoryview(search_tibs.to_bytes()))
+        return total
+
     def ba_chunks():
         count = 0
         for index in range(0, len(search_bits), 5):
-            if search_bits[index : index + 5] == chunk_target_bits:
+            if search_bits[index: index + 5] == chunk_target_bits:
                 count += 1
         return count
 
@@ -372,6 +385,11 @@ def build_cases(byte_count, value_count):
         ComparisonCase("pack u16", ba_pack_u16, tibs_pack_u16, same_bits),
         ComparisonCase("unpack u16", ba_unpack_u16, tibs_unpack_u16),
         ComparisonCase("chunks_iter", ba_chunks, tibs_chunks),
+        # bitarray implements the buffer protocol, so memoryview() is zero-copy;
+        # tibs has no exported buffer protocol, so each view must go through a
+        # fresh to_bytes() copy. This case is expected to favour bitarray by a
+        # wide margin and is a target for adding buffer protocol support to tibs.
+        ComparisonCase("repeated buffer view", ba_buffer_view, tibs_buffer_view),
     ]
 
 
