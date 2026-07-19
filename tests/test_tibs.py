@@ -299,6 +299,47 @@ def test_raw_bytes_and_offset():
     assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == Tibs('0x0f00f0')
 
 
+def test_buffer_protocol_round_trip():
+    a = Tibs.from_bytes(b'hello world')
+    mv = memoryview(a)
+    assert bytes(mv) == a.to_bytes()
+    assert mv.readonly is True
+    assert mv.format == 'B'
+    assert len(mv) == len(a.to_bytes())
+
+
+def test_buffer_protocol_is_writable_false():
+    a = Tibs('0xff00')
+    mv = memoryview(a)
+    with pytest.raises(TypeError):
+        mv[0] = 0
+
+
+def test_buffer_protocol_keeps_owner_alive():
+    data = bytes(range(256)) * 4
+    a = Tibs.from_bytes(data)
+    mv = memoryview(a)
+    del a
+    assert bytes(mv) == data
+
+
+def test_buffer_protocol_mid_byte_offset_raises():
+    a = Tibs.from_bytes(b'hello')
+    b = a[3:]
+    with pytest.raises(BufferError):
+        memoryview(b)
+
+
+def test_buffer_protocol_unaligned_length():
+    # A byte-aligned start but a length that isn't a whole number of bytes still
+    # exports a buffer; the trailing padding bits in the last byte are not
+    # masked to zero, matching bitarray's own buffer protocol behaviour.
+    a = Tibs('0b101')
+    mv = memoryview(a)
+    assert len(mv) == 1
+    assert bytes(mv) == b'\xa0'
+
+
 def test_mutibs_raw_bytes_and_offset():
     a = Mutibs('0xff')
     b = a[4:]

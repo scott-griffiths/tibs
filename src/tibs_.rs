@@ -14,11 +14,14 @@ use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::{PyBufferError, PyTypeError, PyValueError};
+use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
+use std::ffi::{CString, c_int, c_void};
 use std::hash::{Hash, Hasher};
+use std::ptr;
 use std::sync::Arc;
 
 impl Hash for Tibs {
@@ -445,6 +448,77 @@ impl Tibs {
     ///
     pub fn to_raw_data(&self) -> (Vec<u8>, usize, usize) {
         self.raw_data()
+    }
+
+    /// Export a read-only buffer (the ``buffer protocol``), for e.g. ``memoryview(t)``.
+    ///
+    /// This is only possible when the underlying storage starts on a byte
+    /// boundary; otherwise a :class:`BufferError` is raised, in which case
+    /// :meth:`~to_bytes` or :meth:`~to_padded_bytes` can be used to get an
+    /// owned copy instead. As with the raw byte data exposed by
+    /// :meth:`~to_raw_data`, bits beyond the logical length in the final byte
+    /// are not masked to zero.
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut ffi::Py_buffer,
+        flags: c_int,
+    ) -> PyResult<()> {
+        if view.is_null() {
+            return Err(PyBufferError::new_err("View is null"));
+        }
+        if (flags & ffi::PyBUF_WRITABLE) == ffi::PyBUF_WRITABLE {
+            return Err(PyBufferError::new_err(
+                "Tibs is immutable and cannot export a writable buffer.",
+            ));
+        }
+        let (data_ptr, data_len) = {
+            let bits = slf.borrow();
+            let Some(bytes) = BitCollection::byte_aligned_raw_data(&*bits) else {
+                return Err(PyBufferError::new_err(
+                    "Cannot export a buffer for this Tibs: its data does not start on a byte \
+                     boundary. Use to_bytes() or to_padded_bytes() to get an owned copy instead.",
+                ));
+            };
+            (bytes.as_ptr(), bytes.len())
+        };
+        // Safety: `data_ptr` points into the Arc<BV> owned by `slf`. Storing `slf`
+        // itself in `view.obj` keeps that Arc (and so this pointer) alive for as
+        // long as the buffer is exported. Tibs is frozen and its Arc<BV> is never
+        // mutated in place, so the pointer stays valid without export tracking.
+        unsafe {
+            (*view).obj = slf.into_any().into_ptr();
+            (*view).buf = data_ptr as *mut c_void;
+            (*view).len = data_len as isize;
+            (*view).readonly = 1;
+            (*view).itemsize = 1;
+            (*view).format = if (flags & ffi::PyBUF_FORMAT) == ffi::PyBUF_FORMAT {
+                CString::new("B").unwrap().into_raw()
+            } else {
+                ptr::null_mut()
+            };
+            (*view).ndim = 1;
+            (*view).shape = if (flags & ffi::PyBUF_ND) == ffi::PyBUF_ND {
+                &mut (*view).len
+            } else {
+                ptr::null_mut()
+            };
+            (*view).strides = if (flags & ffi::PyBUF_STRIDES) == ffi::PyBUF_STRIDES {
+                &mut (*view).itemsize
+            } else {
+                ptr::null_mut()
+            };
+            (*view).suboffsets = ptr::null_mut();
+            (*view).internal = ptr::null_mut();
+        }
+        Ok(())
+    }
+
+    unsafe fn __releasebuffer__(&self, view: *mut ffi::Py_buffer) {
+        unsafe {
+            if !(*view).format.is_null() {
+                drop(CString::from_raw((*view).format));
+            }
+        }
     }
 
     /// Return string representations for printing.

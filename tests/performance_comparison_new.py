@@ -332,7 +332,7 @@ def build_cases(byte_count, value_count):
     def tibs_buffer_view():
         total = 0
         for _ in range(buffer_view_repeats):
-            total += len(memoryview(search_tibs.to_bytes()))
+            total += len(memoryview(search_tibs))
         return total
 
     def ba_chunks():
@@ -385,10 +385,6 @@ def build_cases(byte_count, value_count):
         ComparisonCase("pack u16", ba_pack_u16, tibs_pack_u16, same_bits),
         ComparisonCase("unpack u16", ba_unpack_u16, tibs_unpack_u16),
         ComparisonCase("chunks_iter", ba_chunks, tibs_chunks),
-        # bitarray implements the buffer protocol, so memoryview() is zero-copy;
-        # tibs has no exported buffer protocol, so each view must go through a
-        # fresh to_bytes() copy. This case is expected to favour bitarray by a
-        # wide margin and is a target for adding buffer protocol support to tibs.
         ComparisonCase("repeated buffer view", ba_buffer_view, tibs_buffer_view),
     ]
 
