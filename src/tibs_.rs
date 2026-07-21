@@ -7,14 +7,14 @@ use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
     bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyBufferError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
@@ -82,6 +82,20 @@ impl Tibs {
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
         &self.data[self.offset..self.offset + self.length]
+    }
+
+    /// Fast single-bit read that bypasses bitvec's per-access pointer decoding.
+    ///
+    /// SAFETY: `index` must be less than `self.length`.
+    #[inline(always)]
+    pub(crate) unsafe fn bit_at_unchecked(&self, index: usize) -> bool {
+        // The backing BitVec's storage may not start at bit 0 of its first
+        // byte (see raw_data_ref), so include its head offset.
+        let head = self.data.as_bitslice().as_bitptr().bit().into_inner() as usize;
+        let abs = head + self.offset + index;
+        let byte = unsafe { *self.data.as_raw_slice().get_unchecked(abs >> 3) };
+        // Msb0 ordering: semantic bit i within a byte is physical bit (7 - i).
+        (byte >> (7 - (abs & 7))) & 1 != 0
     }
 
     #[inline]
@@ -1930,8 +1944,39 @@ impl Tibs {
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
         // Handle integer indexing
+        // Fast path for exact int keys via direct ffi. The bool singleton is
+        // chosen by indexing, not branching: with random data an if/else here
+        // mispredicts ~50% of the time, costing ~10ns per read.
+        unsafe {
+            if ffi::PyLong_Check(key.as_ptr()) != 0 {
+                let index = ffi::PyLong_AsSsize_t(key.as_ptr());
+                if index == -1 && !ffi::PyErr_Occurred().is_null() {
+                    let err = PyErr::fetch(py);
+                    return Err(if err.is_instance_of::<PyOverflowError>(py) {
+                        PyIndexError::new_err(format!(
+                            "Index is out of range for length of {}",
+                            self.length
+                        ))
+                    } else {
+                        err
+                    });
+                }
+                let index = validate_index(index, self.length)?;
+                // SAFETY: validate_index guarantees index < self.length.
+                let value = self.bit_at_unchecked(index);
+                // select_unpredictable compiles to a conditional move: a plain
+                // if/else on random bit data mispredicts ~50% of the time,
+                // which costs ~10ns per read.
+                let obj =
+                    std::hint::select_unpredictable(value, ffi::Py_True(), ffi::Py_False());
+                ffi::Py_INCREF(obj);
+                return Ok(Py::from_owned_ptr(py, obj));
+            }
+        }
         if let Ok(index) = key.extract::<isize>() {
-            let value: bool = self.get_index(index)?;
+            let index = validate_index(index, self.length)?;
+            // SAFETY: validate_index guarantees index < self.length.
+            let value = unsafe { self.bit_at_unchecked(index) };
             let py_value = PyBool::new(py, value);
             return Ok(py_value.to_owned().into());
         }

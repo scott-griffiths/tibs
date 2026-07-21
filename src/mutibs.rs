@@ -12,7 +12,9 @@ use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_v
 use crate::view::{MutableView, View};
 
 use crate::helpers;
-use pyo3::exceptions::{PyAttributeError, PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyAttributeError, PyIndexError, PyOverflowError, PyTypeError, PyValueError,
+};
 use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
@@ -1763,6 +1765,32 @@ impl Mutibs {
     ///
     pub fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = key.py();
+        // Fast path for exact int keys via direct ffi, mirroring
+        // Tibs::__getitem__ (see there for why the bool singleton is chosen
+        // with a conditional move rather than a branch).
+        unsafe {
+            if ffi::PyLong_Check(key.as_ptr()) != 0 {
+                let index = ffi::PyLong_AsSsize_t(key.as_ptr());
+                if index == -1 && !ffi::PyErr_Occurred().is_null() {
+                    let err = PyErr::fetch(py);
+                    return Err(if err.is_instance_of::<PyOverflowError>(py) {
+                        PyIndexError::new_err(format!(
+                            "Index is out of range for length of {}",
+                            self.data.len()
+                        ))
+                    } else {
+                        err
+                    });
+                }
+                let index = validate_index(index, self.data.len())?;
+                // SAFETY: validate_index guarantees index < self.data.len().
+                let value = *self.data.as_bitslice().get_unchecked(index);
+                let obj =
+                    std::hint::select_unpredictable(value, ffi::Py_True(), ffi::Py_False());
+                ffi::Py_INCREF(obj);
+                return Ok(Py::from_owned_ptr(py, obj));
+            }
+        }
         // Handle integer indexing
         if let Ok(index) = key.extract::<isize>() {
             let value: bool = self.get_index(index)?;

@@ -23,6 +23,7 @@ pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
 }
 
 /// Validates the index is in range and returns an absolute bit index.
+#[inline(always)]
 pub(crate) fn validate_index(index: isize, length: usize) -> PyResult<usize> {
     let index_p = if index < 0 {
         length as isize + index
