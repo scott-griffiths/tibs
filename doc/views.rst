@@ -163,6 +163,20 @@ view, this is the same ordering you would get from
     >>> word.lsb0.field(0, len(word) - 1).bin
     '0000000000000001'
 
+Format specs follow the same rule, so a view can be dropped straight into an
+f-string and the layout is applied for you (see :ref:`formatting`)::
+
+    >>> f"{word.le:#x}"
+    '0x0001'
+    >>> instruction = Tibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11")).lsb0.le
+    >>> f"{instruction.field(11, 8):u}"
+    '1'
+    >>> f"{instruction.field(63, 32):#010x}"
+    '0x11223344'
+
+The one exception is an empty format spec, which still gives you the ``repr`` of the
+view rather than a value, because that's what ``str()`` of a view has always done.
+
 For full-width multi-byte values, ``lsb0`` can therefore look like a
 little-endian value display: bit label 0 is the least significant bit of the
 whole value, so it appears on the RHS. Use the original ``Tibs`` or ``Mutibs``

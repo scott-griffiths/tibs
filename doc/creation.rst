@@ -146,6 +146,10 @@ This is a common enough operation that the :meth:`Tibs.to_padded_bytes` method i
 When you have one of these lossless representations, you can always reconstruct the original Tibs - there is a 1:1 relationship.
 So ``t == Tibs.from_bin(t.bin)`` will always be true.
 
+If you're rendering rather than converting, these representations are also available
+through Python's format mini-language, so ``f"{t:#x}"`` and ``f"{t:_.8b}"`` do what
+you'd expect. See :ref:`formatting` for the details.
+
 
 Data interpretations
 ^^^^^^^^^^^^^^^^^^^^

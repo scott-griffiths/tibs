@@ -1,5 +1,27 @@
 # Release Notes
 
+### Unreleased: version 1.2
+
+Added
+
+* Added `__format__` to `Tibs`, `Mutibs`, `View` and `MutableView`, so they can be
+  used directly in f-strings and with `str.format()`. The type codes are `b`, `o`,
+  `x` and `X` for the bit representations (equivalent to the `bin`, `oct` and `hex`
+  properties, so leading zeros are kept), plus `u` and `i` for the unsigned and
+  signed integer interpretations. The `#` flag adds a `0x` / `0X` / `0b` / `0o`
+  prefix, and `_` groups the digits — with the group size settable through the
+  otherwise unused precision field, so `f"{t:_.8b}"` groups binary by byte. Fill,
+  alignment and width work as they do elsewhere in Python.
+
+  ```python
+  >>> f"{Tibs('0xac804f4b'):#_.2x}"
+  '0xac_80_4f_4b'
+  ```
+
+  Two things differ from integer formatting, because a `Tibs` is a sequence rather
+  than a number: groups are counted from bit zero, so it's the last group that comes
+  up short rather than the first, and padding is never grouped.
+
 ### July 18th 2026: version 1.1
 
 Added

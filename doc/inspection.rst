@@ -165,3 +165,135 @@ positions use :meth:`Tibs.split_at`::
 The positions use normal bit offsets. Negative positions count from the end,
 and duplicate positions create empty pieces. The positions must be in
 nondecreasing order after negative positions are normalized.
+
+
+.. _formatting:
+
+Formatting
+^^^^^^^^^^
+
+When you just want to see the data, ``Tibs``, ``Mutibs``, ``View`` and ``MutableView``
+all support Python's format mini-language, so they work directly in f-strings::
+
+    >>> packet = Tibs('0xac804f4b')
+    >>> f"{packet:#x}"
+    '0xac804f4b'
+    >>> f"{packet:_.8b}"
+    '10101100_10000000_01001111_01001011'
+    >>> f"{packet:u}"
+    '2894090059'
+
+With no format spec you get the same thing as ``str()``, which is what you'd see if you
+just printed it::
+
+    >>> f"{packet}"
+    '0xac804f4b'
+
+Type codes
+==========
+
+There are two families of type code. The first are *representation* codes, which show
+you the bits themselves and are exactly equivalent to the ``bin``, ``oct`` and ``hex``
+properties:
+
+* ``b`` — binary. Always available.
+* ``o`` — octal. Length must be a multiple of 3.
+* ``x`` — hexadecimal. Length must be a multiple of 4.
+* ``X`` — upper case hexadecimal. Length must be a multiple of 4.
+
+The second are *interpretation* codes, which decode the bits as a number. These borrow
+the letters used by :class:`Dtype` rather than Python's ``d``, because a ``Tibs`` has
+both a signed and an unsigned reading and there's no sensible way to guess which you
+meant:
+
+* ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`.
+* ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`.
+
+So the same 32 bits can be shown four different ways::
+
+    >>> f"{packet:x}, {packet:b}"
+    'ac804f4b, 10101100100000000100111101001011'
+    >>> f"{packet:u}, {packet:i}"
+    '2894090059, -1400877237'
+    >>> f"{Tibs('0o7531'):o}"
+    '7531'
+
+.. note::
+
+    The representation codes are not integer formats, so leading zeros are kept and the
+    length of the output always tells you the length of the data. ``f"{Tibs('0x0f'):b}"``
+    is ``'00001111'``, whereas ``f"{15:b}"`` is ``'1111'``. If you want the number, ask
+    for the number with ``u`` or ``i``.
+
+Prefixes and grouping
+=====================
+
+The ``#`` flag adds the usual ``0x``, ``0X``, ``0b`` or ``0o`` prefix, and ``_`` inserts
+separators between groups of digits. Both are useful for reading long values, and
+because the string constructors ignore underscores and understand the prefixes, anything
+formatted with ``#`` can be fed straight back in::
+
+    >>> f"{packet:#_x}"
+    '0xac80_4f4b'
+    >>> Tibs(f"{packet:#_x}") == packet
+    True
+
+Python fixes the group size at four digits. That's often the wrong size for binary data,
+so tibs lets you set it using the precision field, which the standard mini-language
+leaves unused for these types::
+
+    >>> f"{packet:_b}"
+    '1010_1100_1000_0000_0100_1111_0100_1011'
+    >>> f"{packet:_.8b}"
+    '10101100_10000000_01001111_01001011'
+    >>> f"{packet:_.2x}"
+    'ac_80_4f_4b'
+
+Grouping a ``u`` or ``i`` value works the way it does for any other Python integer, so
+you get three-digit groups and ``,`` is available as well::
+
+    >>> f"{packet:_u}"
+    '2_894_090_059'
+    >>> f"{packet:,i}"
+    '-1,400,877,237'
+
+Width and alignment
+===================
+
+Fill, alignment and width all behave as they do elsewhere in Python, which is handy for
+lining up columns of registers or packet fields::
+
+    >>> for name, value in [('ctrl', Tibs('0x0f')), ('status', Tibs('0xbeef'))]:
+    ...     print(f"{name:>8}  {value:>12x}")
+        ctrl            0f
+      status          beef
+
+.. note::
+
+    Two details differ from integer formatting, both because a ``Tibs`` is a sequence
+    rather than a number.
+
+    Groups are counted from bit zero, so it's the *last* group that comes up short
+    rather than the first. ``f"{Tibs('0b101010101'):_b}"`` gives ``'1010_1010_1'``,
+    where the equivalent integer format gives ``'1_0101_0101'``.
+
+    Padding is added after grouping and is never itself grouped, so the separators stay
+    lined up with real bit positions.
+
+A few things that are meaningful for numbers are rejected for the representation codes,
+because they'd be meaningless or misleading for a bit sequence: the sign characters
+``+``, ``-`` and space, and the ``,`` separator. They are all accepted by ``u`` and
+``i``.
+
+Long values
+===========
+
+``str()`` gives up on very long values and shows a truncated version with the length
+appended, and a format spec with no type code does the same. An explicit type code
+never truncates::
+
+    >>> t = Tibs.from_zeros(50_000)
+    >>> f"{t}".endswith('... # length=50000')
+    True
+    >>> len(f"{t:b}")
+    50000
