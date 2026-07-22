@@ -549,6 +549,37 @@ impl Tibs {
         }
     }
 
+    /// Return a string formatted according to the Python format mini-language.
+    ///
+    /// The type codes ``b``, ``o``, ``x`` and ``X`` give the bit representation, and so
+    /// keep any leading zeros. They are equivalent to the :attr:`~Tibs.bin`,
+    /// :attr:`~Tibs.oct` and :attr:`~Tibs.hex` properties. The type codes ``u`` and
+    /// ``i`` give the unsigned and signed integer interpretations instead.
+    ///
+    /// The ``#`` flag adds a ``0b``, ``0o``, ``0x`` or ``0X`` prefix. The ``_`` option
+    /// groups the digits, with the group size taken from the otherwise unused precision
+    /// field and defaulting to 4. Groups are counted from bit zero, so a short group
+    /// comes last. Fill, alignment and width work as they do elsewhere in Python.
+    ///
+    /// An empty format spec gives the same string as :func:`str`.
+    ///
+    /// :param str format_spec: The format specification.
+    /// :return: The formatted string.
+    ///
+    /// :raises ValueError: if the spec cannot be parsed, if a type code is used that needs a length that is a different multiple, or if a sign or comma grouping is used with a bit representation type code.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> f"{Tibs('0xac804f4b'):#_.2x}"
+    ///     '0xac_80_4f_4b'
+    ///     >>> f"{Tibs('0x0f'):b}"
+    ///     '00001111'
+    ///
+    #[pyo3(signature = (format_spec, /), text_signature = "($self, format_spec, /)")]
+    pub fn __format__(&self, py: Python<'_>, format_spec: &str) -> PyResult<String> {
+        helpers::format_bit_collection(py, self, format_spec, "Tibs")
+    }
+
     /// Return a view with interpretation settings.
     ///
     /// A view does not change the underlying bits. It changes how operations such
@@ -1967,8 +1998,7 @@ impl Tibs {
                 // select_unpredictable compiles to a conditional move: a plain
                 // if/else on random bit data mispredicts ~50% of the time,
                 // which costs ~10ns per read.
-                let obj =
-                    std::hint::select_unpredictable(value, ffi::Py_True(), ffi::Py_False());
+                let obj = std::hint::select_unpredictable(value, ffi::Py_True(), ffi::Py_False());
                 ffi::Py_INCREF(obj);
                 return Ok(Py::from_owned_ptr(py, obj));
             }

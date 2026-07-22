@@ -2,7 +2,7 @@ use crate::core::BitCollection;
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
-    bv_from_u128, bytes_like_to_vec,
+    bv_from_u128, bytes_like_to_vec, format_bit_collection,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -843,6 +843,31 @@ impl MutableView {
         }
     }
 
+    /// Return a string formatted according to the Python format mini-language.
+    ///
+    /// The viewed bits are formatted, so the byte order and bit order of the view are
+    /// applied first. See :meth:`Tibs.__format__` for the accepted format specs.
+    ///
+    /// An empty format spec gives the ``repr``, as :func:`str` of a view does.
+    ///
+    /// :param str format_spec: The format specification.
+    /// :return: The formatted string.
+    ///
+    /// :raises ValueError: if the spec cannot be parsed, if a type code is used that needs a length that is a different multiple, or if a sign or comma grouping is used with a bit representation type code.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> f"{Mutibs('0x0100').le:#x}"
+    ///     '0x0001'
+    ///
+    #[pyo3(signature = (format_spec, /), text_signature = "($self, format_spec, /)")]
+    pub fn __format__(&self, py: Python<'_>, format_spec: &str) -> PyResult<String> {
+        if format_spec.is_empty() {
+            return Ok(self.__repr__(py));
+        }
+        format_bit_collection(py, &self.to_tibs_view(py)?, format_spec, "MutableView")
+    }
+
     /// Return True if two MutableViews have the same source value and layout.
     pub fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let Ok(other) = other.extract::<PyRef<'_, MutableView>>() else {
@@ -1256,6 +1281,31 @@ impl View {
         parts.push(self.byte_order.repr_name().to_string());
         parts.push(self.bit_order.repr_name().to_string());
         format!("View({})", parts.join(", "))
+    }
+
+    /// Return a string formatted according to the Python format mini-language.
+    ///
+    /// The viewed bits are formatted, so the byte order and bit order of the view are
+    /// applied first. See :meth:`Tibs.__format__` for the accepted format specs.
+    ///
+    /// An empty format spec gives the ``repr``, as :func:`str` of a view does.
+    ///
+    /// :param str format_spec: The format specification.
+    /// :return: The formatted string.
+    ///
+    /// :raises ValueError: if the spec cannot be parsed, if a type code is used that needs a length that is a different multiple, or if a sign or comma grouping is used with a bit representation type code.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> f"{Tibs('0x0100').le:#x}"
+    ///     '0x0001'
+    ///
+    #[pyo3(signature = (format_spec, /), text_signature = "($self, format_spec, /)")]
+    pub fn __format__(&self, py: Python<'_>, format_spec: &str) -> PyResult<String> {
+        if format_spec.is_empty() {
+            return Ok(self.__repr__());
+        }
+        format_bit_collection(py, &self.to_tibs_view()?, format_spec, "View")
     }
 
     /// Return True if two Views have the same source value and layout.
