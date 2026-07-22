@@ -3,12 +3,14 @@ use crate::core::{BitCollection, concatenate_bitcollections, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int,
-    bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec,
-    find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_length,
-    validate_logical_op_lengths, validate_shift, validate_slice,
+    BS, BV, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
+    bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
+    bv_from_zeros, bytes_like_to_vec, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
-use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
+use crate::tibs_::{
+    Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
+};
 use crate::view::{MutableView, View};
 
 use crate::helpers;
@@ -522,10 +524,12 @@ impl Mutibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<usize> {
         if old.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to replace."));
         }
+        let mask = prepare_mask(mask, old.len())?;
 
         let (search_start, search_end) = validate_slice(self.len(), start, end)?;
         let search_old = old;
@@ -538,17 +542,32 @@ impl Mutibs {
             )));
         }
 
+        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+        let matcher = mask
+            .as_ref()
+            .map(|mask| MaskedMatcher::new(search_old.as_bitslice(), mask.as_bitslice(), false));
+
         let mut starting_points: Vec<usize> = Vec::new();
         let mut current_pos = search_start;
         while current_pos < search_end && countdown > 0 {
-            if let Some(found_pos) = find_bitvec(
-                py,
-                self.as_bitvec_ref(),
-                search_old.as_bitslice(),
-                current_pos,
-                search_end,
-                byte_aligned,
-            )? {
+            let found = match &matcher {
+                Some(matcher) => matcher.find(
+                    py,
+                    self.as_bitvec_ref(),
+                    current_pos,
+                    search_end,
+                    alignment_mod8,
+                )?,
+                None => find_bitvec(
+                    py,
+                    self.as_bitvec_ref(),
+                    search_old.as_bitslice(),
+                    current_pos,
+                    search_end,
+                    byte_aligned,
+                )?,
+            };
+            if let Some(found_pos) = found {
                 starting_points.push(found_pos);
                 current_pos = found_pos + search_old.len();
                 countdown -= 1;
@@ -608,32 +627,43 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
         reverse: bool,
     ) -> PyResult<Option<usize>> {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
+        let mask = prepare_mask(mask, needle.len())?;
         let (start, end) = validate_slice(self.len(), start, end)?;
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
-        let found = if !reverse {
-            find_bitvec_aligned(
+        let found = match (&mask, reverse) {
+            (Some(mask), _) => helpers::find_bitvec_masked_aligned(
+                py,
+                self.as_bitvec_ref(),
+                needle.as_bitslice(),
+                mask.as_bitslice(),
+                start,
+                end,
+                alignment_mod8,
+                reverse,
+            )?,
+            (None, false) => find_bitvec_aligned(
                 py,
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )?
-        } else {
-            helpers::rfind_bitvec_aligned(
+            )?,
+            (None, true) => helpers::rfind_bitvec_aligned(
                 py,
                 self.as_bitvec_ref(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )?
+            )?,
         };
         Ok(found)
     }
@@ -2051,7 +2081,7 @@ impl Mutibs {
 
     /// Return True if b is a sub-sequence of self.
     pub fn __contains__(&self, py: Python<'_>, b: Tibs) -> PyResult<bool> {
-        self.find(py, b, None, None, false)
+        self.find(py, b, None, None, false, None)
             .map(|found| found.is_some())
     }
 
@@ -2079,15 +2109,19 @@ impl Mutibs {
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bit position if found, or None if not found.
-    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    /// :raises ValueError: if ``needle`` is empty, if the slice parameters are invalid, or if the
+    ///     mask length doesn't match the needle length.
     ///
     /// .. code-block:: pycon
     ///
     ///      >>> Mutibs('0xc3e').find('0b1111')
     ///      6
+    ///      >>> Mutibs('0x3a5f').find('0x0f', mask='0x0f', byte_aligned=True)
+    ///      8
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find(
         &self,
         py: Python<'_>,
@@ -2095,8 +2129,9 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, false)
+        self.find_impl(py, needle, start, end, byte_aligned, mask, false)
     }
 
     /// Find all occurrences of a bit sequence.
@@ -2105,8 +2140,10 @@ impl Mutibs {
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A list of bit positions.
-    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    /// :raises ValueError: if ``needle`` is empty, if the slice parameters are invalid, or if the
+    ///     mask length doesn't match the needle length.
     ///
     /// All occurrences of needle are found, even if they overlap.
     ///
@@ -2115,7 +2152,7 @@ impl Mutibs {
     ///      >>> Mutibs('0xc3e').find_all('0b1111')
     ///      [6]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(
         &self,
         py: Python<'_>,
@@ -2123,22 +2160,35 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Vec<u64>> {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
+        let mask = prepare_mask(mask, needle.len())?;
 
         let haystack_len = self.len();
         let (start, end) = validate_slice(haystack_len, start, end)?;
 
-        helpers::collect_find_all_positions(
-            py,
-            self.as_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            byte_aligned,
-        )
+        match mask {
+            Some(mask) => helpers::collect_find_all_positions_masked(
+                py,
+                self.as_bitslice(),
+                needle.as_bitslice(),
+                mask.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            ),
+            None => helpers::collect_find_all_positions(
+                py,
+                self.as_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            ),
+        }
     }
 
     /// Return a list of Mutibs by cutting into chunks.
@@ -2476,9 +2526,11 @@ impl Mutibs {
     /// :param object value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
     /// :param int | None start: The start of the slice to count within. Defaults to 0.
     /// :param int | None end: The end of the slice to count within. Defaults to len(self).
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     ///
     /// :return: The number of times the bit pattern is found.
-    /// :raises ValueError: if the slice parameters are invalid.
+    /// :raises ValueError: if the slice parameters are invalid, or if the mask length doesn't match
+    ///     the length of the value.
     ///
     /// .. code-block:: pycon
     ///
@@ -2489,24 +2541,32 @@ impl Mutibs {
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    #[pyo3(signature = (value, start=None, end=None), text_signature = "($self, value, start=None, end=None)")]
+    #[pyo3(signature = (value, start=None, end=None, mask=None), text_signature = "($self, value, start=None, end=None, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
         value: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        mask: Option<Tibs>,
     ) -> PyResult<usize> {
         let (start, end) = validate_slice(self.len(), start, end)?;
         let haystack = &self.as_bitslice()[start..end];
 
         if let Some(b) = helpers::convert_to_bool(value) {
-            return Ok(count_bitslice(haystack, b));
+            return match prepare_mask(mask, 1)? {
+                // The only unset single-bit mask matches every bit.
+                Some(_) => Ok(haystack.len()),
+                None => Ok(count_bitslice(haystack, b)),
+            };
         }
 
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
-                if v.len() == 1 {
+                let mask = prepare_mask(mask, v.len())?;
+                if let Some(mask) = mask {
+                    helpers::count_bitvec_masked(py, haystack, v.as_bitslice(), mask.as_bitslice())
+                } else if v.len() == 1 {
                     Ok(count_bitslice(haystack, v.get_index(0)?))
                 } else {
                     helpers::count_bitvec(py, haystack, v.as_bitslice())
@@ -2564,15 +2624,19 @@ impl Mutibs {
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bit position if found, or None if not found.
-    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    /// :raises ValueError: if ``needle`` is empty, if the slice parameters are invalid, or if the
+    ///     mask length doesn't match the needle length.
     ///
     /// .. code-block:: pycon
     ///
     ///      >>> Mutibs('0b10111011').rfind('0b11')
     ///      6
+    ///      >>> Mutibs('0b10111011').rfind('0b00', mask='0b10')
+    ///      5
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind(
         &self,
         py: Python<'_>,
@@ -2580,8 +2644,9 @@ impl Mutibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, true)
+        self.find_impl(py, needle, start, end, byte_aligned, mask, true)
     }
 
     /// Invert one or many bits in place.
@@ -3046,7 +3111,13 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The number of replacements made.
+    /// :raises ValueError: if old is empty, count is negative, the slice parameters are invalid or
+    ///     the mask length doesn't match the length of old.
+    ///
+    /// The ``mask`` affects only which bits have to match; the whole of each match is still
+    /// replaced by ``new``.
     ///
     /// .. code-block:: pycon
     ///
@@ -3056,7 +3127,7 @@ impl Mutibs {
     ///     >>> m
     ///     Mutibs('0b0011101110')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replace<'a>(
         mut slf: PyRefMut<'a, Self>,
         py: Python<'_>,
@@ -3066,6 +3137,7 @@ impl Mutibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<usize> {
         let old = if old.as_ptr() == slf.as_ptr() {
             slf.to_tibs()
@@ -3081,7 +3153,7 @@ impl Mutibs {
         } else {
             Tibs::extract(new.as_borrowed())?
         };
-        slf.apply_replace_bits(py, old, new, start, end, count, byte_aligned)
+        slf.apply_replace_bits(py, old, new, start, end, count, byte_aligned, mask)
     }
 
     /// Search and replace and return a new Mutibs.
@@ -3094,15 +3166,19 @@ impl Mutibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A new Mutibs.
-    /// :raises ValueError: if old is empty, count is negative or the slice parameters are invalid.
+    /// :raises ValueError: if old is empty, count is negative, the slice parameters are invalid or
+    ///     the mask length doesn't match the length of old.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Mutibs('0b00010010').replaced([0, 1], [1, 1, 1])
     ///     Mutibs('0b0011101110')
+    ///     >>> Mutibs('0x1f2e3f').replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True)
+    ///     Mutibs('0x002e00')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replaced(
         &self,
         py: Python<'_>,
@@ -3112,11 +3188,12 @@ impl Mutibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Self> {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         let mut out = self.clone();
-        let _ = out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
+        let _ = out.apply_replace_bits(py, old, new, start, end, count, byte_aligned, mask)?;
         Ok(out)
     }
 

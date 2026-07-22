@@ -1698,3 +1698,44 @@ def test_empty_encode():
     assert Mutibs.decode(z) == m
     assert Mutibs.decode(r) == m
     assert Mutibs.decode(w) == m
+
+
+def test_find_with_mask():
+    m = Mutibs('0x1f2e3f')
+    assert m.find('0x0f', mask='0x0f', byte_aligned=True) == 0
+    assert m.rfind('0x0f', mask='0x0f', byte_aligned=True) == 16
+    assert m.find_all('0x0f', mask='0x0f', byte_aligned=True) == [0, 16]
+    assert m.count('0x0f', mask='0x0f') == 4
+    assert m.find_all('0b11', mask='0b00') == list(range(len(m) - 1))
+    with pytest.raises(ValueError):
+        m.find('0x0f', mask='0b0')
+
+
+def test_replace_with_mask():
+    m = Mutibs('0x1f2e3f')
+    assert m.replace('0x0f', '0x00', mask='0x0f', byte_aligned=True) == 2
+    assert m == Mutibs('0x002e00')
+
+    m = Mutibs('0x1f2e3f')
+    assert m.replace('0x0f', '0x00', mask='0x0f', byte_aligned=True, count=1) == 1
+    assert m == Mutibs('0x002e3f')
+
+    m = Mutibs('0x1f2e3f')
+    assert m.replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True) == Mutibs('0x002e00')
+    assert m == Mutibs('0x1f2e3f')
+    with pytest.raises(ValueError):
+        m.replace('0x0f', '0x00', mask='0b1')
+
+
+def test_replace_with_mask_long_needle():
+    # Over 64 bits the masked search uses a filter window plus verification.
+    m = Mutibs.from_zeros(100) + Mutibs('0b1') + Mutibs.from_zeros(99)
+    old = Mutibs.from_zeros(70)
+    # Ignoring bit 30 of the needle lets it straddle the single set bit.
+    mask = Mutibs.from_ones(70)
+    mask[30] = 0
+    assert m.find(old, mask=mask) == 0
+    # Either the set bit falls outside the match, or it lands on the ignored bit.
+    assert m.find_all(old, mask=mask) == list(range(31)) + [70] + list(range(101, 131))
+    assert m.replace(old, '0b1', mask=mask, count=1) == 1
+    assert m == Mutibs('0b1') + Mutibs.from_zeros(30) + Mutibs('0b1') + Mutibs.from_zeros(99)

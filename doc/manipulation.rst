@@ -96,15 +96,25 @@ Inserting, replacing and deleting
     Mutibs('0b101101')
 
 :meth:`Mutibs.replace` searches for one bit pattern and replaces it with another.
-It accepts the same ``start``, ``end``, ``count`` and ``byte_aligned`` options as
-the non-mutating :meth:`Tibs.replaced` method, and returns the number of
-replacements made::
+It accepts the same ``start``, ``end``, ``count``, ``byte_aligned`` and ``mask``
+options as the non-mutating :meth:`Tibs.replaced` method, and returns the number
+of replacements made::
 
     >>> m = Mutibs('0b100100100')
     >>> m.replace('0b100', '0b11', count=2)
     2
     >>> m
     Mutibs('0b1111100')
+
+A ``mask`` says which bits of the pattern have to match, as described in
+:ref:`searching with a mask <searching_with_a_mask>`. It affects only the
+matching - the whole of each match is still replaced by the new bits::
+
+    >>> m = Mutibs('0x1f2e3f')
+    >>> m.replace('0x0f', '0x00', mask='0x0f', byte_aligned=True)
+    2
+    >>> m
+    Mutibs('0x002e00')
 
 Slices can also be assigned to, or deleted, using normal Python syntax::
 

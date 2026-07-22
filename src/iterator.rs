@@ -1,7 +1,8 @@
 use crate::core::BitCollection;
 use crate::enums::{ByteOrder, DtypeKind};
 use crate::helpers;
-use crate::tibs_::{Tibs, py_from_value_parts};
+use crate::helpers::MaskedMatcher;
+use crate::tibs_::{Tibs, prepare_mask, py_from_value_parts};
 use memchr::memmem;
 use pyo3::prelude::*;
 
@@ -49,6 +50,9 @@ pub struct FindAllIterator {
     pub byte_needle: Option<Vec<u8>>,
     pub byte_base: usize,
     pub byte_current: usize,
+    /// Prepared once when searching with a mask, in place of the lps and the
+    /// byte search, neither of which can cope with don't-care bits.
+    pub(crate) matcher: Option<MaskedMatcher>,
 }
 
 impl FindAllIterator {
@@ -58,6 +62,7 @@ impl FindAllIterator {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
         is_reverse: bool,
     ) -> PyResult<Py<Self>> {
         if needle.is_empty() {
@@ -65,10 +70,34 @@ impl FindAllIterator {
                 "No bits were provided to find.",
             ));
         }
+        let mask = prepare_mask(mask, needle.len())?;
 
         let (start, end) = helpers::validate_slice(slf.len(), start, end)?;
         let step = if byte_aligned { 8 } else { 1 };
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+        let py = slf.py();
+
+        if let Some(mask) = mask {
+            let matcher = MaskedMatcher::new(needle.as_bitslice(), mask.as_bitslice(), is_reverse);
+            let iter_obj = Self {
+                haystack: slf.into(),
+                search_needle: needle,
+                lps: Vec::new(),
+                start,
+                end,
+                byte_aligned,
+                step,
+                current_pos: if is_reverse { end } else { start },
+                is_reverse,
+                byte_haystack: None,
+                byte_needle: None,
+                byte_base: 0,
+                byte_current: 0,
+                matcher: Some(matcher),
+            };
+            return Py::new(py, iter_obj);
+        }
+
         let (byte_haystack, byte_needle, byte_base) = helpers::byte_search_prep(
             slf.as_bitslice(),
             needle.as_bitslice(),
@@ -80,7 +109,6 @@ impl FindAllIterator {
             (Some(haystack.into_owned()), Some(needle.into_owned()), base)
         });
 
-        let py = slf.py();
         let using_byte_search = byte_haystack.is_some();
         let using_small_search = needle.len() <= 64;
         let (search_needle, lps) = if using_byte_search {
@@ -115,6 +143,7 @@ impl FindAllIterator {
             byte_needle,
             byte_base,
             byte_current: if is_reverse { end / 8 - byte_base } else { 0 },
+            matcher: None,
         };
         Py::new(py, iter_obj)
     }
@@ -173,7 +202,31 @@ impl FindAllIterator {
             let lps = &slf.lps;
             let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
-            if slf.is_reverse {
+            if let Some(matcher) = &slf.matcher {
+                if slf.is_reverse {
+                    if current_pos <= slf.start || current_pos > slf.end {
+                        return Ok(None);
+                    }
+                    matcher.find(
+                        py,
+                        haystack_rs.as_bitslice(),
+                        slf.start,
+                        current_pos,
+                        alignment_mod8,
+                    )?
+                } else {
+                    if slf.end.saturating_sub(current_pos) < needle_len {
+                        return Ok(None);
+                    }
+                    matcher.find(
+                        py,
+                        haystack_rs.as_bitslice(),
+                        current_pos,
+                        slf.end,
+                        alignment_mod8,
+                    )?
+                }
+            } else if slf.is_reverse {
                 if current_pos <= slf.start || current_pos > slf.end {
                     return Ok(None);
                 }

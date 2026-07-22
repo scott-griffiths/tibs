@@ -24,6 +24,26 @@ use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::sync::Arc;
 
+/// Check a search mask against the length of the bits being searched for.
+///
+/// Returns `None` when there is no mask, or when every bit of it is set and so
+/// the faster unmasked search paths give the same answer.
+pub(crate) fn prepare_mask(mask: Option<Tibs>, needle_len: usize) -> PyResult<Option<Tibs>> {
+    let Some(mask) = mask else {
+        return Ok(None);
+    };
+    if mask.len() != needle_len {
+        return Err(PyValueError::new_err(format!(
+            "The mask length of {} does not match the length of the bits to find ({needle_len}).",
+            mask.len()
+        )));
+    }
+    Ok(match mask.as_bitslice().all() {
+        true => None,
+        false => Some(mask),
+    })
+}
+
 impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
@@ -156,32 +176,43 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
         reverse: bool,
     ) -> PyResult<Option<usize>> {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
+        let mask = prepare_mask(mask, needle.len())?;
         let (start, end) = validate_slice(self.len(), start, end)?;
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
-        let found = if !reverse {
-            find_bitvec_aligned(
+        let found = match (&mask, reverse) {
+            (Some(mask), _) => helpers::find_bitvec_masked_aligned(
+                py,
+                self.to_bitslice(),
+                needle.as_bitslice(),
+                mask.as_bitslice(),
+                start,
+                end,
+                alignment_mod8,
+                reverse,
+            )?,
+            (None, false) => find_bitvec_aligned(
                 py,
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )?
-        } else {
-            rfind_bitvec_aligned(
+            )?,
+            (None, true) => rfind_bitvec_aligned(
                 py,
                 self.to_bitslice(),
                 needle.as_bitslice(),
                 start,
                 end,
                 alignment_mod8,
-            )?
+            )?,
         };
         Ok(found)
     }
@@ -879,9 +910,11 @@ impl Tibs {
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A list of bit positions.
     ///
-    /// :raises ValueError: if needle is empty, if start or end are out of range or if end is before start.
+    /// :raises ValueError: if needle is empty, if start or end are out of range, if end is before start
+    ///     or if the mask length doesn't match the needle length.
     ///
     /// All occurrences of needle are found, even if they overlap.
     ///
@@ -889,8 +922,10 @@ impl Tibs {
     ///
     ///     >>> Tibs('0b10111011').find_all('0b11')
     ///     [2, 3, 6]
+    ///     >>> Tibs('0x1f2f3a').find_all('0x0f', mask='0x0f', byte_aligned=True)
+    ///     [0, 8]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
@@ -898,22 +933,35 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Vec<u64>> {
         if needle.is_empty() {
             return Err(PyValueError::new_err("No bits were provided to find."));
         }
+        let mask = prepare_mask(mask, needle.len())?;
 
         let haystack_len = slf.len();
         let (start, end) = validate_slice(haystack_len, start, end)?;
 
-        helpers::collect_find_all_positions(
-            py,
-            slf.as_bitslice(),
-            needle.as_bitslice(),
-            start,
-            end,
-            byte_aligned,
-        )
+        match mask {
+            Some(mask) => helpers::collect_find_all_positions_masked(
+                py,
+                slf.as_bitslice(),
+                needle.as_bitslice(),
+                mask.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            ),
+            None => helpers::collect_find_all_positions(
+                py,
+                slf.as_bitslice(),
+                needle.as_bitslice(),
+                start,
+                end,
+                byte_aligned,
+            ),
+        }
     }
 
     /// Find all occurrences of a bit sequence, returning an iterator of bit positions.
@@ -922,9 +970,11 @@ impl Tibs {
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A generator yielding bit positions.
     ///
-    /// :raises ValueError: if needle is empty, if start or end are out of range or if end is before start.
+    /// :raises ValueError: if needle is empty, if start or end are out of range, if end is before start
+    ///     or if the mask length doesn't match the needle length.
     ///
     /// All occurrences of needle are found, even if they overlap.
     ///
@@ -937,15 +987,16 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').find_all_iter('0b11'))
     ///     [2, 3, 6]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Py<FindAllIterator>> {
-        FindAllIterator::new(slf, needle, start, end, byte_aligned, false)
+        FindAllIterator::new(slf, needle, start, end, byte_aligned, mask, false)
     }
 
     /// Find all occurrences of a bit sequence in reverse, returning an iterator of bit positions.
@@ -954,9 +1005,11 @@ impl Tibs {
     /// :param int | None start: The starting bit position of the slice to search. Defaults to 0.
     /// :param int | None end: The end bit position of the slice to search. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries. Defaults to ``False``.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A generator yielding bit positions.
     ///
-    /// :raises ValueError: if needle is empty, if start or end are out of range or end is before start.
+    /// :raises ValueError: if needle is empty, if start or end are out of range, if end is before start
+    ///     or if the mask length doesn't match the needle length.
     ///
     /// All occurrences of needle are found, even if they overlap.
     ///
@@ -969,15 +1022,16 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').rfind_all_iter('0b11'))
     ///     [6, 3, 2]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Py<FindAllIterator>> {
-        FindAllIterator::new(slf, needle, start, end, byte_aligned, true)
+        FindAllIterator::new(slf, needle, start, end, byte_aligned, mask, true)
     }
 
     /// The bit length of the Tibs.
@@ -1660,16 +1714,23 @@ impl Tibs {
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bit position if found, or None if not found.
     ///
-    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    /// :raises ValueError: if ``needle`` is empty, if the slice parameters are invalid, or if the
+    ///     mask length doesn't match the needle length.
+    ///
+    /// The ``mask`` must be the same length as ``needle``. Only the bits set in it are compared, so
+    /// the bits of ``needle`` under a zero mask bit are ignored and can be anything.
     ///
     /// .. code-block:: pycon
     ///
     ///      >>> Tibs('0xc3e').find('0b1111')
     ///      6
+    ///      >>> Tibs('0x3a5f').find('0x0f', mask='0x0f', byte_aligned=True)
+    ///      8
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find(
         &self,
         py: Python<'_>,
@@ -1677,13 +1738,14 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, false)
+        self.find_impl(py, needle, start, end, byte_aligned, mask, false)
     }
 
     /// Return True if b is a sub-sequence of self.
     pub fn __contains__(&self, py: Python<'_>, b: Tibs) -> PyResult<bool> {
-        self.find(py, b, None, None, false)
+        self.find(py, b, None, None, false, None)
             .map(|found| found.is_some())
     }
 
@@ -1700,16 +1762,20 @@ impl Tibs {
     /// :param int | None start: The starting bit position. Defaults to 0.
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param bool byte_aligned: If ``True``, the Tibs will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bit position if found, or None if not found.
     ///
-    /// :raises ValueError: if ``needle`` is empty, or if the slice parameters are invalid.
+    /// :raises ValueError: if ``needle`` is empty, if the slice parameters are invalid, or if the
+    ///     mask length doesn't match the needle length.
     ///
     /// .. code-block:: pycon
     ///
     ///      >>> Tibs('0b10111011').rfind('0b11')
     ///      6
+    ///      >>> Tibs('0b10111011').rfind('0b00', mask='0b10')
+    ///      5
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false), text_signature = "($self, needle, start=None, end=None, byte_aligned=False)")]
+    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind(
         &self,
         py: Python<'_>,
@@ -1717,8 +1783,9 @@ impl Tibs {
         start: Option<isize>,
         end: Option<isize>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, true)
+        self.find_impl(py, needle, start, end, byte_aligned, mask, true)
     }
 
     /// Return whether the current Tibs starts with prefix.
@@ -1758,9 +1825,11 @@ impl Tibs {
     /// :param object value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
     /// :param int | None start: The start of the slice to count within. Defaults to 0.
     /// :param int | None end: The end of the slice to count within. Defaults to len(self).
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     ///
     /// :return: The number of times the bit pattern is found.
-    /// :raises ValueError: if the slice parameters are invalid.
+    /// :raises ValueError: if the slice parameters are invalid, or if the mask length doesn't match
+    ///     the length of the value.
     ///
     /// .. code-block:: pycon
     ///
@@ -1771,24 +1840,32 @@ impl Tibs {
     ///     >>> Tibs.from_bin('0011010101100').count('0b01')
     ///     4
     ///
-    #[pyo3(signature = (value, start=None, end=None), text_signature = "($self, value, start=None, end=None)")]
+    #[pyo3(signature = (value, start=None, end=None, mask=None), text_signature = "($self, value, start=None, end=None, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
         value: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        mask: Option<Tibs>,
     ) -> PyResult<usize> {
         let (start, end) = validate_slice(self.len(), start, end)?;
         let haystack = &self.as_bitslice()[start..end];
 
         if let Some(b) = helpers::convert_to_bool(value) {
-            return Ok(count_bitslice(haystack, b));
+            return match prepare_mask(mask, 1)? {
+                // The only unset single-bit mask matches every bit.
+                Some(_) => Ok(haystack.len()),
+                None => Ok(count_bitslice(haystack, b)),
+            };
         }
 
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
-                if v.len() == 1 {
+                let mask = prepare_mask(mask, v.len())?;
+                if let Some(mask) = mask {
+                    helpers::count_bitvec_masked(py, haystack, v.as_bitslice(), mask.as_bitslice())
+                } else if v.len() == 1 {
                     Ok(count_bitslice(haystack, v.get_index(0)?))
                 } else {
                     helpers::count_bitvec(py, haystack, v.as_bitslice())
@@ -1922,15 +1999,22 @@ impl Tibs {
     /// :param int | None end: The end position. Defaults to len(self).
     /// :param int | None count: If present, the maximum number of replacements to make.
     /// :param bool byte_aligned: If ``True``, the bits will only be found on byte boundaries.
+    /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: A new Tibs.
-    /// :raises ValueError: if old is empty, count is negative or the slice parameters are invalid.
+    /// :raises ValueError: if old is empty, count is negative, the slice parameters are invalid or
+    ///     the mask length doesn't match the length of old.
+    ///
+    /// The ``mask`` affects only which bits have to match; the whole of each match is still
+    /// replaced by ``new``.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Tibs('0b00010010').replaced([0, 1], [1, 1, 1])
     ///     Tibs('0b0011101110')
+    ///     >>> Tibs('0x1f2e3f').replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True)
+    ///     Tibs('0x002e00')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False)")]
+    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replaced(
         &self,
         py: Python<'_>,
@@ -1940,11 +2024,12 @@ impl Tibs {
         end: Option<isize>,
         count: Option<i64>,
         byte_aligned: bool,
+        mask: Option<Tibs>,
     ) -> PyResult<Self> {
         let old = Tibs::extract(old.as_borrowed())?;
         let new = Tibs::extract(new.as_borrowed())?;
         self.copy_with_mutation(move |out| {
-            out.apply_replace_bits(py, old, new, start, end, count, byte_aligned)?;
+            out.apply_replace_bits(py, old, new, start, end, count, byte_aligned, mask)?;
             Ok(())
         })
     }

@@ -59,6 +59,17 @@ def test_find_all(benchmark):
     assert c == 305
 
 
+def test_find_all_masked(benchmark):
+    def finding():
+        s = Tibs.from_random(2000000, seed=b"99")
+        # Every byte whose low nibble is 1111. Masked searches can't use the
+        # byte-oriented fast path, so this is a bit-by-bit scan.
+        return len(s.find_all("0x0f", mask="0x0f", byte_aligned=True))
+
+    c = benchmark(finding)
+    assert c == 15674
+
+
 def test_primes(benchmark):
     def primes():
         limit = 1000000

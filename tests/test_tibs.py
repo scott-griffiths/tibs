@@ -888,3 +888,129 @@ def test_raw_encoding_is_stable_key_for_tibs_and_mutibs():
     assert Mutibs("0b101").encode(Codec.Raw) in keys
     decoded_keys = {Tibs.decode(key).encode(Codec.Raw) for key in keys}
     assert decoded_keys == keys
+
+
+def test_find_with_mask():
+    t = Tibs('0x1f2e3f')
+    # Every byte whose low nibble is 1111, whatever the high nibble.
+    assert t.find('0x0f', mask='0x0f', byte_aligned=True) == 0
+    assert t.rfind('0x0f', mask='0x0f', byte_aligned=True) == 16
+    assert t.find_all('0x0f', mask='0x0f', byte_aligned=True) == [0, 16]
+    # count has no alignment option, so it also sees the unaligned matches.
+    assert t.count('0x0f', mask='0x0f') == 4
+    assert t.find_all('0x0f', mask='0x0f') == [0, 14, 15, 16]
+    # The masked-out bits of the needle are ignored, whatever they are.
+    assert t.find_all('0xff', mask='0x0f', byte_aligned=True) == [0, 16]
+
+
+def test_find_with_mask_matches_unmasked():
+    t = Tibs('0b10111011')
+    assert t.find_all('0b11', mask='0b11') == t.find_all('0b11') == [2, 3, 6]
+    assert t.find('0b11', mask='0b11') == t.find('0b11')
+    assert t.rfind('0b11', mask='0b11') == t.rfind('0b11')
+    assert t.count('0b11', mask='0b11') == t.count('0b11')
+
+
+def test_find_with_empty_mask_matches_everywhere():
+    t = Tibs('0b10111011')
+    assert t.find_all('0b11', mask='0b00') == [0, 1, 2, 3, 4, 5, 6]
+    assert t.find('0b11', mask='0b00') == 0
+    assert t.rfind('0b11', mask='0b00') == 6
+    assert t.count('0b11', mask='0b00') == 7
+    assert t.count(1, mask='0b0') == 8
+    assert t.find_all('0b11', mask='0b00', byte_aligned=True) == [0]
+
+
+def test_find_with_mask_and_slice():
+    t = Tibs('0b10111011')
+    assert t.find('0b00', mask='0b10') == 1
+    assert t.find('0b00', mask='0b10', start=2) == 5
+    assert t.rfind('0b00', mask='0b10') == 5
+    assert t.find('0b00', mask='0b10', start=2, end=5) is None
+
+
+def test_find_with_mask_long_needles():
+    # Needles over 64 bits use a filter window plus verification.
+    haystack = Tibs.from_random(4000, seed=b'masked')
+    for needle_length in [64, 65, 100, 200]:
+        for at in [0, 5, 1234, 4000 - needle_length]:
+            needle = haystack[at:at + needle_length]
+            # A mask with its set bits only at the very end, so the filter
+            # window doesn't sit at the start of the needle.
+            late = Tibs.from_zeros(needle_length - 8) + Tibs.from_ones(8)
+            for mask in [Tibs.from_ones(needle_length), late]:
+                assert haystack.find(needle, mask=mask) is not None
+                assert at in haystack.find_all(needle, mask=mask)
+                assert haystack.rfind(needle, mask=mask) >= at
+    # Flipping a masked-out bit still matches, flipping a masked-in one doesn't.
+    needle = Mutibs(haystack[100:300])
+    mask = Mutibs.from_ones(200)
+    mask[50] = 0
+    needle[50] = not needle[50]
+    assert haystack.find(needle, mask=mask) == 100
+    assert haystack.find(needle) is None
+    assert haystack.find(needle, mask=Tibs.from_ones(200)) is None
+
+
+def test_find_all_iter_with_mask():
+    t = Tibs('0x1f2e3f')
+    positions = t.find_all('0x0f', mask='0x0f')
+    assert list(t.find_all_iter('0x0f', mask='0x0f')) == positions
+    assert list(t.rfind_all_iter('0x0f', mask='0x0f')) == positions[::-1]
+    long_needle = Tibs.from_zeros(65)
+    haystack = Tibs.from_zeros(500)
+    mask = Tibs.from_ones(64) + Tibs('0b0')
+    assert list(haystack.find_all_iter(long_needle, mask=mask)) == list(range(500 - 64))
+
+
+def test_replaced_with_mask():
+    t = Tibs('0x1f2e3f')
+    assert t.replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True) == Tibs('0x002e00')
+    # The whole match is replaced, and new can be a different length.
+    assert t.replaced('0x0f', '0b1', mask='0x0f', byte_aligned=True) == Tibs('0b1001011101')
+    assert t.replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True, count=1) == Tibs('0x002e3f')
+    assert t.replaced('0x0f', '0x00', mask='0xff', byte_aligned=True) == t
+
+
+def test_mask_length_must_match():
+    t = Tibs('0x1f2e3f')
+    with pytest.raises(ValueError):
+        t.find('0x0f', mask='0b0')
+    with pytest.raises(ValueError):
+        t.rfind('0x0f', mask=Tibs.from_zeros(9))
+    with pytest.raises(ValueError):
+        t.find_all('0x0f', mask='0x0fff')
+    with pytest.raises(ValueError):
+        t.find_all_iter('0x0f', mask='0x0fff')
+    with pytest.raises(ValueError):
+        t.count('0x0f', mask='0x0fff')
+    with pytest.raises(ValueError):
+        t.replaced('0x0f', '0x00', mask='0b1')
+    with pytest.raises(ValueError):
+        t.find('', mask='')
+
+
+def test_find_with_mask_against_reference():
+    random.seed(42)
+    for _ in range(200):
+        haystack_length = random.choice([8, 17, 64, 70, 200])
+        needle_length = random.randint(1, min(haystack_length, 80))
+        haystack = Tibs.from_bools(random.choice([0, 0, 1]) for _ in range(haystack_length))
+        needle = Tibs.from_bools(random.getrandbits(1) for _ in range(needle_length))
+        mask = Tibs.from_bools(random.random() < random.choice([0.1, 0.5, 0.95])
+                               for _ in range(needle_length))
+        byte_aligned = random.random() < 0.4
+        start = random.randint(0, haystack_length)
+        end = random.randint(start, haystack_length)
+
+        expected = [p for p in range(start, end - needle_length + 1)
+                    if (not byte_aligned or p % 8 == 0)
+                    and all(haystack[p + i] == needle[i]
+                            for i in range(needle_length) if mask[i])]
+        assert haystack.find_all(needle, start, end, byte_aligned, mask) == expected
+        assert haystack.find(needle, start, end, byte_aligned, mask) == (
+            expected[0] if expected else None)
+        assert haystack.rfind(needle, start, end, byte_aligned, mask) == (
+            expected[-1] if expected else None)
+        assert list(haystack.find_all_iter(needle, start, end, byte_aligned, mask)) == expected
+        assert list(haystack.rfind_all_iter(needle, start, end, byte_aligned, mask)) == expected[::-1]

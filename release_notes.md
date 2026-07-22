@@ -4,6 +4,20 @@
 
 Added
 
+* Searches can now take a `mask`, so that patterns can contain don't-care bits.
+  The mask must be the same length as the bits being searched for, and only the
+  bits set in it need to match, which makes it easy to pick out a field from a
+  fixed-width encoding. It's available on `find`, `rfind`, `find_all`,
+  `find_all_iter`, `rfind_all_iter`, `count`, `replace` and `replaced`, and
+  combines with `start`, `end`, `count` and `byte_aligned` as you'd expect. For
+  `replace` the mask affects only the matching — the whole of each match is
+  still replaced.
+
+  ```python
+  >>> Tibs('0x1f2e3f').find_all('0x0f', mask='0x0f', byte_aligned=True)
+  [0, 16]
+  ```
+
 * The `u` and `i` interpretations no longer have a 128 bit limit. Any positive
   length now works, for `from_u` / `from_i`, the `u` and `i` properties and
   `to_u` / `to_i`, the `uN` / `iN` dtypes, views, and the `u` and `i` format

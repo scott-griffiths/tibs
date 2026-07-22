@@ -118,6 +118,34 @@ left. Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
 use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
 to move the data if you no longer need the mutable object.
 
+.. _searching_with_a_mask:
+
+Searching with a mask
+=====================
+
+Sometimes only part of a pattern is fixed. Pass a ``mask`` of the same length as
+the pattern and only the bits set in it have to match - the rest are don't-cares,
+so whatever the pattern has under them is ignored::
+
+    >>> t = Tibs('0x1f2e3f')
+    >>> t.find_all('0x0f', mask='0x0f', byte_aligned=True)
+    [0, 16]
+
+That finds every byte whose low nibble is ``1111``, whatever its high nibble.
+Instruction encodings are the classic case: mask out the register and immediate
+fields and search for the opcode bits alone.
+
+The ``mask`` argument works the same way on :meth:`~Tibs.find`,
+:meth:`~Tibs.rfind`, :meth:`~Tibs.find_all`, :meth:`~Tibs.find_all_iter`,
+:meth:`~Tibs.rfind_all_iter`, :meth:`~Tibs.count` and
+:meth:`~Tibs.replaced`, and combines with ``start``, ``end`` and
+``byte_aligned`` as usual.
+
+A mask with every bit set is just an ordinary search, and one with no bits set
+matches at every position. Masked searches can't use the byte-oriented fast paths
+that plain searches do, so they are slower - and for patterns longer than 64 bits
+with only a few bits masked in, considerably so.
+
 starts_with / ends_with
 =======================
 

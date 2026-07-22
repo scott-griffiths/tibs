@@ -271,12 +271,42 @@ impl SmallPattern {
         Self::from_bits(needle.iter().by_vals().rev())
     }
 
+    /// As `new`, but only the bits set in `mask` take part in the comparison.
+    fn masked(needle: &BS, mask: &BS) -> Self {
+        Self::from_masked_bits(needle.iter().by_vals(), mask.iter().by_vals())
+    }
+
+    /// As `reversed`, but only the bits set in `mask` take part in the comparison.
+    fn masked_reversed(needle: &BS, mask: &BS) -> Self {
+        Self::from_masked_bits(needle.iter().by_vals().rev(), mask.iter().by_vals().rev())
+    }
+
     fn from_bits(bits: impl ExactSizeIterator<Item = bool>) -> Self {
         let len = bits.len();
         debug_assert!(len <= 64);
         let target = bits.fold(0, |value, bit| (value << 1) | bit as u64);
         let mask = u64::MAX.checked_shr((64 - len) as u32).unwrap_or(0);
         Self { target, mask, len }
+    }
+
+    fn from_masked_bits(
+        bits: impl ExactSizeIterator<Item = bool>,
+        mask_bits: impl ExactSizeIterator<Item = bool>,
+    ) -> Self {
+        let len = bits.len();
+        debug_assert_eq!(len, mask_bits.len());
+        debug_assert!(len <= 64);
+        let (target, mask) = bits
+            .zip(mask_bits)
+            .fold((0u64, 0u64), |(target, mask), (bit, m)| {
+                ((target << 1) | (bit & m) as u64, (mask << 1) | m as u64)
+            });
+        let len_mask = u64::MAX.checked_shr((64 - len) as u32).unwrap_or(0);
+        Self {
+            target,
+            mask: mask & len_mask,
+            len,
+        }
     }
 }
 
@@ -655,6 +685,261 @@ fn rfind_large_prefix_scan(
         (None, Some(new_end)) => PrefixScan::Fallback(new_end),
         (None, None) => PrefixScan::NotFound,
     })
+}
+
+/// A contiguous run of needle bits that the mask requires to match, sitting
+/// outside the filter window and so checked only at candidate positions.
+struct MaskedRun {
+    offset: usize,
+    bits: BV,
+}
+
+/// A needle with don't-care bits, prepared for searching.
+///
+/// Neither `memmem` nor KMP can be used once wildcards are involved: masked
+/// equality is not transitive, so a failure function built from it is unsound.
+/// Instead a 64-bit window of the needle is used as a filter through the same
+/// `SmallScanner` machinery as unmasked searches, and the required bits outside
+/// that window are verified at each candidate position. Needles of up to 64
+/// bits are entirely covered by the filter and need no verification at all.
+pub(crate) struct MaskedMatcher {
+    len: usize,
+    reverse: bool,
+    filter: SmallPattern,
+    /// Position of the filter window within the needle.
+    offset: usize,
+    runs: Vec<MaskedRun>,
+}
+
+impl MaskedMatcher {
+    /// Prepare a search for `needle`, comparing only the bits set in `mask`.
+    ///
+    /// `mask` must be the same length as `needle`. An all-ones mask gives the
+    /// same results as an unmasked search but not its speed, so callers should
+    /// route that case to the unmasked functions.
+    pub(crate) fn new(needle: &BS, mask: &BS, reverse: bool) -> Self {
+        debug_assert_eq!(needle.len(), mask.len());
+        let len = needle.len();
+        if len <= PREFIX_FILTER_BITS {
+            let filter = match reverse {
+                true => SmallPattern::masked_reversed(needle, mask),
+                false => SmallPattern::masked(needle, mask),
+            };
+            return Self {
+                len,
+                reverse,
+                filter,
+                offset: 0,
+                runs: Vec::new(),
+            };
+        }
+        let offset = best_filter_offset(mask);
+        let window = offset..offset + PREFIX_FILTER_BITS;
+        let filter = match reverse {
+            true => SmallPattern::masked_reversed(&needle[window.clone()], &mask[window.clone()]),
+            false => SmallPattern::masked(&needle[window.clone()], &mask[window]),
+        };
+        let mut runs = Vec::new();
+        for (from, to) in [(0, offset), (offset + PREFIX_FILTER_BITS, len)] {
+            let mut i = from;
+            while i < to {
+                if !mask[i] {
+                    i += 1;
+                    continue;
+                }
+                let mut j = i + 1;
+                while j < to && mask[j] {
+                    j += 1;
+                }
+                runs.push(MaskedRun {
+                    offset: i,
+                    bits: needle[i..j].to_bitvec(),
+                });
+                i = j;
+            }
+        }
+        Self {
+            len,
+            reverse,
+            filter,
+            offset,
+            runs,
+        }
+    }
+
+    fn verify(&self, haystack: &BS, pos: usize) -> bool {
+        self.runs.iter().all(|run| {
+            let from = pos + run.offset;
+            haystack[from..from + run.bits.len()] == run.bits[..]
+        })
+    }
+
+    fn for_each<F>(
+        &self,
+        py: Python<'_>,
+        haystack: &BS,
+        start: usize,
+        end: usize,
+        alignment_mod8: Option<usize>,
+        mut on_match: F,
+    ) -> PyResult<()>
+    where
+        F: FnMut(usize) -> bool,
+    {
+        debug_assert!(end >= start);
+        debug_assert!(end <= haystack.len());
+        if self.len == 0 || self.len > end - start {
+            return Ok(());
+        }
+        // The scanner reports the filter window, which starts `self.offset`
+        // bits into the match, so both the alignment requirement and the
+        // reported position have to be shifted back by it.
+        let filter_alignment = alignment_mod8.map(|required| (required + self.offset) & 7);
+        let tail = self.len - self.offset;
+        if self.reverse {
+            // Candidate positions descend: no room after the window is a skip,
+            // no room before it means nothing further can match.
+            for_each_small_match_reverse(
+                py,
+                haystack,
+                self.filter,
+                start,
+                end,
+                filter_alignment,
+                |window| {
+                    if window + tail > end {
+                        return true;
+                    }
+                    if window < start + self.offset {
+                        return false;
+                    }
+                    let pos = window - self.offset;
+                    !self.verify(haystack, pos) || on_match(pos)
+                },
+            )
+        } else {
+            for_each_small_match_forward(
+                py,
+                haystack,
+                self.filter,
+                start,
+                end,
+                filter_alignment,
+                |window| {
+                    if window < start + self.offset {
+                        return true;
+                    }
+                    if window + tail > end {
+                        return false;
+                    }
+                    let pos = window - self.offset;
+                    !self.verify(haystack, pos) || on_match(pos)
+                },
+            )
+        }
+    }
+
+    /// The first match in scan order, so the last one in the haystack when the
+    /// matcher was built for a reverse search.
+    pub(crate) fn find(
+        &self,
+        py: Python<'_>,
+        haystack: &BS,
+        start: usize,
+        end: usize,
+        alignment_mod8: Option<usize>,
+    ) -> PyResult<Option<usize>> {
+        let mut found = None;
+        self.for_each(py, haystack, start, end, alignment_mod8, |pos| {
+            found = Some(pos);
+            false
+        })?;
+        Ok(found)
+    }
+
+    pub(crate) fn collect(
+        &self,
+        py: Python<'_>,
+        haystack: &BS,
+        start: usize,
+        end: usize,
+        alignment_mod8: Option<usize>,
+    ) -> PyResult<Vec<u64>> {
+        let mut matches = Vec::new();
+        self.for_each(py, haystack, start, end, alignment_mod8, |pos| {
+            matches.push(pos as u64);
+            true
+        })?;
+        Ok(matches)
+    }
+
+    pub(crate) fn count(&self, py: Python<'_>, haystack: &BS) -> PyResult<usize> {
+        let mut count = 0;
+        self.for_each(py, haystack, 0, haystack.len(), None, |_| {
+            count += 1;
+            true
+        })?;
+        Ok(count)
+    }
+}
+
+/// The start of the 64-bit window of `mask` with the most bits set, which makes
+/// the most selective filter. Ties keep the earliest window.
+fn best_filter_offset(mask: &BS) -> usize {
+    debug_assert!(mask.len() > PREFIX_FILTER_BITS);
+    let last = mask.len() - PREFIX_FILTER_BITS;
+    let mut count = mask[..PREFIX_FILTER_BITS].count_ones();
+    let mut best_count = count;
+    let mut best = 0;
+    for offset in 1..=last {
+        if best_count == PREFIX_FILTER_BITS {
+            break;
+        }
+        count += mask[offset + PREFIX_FILTER_BITS - 1] as usize;
+        count -= mask[offset - 1] as usize;
+        if count > best_count {
+            best_count = count;
+            best = offset;
+        }
+    }
+    best
+}
+
+/// Find the first masked match, or the last one if `reverse` is set.
+pub(crate) fn find_bitvec_masked_aligned(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    mask: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+    reverse: bool,
+) -> PyResult<Option<usize>> {
+    MaskedMatcher::new(needle, mask, reverse).find(py, haystack, start, end, alignment_mod8)
+}
+
+pub(crate) fn collect_find_all_positions_masked(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    mask: &BS,
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> PyResult<Vec<u64>> {
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+    MaskedMatcher::new(needle, mask, false).collect(py, haystack, start, end, alignment_mod8)
+}
+
+/// Count the masked occurrences of needle in haystack, including overlaps.
+pub(crate) fn count_bitvec_masked(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    mask: &BS,
+) -> PyResult<usize> {
+    MaskedMatcher::new(needle, mask, false).count(py, haystack)
 }
 
 fn collect_find_all_positions_small(
