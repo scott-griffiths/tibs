@@ -316,10 +316,12 @@ class TestComplexInteractions:
     def test_int_representation_edges(self):
         assert Tibs.from_u(255, 8).to_i() == -1
         assert Tibs.from_i(-128, 8).to_u() == 128
+        assert Tibs("0b" + "1" * 129).to_u() == 2 ** 129 - 1
+        assert Tibs("0b" + "1" * 129).to_i() == -1
         with pytest.raises(ValueError):
-            Tibs("0b" + "1" * 129).to_u()
+            Tibs().to_u()
         with pytest.raises(ValueError):
-            Tibs("0b" + "1" * 129).to_i()
+            Tibs().to_i()
 
     def test_mixed_type_operations(self):
         m = Mutibs("0b1010")

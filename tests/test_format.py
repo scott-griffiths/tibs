@@ -274,15 +274,21 @@ def test_empty_container_keeps_the_prefix(cls):
     assert Tibs(format(t, '#x')) == Tibs()
 
 
-def test_numeric_codes_are_limited_to_128_bits(cls):
-    # The representation codes work at any length, but 'u' and 'i' inherit the
-    # 128 bit limit of the .u and .i properties.
+def test_numeric_codes_have_no_length_limit(cls):
+    # Both families of code work at any length. 'u' and 'i' were capped at 128
+    # bits while the .u and .i properties were.
     assert len(format(cls.from_ones(128), 'b')) == 128
     assert format(cls.from_ones(128), 'u') == str(2 ** 128 - 1)
+    assert format(cls.from_ones(129), 'u') == str(2 ** 129 - 1)
+    assert format(cls.from_ones(129), 'i') == '-1'
+    assert format(cls.from_ones(1000), 'u') == str(2 ** 1000 - 1)
+
+
+def test_numeric_codes_still_need_some_bits(cls):
     with pytest.raises(ValueError):
-        format(cls.from_ones(129), 'u')
+        format(cls(), 'u')
     with pytest.raises(ValueError):
-        format(cls.from_ones(129), 'i')
+        format(cls(), 'i')
 
 
 def test_multibyte_fill_is_counted_in_code_points(cls):

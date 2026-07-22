@@ -234,31 +234,29 @@ def test_from_i_errors():
 
 
 def test_signed_int_from_large_ints():
-    with pytest.raises(ValueError):
-        _ = Tibs.from_i(-1, 129)
+    # 129 bits used to be rejected; there's no upper limit on the length now.
+    # See test_large_ints.py for fuller coverage.
+    assert Tibs.from_i(-1, 129).all()
     a = Tibs.from_i(-1, 128)
     assert a.all()
     assert a.to_i() == -1
     assert not Tibs.from_i(0, 128).any()
     assert Tibs.from_i(17, 128).to_i() == 17
     assert Tibs.from_i(-17, 128).to_i() == -17
-    with pytest.raises(ValueError):
-        _ = Mutibs.from_i(-1, 129)
+    assert Mutibs.from_i(-1, 129).all()
     b = Mutibs.from_i(-1, 128)
     assert b.all()
     assert b.to_i() == -1
 
 
 def test_unsigned_int_from_large_ints():
-    with pytest.raises(ValueError):
-        _ = Tibs.from_u(0, 129)
+    assert not Tibs.from_u(0, 129).any()
     a = Tibs.from_u(0, 128)
     assert not a.any()
     assert a.to_u() == 0
     assert Tibs.from_u((1 << 128) - 1, 128).all()
     assert Tibs.from_u(17, 128).to_u() == 17
-    with pytest.raises(ValueError):
-        _ = Mutibs.from_u(0, 129)
+    assert not Mutibs.from_u(0, 129).any()
     b = Mutibs.from_u(0, 128)
     assert not b.any()
     assert b.to_u() == 0

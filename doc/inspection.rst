@@ -206,11 +206,11 @@ the letters used by :class:`Dtype` rather than Python's ``d``, because a ``Tibs`
 both a signed and an unsigned reading and there's no sensible way to guess which you
 meant:
 
-* ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`. Length must be 1 to 128 bits.
-* ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`. Length must be 1 to 128 bits.
+* ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`.
+* ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`.
 
-The representation codes work at any length, but the interpretation codes inherit the
-128 bit limit of the properties they use.
+Both families work at any length, though the interpretation codes need at least one bit
+to interpret.
 
 So the same 32 bits can be shown four different ways::
 

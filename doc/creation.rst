@@ -38,7 +38,7 @@ Some examples::
     # Optionally seeded random bits. There's also an option to use the OS's secure generator.
     d = Tibs.from_random(1000, seed=b'a_seed')
 
-    # From a signed integer. The length can be any value up to 128 bits.
+    # From a signed integer. The length can be any positive number of bits.
     e = Tibs.from_i(-384, 20)
 
     # From an unsigned integer. For whole-byte lengths a byte order can be used.

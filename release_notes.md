@@ -4,6 +4,15 @@
 
 Added
 
+* The `u` and `i` interpretations no longer have a 128 bit limit. Any positive
+  length now works, for `from_u` / `from_i`, the `u` and `i` properties and
+  `to_u` / `to_i`, the `uN` / `iN` dtypes, views, and the `u` and `i` format
+  codes. The zero-length case is still an error, as there's nothing to interpret.
+
+  ```python
+  >>> Tibs.from_u(2 ** 200 - 1, 200).u == 2 ** 200 - 1
+  True
+  ```
 * Added `__format__` to `Tibs`, `Mutibs`, `View` and `MutableView`, so they can be
   used directly in f-strings and with `str.format()`. The type codes are `b`, `o`,
   `x` and `X` for the bit representations (equivalent to the `bin`, `oct` and `hex`

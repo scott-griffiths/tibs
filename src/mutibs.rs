@@ -1279,7 +1279,7 @@ impl Mutibs {
     /// Create a new instance from an unsigned integer.
     ///
     /// :param int u: An unsigned integer.
-    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param int length: The bit length to create. Can be any positive number of bits.
     /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Mutibs``.
     ///
@@ -1326,7 +1326,7 @@ impl Mutibs {
     /// :param int u: An unsigned integer.
     /// :return: None
     ///
-    /// :raises ValueError: if the current length is not between 1 and 128 bits.
+    /// :raises ValueError: if the current length is zero.
     /// :raises OverflowError: if the integer doesn't fit in the current length.
     ///
     /// .. code-block:: pycon
@@ -1360,7 +1360,7 @@ impl Mutibs {
     /// Create a new instance from a signed integer.
     ///
     /// :param int i: A signed integer.
-    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param int length: The bit length to create. Can be any positive number of bits.
     /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Mutibs``.
     ///
@@ -1407,7 +1407,7 @@ impl Mutibs {
     /// :param int i: A signed integer.
     /// :return: None
     ///
-    /// :raises ValueError: if the current length is not between 1 and 128 bits.
+    /// :raises ValueError: if the current length is zero.
     /// :raises OverflowError: if the integer doesn't fit in the current length.
     ///
     /// .. code-block:: pycon

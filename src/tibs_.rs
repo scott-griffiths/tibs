@@ -1191,7 +1191,7 @@ impl Tibs {
     /// Create a new instance from an unsigned integer.
     ///
     /// :param int u: An unsigned integer.
-    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param int length: The bit length to create. Can be any positive number of bits.
     /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
@@ -1245,7 +1245,7 @@ impl Tibs {
     /// Create a new instance from a signed integer.
     ///
     /// :param int i: A signed integer.
-    /// :param int length: The bit length to create. Can be up to 128.
+    /// :param int length: The bit length to create. Can be any positive number of bits.
     /// :param ByteOrder byte_order: The byte order used to store the integer. Defaults to ByteOrder.Unspecified.
     /// :return: A newly constructed ``Tibs``.
     ///
