@@ -1014,3 +1014,94 @@ def test_find_with_mask_against_reference():
             expected[-1] if expected else None)
         assert list(haystack.find_all_iter(needle, start, end, byte_aligned, mask)) == expected
         assert list(haystack.rfind_all_iter(needle, start, end, byte_aligned, mask)) == expected[::-1]
+
+
+def _pairwise_reference(a, b):
+    """The six operations spelled out with the pre-existing operators."""
+    return (
+        (a & b).count(1),
+        (a | b).count(1),
+        (a ^ b).count(1),
+        a.count(1) - (a & b).count(1),
+        (a & b).any(),
+        (a & b) == a,
+    )
+
+
+def _pairwise_actual(a, b):
+    return (a.count_and(b), a.count_or(b), a.count_xor(b), a.count_andnot(b),
+            a.intersects(b), a.is_subset_of(b))
+
+
+def test_pairwise_worked_example():
+    a, b = Tibs('0b1100'), Tibs('0b1010')
+    assert a.count_and(b) == 1     # position 0 only
+    assert a.count_or(b) == 3      # positions 0, 1, 2
+    assert a.count_xor(b) == 2     # positions 1, 2 — the Hamming distance
+    assert a.count_andnot(b) == 1  # position 1
+    assert a.intersects(b) is True
+    assert a.is_subset_of(b) is False
+    # A set bit means membership, so the operations ignore matching zeros.
+    assert Tibs('0b1000').is_subset_of('0b1010') is True
+    assert Tibs('0b1100').intersects('0b0011') is False
+
+
+def test_pairwise_promotes_arguments():
+    assert Tibs('0xff').count_and('0x0f') == 4
+    assert Tibs('0xff').count_and(b'\x0f') == 4
+    assert Tibs('0xff').count_and(Mutibs('0x0f')) == 4
+    assert Tibs('0b1010').is_subset_of([1, 1, 1, 1]) is True
+
+
+def test_pairwise_edge_cases():
+    empty, zeros, ones = Tibs(''), Tibs('0b0000'), Tibs('0b1111')
+    # The empty set is a subset of everything and intersects nothing.
+    assert zeros.is_subset_of('0b1010') is True
+    assert zeros.intersects(ones) is False
+    assert empty.is_subset_of(empty) is True
+    assert empty.intersects(empty) is False
+    assert empty.count_and(empty) == 0
+    # Subset is reflexive, and mutual subsets are equal.
+    for t in [empty, zeros, ones, Tibs('0b1010')]:
+        assert t.is_subset_of(t) is True
+    assert ones.is_subset_of(zeros) is False
+    assert zeros.is_subset_of(ones) is True
+
+
+def test_pairwise_length_mismatch():
+    a = Tibs('0b1010')
+    for call in [lambda: a.count_and('0b101'), lambda: a.count_or('0b101'),
+                 lambda: a.count_xor('0b101'), lambda: a.count_andnot('0b101'),
+                 lambda: a.intersects('0b101'), lambda: a.is_subset_of('0b101')]:
+        with pytest.raises(ValueError):
+            call()
+
+
+def test_pairwise_unaligned_operands():
+    # Operands taken as slices of dense parents carry set padding bits either
+    # side of their live range; those must not leak into the answers.
+    parents = [Tibs.from_ones(600), Tibs.from_zeros(600),
+               Tibs.from_random(600, seed=b'pairwise')]
+    for pa in parents:
+        for pb in parents:
+            for offset_a in range(8):
+                for offset_b in range(8):
+                    for length in [1, 7, 8, 9, 63, 64, 65, 71, 128, 200]:
+                        a = pa[offset_a:offset_a + length]
+                        b = pb[offset_b:offset_b + length]
+                        assert _pairwise_actual(a, b) == _pairwise_reference(a, b)
+
+
+def test_pairwise_identities():
+    random.seed(4)
+    for _ in range(300):
+        n = random.randint(0, 300)
+        a = Tibs.from_bools(random.choice([0, 0, 1]) for _ in range(n))
+        b = Tibs.from_bools(random.choice([0, 0, 1]) for _ in range(n))
+        assert _pairwise_actual(a, b) == _pairwise_reference(a, b)
+        assert a.count_xor(b) == a.count_or(b) - a.count_and(b)
+        assert a.count_xor(b) == a.count_andnot(b) + b.count_andnot(a)
+        assert a.count_or(b) == a.count(1) + b.count(1) - a.count_and(b)
+        assert a.intersects(b) == (a.count_and(b) > 0)
+        assert a.is_subset_of(b) == (a.count_andnot(b) == 0)
+        assert (a.is_subset_of(b) and b.is_subset_of(a)) == (a == b)

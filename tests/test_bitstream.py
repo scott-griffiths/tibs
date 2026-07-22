@@ -556,10 +556,10 @@ class TestAdding:
         assert (~Tibs("0b1")).to_bin() == "0"
         assert ~~s == s
 
-    def test_invert_special_method_errors(self):
-        s = Tibs()
-        with pytest.raises(ValueError):
-            _ = ~s
+    def test_invert_special_method_on_empty(self):
+        # Inverting nothing gives nothing, matching inverted() and Mutibs.invert().
+        assert ~Tibs() == Tibs()
+        assert ~Mutibs() == Mutibs()
 
     def test_join_with_auto(self):
         s = Tibs.from_joined(["0xf", "0b00", Tibs.from_bin("11")])

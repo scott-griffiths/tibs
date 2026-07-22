@@ -4,6 +4,25 @@
 
 Added
 
+* Six methods for comparing two containers without building an intermediate
+  object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`
+  and `is_subset_of`. The counts are equivalent to `(a & b).count(1)` and so on,
+  and `count_xor` is the Hamming distance. Both containers must be the same
+  length, as for the `&`, `|` and `^` operators.
+
+  ```python
+  >>> a, b = Tibs('0b1100'), Tibs('0b1010')
+  >>> a.count_xor(b)      # the Hamming distance
+  2
+  >>> Tibs('0b1010').is_subset_of('0b1011')
+  True
+  ```
+
+  Skipping the intermediate object makes the counts around 3x faster for short
+  containers and much more than that for long ones. `intersects` and
+  `is_subset_of` stop as soon as they know the answer, so they can return
+  almost immediately where building `a & b` would have to do all the work.
+
 * Searches can now take a `mask`, so that patterns can contain don't-care bits.
   The mask must be the same length as the bits being searched for, and only the
   bits set in it need to match, which makes it easy to pick out a field from a
@@ -48,6 +67,12 @@ Added
   the data, so zero padding is rejected for `b`, `o`, `x` and `X` — it would silently
   change the apparent length of the value, where for an integer it changes nothing.
   Pad with `<`, `>` or `^` and a non-digit fill instead, or use `u` or `i`.
+
+Changed
+
+* Inverting an empty `Tibs` or `Mutibs` with `~` now returns an empty container
+  instead of raising a `ValueError`. This matches what `Tibs.inverted` and
+  `Mutibs.invert` already did when there were no bits to invert.
 
 ### July 18th 2026: version 1.1
 

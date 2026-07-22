@@ -59,6 +59,17 @@ def test_find_all(benchmark):
     assert c == 305
 
 
+def test_pairwise_counts(benchmark):
+    def counting():
+        a = Tibs.from_random(2000000, seed=b"99")
+        b = Tibs.from_random(2000000, seed=b"98")
+        # Each of these would otherwise build a 2 million bit intermediate.
+        return (a.count_and(b), a.count_or(b), a.count_xor(b), a.count_andnot(b))
+
+    c = benchmark(counting)
+    assert c == (500480, 1500548, 1000068, 500584)
+
+
 def test_find_all_masked(benchmark):
     def finding():
         s = Tibs.from_random(2000000, seed=b"99")

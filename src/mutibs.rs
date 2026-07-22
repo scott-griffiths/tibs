@@ -1,5 +1,5 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, concatenate_bitcollections, count_bitslice};
+use crate::core::{BitCollection, LogicalOp, concatenate_bitcollections, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
@@ -2233,6 +2233,123 @@ impl Mutibs {
         Ok(PyTuple::new(py, pieces)?.unbind())
     }
 
+    /// Count the bits set in both this Mutibs and another.
+    ///
+    /// Equivalent to ``(self & other).count(1)``, but without building the
+    /// intermediate object.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: The number of positions set in both.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1100').count_and('0b1010')
+    ///     1
+    ///
+    pub fn count_and(&self, other: Tibs) -> PyResult<usize> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(self.pairwise_count(&other, LogicalOp::And))
+    }
+
+    /// Count the bits set in either this Mutibs or another.
+    ///
+    /// Equivalent to ``(self | other).count(1)``, but without building the
+    /// intermediate object.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: The number of positions set in either.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1100').count_or('0b1010')
+    ///     3
+    ///
+    pub fn count_or(&self, other: Tibs) -> PyResult<usize> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(self.pairwise_count(&other, LogicalOp::Or))
+    }
+
+    /// Count the bits that differ between this Mutibs and another.
+    ///
+    /// This is the Hamming distance. Equivalent to ``(self ^ other).count(1)``,
+    /// but without building the intermediate object.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: The number of positions where the two differ.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1100').count_xor('0b1010')
+    ///     2
+    ///
+    pub fn count_xor(&self, other: Tibs) -> PyResult<usize> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(self.pairwise_count(&other, LogicalOp::Xor))
+    }
+
+    /// Count the bits set in this Mutibs but not in another.
+    ///
+    /// Equivalent to ``self.count(1) - self.count_and(other)``, but in a single pass.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: The number of positions set here but not in the other.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1100').count_andnot('0b1010')
+    ///     1
+    ///
+    pub fn count_andnot(&self, other: Tibs) -> PyResult<usize> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(self.pairwise_count(&other, LogicalOp::AndNot))
+    }
+
+    /// Return whether any bit is set in both this Mutibs and another.
+    ///
+    /// Equivalent to ``(self & other).any()``, but stops at the first bit set in
+    /// both instead of building the intermediate object.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: ``True`` if some position is set in both, otherwise ``False``.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1100').intersects('0b1010')
+    ///     True
+    ///     >>> Mutibs('0b1100').intersects('0b0011')
+    ///     False
+    ///
+    pub fn intersects(&self, other: Tibs) -> PyResult<bool> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(self.pairwise_any(&other, LogicalOp::And))
+    }
+
+    /// Return whether every bit set in this Mutibs is also set in another.
+    ///
+    /// Equivalent to ``(self & other) == self``, but stops at the first bit set
+    /// here and not there.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: ``True`` if every position set here is set in the other, otherwise ``False``.
+    /// :raises ValueError: if the two lengths differ.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b1000').is_subset_of('0b1010')
+    ///     True
+    ///     >>> Mutibs('0b1100').is_subset_of('0b1010')
+    ///     False
+    ///
+    pub fn is_subset_of(&self, other: Tibs) -> PyResult<bool> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
+    }
+
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.
     ///
     /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
@@ -2785,7 +2902,8 @@ impl Mutibs {
     /// Return the instance with every bit inverted.
     ///
     /// :return: A new Mutibs.
-    /// :raises ValueError: if the Mutibs is empty.
+    ///
+    /// Inverting an empty Mutibs gives an empty Mutibs, as :meth:`invert` does.
     ///
     /// .. code-block:: pycon
     ///
@@ -2793,9 +2911,6 @@ impl Mutibs {
     ///     Mutibs('0b01001')
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
-        if self.as_bitvec_ref().is_empty() {
-            return Err(PyValueError::new_err("Cannot invert empty Mutibs."));
-        }
         Ok(BitCollection::invert_copy(self))
     }
 

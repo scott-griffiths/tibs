@@ -1739,3 +1739,38 @@ def test_replace_with_mask_long_needle():
     assert m.find_all(old, mask=mask) == list(range(31)) + [70] + list(range(101, 131))
     assert m.replace(old, '0b1', mask=mask, count=1) == 1
     assert m == Mutibs('0b1') + Mutibs.from_zeros(30) + Mutibs('0b1') + Mutibs.from_zeros(99)
+
+
+def test_pairwise_operations():
+    a, b = Mutibs('0b1100'), Mutibs('0b1010')
+    assert a.count_and(b) == 1
+    assert a.count_or(b) == 3
+    assert a.count_xor(b) == 2
+    assert a.count_andnot(b) == 1
+    assert a.intersects(b) is True
+    assert a.is_subset_of(b) is False
+    assert Mutibs('0b1000').is_subset_of('0b1010') is True
+    # Mutibs and Tibs operands are interchangeable.
+    assert a.count_and(Tibs('0b1010')) == 1
+    assert Tibs('0b1100').count_and(a) == 2
+    with pytest.raises(ValueError):
+        a.count_and('0b101')
+
+
+def test_pairwise_matches_tibs_when_unaligned():
+    parent = Mutibs.from_ones(400)
+    other = Mutibs.from_random(400, seed=b'm')
+    for offset in range(8):
+        for length in [1, 8, 9, 65, 130]:
+            a, b = parent[offset:offset + length], other[offset:offset + length]
+            ta, tb = Tibs(a), Tibs(b)
+            assert a.count_and(b) == ta.count_and(tb) == (ta & tb).count(1)
+            assert a.count_xor(b) == (ta ^ tb).count(1)
+            assert a.count_andnot(b) == ta.count(1) - (ta & tb).count(1)
+            assert a.intersects(b) == (ta & tb).any()
+            assert a.is_subset_of(b) == ((ta & tb) == ta)
+
+
+def test_invert_empty_special_method():
+    assert ~Mutibs() == Mutibs()
+    assert ~Tibs() == Tibs()

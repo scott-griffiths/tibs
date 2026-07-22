@@ -56,6 +56,60 @@ To count the number of times a bit value or sequence of bits occurs use the :met
 
 Counting should be very fast, especially when just counting the number of ``1`` or ``0`` bits.
 
+.. _comparing_two_containers:
+
+Comparing two containers
+========================
+
+The bit-wise operators ``&``, ``|`` and ``^`` build a new container. When all you
+want is a count or a yes/no answer, these methods give it to you without
+building anything in between, which is typically several times faster:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Method
+     - Equivalent to
+   * - :meth:`~Tibs.count_and`
+     - ``(a & b).count(1)``
+   * - :meth:`~Tibs.count_or`
+     - ``(a | b).count(1)``
+   * - :meth:`~Tibs.count_xor`
+     - ``(a ^ b).count(1)`` — the Hamming distance
+   * - :meth:`~Tibs.count_andnot`
+     - ``a.count(1) - a.count_and(b)``
+   * - :meth:`~Tibs.intersects`
+     - ``(a & b).any()``
+   * - :meth:`~Tibs.is_subset_of`
+     - ``(a & b) == a``
+
+Both containers must be the same length, as they must be for ``&``, ``|`` and ``^``.
+
+It helps to think of a container as the *set of positions where the bit is set* -
+so a ``1`` means "present" and a ``0`` means "absent", rather than being a second
+kind of value that could match. That is what makes the last two asymmetric between
+``1`` and ``0``::
+
+    >>> a, b = Tibs('0b1100'), Tibs('0b1010')
+    >>> a.count_and(b)     # only position 0 is set in both
+    1
+    >>> a.count_xor(b)     # positions 1 and 2 differ
+    2
+    >>> a.intersects(b)
+    True
+    >>> a.is_subset_of(b)  # position 1 is set in a but not in b
+    False
+
+Flags are the case where this reads most naturally::
+
+    >>> granted = Tibs('0b1011')
+    >>> Tibs('0b1010').is_subset_of(granted)
+    True
+
+The two predicates stop as soon as they know the answer, so on large containers
+where the answer comes early they finish in a fraction of the time that building
+``a & b`` would take.
+
 find / rfind
 ============
 
