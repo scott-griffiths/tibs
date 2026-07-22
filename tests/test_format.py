@@ -156,11 +156,41 @@ def test_width_smaller_than_body_is_ignored(cls):
     assert format(t, '4x') == 'ac804f4b'
 
 
-def test_zero_padding_goes_after_the_prefix(cls):
+def test_padding_that_could_be_mistaken_for_data_is_rejected(cls):
+    # Zero padding an int is harmless because leading zeros mean nothing there. Here
+    # the length is part of the value, so it would silently change what the string
+    # says. Rejected however it is spelled, and whatever the width.
     t = cls('0xf')
-    assert format(t, '#06x') == '0x000f'
-    assert format(t, '06x') == '00000f'
+    for spec in ['#06x', '06x', '#010x', '0>10x', '0=#10x', '0x', '016_b', '08o']:
+        with pytest.raises(ValueError):
+            format(t, spec)
+
+
+def test_any_digit_fill_is_rejected_not_just_zero(cls):
+    for spec, value in [('f>10x', '0xff'), ('F>10X', '0xff'), ('a>10x', '0xff'),
+                        ('1>10b', '0b1'), ('7>8o', '0o7531')]:
+        with pytest.raises(ValueError):
+            format(cls(value), spec)
+
+
+def test_padding_is_rejected_regardless_of_width(cls):
+    # The spec is invalid even when the width is too small for any padding to be
+    # inserted, so a spec is never valid for one value and invalid for another.
+    with pytest.raises(ValueError):
+        format(cls('0xac804f4b'), '#010x')
+    with pytest.raises(ValueError):
+        format(cls('0xac804f4b'), '#02x')
+
+
+def test_fill_that_cannot_be_data_is_allowed(cls):
+    t = cls('0xf')
     assert format(t, '=#6x') == '0x   f'
+    assert format(t, '>#6x') == '   0xf'
+    assert format(t, '*>6x') == '*****f'
+    assert format(t, '^5x') == '  f  '
+    # A digit that is not valid for this base cannot be mistaken for the data.
+    assert format(cls('0b1111'), '8>6b') == '881111'
+    assert format(cls('0o7531'), '9>6o') == '997531'
 
 
 def test_fill_align_lookahead(cls):
@@ -176,13 +206,12 @@ def test_padding_is_applied_after_grouping(cls):
     assert format(t, '>12_b') == '   1111_1111'
 
 
-def test_zero_padding_is_not_grouped(cls):
-    # Divergence from Python, which groups the padding too. Here the separators
-    # stay lined up with bit positions in the actual data, and the padding is
-    # just padding.
+def test_padding_is_never_grouped(cls):
+    # Divergence from Python, which groups the padding too. Here the separators stay
+    # lined up with bit positions in the actual data, and the padding is just padding.
     t = cls('0xff')
-    assert format(t, '016_b') == '00000001111_1111'
-    assert format(255, '016_b') == '0_0000_1111_1111'
+    assert format(t, '*>14_b') == '*****1111_1111'
+    assert format(255, '014_b') == '0000_1111_1111'
 
 
 # Numeric codes: u / i
@@ -243,6 +272,38 @@ def test_empty_container_keeps_the_prefix(cls):
     assert format(t, '#_b') == '0b'
     # ...and the prefix alone still parses back to an empty container.
     assert Tibs(format(t, '#x')) == Tibs()
+
+
+def test_numeric_codes_are_limited_to_128_bits(cls):
+    # The representation codes work at any length, but 'u' and 'i' inherit the
+    # 128 bit limit of the .u and .i properties.
+    assert len(format(cls.from_ones(128), 'b')) == 128
+    assert format(cls.from_ones(128), 'u') == str(2 ** 128 - 1)
+    with pytest.raises(ValueError):
+        format(cls.from_ones(129), 'u')
+    with pytest.raises(ValueError):
+        format(cls.from_ones(129), 'i')
+
+
+def test_multibyte_fill_is_counted_in_code_points(cls):
+    assert format(cls('0xff'), '€>6x') == '€€€€ff'
+    assert format(cls('0xff'), '€^7x') == '€€ff€€€'
+
+
+def test_absurd_width_raises_instead_of_aborting(cls):
+    # A width too large to allocate must raise a catchable MemoryError rather
+    # than aborting the process or raising a Rust PanicException.
+    t = cls('0xff')
+    for spec in ['1' + '0' * 18 + 'x', '9' * 19 + 'x', '€>' + '9' * 19 + 'x']:
+        with pytest.raises(MemoryError):
+            format(t, spec)
+
+
+def test_width_too_large_to_parse(cls):
+    with pytest.raises(ValueError):
+        format(cls('0xff'), '9' * 20 + 'x')
+    with pytest.raises(ValueError):
+        format(cls('0xff'), '_.' + '9' * 20 + 'b')
 
 
 def test_empty_container_has_no_numeric_value(cls):
@@ -359,7 +420,7 @@ def test_mutable_view_matches_view():
 def test_view_field_formatting():
     # The eBPF example from the docs: LSB0 field labels on a little-endian word.
     instruction = Tibs.from_bytes(bytes.fromhex('07 01 00 00 44 33 22 11')).lsb0.le
-    assert format(instruction.field(63, 32), '#010x') == '0x11223344'
+    assert format(instruction.field(63, 32), '#x') == '0x11223344'
     assert format(instruction.field(11, 8), 'u') == '1'
 
 

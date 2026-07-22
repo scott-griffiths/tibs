@@ -206,8 +206,11 @@ the letters used by :class:`Dtype` rather than Python's ``d``, because a ``Tibs`
 both a signed and an unsigned reading and there's no sensible way to guess which you
 meant:
 
-* ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`.
-* ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`.
+* ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`. Length must be 1 to 128 bits.
+* ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`. Length must be 1 to 128 bits.
+
+The representation codes work at any length, but the interpretation codes inherit the
+128 bit limit of the properties they use.
 
 So the same 32 bits can be shown four different ways::
 
@@ -230,13 +233,27 @@ Prefixes and grouping
 
 The ``#`` flag adds the usual ``0x``, ``0X``, ``0b`` or ``0o`` prefix, and ``_`` inserts
 separators between groups of digits. Both are useful for reading long values, and
-because the string constructors ignore underscores and understand the prefixes, anything
-formatted with ``#`` can be fed straight back in::
+because the string constructors ignore underscores and understand the prefixes, a value
+formatted with ``#``, with or without grouping, can be fed straight back in::
 
     >>> f"{packet:#_x}"
     '0xac80_4f4b'
     >>> Tibs(f"{packet:#_x}") == packet
     True
+
+.. warning::
+
+    If you combine ``#`` with an alignment, the ``#`` must come *after* it. A ``#``
+    immediately followed by an alignment character is read as a fill character
+    instead, which is easy to miss::
+
+        >>> f"{packet:>#12x}"
+        '  0xac804f4b'
+        >>> f"{packet:#>12x}"
+        '####ac804f4b'
+
+    This is how the mini-language works for any type, but it bites more often here
+    because a prefix is so often what you want.
 
 Python fixes the group size at four digits. That's often the wrong size for binary data,
 so tibs lets you set it using the precision field, which the standard mini-language
@@ -280,10 +297,31 @@ lining up columns of registers or packet fields::
     Padding is added after grouping and is never itself grouped, so the separators stay
     lined up with real bit positions.
 
-A few things that are meaningful for numbers are rejected for the representation codes,
-because they'd be meaningless or misleading for a bit sequence: the sign characters
-``+``, ``-`` and space, and the ``,`` separator. They are all accepted by ``u`` and
-``i``.
+The fill character has to be something that can't be mistaken for the data, so zero
+padding is not available for ``b``, ``o``, ``x`` and ``X``::
+
+    >>> f"{Tibs('0xf'):#06x}"
+    Traceback (most recent call last):
+    ...
+    ValueError: Zero padding is not allowed with the 'x' format type, because the padding could not be told apart from the data and would change its apparent length. Align with '<', '>' or '^' to pad with spaces instead, or use the 'u' or 'i' type code for a numeric interpretation.
+
+Zero padding an integer is harmless, because leading zeros don't change what an integer
+is. Here they would: a 4-bit value padded to ``'0x000f'`` reads as a 16-bit one, and
+comes back as a 16-bit one if you feed it in again. The same goes for any other fill
+that is a valid digit for the type, such as ``f`` for hex or ``1`` for binary. Digits
+that can't appear in that base are fine, as is anything else::
+
+    >>> f"{Tibs('0xf'):*>6x}"
+    '*****f'
+    >>> f"{Tibs('0b1111'):8>6b}"
+    '881111'
+
+If you want a fixed number of bits rather than a fixed number of characters, change the
+data rather than its presentation, for example with :meth:`Tibs.from_u`.
+
+A few other things that are meaningful for numbers are also rejected for the
+representation codes: the sign characters ``+``, ``-`` and space, and the ``,``
+separator. All of them are accepted by ``u`` and ``i``, which really are numbers.
 
 Long values
 ===========

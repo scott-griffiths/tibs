@@ -18,9 +18,13 @@ Added
   '0xac_80_4f_4b'
   ```
 
-  Two things differ from integer formatting, because a `Tibs` is a sequence rather
-  than a number: groups are counted from bit zero, so it's the last group that comes
-  up short rather than the first, and padding is never grouped.
+  Three things differ from integer formatting, because a `Tibs` is a sequence rather
+  than a number and its length is part of its value. Groups are counted from bit zero,
+  so it's the last group that comes up short rather than the first. Padding is never
+  itself grouped. And the fill character must not be one that could be mistaken for
+  the data, so zero padding is rejected for `b`, `o`, `x` and `X` — it would silently
+  change the apparent length of the value, where for an integer it changes nothing.
+  Pad with `<`, `>` or `^` and a non-digit fill instead, or use `u` or `i`.
 
 ### July 18th 2026: version 1.1
 

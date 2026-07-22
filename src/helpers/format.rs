@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
 /// The default number of digits between separators when grouping is requested.
@@ -160,6 +160,12 @@ impl FormatSpec {
         Ok(parsed)
     }
 
+    /// The character that will be used for padding, which defaults to a zero when the
+    /// ``0`` option was given and a space otherwise.
+    fn effective_fill(&self) -> char {
+        self.fill.unwrap_or(if self.zero_pad { '0' } else { ' ' })
+    }
+
     /// Apply fill, alignment and width to an already-built body.
     ///
     /// `prefix` stays attached to the front of the body except under `=` alignment,
@@ -167,13 +173,19 @@ impl FormatSpec {
     /// alignment was given, and `zero_align` replaces it when the ``0`` option was
     /// used. The two differ because a bit representation pads like a number, keeping
     /// the padding after the prefix, whereas the plain string form pads like a string.
-    fn pad(&self, body: &str, prefix: &str, default_align: Align, zero_align: Align) -> String {
+    fn pad(
+        &self,
+        body: &str,
+        prefix: &str,
+        default_align: Align,
+        zero_align: Align,
+    ) -> PyResult<String> {
         let total_len = prefix.chars().count() + body.chars().count();
         if total_len >= self.width {
-            return format!("{prefix}{body}");
+            return Ok(format!("{prefix}{body}"));
         }
         let padding_len = self.width - total_len;
-        let fill = self.fill.unwrap_or(if self.zero_pad { '0' } else { ' ' });
+        let fill = self.effective_fill();
         let align = self.align.unwrap_or(if self.zero_pad {
             zero_align
         } else {
@@ -185,14 +197,37 @@ impl FormatSpec {
             Align::AfterPrefix => (0, padding_len, 0),
             Align::Center => (padding_len / 2, 0, padding_len - padding_len / 2),
         };
-        let mut padded =
-            String::with_capacity(prefix.len() + body.len() + padding_len * fill.len_utf8());
+        // An absurd width would otherwise abort the process when the allocator fails,
+        // so ask for the space up front and report a MemoryError if it cannot be had.
+        // This is what formatting an int with the same width does.
+        let capacity = prefix
+            .len()
+            .saturating_add(body.len())
+            .saturating_add(padding_len.saturating_mul(fill.len_utf8()));
+        let mut padded = String::new();
+        padded.try_reserve_exact(capacity).map_err(|_| {
+            PyMemoryError::new_err(format!(
+                "Not enough memory for a formatted string of width {}.",
+                self.width
+            ))
+        })?;
         padded.extend(std::iter::repeat_n(fill, before));
         padded.push_str(prefix);
         padded.extend(std::iter::repeat_n(fill, between));
         padded.push_str(body);
         padded.extend(std::iter::repeat_n(fill, after));
-        padded
+        Ok(padded)
+    }
+}
+
+/// Return whether a fill character could be mistaken for a digit of the given type.
+fn fill_could_be_a_digit(fill: char, ty: char) -> bool {
+    match ty {
+        'b' => matches!(fill, '0' | '1'),
+        'o' => matches!(fill, '0'..='7'),
+        // Both cases, because either can be read back as hex.
+        'x' | 'X' => fill.is_ascii_hexdigit(),
+        _ => false,
     }
 }
 
@@ -244,7 +279,7 @@ pub(crate) fn format_bit_collection(
                  for a numeric interpretation."
             )));
         }
-        return Ok(parsed.pad(&bits.to_string(), "", Align::Left, Align::Left));
+        return parsed.pad(&bits.to_string(), "", Align::Left, Align::Left);
     };
 
     // The numeric interpretations really are numbers, so hand the rest of the spec
@@ -279,6 +314,28 @@ pub(crate) fn format_bit_collection(
             "A group size was given without a grouping character in format specifier \
              '{spec}'. Add '_' before the '.', for example '_.8{ty}'."
         )));
+    }
+    // Padding with something that is a valid digit would be indistinguishable from the
+    // data, and so would change the apparent length of the value. That is harmless for
+    // an integer, where leading zeros mean nothing, but here the length is part of the
+    // value. Rejected whatever the width, so that a spec is either always valid or
+    // always invalid rather than depending on how long the data happens to be.
+    let fill = parsed.effective_fill();
+    if fill_could_be_a_digit(fill, ty) {
+        return Err(PyValueError::new_err(if parsed.fill.is_none() {
+            format!(
+                "Zero padding is not allowed with the '{ty}' format type, because the \
+                 padding could not be told apart from the data and would change its \
+                 apparent length. Align with '<', '>' or '^' to pad with spaces instead, \
+                 or use the 'u' or 'i' type code for a numeric interpretation."
+            )
+        } else {
+            format!(
+                "The fill character '{fill}' is a valid '{ty}' digit, so the padding could \
+                 not be told apart from the data and would change its apparent length. \
+                 Use a fill character that is not a valid digit, such as a space."
+            )
+        }));
     }
 
     let mut digits = match ty {
@@ -315,5 +372,5 @@ pub(crate) fn format_bit_collection(
         ""
     };
 
-    Ok(parsed.pad(&digits, prefix, Align::Right, Align::AfterPrefix))
+    parsed.pad(&digits, prefix, Align::Right, Align::AfterPrefix)
 }

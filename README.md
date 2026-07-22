@@ -95,7 +95,7 @@ awkward quickly with plain bytes and masks.
 >>> # Linux eBPF: little-endian instruction, LSB0 field labels.
 >>> instruction = Tibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11")).lsb0.le
 >>> dst_reg = instruction.field(11, 8).u
->>> f"r{dst_reg} += {instruction.field(63, 32):#010x}"
+>>> f"r{dst_reg} += {instruction.field(63, 32):#x}"
 'r1 += 0x11223344'
 
 ```

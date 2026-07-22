@@ -171,7 +171,7 @@ f-string and the layout is applied for you (see :ref:`formatting`)::
     >>> instruction = Tibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11")).lsb0.le
     >>> f"{instruction.field(11, 8):u}"
     '1'
-    >>> f"{instruction.field(63, 32):#010x}"
+    >>> f"{instruction.field(63, 32):#x}"
     '0x11223344'
 
 The one exception is an empty format spec, which still gives you the ``repr`` of the
