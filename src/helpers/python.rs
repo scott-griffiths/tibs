@@ -24,10 +24,18 @@ fn build_bool_chunks(py: Python<'_>) -> PyResult<Vec<Py<PyList>>> {
 /// This is called for potentially millions of bits, where per-item C API
 /// calls dominate, so whole storage bytes are appended via the byte-value
 /// lookup table and only the partial edge bits are appended individually.
-pub(crate) fn bitslice_to_bool_list(py: Python<'_>, slice: &super::bits::BS) -> PyResult<Py<PyList>> {
+pub(crate) fn bitslice_to_bool_list(
+    py: Python<'_>,
+    slice: &super::bits::BS,
+) -> PyResult<Py<PyList>> {
     let chunks = BOOL_CHUNKS.get_or_try_init(py, || build_bool_chunks(py))?;
 
-    unsafe fn append_bits(py: Python<'_>, list: *mut ffi::PyObject, bits: u8, n: usize) -> PyResult<()> {
+    unsafe fn append_bits(
+        py: Python<'_>,
+        list: *mut ffi::PyObject,
+        bits: u8,
+        n: usize,
+    ) -> PyResult<()> {
         // The n bits are right-aligned in `bits`, most significant first.
         for i in 0..n {
             let obj = if bits & (1 << (n - 1 - i)) != 0 {
@@ -87,8 +95,7 @@ pub(crate) fn bitslice_to_bool_list(py: Python<'_>, slice: &super::bits::BS) -> 
                         continue;
                     }
                     let at = (live_head + index * 8) as ffi::Py_ssize_t;
-                    if ffi::PyList_SetSlice(list, at, at + 8, chunks[byte as usize].as_ptr()) != 0
-                    {
+                    if ffi::PyList_SetSlice(list, at, at + 8, chunks[byte as usize].as_ptr()) != 0 {
                         return Err(PyErr::fetch(py));
                     }
                 }

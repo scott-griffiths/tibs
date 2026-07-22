@@ -72,7 +72,15 @@ pub(crate) fn find_bitvec_aligned(
         PrefixScan::NotFound => Ok(None),
         PrefixScan::Fallback(resume) => {
             let lps = compute_lps(py, needle)?;
-            find_bitvec_impl_with_lps_aligned(py, haystack, needle, &lps, resume, end, alignment_mod8)
+            find_bitvec_impl_with_lps_aligned(
+                py,
+                haystack,
+                needle,
+                &lps,
+                resume,
+                end,
+                alignment_mod8,
+            )
         }
     }
 }
@@ -97,9 +105,15 @@ pub(crate) fn find_bitvec_with_lps_aligned(
     match find_large_prefix_scan(py, haystack, needle, start, end, alignment_mod8)? {
         PrefixScan::Found(pos) => Ok(Some(pos)),
         PrefixScan::NotFound => Ok(None),
-        PrefixScan::Fallback(resume) => {
-            find_bitvec_impl_with_lps_aligned(py, haystack, needle, lps, resume, end, alignment_mod8)
-        }
+        PrefixScan::Fallback(resume) => find_bitvec_impl_with_lps_aligned(
+            py,
+            haystack,
+            needle,
+            lps,
+            resume,
+            end,
+            alignment_mod8,
+        ),
     }
 }
 
@@ -379,7 +393,10 @@ fn scan_groups_forward<F: FnMut(usize) -> bool>(
     match hs.domain() {
         Domain::Enclave(elem) => {
             let head = elem.head().into_inner() as usize;
-            scanner.feed(live_bits_forward(elem.load_value(), head, hs.len()), hs.len());
+            scanner.feed(
+                live_bits_forward(elem.load_value(), head, hs.len()),
+                hs.len(),
+            );
             Ok(())
         }
         Domain::Region { head, body, tail } => {
@@ -407,7 +424,10 @@ fn scan_groups_forward<F: FnMut(usize) -> bool>(
             if live_tail > 0
                 && let Some(elem) = tail
             {
-                scanner.feed(live_bits_forward(elem.load_value(), 0, live_tail), live_tail);
+                scanner.feed(
+                    live_bits_forward(elem.load_value(), 0, live_tail),
+                    live_tail,
+                );
             }
             Ok(())
         }
@@ -664,22 +684,30 @@ fn rfind_large_prefix_scan(
     let mut found = None;
     let mut fallback = None;
     let mut failures = 0usize;
-    for_each_small_match_reverse(py, haystack, pattern, start, end, suffix_alignment, |suffix| {
-        if suffix < start + rest_len {
-            return false;
-        }
-        let pos = suffix - rest_len;
-        if haystack[pos..suffix] == orig_rest[..] {
-            found = Some(pos);
-            return false;
-        }
-        failures += 1;
-        if failures >= PREFIX_FILTER_BUDGET {
-            fallback = Some((pos + needle_len - 1).min(end));
-            return false;
-        }
-        true
-    })?;
+    for_each_small_match_reverse(
+        py,
+        haystack,
+        pattern,
+        start,
+        end,
+        suffix_alignment,
+        |suffix| {
+            if suffix < start + rest_len {
+                return false;
+            }
+            let pos = suffix - rest_len;
+            if haystack[pos..suffix] == orig_rest[..] {
+                found = Some(pos);
+                return false;
+            }
+            failures += 1;
+            if failures >= PREFIX_FILTER_BUDGET {
+                fallback = Some((pos + needle_len - 1).min(end));
+                return false;
+            }
+            true
+        },
+    )?;
     Ok(match (found, fallback) {
         (Some(pos), _) => PrefixScan::Found(pos),
         (None, Some(new_end)) => PrefixScan::Fallback(new_end),
