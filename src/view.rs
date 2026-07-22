@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_i128, bv_from_oct,
-    bv_from_u128, bytes_like_to_vec, format_bit_collection,
+    BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
+    bv_from_uint, bytes_like_to_vec, format_bit_collection,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -466,21 +466,21 @@ impl MutableView {
         self.assign_from_view_bits(py, viewed)
     }
 
-    fn assign_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+    fn assign_u(&self, py: Python<'_>, u: &Bound<'_, PyAny>) -> PyResult<()> {
         let source = self.source.borrow(py);
         let len = self.validate_current_layout(source.len())?;
         drop(source);
 
-        let viewed = bv_from_u128(u, len, false)?;
+        let viewed = bv_from_uint(u, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
-    fn assign_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+    fn assign_i(&self, py: Python<'_>, i: &Bound<'_, PyAny>) -> PyResult<()> {
         let source = self.source.borrow(py);
         let len = self.validate_current_layout(source.len())?;
         drop(source);
 
-        let viewed = bv_from_i128(i, len, false)?;
+        let viewed = bv_from_int(i, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
@@ -622,15 +622,15 @@ impl MutableView {
     }
 
     /// Interpret the viewed bits as an unsigned integer.
-    pub fn to_u(&self, py: Python<'_>) -> PyResult<u128> {
+    pub fn to_u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let tibs = self.to_tibs_view(py)?;
-        BitCollection::to_u128(&tibs, false)
+        BitCollection::to_uint(&tibs, py, false)
     }
 
     /// Interpret the viewed bits as a signed integer.
-    pub fn to_i(&self, py: Python<'_>) -> PyResult<i128> {
+    pub fn to_i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let tibs = self.to_tibs_view(py)?;
-        BitCollection::to_i128(&tibs, false)
+        BitCollection::to_int(&tibs, py, false)
     }
 
     /// Interpret the viewed bits as an IEEE floating point value.
@@ -641,13 +641,13 @@ impl MutableView {
 
     /// Write the viewed bits from an unsigned integer without changing the source length.
     #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
-    pub fn write_u(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+    pub fn write_u(&self, py: Python<'_>, u: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_u(py, u)
     }
 
     /// Write the viewed bits from a signed integer without changing the source length.
     #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
-    pub fn write_i(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+    pub fn write_i(&self, py: Python<'_>, i: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_i(py, i)
     }
 
@@ -750,23 +750,23 @@ impl MutableView {
 
     /// Interpret the viewed bits as an unsigned integer.
     #[getter]
-    fn u(&self, py: Python<'_>) -> PyResult<u128> {
+    fn u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.to_u(py)
     }
 
     #[setter(u)]
-    fn write_u_property(&self, py: Python<'_>, u: u128) -> PyResult<()> {
+    fn write_u_property(&self, py: Python<'_>, u: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_u(py, u)
     }
 
     /// Interpret the viewed bits as a signed integer.
     #[getter]
-    fn i(&self, py: Python<'_>) -> PyResult<i128> {
+    fn i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.to_i(py)
     }
 
     #[setter(i)]
-    fn write_i_property(&self, py: Python<'_>, i: i128) -> PyResult<()> {
+    fn write_i_property(&self, py: Python<'_>, i: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_i(py, i)
     }
 
@@ -1080,18 +1080,18 @@ impl View {
     ///     >>> Tibs('0x0100').le.to_u()
     ///     1
     ///
-    pub fn to_u(&self) -> PyResult<u128> {
+    pub fn to_u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let tibs = self.to_tibs_view()?;
-        BitCollection::to_u128(&tibs, false)
+        BitCollection::to_uint(&tibs, py, false)
     }
 
     /// Interpret the viewed bits as a signed integer.
     ///
     /// :return: The signed integer value.
     ///
-    pub fn to_i(&self) -> PyResult<i128> {
+    pub fn to_i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let tibs = self.to_tibs_view()?;
-        BitCollection::to_i128(&tibs, false)
+        BitCollection::to_int(&tibs, py, false)
     }
 
     /// Interpret the viewed bits as an IEEE floating point value.
@@ -1170,8 +1170,8 @@ impl View {
     /// Equivalent to using :meth:`~to_u`.
     ///
     #[getter]
-    fn u(&self) -> PyResult<u128> {
-        self.to_u()
+    fn u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_u(py)
     }
 
     /// Interpret the viewed bits as a signed integer.
@@ -1179,8 +1179,8 @@ impl View {
     /// Equivalent to using :meth:`~to_i`.
     ///
     #[getter]
-    fn i(&self) -> PyResult<i128> {
-        self.to_i()
+    fn i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_i(py)
     }
 
     /// Interpret the viewed bits as an IEEE floating point value.

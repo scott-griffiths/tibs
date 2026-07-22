@@ -3,10 +3,10 @@ use crate::core::{BitCollection, concatenate_bitcollections, count_bitslice};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
-    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    bytes_like_to_vec, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int,
+    bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec,
+    find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv, validate_index, validate_length,
+    validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
 use crate::view::{MutableView, View};
@@ -276,17 +276,17 @@ impl Mutibs {
     }
 
     #[inline]
-    fn assign_u(&mut self, u: u128) -> PyResult<()> {
+    fn assign_u(&mut self, u: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
-        let value = bv_from_u128(u, length, false)?;
+        let value = bv_from_uint(u, length, false)?;
         self.assign_from_bv(value);
         Ok(())
     }
 
     #[inline]
-    fn assign_i(&mut self, i: i128) -> PyResult<()> {
+    fn assign_i(&mut self, i: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
-        let value = bv_from_i128(i, length, false)?;
+        let value = bv_from_int(i, length, false)?;
         self.assign_from_bv(value);
         Ok(())
     }
@@ -1294,13 +1294,13 @@ impl Mutibs {
     #[pyo3(signature = (u, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, u, /, length, byte_order=None)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
-        u: u128,
+        u: &Bound<'_, PyAny>,
         length: i64,
         byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        let bv = bv_from_u128(u, length, is_little_endian)?;
+        let bv = bv_from_uint(u, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1317,8 +1317,13 @@ impl Mutibs {
     ///     15
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
-        self.map_slice(start, end, |bits| BitCollection::to_u128(bits, false))
+    pub fn to_u<'py>(
+        &self,
+        py: Python<'py>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.map_slice(start, end, |bits| BitCollection::to_uint(bits, py, false))
     }
 
     /// Write the current bits from an unsigned integer without changing the length.
@@ -1337,7 +1342,7 @@ impl Mutibs {
     ///     Mutibs('0x0f')
     ///
     #[pyo3(signature = (u, /), text_signature = "($self, u, /)")]
-    pub fn write_u(&mut self, u: u128) -> PyResult<()> {
+    pub fn write_u(&mut self, u: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_u(u)
     }
 
@@ -1348,12 +1353,12 @@ impl Mutibs {
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
-    fn u(&self) -> PyResult<u128> {
-        self.to_u(None, None)
+    fn u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_u(py, None, None)
     }
 
     #[setter(u)]
-    fn write_u_property(&mut self, u: u128) -> PyResult<()> {
+    fn write_u_property(&mut self, u: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_u(u)
     }
 
@@ -1375,13 +1380,13 @@ impl Mutibs {
     #[pyo3(signature = (i, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, i, /, length, byte_order=None)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
-        i: i128,
+        i: &Bound<'_, PyAny>,
         length: i64,
         byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        let bv = bv_from_i128(i, length, is_little_endian)?;
+        let bv = bv_from_int(i, length, is_little_endian)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1398,8 +1403,13 @@ impl Mutibs {
     ///     -2
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
-        self.map_slice(start, end, |bits| BitCollection::to_i128(bits, false))
+    pub fn to_i<'py>(
+        &self,
+        py: Python<'py>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.map_slice(start, end, |bits| BitCollection::to_int(bits, py, false))
     }
 
     /// Write the current bits from a signed integer without changing the length.
@@ -1418,7 +1428,7 @@ impl Mutibs {
     ///     Mutibs('0xe')
     ///
     #[pyo3(signature = (i, /), text_signature = "($self, i, /)")]
-    pub fn write_i(&mut self, i: i128) -> PyResult<()> {
+    pub fn write_i(&mut self, i: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_i(i)
     }
 
@@ -1429,12 +1439,12 @@ impl Mutibs {
     ///
     /// :return: The value as a signed integer.
     #[getter]
-    fn i(&self) -> PyResult<i128> {
-        self.to_i(None, None)
+    fn i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_i(py, None, None)
     }
 
     #[setter(i)]
-    fn write_i_property(&mut self, i: i128) -> PyResult<()> {
+    fn write_i_property(&mut self, i: &Bound<'_, PyAny>) -> PyResult<()> {
         self.assign_i(i)
     }
 

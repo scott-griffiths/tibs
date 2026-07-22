@@ -1,13 +1,16 @@
 use crate::helpers::{
-    BS, BV, bv_from_zeros, copy_shifted_bytes, mask_padding_bits, validate_index, validate_slice,
+    BS, BV, FAST_INT_BITS, bv_from_zeros, byte_order_name, copy_shifted_bytes, mask_padding_bits,
+    validate_index, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PyInt};
 use std::borrow::Cow;
 use std::fmt;
 
@@ -740,48 +743,81 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
+    /// Build a Python int from more bits than fit in a machine word.
+    ///
+    /// The bits are left padded to a whole number of bytes so that
+    /// `int.from_bytes` can do the arithmetic. For a signed reading the pad
+    /// repeats the sign bit, which is exactly the sign extension that
+    /// `from_bytes(..., signed=True)` then expects.
+    fn to_big_int<'py>(
+        &self,
+        py: Python<'py>,
+        is_little_endian: bool,
+        signed: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let length = self.len();
+        let pad = (8 - length % 8) % 8;
+        let bytes = if pad == 0 {
+            self.to_padded_byte_data()
+        } else {
+            // A byte order is only allowed for whole-byte lengths, so padding
+            // and little-endian never have to be reconciled.
+            debug_assert!(!is_little_endian);
+            let mut bv = BV::repeat(signed && self.as_bitslice()[0], pad);
+            bv.extend_from_bitslice(self.as_bitslice());
+            bv.into_vec()
+        };
+        let args = (PyBytes::new(py, &bytes), byte_order_name(is_little_endian));
+        let int_type = py.get_type::<PyInt>();
+        // `signed` is keyword-only and defaults to False, so the unsigned case
+        // can skip building a kwargs dict.
+        if signed {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item(intern!(py, "signed"), true)?;
+            int_type.call_method(intern!(py, "from_bytes"), args, Some(&kwargs))
+        } else {
+            int_type.call_method1(intern!(py, "from_bytes"), args)
+        }
+    }
+
     #[inline]
-    fn to_u128(&self, is_little_endian: bool) -> PyResult<u128> {
+    fn to_uint<'py>(&self, py: Python<'py>, is_little_endian: bool) -> PyResult<Bound<'py, PyAny>> {
         let length = self.len();
         if length == 0 {
             return Err(PyValueError::new_err(
                 "Cannot convert to unsigned int when bit length is zero.",
             ));
         }
-        if length > 128 {
-            return Err(PyValueError::new_err(format!(
-                "Bit length to convert to unsigned int must be between 1 and 128. Received {length}."
-            )));
+        if length > FAST_INT_BITS {
+            return self.to_big_int(py, is_little_endian, false);
         }
         let raw = if is_little_endian {
-            self.as_bitslice().load_le::<u128>()
+            self.as_bitslice().load_le::<u64>()
         } else {
-            self.as_bitslice().load_be::<u128>()
+            self.as_bitslice().load_be::<u64>()
         };
-        Ok(raw)
+        raw.into_bound_py_any(py)
     }
 
     #[inline]
-    fn to_i128(&self, is_little_endian: bool) -> PyResult<i128> {
+    fn to_int<'py>(&self, py: Python<'py>, is_little_endian: bool) -> PyResult<Bound<'py, PyAny>> {
         let length = self.len();
         if length == 0 {
             return Err(PyValueError::new_err(
                 "Cannot convert to signed int when bit length is zero.",
             ));
         }
-        if length > 128 {
-            return Err(PyValueError::new_err(format!(
-                "Bit length to convert to signed int must be between 1 and 128. Received {length}."
-            )));
+        if length > FAST_INT_BITS {
+            return self.to_big_int(py, is_little_endian, true);
         }
         let raw = if is_little_endian {
-            self.as_bitslice().load_le::<u128>()
+            self.as_bitslice().load_le::<u64>()
         } else {
-            self.as_bitslice().load_be::<u128>()
+            self.as_bitslice().load_be::<u64>()
         };
 
-        let shift = 128 - length;
-        Ok(((raw << shift) as i128) >> shift)
+        let shift = FAST_INT_BITS - length;
+        (((raw << shift) as i64) >> shift).into_bound_py_any(py)
     }
 
     fn to_f64(&self, is_little_endian: bool) -> PyResult<f64> {

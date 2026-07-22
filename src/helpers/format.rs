@@ -1,5 +1,4 @@
 use crate::core::BitCollection;
-use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
@@ -287,9 +286,9 @@ pub(crate) fn format_bit_collection(
     // exactly as they do everywhere else, including their error messages.
     if matches!(ty, 'u' | 'i') {
         let value = if ty == 'u' {
-            bits.to_u128(false)?.into_bound_py_any(py)?
+            bits.to_uint(py, false)?
         } else {
-            bits.to_i128(false)?.into_bound_py_any(py)?
+            bits.to_int(py, false)?
         };
         let mut int_spec = String::with_capacity(spec.len());
         int_spec.push_str(&spec[..spec.len() - ty.len_utf8()]);

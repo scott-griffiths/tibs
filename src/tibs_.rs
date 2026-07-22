@@ -4,10 +4,10 @@ use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
-    bv_from_i128, bv_from_oct, bv_from_ones, bv_from_random, bv_from_u128, bv_from_zeros,
-    bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int,
+    bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec,
+    find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv, validate_index,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -251,12 +251,12 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
         DtypeKind::Uint => {
             let is_little_endian =
                 ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
-            bv_from_u128(value.extract::<u128>()?, dtype.length, is_little_endian)
+            bv_from_uint(value, dtype.length, is_little_endian)
         }
         DtypeKind::Int => {
             let is_little_endian =
                 ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
-            bv_from_i128(value.extract::<i128>()?, dtype.length, is_little_endian)
+            bv_from_int(value, dtype.length, is_little_endian)
         }
         DtypeKind::Bool => match helpers::convert_to_bool(value) {
             Some(bit) => {
@@ -341,11 +341,11 @@ pub(crate) fn py_from_value_parts(
         }
         DtypeKind::Uint => {
             let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
-            BitCollection::to_u128(value, is_little_endian)?.into_py_any(py)
+            Ok(BitCollection::to_uint(value, py, is_little_endian)?.unbind())
         }
         DtypeKind::Int => {
             let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
-            BitCollection::to_i128(value, is_little_endian)?.into_py_any(py)
+            Ok(BitCollection::to_int(value, py, is_little_endian)?.unbind())
         }
         DtypeKind::Bool => value.as_bitslice()[0].into_py_any(py),
         DtypeKind::Bits => {
@@ -1206,13 +1206,13 @@ impl Tibs {
     #[pyo3(signature = (u, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, u, /, length, byte_order=None)")]
     pub fn from_u(
         _cls: &Bound<'_, PyType>,
-        u: u128,
+        u: &Bound<'_, PyAny>,
         length: i64,
         byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        Ok(Tibs::from_bv(bv_from_u128(u, length, is_little_endian)?))
+        Ok(Tibs::from_bv(bv_from_uint(u, length, is_little_endian)?))
     }
 
     /// Return the unsigned integer representation of the Tibs.
@@ -1228,8 +1228,13 @@ impl Tibs {
     ///     15
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_u(&self, start: Option<isize>, end: Option<isize>) -> PyResult<u128> {
-        self.map_slice(start, end, |bits| BitCollection::to_u128(bits, false))
+    pub fn to_u<'py>(
+        &self,
+        py: Python<'py>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.map_slice(start, end, |bits| BitCollection::to_uint(bits, py, false))
     }
 
     /// Read-only property of the unsigned integer representation of the Tibs.
@@ -1238,8 +1243,8 @@ impl Tibs {
     ///
     /// :return: The value as an unsigned integer.
     #[getter]
-    fn u(&self) -> PyResult<u128> {
-        self.to_u(None, None)
+    fn u<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_u(py, None, None)
     }
 
     /// Create a new instance from a signed integer.
@@ -1260,13 +1265,13 @@ impl Tibs {
     #[pyo3(signature = (i, /, length, byte_order = ByteOrder::Unspecified), text_signature = "(cls, i, /, length, byte_order=None)")]
     pub fn from_i(
         _cls: &Bound<'_, PyType>,
-        i: i128,
+        i: &Bound<'_, PyAny>,
         length: i64,
         byte_order: Option<ByteOrder>,
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        Ok(Tibs::from_bv(bv_from_i128(i, length, is_little_endian)?))
+        Ok(Tibs::from_bv(bv_from_int(i, length, is_little_endian)?))
     }
 
     /// Return the signed integer representation of the Tibs.
@@ -1282,8 +1287,13 @@ impl Tibs {
     ///     -2
     ///
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_i(&self, start: Option<isize>, end: Option<isize>) -> PyResult<i128> {
-        self.map_slice(start, end, |bits| BitCollection::to_i128(bits, false))
+    pub fn to_i<'py>(
+        &self,
+        py: Python<'py>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.map_slice(start, end, |bits| BitCollection::to_int(bits, py, false))
     }
 
     /// Read-only property of the signed integer representation of the Tibs.
@@ -1292,8 +1302,8 @@ impl Tibs {
     ///
     /// :return: The value as a signed integer.
     #[getter]
-    fn i(&self) -> PyResult<i128> {
-        self.to_i(None, None)
+    fn i<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.to_i(py, None, None)
     }
 
     /// Create a new instance from a floating point number.
