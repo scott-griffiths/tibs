@@ -2105,7 +2105,7 @@ impl Tibs {
                 // which costs ~10ns per read.
                 let obj = std::hint::select_unpredictable(value, ffi::Py_True(), ffi::Py_False());
                 ffi::Py_INCREF(obj);
-                return Ok(Py::from_owned_ptr(py, obj));
+                return Ok(Bound::from_owned_ptr(py, obj).unbind());
             }
         }
         if let Ok(index) = key.extract::<isize>() {
