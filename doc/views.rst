@@ -330,6 +330,38 @@ meaning and is dropped::
     >>> header.field(11, 0).u
     291
 
+Scattered fields
+^^^^^^^^^^^^^^^^
+
+:meth:`~Tibs.field` reads a *contiguous* run of bits. Some fields aren't
+contiguous — an instruction immediate split across the word, flags interleaved
+with data — and for those a mask picks out the bits that belong to the field.
+
+:meth:`Tibs.extract` reads the bits selected by a mask and packs them together.
+It's the bit-level version of the PEXT instruction::
+
+    >>> word = Tibs('0b11010110')
+    >>> word.extract('0b10110000')   # the bits at positions 0, 2 and 3
+    Tibs('0b101')
+
+The mask must be the same length as the container, and the result has one bit for
+each set bit of the mask.
+
+.. _deposit:
+
+The inverse, writing such a field, is :meth:`Mutibs.deposit`: the bits of the
+value are placed at the positions the mask selects, and the rest of the container
+is left alone. It is the bit-level version of the PDEP instruction::
+
+    >>> m = Mutibs('0b11010110')
+    >>> m.deposit('0b111', '0b10110000')   # write 3 bits into positions 0, 2, 3
+    >>> m.bin
+    '11110110'
+
+The value must be exactly ``mask.count()`` bits long. The non-mutating
+:meth:`Tibs.deposited` returns a new container instead of writing in place. See
+:doc:`example_scattered_field` for a worked register example.
+
 Materializing a view
 ^^^^^^^^^^^^^^^^^^^^
 

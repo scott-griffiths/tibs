@@ -40,39 +40,46 @@ common platforms; if there are issues then please let me know.
 The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
 
 
-## Why use it?
+## What Tibs is
 
-Tibs looks at binary data three ways, and the same object does all three.
+Tibs is a sequence of bits — like `bytes`, but the unit is the bit and the length
+can be anything. That sequence is the whole object: you slice it, concatenate it,
+search and replace inside it at bit granularity, or pin searches to byte boundaries
+for stream parsing. Immutable `Tibs` gives stable values and cheap slices; `Mutibs`
+gives in-place edits, just as `bytes` pairs with `bytearray`.
 
-**A sequence of bits.** Like `bytes`, but the unit is the bit and the length can be
-anything. Slice, concatenate, search and replace at bit granularity — or pin
-searches to byte boundaries for stream parsing. Immutable `Tibs` gives stable
-values and cheap slices; `Mutibs` gives in-place edits, just as `bytes` pairs with
-`bytearray`.
+> `find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `chunks` · `+` · `in`
 
-> `find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `in`
+On top of those bits, the same object gives you two lenses — two ways of reading and
+writing the sequence without ever copying it into another type.
 
-**Typed fields.** Read and write integers, floats and strings of any bit length,
-without hand-rolling shifts and masks. Views handle little-endian ordering and
-LSB0 field labels so you don't reshuffle data yourself.
+**Read it as typed fields.** Pull integers, floats, strings, hex or binary of any
+bit length straight out of the bits, without hand-rolling shifts and masks. A view
+handles little-endian ordering and LSB0 field labels so you don't reshuffle data
+yourself, and `extract` / `deposit` reach fields that are scattered across a word.
 
-> `from_u` · `to_f` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · f-string formatting
+> `from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extract` / `deposit` · f-string formatting
 
-**A set of bits.** Bitwise algebra, cardinalities and set predicates, with no
-intermediate object built along the way. `Mutibs` doubles as a large mutable
-bitset.
+**Read it as a set of bits.** Bitwise algebra, cardinalities and set predicates, with
+no intermediate object built along the way. `Mutibs` doubles as a large mutable bitset.
 
 > `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
 
-And it's fast — often significantly faster than similar libraries, with a Rust
-core and a performance regression suite in CI.
+These aren't separate modes or separate types — it's one object, and the lenses are
+just different questions you ask of the same bits.
+
+And it's fast — often significantly faster than similar libraries, with a Rust core
+and a performance regression suite in CI. It can also compress and serialize itself
+when you need to put the bits on disk or the wire.
+
+> `encode` / `decode` — `Rice`, `Zstd`, `Raw`
 
 
 ## Quick taste
 
-The same three views, in code.
+The sequence and its two lenses, in code.
 
-**A sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
+**The sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
 slicing, hashing and holding stable values. `Mutibs` is its mutable counterpart,
 for patching in place.
 
@@ -97,9 +104,9 @@ Tibs('0xac804f4b')
 
 ```
 
-**Typed fields.** Read fields as integers, floats or bytes, letting a view take
-care of byte order and bit numbering — the sort of job that gets awkward quickly
-with plain bytes and masks.
+**Read it as typed fields.** Pull fields out as integers, floats or bytes, letting
+a view take care of byte order and bit numbering — the sort of job that gets awkward
+quickly with plain bytes and masks.
 
 ```pycon
 >>> # Linux eBPF: little-endian instruction, LSB0 field labels.
@@ -110,8 +117,8 @@ with plain bytes and masks.
 
 ```
 
-**A set of bits.** Compare containers as sets — cardinalities and predicates that
-never build an intermediate object.
+**Read it as a set of bits.** Compare containers as sets — cardinalities and
+predicates that never build an intermediate object.
 
 ```pycon
 >>> # Are all the required capability bits granted?
@@ -126,9 +133,8 @@ True
 
 ```
 
-These aren't separate modes — the same object does all three. This log scanner
-*searches* a byte stream, slices out each header, and reads its fields as
-integers, in one pass:
+And it's all one object. This log scanner *searches* a byte stream, slices out
+each header, and reads its fields as integers, in one pass:
 
 ```pycon
 >>> sync = Tibs("0xaa55")

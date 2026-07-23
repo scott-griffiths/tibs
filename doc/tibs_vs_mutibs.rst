@@ -3,11 +3,113 @@
 Tibs vs Mutibs
 --------------
 
+``Tibs`` and ``Mutibs`` share almost all of their behaviour; the difference is that
+a ``Tibs`` is immutable while a ``Mutibs`` can be changed in place. That has a few
+consequences:
+
 * Tibs instances cannot change after they are created. This lets you use them as keys in dictionaries,
   they can be hashed and used in sets.
 * Methods that return iterators over the data are available for Tibs, but not Mutibs. This is because for
   a ``Mutibs`` the data could change while the iterator is live. To use these methods on a ``Mutibs`` first
   convert to a ``Tibs``.
+
+
+Mutating and copy methods
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``Mutibs`` has many mutating methods, which change the value in-place and return ``None``.
+Many of these methods have siblings which do the same task but don't modify the instance and
+instead return a new copy. These 'copy' methods are also available on the immutable ``Tibs``.
+
+For example, :meth:`Mutibs.reverse` changes the existing object and returns
+``None``::
+
+    >>> m = Mutibs('0b101100')
+    >>> result = m.reverse()
+    >>> result is None
+    True
+    >>> m
+    Mutibs('0b001101')
+
+The copy-returning form leaves the original value alone::
+
+    >>> t = Tibs('0b101100')
+    >>> r = t.reversed()
+    >>> t
+    Tibs('0b101100')
+    >>> r
+    Tibs('0b001101')
+
+The same copy-returning methods are also available on ``Mutibs`` when you want a
+new mutable value without changing the original::
+
+    >>> m = Mutibs('0b101100')
+    >>> r = m.reversed()
+    >>> m
+    Mutibs('0b101100')
+    >>> r
+    Mutibs('0b001101')
+
+.. csv-table::
+   :header: "Mutibs mutating methods", "Tibs/Mutibs copy equivalent"
+
+   ":meth:`~Mutibs.byte_swap`", ":meth:`~Mutibs.byte_swapped`"
+   ":meth:`~Mutibs.insert`", ":meth:`~Mutibs.inserted`"
+   ":meth:`~Mutibs.invert`", ":meth:`~Mutibs.inverted`"
+   ":meth:`~Mutibs.replace`", ":meth:`~Mutibs.replaced`"
+   ":meth:`~Mutibs.reverse`", ":meth:`~Mutibs.reversed`"
+   ":meth:`~Mutibs.rotate_left`", ":meth:`~Mutibs.rotated_left`"
+   ":meth:`~Mutibs.rotate_right`", ":meth:`~Mutibs.rotated_right`"
+   ":meth:`~Mutibs.set`", ":meth:`~Mutibs.set_at`"
+   ":meth:`~Mutibs.unset`", ":meth:`~Mutibs.unset_at`"
+
+
+The linguistic oddities here are ``set_at()`` and ``unset_at()``, as the past-participle of 'set' is
+also 'set', so the naming pattern failed (English is annoying sometimes).
+
+Not all mutating methods have a copy equivalent - things like ``clear()`` don't make sense for a
+``Tibs``, and you can use the ``+`` operator to do non-mutating extensions.
+
+
+Switching between Tibs and Mutibs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``to_`` methods for changing from the immutable ``Tibs`` to the mutable ``Mutibs`` and
+vice versa let you move between the two when you need a capability the other type has.
+
+If you have a ``Tibs`` but want to use one of the in-place modifying methods like :meth:`Mutibs.reverse`, then
+you can first use :meth:`Tibs.to_mutibs` to create a mutable copy::
+
+    >>> t = Tibs.from_i(-99, 16)
+    >>> t.bin
+    '1111111110011101'
+    >>> m = t.to_mutibs()
+    >>> m.reverse()
+    >>> m.bin
+    '1011100111111111'
+
+In this simple case it's better to use the :meth:`Tibs.reversed` method, which creates and returns a new reversed
+``Tibs``.
+
+There are also some methods that are only available on ``Tibs``, which take advantage of its immutable nature.
+For example the :meth:`Tibs.chunks_iter` method, which returns an iterator over equal sized chunks of the data, is
+not available for ``Mutibs`` as its data could change while the iterator is active. The list-returning
+``chunks`` method is available on both ``Tibs`` and ``Mutibs``, while for the iterator form we can use
+:meth:`Mutibs.to_tibs`::
+
+    >>> m = Mutibs('0xb2')
+    >>> m *= 3
+    >>> for c in m.chunks(12):
+    ...     print(c.hex)
+    b2b
+    2b2
+    >>> for c in m.to_tibs().chunks_iter(12):
+    ...     print(c.hex)
+    b2b
+    2b2
+
+There is also the :meth:`Mutibs.as_tibs` method, which *moves* the data to a ``Tibs`` instead of making a copy.
+This is more efficient if you don't need to use the ``Mutibs`` any more (as it will be empty after the move).
 
 
 Efficiency
