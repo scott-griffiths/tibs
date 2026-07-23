@@ -25,7 +25,7 @@ everything fits neatly into bytes. Use it for packets, registers, instruction
 formats, bitsets, compressed data and streams where fields can have many different
 interpretations and be any number of bits long.
 
-It is use to power the popular [bitstring](https://github.com/scott-griffiths/bitstring)
+It is used to power the popular [bitstring](https://github.com/scott-griffiths/bitstring)
 library, which is by the same author.
 
 ## Install
@@ -42,19 +42,39 @@ The full documentation is available on [Read the Docs](https://tibs.readthedocs.
 
 ## Why use it?
 
-- It's fast - often significantly faster than similar libraries.
-- Work with bit sequences of any length, not just whole bytes.
-- Construct from strings, bytes, bools, integers, floats, random data or typed values.
-- Slice, split and reinterpret fields as bytes, ints, floats, binary, octal or hex.
-- Decode little-endian values and LSB0-labelled fields without manually reshuffling data.
-- Search, count, replace, rotate, reverse, byte-swap, set and unset bits with Rust-backed operations.
-- Use immutable `Tibs` for stable values and cheap slices; use `Mutibs` for in-place edits.
+Tibs looks at binary data three ways, and the same object does all three.
+
+**A sequence of bits.** Like `bytes`, but the unit is the bit and the length can be
+anything. Slice, concatenate, search and replace at bit granularity — or pin
+searches to byte boundaries for stream parsing. Immutable `Tibs` gives stable
+values and cheap slices; `Mutibs` gives in-place edits, just as `bytes` pairs with
+`bytearray`.
+
+> `find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `in`
+
+**Typed fields.** Read and write integers, floats and strings of any bit length,
+without hand-rolling shifts and masks. Views handle little-endian ordering and
+LSB0 field labels so you don't reshuffle data yourself.
+
+> `from_u` · `to_f` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · f-string formatting
+
+**A set of bits.** Bitwise algebra, cardinalities and set predicates, with no
+intermediate object built along the way. `Mutibs` doubles as a large mutable
+bitset.
+
+> `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
+
+And it's fast — often significantly faster than similar libraries, with a Rust
+core and a performance regression suite in CI.
 
 
 ## Quick taste
 
-`Tibs` is immutable, like `bytes`. It is good for parsing, slicing, hashing and
-holding stable binary values.
+The same three views, in code.
+
+**A sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
+slicing, hashing and holding stable values. `Mutibs` is its mutable counterpart,
+for patching in place.
 
 ```pycon
 >>> from tibs import Tibs
@@ -67,29 +87,19 @@ Tibs('0xac804f4b')
 >>> flags.bin, size.u, payload.bytes
 ('1010', 3200, b'OK')
 
->>> packet.find(b"OK", byte_aligned=True)
-16
-
-```
-
-`Mutibs` is mutable. Convert when a packet or bitset needs to be patched in
-place.
-
-```pycon
 >>> patched = packet.to_mutibs()
 >>> patched[4:16] = Tibs.from_u(2047, 12)
 >>> patched[-8:] = b"!"
 >>> patched
 Mutibs('0xa7ff4f21')
->>> patched[4:16].to_u(), patched[-16:].bytes
-(2047, b'O!')
->>> packet
+>>> packet  # the original is untouched
 Tibs('0xac804f4b')
 
 ```
 
-Views handle byte order and bit numbering. This is the sort of job that gets
-awkward quickly with plain bytes and masks.
+**Typed fields.** Read fields as integers, floats or bytes, letting a view take
+care of byte order and bit numbering — the sort of job that gets awkward quickly
+with plain bytes and masks.
 
 ```pycon
 >>> # Linux eBPF: little-endian instruction, LSB0 field labels.
@@ -100,8 +110,25 @@ awkward quickly with plain bytes and masks.
 
 ```
 
-Search APIs work at bit granularity but can also stay byte-aligned for stream
-parsing.
+**A set of bits.** Compare containers as sets — cardinalities and predicates that
+never build an intermediate object.
+
+```pycon
+>>> # Are all the required capability bits granted?
+>>> required, granted = Tibs('0b0010_1000'), Tibs('0b1010_1100')
+>>> required.is_subset_of(granted)
+True
+
+>>> # Hamming distance between two 256-bit fingerprints.
+>>> a, b = Tibs.from_random(256, seed=b'doc-a'), Tibs.from_random(256, seed=b'doc-b')
+>>> a.count_xor(b)
+138
+
+```
+
+These aren't separate modes — the same object does all three. This log scanner
+*searches* a byte stream, slices out each header, and reads its fields as
+integers, in one pass:
 
 ```pycon
 >>> sync = Tibs("0xaa55")
@@ -173,7 +200,7 @@ Tibs has reached the 1.0 stable API milestone. Documented public behavior will
 remain compatible across future 1.x releases. It is used to power the `bitstring` 
 library and gets several million downloads per month.
 
-There are over 800 unit tests, including Hypothesis tests and performance
+There are over 1000 unit tests, including Hypothesis tests and performance
 benchmarks.
 
 
