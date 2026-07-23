@@ -1,6 +1,6 @@
 use crate::codec as tibs_codec;
 use crate::core::{
-    BitCollection, LogicalOp, concatenate_bitcollections, count_bitslice, deposit_masked,
+    BitCollection, LogicalOp, concatenate_bitcollections, deposit_masked,
 };
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
@@ -2740,6 +2740,7 @@ impl Mutibs {
     /// :param object | None value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``). Defaults to counting the set bits.
     /// :param int | None start: The start of the slice to count within. Defaults to 0.
     /// :param int | None end: The end of the slice to count within. Defaults to len(self).
+    /// :param bool byte_aligned: If ``True``, only occurrences on byte boundaries are counted. Defaults to ``False``.
     /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     ///
     /// :return: The number of times the bit pattern is found.
@@ -2757,43 +2758,56 @@ impl Mutibs {
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    #[pyo3(signature = (value=None, start=None, end=None, mask=None), text_signature = "($self, value=None, start=None, end=None, mask=None)")]
+    #[pyo3(signature = (value=None, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
         value: Option<&Bound<'_, PyAny>>,
         start: Option<isize>,
         end: Option<isize>,
+        byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<usize> {
         let (start, end) = validate_slice(self.len(), start, end)?;
-        let haystack = &self.as_bitslice()[start..end];
+        let haystack = self.as_bitslice();
 
         let Some(value) = value else {
             // No value given, so count the set bits.
             return match prepare_mask(mask, 1)? {
-                Some(_) => Ok(haystack.len()),
-                None => Ok(count_bitslice(haystack, true)),
+                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
+                None => Ok(helpers::count_single_bit(haystack, true, start, end, byte_aligned)),
             };
         };
 
         if let Some(b) = helpers::convert_to_bool(value) {
             return match prepare_mask(mask, 1)? {
                 // The only unset single-bit mask matches every bit.
-                Some(_) => Ok(haystack.len()),
-                None => Ok(count_bitslice(haystack, b)),
+                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
+                None => Ok(helpers::count_single_bit(haystack, b, start, end, byte_aligned)),
             };
         }
 
         match Tibs::extract(value.as_borrowed()) {
             Ok(v) => {
                 let mask = prepare_mask(mask, v.len())?;
-                if let Some(mask) = mask {
-                    helpers::count_bitvec_masked(py, haystack, v.as_bitslice(), mask.as_bitslice())
-                } else if v.len() == 1 {
-                    Ok(count_bitslice(haystack, v.get_index(0)?))
-                } else {
-                    helpers::count_bitvec(py, haystack, v.as_bitslice())
+                match mask {
+                    Some(mask) => helpers::count_bitvec_masked(
+                        py,
+                        haystack,
+                        v.as_bitslice(),
+                        mask.as_bitslice(),
+                        start,
+                        end,
+                        byte_aligned,
+                    ),
+                    None => helpers::count_bitvec(
+                        py,
+                        haystack,
+                        v.as_bitslice(),
+                        start,
+                        end,
+                        byte_aligned,
+                    ),
                 }
             }
             Err(err) => {

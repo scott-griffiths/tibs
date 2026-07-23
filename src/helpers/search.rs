@@ -1,5 +1,6 @@
 use super::bits::{BS, BV};
 use super::raw_bytes::byte_search_prep;
+use crate::core::count_bitslice;
 use bitvec::domain::Domain;
 use memchr::memmem;
 use pyo3::prelude::*;
@@ -901,9 +902,16 @@ impl MaskedMatcher {
         Ok(matches)
     }
 
-    pub(crate) fn count(&self, py: Python<'_>, haystack: &BS) -> PyResult<usize> {
+    pub(crate) fn count(
+        &self,
+        py: Python<'_>,
+        haystack: &BS,
+        start: usize,
+        end: usize,
+        alignment_mod8: Option<usize>,
+    ) -> PyResult<usize> {
         let mut count = 0;
-        self.for_each(py, haystack, 0, haystack.len(), None, |_| {
+        self.for_each(py, haystack, start, end, alignment_mod8, |_| {
             count += 1;
             true
         })?;
@@ -966,8 +974,12 @@ pub(crate) fn count_bitvec_masked(
     haystack: &BS,
     needle: &BS,
     mask: &BS,
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
 ) -> PyResult<usize> {
-    MaskedMatcher::new(needle, mask, false).count(py, haystack)
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+    MaskedMatcher::new(needle, mask, false).count(py, haystack, start, end, alignment_mod8)
 }
 
 fn collect_find_all_positions_small(
@@ -987,10 +999,17 @@ fn collect_find_all_positions_small(
     Ok(matches)
 }
 
-fn count_bitvec_small(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResult<usize> {
-    debug_assert!((1..=64).contains(&needle.len()));
+fn count_bitvec_small(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<usize> {
+    debug_assert!((2..=64).contains(&needle.len()));
     let mut count = 0;
-    for_each_small_match(py, haystack, needle, 0, haystack.len(), None, |_| {
+    for_each_small_match(py, haystack, needle, start, end, alignment_mod8, |_| {
         count += 1;
         true
     })?;
@@ -1200,21 +1219,122 @@ fn find_bitvec_impl_with_lps_aligned(
     Ok(None)
 }
 
-/// Count the number of occurrences of needle in haystack.
-pub(crate) fn count_bitvec(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResult<usize> {
-    if needle.is_empty() || needle.len() > haystack.len() {
+/// Count the occurrences of needle in `haystack[start..end]`, including overlaps.
+///
+/// This mirrors the dispatch of [`collect_find_all_positions`], so it reaches the
+/// same fast paths — the byte-oriented SIMD search when the needle can be treated
+/// as bytes, and the windowed bit scan otherwise — instead of always falling back
+/// to a bit-by-bit scan.
+pub(crate) fn count_bitvec(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> PyResult<usize> {
+    debug_assert!(end >= start);
+    debug_assert!(end <= haystack.len());
+
+    // An empty needle matches nothing to count (and would trap `memmem` below).
+    if needle.is_empty() || needle.len() > end - start {
         return Ok(0);
     }
-    if needle.len() <= 64 {
-        return count_bitvec_small(py, haystack, needle);
+
+    let alignment_mod8 = if byte_aligned { Some(0) } else { None };
+
+    if needle.len() == 1 {
+        return Ok(count_single_bit(haystack, needle[0], start, end, byte_aligned));
     }
+
+    if let Some((byte_haystack, byte_needle, _byte_base)) =
+        byte_search_prep(haystack, needle, start, end, alignment_mod8)
+    {
+        let mut count = 0;
+        let mut byte_current = 0;
+        let mut check_at = SIGNAL_CHECK_INTERVAL;
+        loop {
+            if count >= check_at {
+                py.check_signals()?;
+                check_at = count.saturating_add(SIGNAL_CHECK_INTERVAL);
+            }
+            let found = if byte_current >= byte_haystack.len() {
+                None
+            } else {
+                memmem::find(&byte_haystack[byte_current..], &byte_needle)
+                    .map(|pos| pos + byte_current)
+            };
+            let Some(byte_pos) = found else {
+                break;
+            };
+            count += 1;
+            byte_current = byte_pos + 1;
+        }
+        return Ok(count);
+    }
+
+    if needle.len() <= 64 {
+        return count_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
+    }
+
+    count_bitvec_kmp(py, haystack, needle, start, end, alignment_mod8)
+}
+
+/// Count bits equal to `value` in `haystack[start..end]`, honouring an optional
+/// byte-alignment requirement on the matching positions.
+pub(crate) fn count_single_bit(
+    haystack: &BS,
+    value: bool,
+    start: usize,
+    end: usize,
+    byte_aligned: bool,
+) -> usize {
+    if !byte_aligned {
+        return count_bitslice(&haystack[start..end], value);
+    }
+    let mut pos = first_aligned(start, 0);
+    let mut count = 0;
+    while pos < end {
+        if haystack[pos] == value {
+            count += 1;
+        }
+        pos += 8;
+    }
+    count
+}
+
+/// The number of candidate positions in `[start, end)`: every position, or only
+/// those on a byte boundary when `byte_aligned`. This is what a single-bit count
+/// returns when the mask matches regardless of value.
+pub(crate) fn count_candidate_positions(start: usize, end: usize, byte_aligned: bool) -> usize {
+    if !byte_aligned {
+        return end - start;
+    }
+    end.saturating_sub(first_aligned(start, 0)).div_ceil(8)
+}
+
+/// The first position at or after `start` whose bit index mod 8 is `required`.
+#[inline]
+fn first_aligned(start: usize, required: usize) -> usize {
+    let start_mod = start & 7;
+    let adjustment = (required + 8 - start_mod) & 7;
+    start.saturating_add(adjustment)
+}
+
+fn count_bitvec_kmp(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<usize> {
     let lps = compute_lps(py, needle)?;
     let needle_len = needle.len();
-    let mut i = 0; // The start
+    let mut i = start;
     let mut j = 0;
-    let end = haystack.len();
     let mut count = 0;
-    let mut check_at = SIGNAL_CHECK_INTERVAL.min(end);
+    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
     while i < end {
         while i < check_at {
             if needle[j] == haystack[i] {
@@ -1222,7 +1342,10 @@ pub(crate) fn count_bitvec(py: Python<'_>, haystack: &BS, needle: &BS) -> PyResu
                 j += 1;
 
                 if j == needle_len {
-                    count += 1;
+                    let match_pos = i - j;
+                    if matches_alignment(match_pos, alignment_mod8) {
+                        count += 1;
+                    }
                     // Continue searching
                     j = lps[j - 1];
                 }

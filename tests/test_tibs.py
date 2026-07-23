@@ -513,6 +513,44 @@ def test_count_with_range():
         _ = a.count(1, 8, 2)
 
 
+def test_count_byte_aligned():
+    t = Tibs('0x1f2e3f')
+    # Byte-aligned bytes with low nibble 0xf: only the first and last bytes.
+    assert t.count('0x0f', mask='0x0f', byte_aligned=True) == 2
+    # A whole-byte needle uses the byte-oriented fast path.
+    t = Tibs('0xabababab')
+    assert t.count('0xab', byte_aligned=True) == 4
+    assert t.count('0xab') == 4
+    # byte_aligned on a single bit restricts to bit positions on byte boundaries.
+    b = Tibs('0b1000_0001_1000_0000')
+    assert b.count(1) == 3
+    assert b.count(1, byte_aligned=True) == 2
+
+
+def test_count_byte_aligned_matches_find_all():
+    # count must agree with len(find_all) across needle lengths, ranges,
+    # alignment and masks, since it shares the same search dispatch.
+    haystack = Tibs.from_random(20011, seed=b'count-fastpath')
+    needles = ['0b0', '0b1', '0xa', '0xabc', '0xabcd', '0b101',
+               Tibs.from_random(17, seed=b'n1'),
+               Tibs.from_random(64, seed=b'n2'),
+               Tibs.from_random(129, seed=b'n3')]
+    for needle in needles:
+        for byte_aligned in (False, True):
+            for start, end in [(None, None), (3, 19997), (5, 12345)]:
+                expected = len(haystack.find_all(
+                    needle, start=start, end=end, byte_aligned=byte_aligned))
+                assert haystack.count(
+                    needle, start=start, end=end, byte_aligned=byte_aligned) == expected
+    # And with a mask, against the masked find_all.
+    for needle, mask in [('0x0f', '0x0f'), ('0xabcd', '0xf0f0')]:
+        for byte_aligned in (False, True):
+            expected = len(haystack.find_all(
+                needle, mask=mask, byte_aligned=byte_aligned))
+            assert haystack.count(
+                needle, mask=mask, byte_aligned=byte_aligned) == expected
+
+
 def test_tibs_set_at_returns_new_instance():
     a = Tibs('0b0000')
     b = a.set_at([0, -1])
@@ -896,7 +934,9 @@ def test_find_with_mask():
     assert t.find('0x0f', mask='0x0f', byte_aligned=True) == 0
     assert t.rfind('0x0f', mask='0x0f', byte_aligned=True) == 16
     assert t.find_all('0x0f', mask='0x0f', byte_aligned=True) == [0, 16]
-    # count has no alignment option, so it also sees the unaligned matches.
+    # count honours byte_aligned too, so it matches the aligned find_all count.
+    assert t.count('0x0f', mask='0x0f', byte_aligned=True) == 2
+    # Without it, the unaligned matches are seen as well.
     assert t.count('0x0f', mask='0x0f') == 4
     assert t.find_all('0x0f', mask='0x0f') == [0, 14, 15, 16]
     # The masked-out bits of the needle are ignored, whatever they are.

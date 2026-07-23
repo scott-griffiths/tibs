@@ -57,7 +57,14 @@ With no argument it counts the set bits::
     >>> Tibs('0xef').count(1, 0, 4)
     3
 
-Counting should be very fast, especially when just counting the number of ``1`` or ``0`` bits.
+Like :meth:`Tibs.find_all` it also takes ``byte_aligned`` and ``mask``, so you can
+count occurrences on byte boundaries only, or with don't-care bits in the pattern::
+
+    >>> Tibs('0x1f2e3f').count('0x0f', mask='0x0f', byte_aligned=True)
+    2
+
+Counting should be very fast, especially when just counting the number of ``1`` or ``0`` bits,
+or when a byte-aligned pattern lands on whole bytes.
 
 .. _comparing_two_containers:
 

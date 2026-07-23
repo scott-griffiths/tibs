@@ -21,9 +21,10 @@ pub(crate) use raw_bytes::{
 };
 pub(crate) use search::{
     MaskedMatcher, SIGNAL_CHECK_INTERVAL, collect_find_all_positions,
-    collect_find_all_positions_masked, compute_lps, count_bitvec, count_bitvec_masked, find_bitvec,
-    find_bitvec_aligned, find_bitvec_masked_aligned, find_bitvec_with_lps_aligned,
-    rfind_bitvec_aligned, rfind_bitvec_with_reversed_lps_aligned,
+    collect_find_all_positions_masked, compute_lps, count_bitvec, count_bitvec_masked,
+    count_candidate_positions, count_single_bit, find_bitvec, find_bitvec_aligned,
+    find_bitvec_masked_aligned, find_bitvec_with_lps_aligned, rfind_bitvec_aligned,
+    rfind_bitvec_with_reversed_lps_aligned,
 };
 pub(crate) use validation::{
     validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,

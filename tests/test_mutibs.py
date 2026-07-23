@@ -1424,6 +1424,14 @@ def test_count_edge_cases():
     with pytest.raises(TypeError):
         m.count([1, 2])
     assert m.count(m) == 1
+
+
+def test_count_byte_aligned():
+    m = Mutibs('0xabababab')
+    assert m.count('0xab', byte_aligned=True) == 4
+    assert m.count('0xab', byte_aligned=True) == len(m.to_tibs().find_all('0xab', byte_aligned=True))
+    m = Mutibs('0b1000_0001_1000_0000')
+    assert m.count(1, byte_aligned=True) == 2
     assert m.count(m + [0]) == 0
     with pytest.raises(ValueError):
         _ = m.count(2)

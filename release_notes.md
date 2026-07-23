@@ -32,6 +32,14 @@ Added
   7
   ```
 
+* `count` now takes a `byte_aligned` parameter, so a pattern can be counted on
+  byte boundaries only, matching `find` and `find_all`.
+* 
+  ```python
+  >>> Tibs('0x1f2e3f').count('0x0f', mask='0x0f', byte_aligned=True)
+  2
+  ```
+
 * Added `extract` and `deposit` for reading and writing bit fields whose bits are
   scattered through a container by a mask, rather than being contiguous like the
   ones `field` handles. `extract` reads the masked bits, packed together;
