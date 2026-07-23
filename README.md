@@ -159,6 +159,8 @@ to look like real binary-data tasks:
 | [`log_scan.py`](examples/log_scan.py) | Find byte-aligned sync markers and pull records from a stream. |
 | [`little_endian_registers.py`](examples/little_endian_registers.py) | Decode and rebuild little-endian register dumps with `u16_le`. |
 | [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode LSB0, little-endian instruction fields. |
+| [`instruction_scan.py`](examples/instruction_scan.py) | Search for an opcode with `mask`, ignoring the register fields. |
+| [`fingerprints.py`](examples/fingerprints.py) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
 | [`sensor_samples.py`](examples/sensor_samples.py) | Pack and unpack 12-bit ADC samples. |
 | [`patch_config.py`](examples/patch_config.py) | Patch compact config fields in place with `Mutibs`. |
 | [`construct.py`](examples/construct.py) | Build and unpack a structured MPEG-style header. |

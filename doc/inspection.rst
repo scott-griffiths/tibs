@@ -44,11 +44,14 @@ Information methods
 count
 =====
 
-To count the number of times a bit value or sequence of bits occurs use the :meth:`Tibs.count` method::
+To count the number of times a bit value or sequence of bits occurs use the :meth:`Tibs.count` method.
+With no argument it counts the set bits::
 
     >>> t = Tibs.from_random(100_000_000)
-    >>> t.count(1)
+    >>> t.count()
     49996739
+    >>> t.count(0)
+    50003261
     >>> t.count([1, 0, 1])
     12503821
     >>> Tibs('0xef').count(1, 0, 4)
