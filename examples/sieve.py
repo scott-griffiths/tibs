@@ -14,7 +14,7 @@ for i in range(2, isqrt(limit) + 1):
         is_prime.unset(range(i * i, limit, i))
 
 # We can now use it to count how many primes.
-primes_count = is_prime.count(1)
+primes_count = is_prime.count()
 assert primes_count == 5_761_455
 
 # Let's also see how many twin primes there are (primes that differ by 2).

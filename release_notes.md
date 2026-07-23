@@ -23,6 +23,15 @@ Added
   `is_subset_of` stop as soon as they know the answer, so they can return
   almost immediately where building `a & b` would have to do all the work.
 
+* The `value` parameter of `count` is now optional, and counts the set bits when
+  it's not given, so `t.count()` is the same as `t.count(1)`. This matches the
+  new `count_and` and friends, which are all counts of set bits.
+
+  ```python
+  >>> Tibs('0xef').count()
+  7
+  ```
+
 * Searches can now take a `mask`, so that patterns can contain don't-care bits.
   The mask must be the same length as the bits being searched for, and only the
   bits set in it need to match, which makes it easy to pick out a field from a

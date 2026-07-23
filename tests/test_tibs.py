@@ -1105,3 +1105,18 @@ def test_pairwise_identities():
         assert a.intersects(b) == (a.count_and(b) > 0)
         assert a.is_subset_of(b) == (a.count_andnot(b) == 0)
         assert (a.is_subset_of(b) and b.is_subset_of(a)) == (a == b)
+
+
+def test_count_defaults_to_set_bits():
+    for cls in (Tibs, Mutibs):
+        t = cls('0xef')
+        assert t.count() == t.count(1) == 7
+        assert t.count(0) == 1
+        # The optional value leaves the other parameters usable by keyword.
+        assert t.count(start=0, end=4) == 3
+        assert t.count(1, 0, 4) == 3
+        assert cls('').count() == 0
+        assert cls.from_ones(100).count() == 100
+        assert cls.from_zeros(100).count() == 0
+    # An unset one-bit mask still matches every position.
+    assert Tibs('0xef').count(mask='0b0') == 8

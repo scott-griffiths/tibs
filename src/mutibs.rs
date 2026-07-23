@@ -2640,7 +2640,7 @@ impl Mutibs {
 
     /// Counts the total number of occurrences of a bit pattern.
     ///
-    /// :param object value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``).
+    /// :param object | None value: Either something that can be converted to a ``Tibs``, or a single bit (one of ``0``, ``1``, ``False`` or ``True``). Defaults to counting the set bits.
     /// :param int | None start: The start of the slice to count within. Defaults to 0.
     /// :param int | None end: The end of the slice to count within. Defaults to len(self).
     /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
@@ -2649,26 +2649,36 @@ impl Mutibs {
     /// :raises ValueError: if the slice parameters are invalid, or if the mask length doesn't match
     ///     the length of the value.
     ///
+    /// With no ``value`` this counts the set bits, so ``count()`` is the same as ``count(1)``.
+    ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0xef').count(1)
+    ///     >>> Mutibs('0xef').count()
     ///     7
     ///     >>> Mutibs('0xef').count(1, 0, 4)
     ///     3
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    #[pyo3(signature = (value, start=None, end=None, mask=None), text_signature = "($self, value, start=None, end=None, mask=None)")]
+    #[pyo3(signature = (value=None, start=None, end=None, mask=None), text_signature = "($self, value=None, start=None, end=None, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
-        value: &Bound<'_, PyAny>,
+        value: Option<&Bound<'_, PyAny>>,
         start: Option<isize>,
         end: Option<isize>,
         mask: Option<Tibs>,
     ) -> PyResult<usize> {
         let (start, end) = validate_slice(self.len(), start, end)?;
         let haystack = &self.as_bitslice()[start..end];
+
+        let Some(value) = value else {
+            // No value given, so count the set bits.
+            return match prepare_mask(mask, 1)? {
+                Some(_) => Ok(haystack.len()),
+                None => Ok(count_bitslice(haystack, true)),
+            };
+        };
 
         if let Some(b) = helpers::convert_to_bool(value) {
             return match prepare_mask(mask, 1)? {
