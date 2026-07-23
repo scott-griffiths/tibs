@@ -185,20 +185,33 @@ Benchmarks are machine-dependent, but the mean speedup over bitarray will typica
 ## Examples
 
 The runnable examples in [`examples/`](examples/) are small, but they are meant
-to look like real binary-data tasks:
+to look like real binary-data tasks. They're grouped by the view each one leans
+on most, though several use more than one.
+
+**The bits as a sequence** — searching a stream and slicing fields out of it.
 
 | Example | Shows |
 | --- | --- |
 | [`log_scan.py`](examples/log_scan.py) | Find byte-aligned sync markers and pull records from a stream. |
+| [`instruction_scan.py`](examples/instruction_scan.py) | Search for an opcode with `mask`, ignoring the register fields. |
+| [`patch_config.py`](examples/patch_config.py) | Patch compact config fields in place with `Mutibs`. |
+
+**Typed fields and views** — numeric fields, with byte order and bit labels handled by a view.
+
+| Example | Shows |
+| --- | --- |
+| [`construct.py`](examples/construct.py) | Build and unpack a structured MPEG-style header. |
+| [`sensor_samples.py`](examples/sensor_samples.py) | Pack and unpack 12-bit ADC samples. |
 | [`little_endian_registers.py`](examples/little_endian_registers.py) | Decode and rebuild little-endian register dumps with `u16_le`. |
 | [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode LSB0, little-endian instruction fields. |
-| [`instruction_scan.py`](examples/instruction_scan.py) | Search for an opcode with `mask`, ignoring the register fields. |
 | [`scattered_field.py`](examples/scattered_field.py) | Read and write a register field split around status bits with `extract`/`deposit`. |
-| [`fingerprints.py`](examples/fingerprints.py) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
-| [`sensor_samples.py`](examples/sensor_samples.py) | Pack and unpack 12-bit ADC samples. |
-| [`patch_config.py`](examples/patch_config.py) | Patch compact config fields in place with `Mutibs`. |
-| [`construct.py`](examples/construct.py) | Build and unpack a structured MPEG-style header. |
+
+**Sets of bits** — bitwise algebra and comparison.
+
+| Example | Shows |
+| --- | --- |
 | [`sieve.py`](examples/sieve.py) | Use a large mutable bitset for a prime sieve. |
+| [`fingerprints.py`](examples/fingerprints.py) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
 
 
 ## Project status

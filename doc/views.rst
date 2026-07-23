@@ -118,7 +118,8 @@ This works for floats and bytes too::
 The default byte order is ``ByteOrder.Unspecified``. For whole-byte data this is
 the same interpretation as ``ByteOrder.Big``, but it can also be used for
 non-whole-byte data. The explicit ``be`` and ``le`` views require a whole number
-of bytes.
+of bytes. See :doc:`example_little_endian_registers` for decoding and rebuilding a
+little-endian register dump.
 
 Bit order
 ^^^^^^^^^
@@ -173,6 +174,9 @@ f-string and the layout is applied for you (see :ref:`formatting`)::
     '1'
     >>> f"{instruction.field(63, 32):#x}"
     '0x11223344'
+
+That combination of ``lsb0`` and ``le`` is worked through in full in
+:doc:`example_ebpf_instruction`.
 
 The one exception is an empty format spec, which still gives you the ``repr`` of the
 view rather than a value, because that's what ``str()`` of a view has always done.

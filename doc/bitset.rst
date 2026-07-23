@@ -58,22 +58,25 @@ building anything in between, which is typically several times faster:
 .. list-table::
    :header-rows: 1
 
-   * - Method
+   * - Method call
      - Equivalent to
-   * - :meth:`~Tibs.count_and`
-     - ``(a & b).count(1)``
-   * - :meth:`~Tibs.count_or`
-     - ``(a | b).count(1)``
-   * - :meth:`~Tibs.count_xor`
-     - ``(a ^ b).count(1)`` — the Hamming distance
-   * - :meth:`~Tibs.count_andnot`
-     - ``a.count(1) - a.count_and(b)``
-   * - :meth:`~Tibs.intersects`
+   * - ``a.count_and(b)``
+     - ``(a & b).count()``
+   * - ``a.count_or(b)``
+     - ``(a | b).count()``
+   * - ``a.count_xor(b)``
+     - ``(a ^ b).count()`` — the Hamming distance
+   * - ``a.count_andnot(b)``
+     - ``a.count() - a.count_and(b)``
+   * - ``a.intersects(b)``
      - ``(a & b).any()``
-   * - :meth:`~Tibs.is_subset_of`
+   * - ``a.is_subset_of(b)``
      - ``(a & b) == a``
 
-Both containers must be the same length, as they must be for ``&``, ``|`` and ``^``.
+The four counting methods are :meth:`~Tibs.count_and`, :meth:`~Tibs.count_or`,
+:meth:`~Tibs.count_xor` and :meth:`~Tibs.count_andnot`; the two predicates are
+:meth:`~Tibs.intersects` and :meth:`~Tibs.is_subset_of`. Both containers must be
+the same length, as they must be for ``&``, ``|`` and ``^``.
 
 It helps to think of a container as the *set of positions where the bit is set* -
 so a ``1`` means "present" and a ``0`` means "absent", rather than being a second

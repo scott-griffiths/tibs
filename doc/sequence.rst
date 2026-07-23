@@ -107,6 +107,18 @@ Indexing and slicing always run from left to right, with bit zero on the left.
 When a specification numbers bits differently, or a multi-byte value is stored
 little-endian, use a :doc:`view <views>` rather than reaching for arithmetic.
 
+Iterating over a ``Tibs`` yields its bits as bools, though :meth:`Tibs.to_bools`
+is faster when you want them all as a list::
+
+    >>> [bit for bit in Tibs('0b1101')]
+    [True, True, False, True]
+
+A ``Mutibs`` is deliberately *not* iterable, because its contents could change
+while the iterator was live. Convert with :meth:`Mutibs.to_tibs` (copy) or
+:meth:`Mutibs.as_tibs` (move) first. The same restriction applies to the
+iterator-returning methods such as :meth:`Tibs.chunks_iter`; see
+:doc:`tibs_vs_mutibs`.
+
 
 Searching
 ^^^^^^^^^
@@ -173,6 +185,9 @@ left. Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
 use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
 to move the data if you no longer need the mutable object.
 
+Scanning a byte stream for markers and pulling records out of it is a common use
+— see :doc:`example_log_scan`.
+
 .. _searching_with_a_mask:
 
 Searching with a mask
@@ -188,7 +203,7 @@ so whatever the pattern has under them is ignored::
 
 That finds every byte whose low nibble is ``1111``, whatever its high nibble.
 Instruction encodings are the classic case: mask out the register and immediate
-fields and search for the opcode bits alone.
+fields and search for the opcode bits alone — see :doc:`example_instruction_scan`.
 
 The ``mask`` argument works the same way on :meth:`~Tibs.find`,
 :meth:`~Tibs.rfind`, :meth:`~Tibs.find_all`, :meth:`~Tibs.find_all_iter`,
@@ -272,6 +287,8 @@ The methods in this section change a ``Mutibs`` in place and return ``None``. Ma
 of them have copy-returning siblings (``insert``/``inserted``,
 ``replace``/``replaced``, and so on) that are also available on the immutable
 ``Tibs``; the naming convention is described in :doc:`tibs_vs_mutibs`.
+For a worked example of patching packed fields in place, see
+:doc:`example_patch_config`.
 
 Appending and extending
 =======================

@@ -9,9 +9,9 @@ consequences:
 
 * Tibs instances cannot change after they are created. This lets you use them as keys in dictionaries,
   they can be hashed and used in sets.
-* Methods that return iterators over the data are available for Tibs, but not Mutibs. This is because for
-  a ``Mutibs`` the data could change while the iterator is live. To use these methods on a ``Mutibs`` first
-  convert to a ``Tibs``.
+* Direct iteration (``for bit in x``) and methods that return iterators over the data are available for
+  Tibs, but not Mutibs. This is because for a ``Mutibs`` the data could change while the iterator is live.
+  To iterate over a ``Mutibs`` first convert to a ``Tibs`` with :meth:`Mutibs.to_tibs` or :meth:`Mutibs.as_tibs`.
 
 
 Mutating and copy methods
@@ -54,6 +54,7 @@ new mutable value without changing the original::
    :header: "Mutibs mutating methods", "Tibs/Mutibs copy equivalent"
 
    ":meth:`~Mutibs.byte_swap`", ":meth:`~Mutibs.byte_swapped`"
+   ":meth:`~Mutibs.deposit`", ":meth:`~Mutibs.deposited`"
    ":meth:`~Mutibs.insert`", ":meth:`~Mutibs.inserted`"
    ":meth:`~Mutibs.invert`", ":meth:`~Mutibs.inverted`"
    ":meth:`~Mutibs.replace`", ":meth:`~Mutibs.replaced`"

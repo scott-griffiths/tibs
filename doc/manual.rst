@@ -67,20 +67,31 @@ reading and writing the sequence without ever copying it into another type:
   intermediate object built along the way.
 
 These aren't separate modes or separate types — it's one object, and the lenses
-are just different questions you ask of the same bits. The manual is organised
-around them:
+are just different questions you ask of the same bits.
 
-* :doc:`sequence` — the bits as a container: construction, indexing, searching,
-  splitting, editing and reordering.
-* :doc:`typed_fields` — reading and writing typed values out of the bits.
-* :doc:`views` — byte order, bit labels and labelled fields.
-* :doc:`formatting` — rendering values with Python's format mini-language.
-* :doc:`bitset` — treating the container as a set of bit positions.
-* :doc:`serialization` — round-tripping arbitrary-length values through bytes.
-* :doc:`tibs_vs_mutibs` — choosing between the immutable and mutable types.
 
-The manual talks about all the major features but is not exhaustive — see the
-:doc:`api` docs for every method and parameter.
+Quick taste
+^^^^^^^^^^^
+
+Build a packet from mixed pieces, split it into fields, and read each field as a
+typed value::
+
+    >>> packet = Tibs.from_joined(["0b1010", Tibs.from_u(3200, 12), b"OK"])
+    >>> packet
+    Tibs('0xac804f4b')
+    >>> flags, size, payload = packet.split_at([4, 16])
+    >>> flags.bin, size.u, payload.bytes
+    ('1010', 3200, b'OK')
+
+The same object also answers set-style questions about its bits — here, whether
+every required capability bit is granted::
+
+    >>> required, granted = Tibs('0b0010_1000'), Tibs('0b1010_1100')
+    >>> required.is_subset_of(granted)
+    True
+
+That is the sequence, the typed-fields lens and the set-of-bits lens, all on one
+value. The :doc:`examples` work through larger versions of the same ideas.
 
 
 Constructors at a glance
@@ -143,6 +154,35 @@ To install use ::
 
 There are pre-built wheels for most configurations - if there are issues then please let me know.
 Tibs works with Python 3.10 and later.
+
+
+How the manual is organised
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The chapters follow the substrate and its two lenses.
+
+*The bits as a container*
+
+* :doc:`sequence` — construction, indexing, searching, splitting, editing and reordering.
+
+*Reading them as typed fields*
+
+* :doc:`typed_fields` — reading and writing typed values out of the bits.
+* :doc:`views` — byte order, bit labels and labelled fields.
+* :doc:`formatting` — rendering values with Python's format mini-language.
+
+*Reading them as a set of bits*
+
+* :doc:`bitset` — bitwise algebra, cardinalities and set predicates.
+
+*Cross-cutting*
+
+* :doc:`serialization` — round-tripping arbitrary-length values through bytes.
+* :doc:`tibs_vs_mutibs` — choosing between the immutable and mutable types.
+
+The manual covers the major features but is not exhaustive — see the :doc:`api`
+docs for every method and parameter, and the :doc:`appendices` for background on
+byte and bit order and the encoded byte format.
 
 
 .. toctree::

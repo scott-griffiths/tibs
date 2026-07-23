@@ -130,6 +130,9 @@ The matching interpretation methods decode values back from a bit sequence::
     >>> samples.to_values("u12")
     [0, 103, 2048, 4095]
 
+See :doc:`example_sensor_samples` for packing and unpacking a stream of samples,
+and :doc:`example_construct` for driving a whole header from a table of dtypes.
+
 For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
 when byte order matters. These suffixes mean little-endian and big-endian byte
 order respectively::
