@@ -1774,3 +1774,33 @@ def test_pairwise_matches_tibs_when_unaligned():
 def test_invert_empty_special_method():
     assert ~Mutibs() == Mutibs()
     assert ~Tibs() == Tibs()
+
+
+def test_extract_deposit_mutibs():
+    m = Mutibs('0b11010110')
+    assert m.extract('0b10110000') == Mutibs('0b101')
+    # deposit mutates in place and returns None
+    ret = m.deposit('0b111', '0b10110000')
+    assert ret is None
+    assert m == Mutibs('0b11110110')
+    # deposited returns a new object, leaving the original alone
+    base = Mutibs('0b11010110')
+    assert base.deposited('0b111', '0b10110000') == Mutibs('0b11110110')
+    assert base == Mutibs('0b11010110')
+
+
+def test_deposit_self_value():
+    # Depositing a Mutibs into itself must read its pre-write bits.
+    m = Mutibs('0b1010')
+    m.deposit(m, Tibs.from_ones(4))
+    assert m == Tibs('0b1010')
+
+
+def test_extract_deposit_mutibs_errors():
+    m = Mutibs('0b1011')
+    with pytest.raises(ValueError):
+        m.extract('0b101')
+    with pytest.raises(ValueError):
+        m.deposit('0b1', '0b101')
+    with pytest.raises(ValueError):
+        m.deposit('0b1', '0b1100')

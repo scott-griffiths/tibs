@@ -355,6 +355,18 @@ where
     }
 }
 
+/// Scatter `value`'s bits into the positions of `bits` where `mask` is set,
+/// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
+/// be the same length and `value` must be `mask.count_ones()` bits long; both
+/// are the caller's responsibility to check.
+pub(crate) fn deposit_masked(bits: &mut BS, value: &BS, mask: &BS) {
+    debug_assert_eq!(bits.len(), mask.len());
+    debug_assert_eq!(value.len(), mask.count_ones());
+    for (value_index, pos) in mask.iter_ones().enumerate() {
+        bits.set(pos, value[value_index]);
+    }
+}
+
 pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
     let mut ones = 0;
 
@@ -483,6 +495,21 @@ pub(crate) trait BitCollection: Sized + Clone {
             _ => for_each_pair_word_bitslice(self.as_bitslice(), other.as_bitslice(), op, test),
         }
         found
+    }
+
+    /// Read the bits of `self` where `mask` is set, compacted into a new
+    /// bit vector of length `mask.count_ones()` (the PEXT operation). `self`
+    /// and `mask` must be the same length.
+    fn extract_masked(&self, mask: &impl BitCollection) -> BV {
+        debug_assert!(self.len() == mask.len());
+        let bits = self.as_bitslice();
+        let mask_bits = mask.as_bitslice();
+        let mut out = BV::with_capacity(mask_bits.count_ones());
+        // Walking the mask's set positions skips its zero runs.
+        for pos in mask_bits.iter_ones() {
+            out.push(bits[pos]);
+        }
+        out
     }
 
     #[inline]

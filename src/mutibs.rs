@@ -1,5 +1,7 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, LogicalOp, concatenate_bitcollections, count_bitslice};
+use crate::core::{
+    BitCollection, LogicalOp, concatenate_bitcollections, count_bitslice, deposit_masked,
+};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
@@ -593,6 +595,23 @@ impl Mutibs {
 
         *self.as_mut_bitvec_ref() = result;
         Ok(replacements)
+    }
+
+    pub(crate) fn apply_deposit(&mut self, value: &Tibs, mask: &Tibs) -> PyResult<()> {
+        validate_logical_op_lengths(self.len(), mask.len())?;
+        let set_bits = mask.as_bitslice().count_ones();
+        if value.len() != set_bits {
+            return Err(PyValueError::new_err(format!(
+                "The value to deposit is {} bits long, but the mask selects {set_bits} bits.",
+                value.len()
+            )));
+        }
+        deposit_masked(
+            self.as_mut_bitvec_ref(),
+            value.as_bitslice(),
+            mask.as_bitslice(),
+        );
+        Ok(())
     }
 
     pub(crate) fn apply_insert_bits(&mut self, mut pos: isize, bs: &Tibs) -> PyResult<()> {
@@ -2348,6 +2367,84 @@ impl Mutibs {
     pub fn is_subset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
+    }
+
+    /// Read the bits at the positions set in a mask, packed together.
+    ///
+    /// This reads a bit field whose bits are scattered through the Mutibs by the
+    /// mask, the way :meth:`field` reads a contiguous one. The result has one
+    /// bit for each set bit of the mask, in order.
+    ///
+    /// :param object mask: The mask selecting which bits to read. This can be anything promotable to ``Tibs``, and must be the same length as ``self``.
+    /// :return: A new Mutibs of length ``mask.count()``.
+    /// :raises ValueError: if the mask length doesn't match the length of ``self``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b11010110').extract('0b10110000')
+    ///     Mutibs('0b101')
+    ///
+    // Named `extract_field` because `Mutibs::extract` is the FromPyObject
+    // promotion method used throughout the crate.
+    #[pyo3(name = "extract")]
+    pub fn extract_field(&self, mask: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), mask.len())?;
+        Ok(Self::from_bv(self.extract_masked(&mask)))
+    }
+
+    /// Write a scattered bit field into the Mutibs in place.
+    ///
+    /// This is the inverse of :meth:`extract`, and writes a scattered field the
+    /// way slice assignment writes a contiguous one: the bits of ``value`` are
+    /// written into the positions set in ``mask``, and the other bits are left
+    /// unchanged.
+    ///
+    /// :param object value: The bits to deposit. This can be anything promotable to ``Tibs``, and must be ``mask.count()`` bits long.
+    /// :param object mask: The mask selecting which positions to write. This can be anything promotable to ``Tibs``, and must be the same length as ``self``.
+    /// :return: None
+    /// :raises ValueError: if the mask length doesn't match the length of ``self``, or ``value`` is not ``mask.count()`` bits long.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs('0b11010110')
+    ///     >>> m.deposit('0b111', '0b10110000')
+    ///     >>> m.bin
+    ///     '11110110'
+    ///
+    pub fn deposit(
+        mut slf: PyRefMut<'_, Self>,
+        value: &Bound<'_, PyAny>,
+        mask: Tibs,
+    ) -> PyResult<()> {
+        // Snapshot value first, both to avoid re-borrowing self when value is
+        // self, and so a self-deposit reads the pre-write bits.
+        let value = if value.as_ptr() == slf.as_ptr() {
+            slf.to_tibs()
+        } else {
+            Tibs::extract(value.as_borrowed())?
+        };
+        slf.apply_deposit(&value, &mask)
+    }
+
+    /// Return a new Mutibs with a scattered bit field written into it.
+    ///
+    /// This is the non-inplace version of :meth:`deposit`.
+    ///
+    /// :param object value: The bits to deposit. This can be anything promotable to ``Tibs``, and must be ``mask.count()`` bits long.
+    /// :param object mask: The mask selecting which positions to write. This can be anything promotable to ``Tibs``, and must be the same length as ``self``.
+    /// :return: A new Mutibs.
+    /// :raises ValueError: if the mask length doesn't match the length of ``self``, or ``value`` is not ``mask.count()`` bits long.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0b11010110').deposited('0b111', '0b10110000').bin
+    ///     '11110110'
+    ///
+    pub fn deposited(&self, value: &Bound<'_, PyAny>, mask: Tibs) -> PyResult<Self> {
+        let value = Tibs::extract(value.as_borrowed())?;
+        let mut out = self.clone();
+        out.apply_deposit(&value, &mask)?;
+        Ok(out)
     }
 
     /// Bit-wise 'and' between two Mutibs. Returns new Mutibs.

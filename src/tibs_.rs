@@ -2311,6 +2311,50 @@ impl Tibs {
         Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
     }
 
+    /// Read the bits at the positions set in a mask, packed together.
+    ///
+    /// This reads a bit field whose bits are scattered through the Tibs by the
+    /// mask, the way :meth:`field` reads a contiguous one. The result has one
+    /// bit for each set bit of the mask, in order.
+    ///
+    /// :param object mask: The mask selecting which bits to read. This can be anything promotable to ``Tibs``, and must be the same length as ``self``.
+    /// :return: A new Tibs of length ``mask.count()``.
+    /// :raises ValueError: if the mask length doesn't match the length of ``self``.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b11010110').extract('0b10110000')
+    ///     Tibs('0b101')
+    ///
+    // Named `extract_field` because `Tibs::extract` is the FromPyObject
+    // promotion method used throughout the crate.
+    #[pyo3(name = "extract")]
+    pub fn extract_field(&self, mask: Tibs) -> PyResult<Self> {
+        validate_logical_op_lengths(self.len(), mask.len())?;
+        Ok(Self::from_bv(self.extract_masked(&mask)))
+    }
+
+    /// Return a new Tibs with a scattered bit field written into it.
+    ///
+    /// This is the immutable equivalent of :meth:`Mutibs.deposit`, and the
+    /// inverse of :meth:`extract`: the bits of ``value`` are written into the
+    /// positions set in ``mask``, and the other bits are copied unchanged.
+    ///
+    /// :param object value: The bits to deposit. This can be anything promotable to ``Tibs``, and must be ``mask.count()`` bits long.
+    /// :param object mask: The mask selecting which positions to write. This can be anything promotable to ``Tibs``, and must be the same length as ``self``.
+    /// :return: A new Tibs.
+    /// :raises ValueError: if the mask length doesn't match the length of ``self``, or ``value`` is not ``mask.count()`` bits long.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b11010110').deposited('0b111', '0b10110000').bin
+    ///     '11110110'
+    ///
+    pub fn deposited(&self, value: &Bound<'_, PyAny>, mask: Tibs) -> PyResult<Self> {
+        let value = Tibs::extract(value.as_borrowed())?;
+        self.copy_with_mutation(|out| out.apply_deposit(&value, &mask))
+    }
+
     /// Bit-wise 'and' between two Tibs. Returns new Tibs.
     ///
     /// :param object other: The other bits. This can be anything promotable to ``Tibs``.

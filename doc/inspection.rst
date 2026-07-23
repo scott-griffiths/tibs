@@ -113,6 +113,24 @@ The two predicates stop as soon as they know the answer, so on large containers
 where the answer comes early they finish in a fraction of the time that building
 ``a & b`` would take.
 
+.. _scattered_fields:
+
+Reading a scattered field
+=========================
+
+:meth:`~Tibs.field` reads a *contiguous* run of bits. Some fields aren't
+contiguous — an instruction immediate split across the word, flags interleaved
+with data — and for those :meth:`Tibs.extract` reads the bits picked out by a
+mask and packs them together. It's the bit-level version of the PEXT instruction::
+
+    >>> word = Tibs('0b11010110')
+    >>> word.extract('0b10110000')   # the bits at positions 0, 2 and 3
+    Tibs('0b101')
+
+The mask must be the same length as the container, and the result has one bit for
+each set bit of the mask. The inverse, writing such a field, is
+:meth:`Mutibs.deposit` — see :ref:`deposit`.
+
 find / rfind
 ============
 

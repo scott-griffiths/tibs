@@ -15,6 +15,7 @@ Some examples using the Tibs library. The code for these can be found in the ``e
     example_ebpf_instruction
     example_instruction_scan
     example_patch_config
+    example_scattered_field
     example_sensor_samples
     example_log_scan
     example_fingerprints

@@ -32,6 +32,20 @@ Added
   7
   ```
 
+* Added `extract` and `deposit` for reading and writing bit fields whose bits are
+  scattered through a container by a mask, rather than being contiguous like the
+  ones `field` handles. `extract` reads the masked bits, packed together;
+  `deposit` (in place, on `Mutibs`) and `deposited` (returning a new container)
+  write them back, leaving the unmasked bits untouched. These are the bit-level
+  equivalents of the x86 PEXT and PDEP instructions.
+
+  ```python
+  >>> Tibs('0b11010110').extract('0b10110000')
+  Tibs('0b101')
+  >>> Tibs('0b11010110').deposited('0b111', '0b10110000').bin
+  '11110110'
+  ```
+
 * Searches can now take a `mask`, so that patterns can contain don't-care bits.
   The mask must be the same length as the bits being searched for, and only the
   bits set in it need to match, which makes it easy to pick out a field from a

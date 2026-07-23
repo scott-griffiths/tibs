@@ -126,6 +126,25 @@ Slices can also be assigned to, or deleted, using normal Python syntax::
     >>> m.bin
     '1100'
 
+.. _deposit:
+
+Writing a scattered field
+=========================
+
+Slice assignment writes a contiguous field. To write one whose bits are
+scattered through the container by a mask, use :meth:`Mutibs.deposit`: the bits of
+the value are placed at the positions the mask selects, and the rest of the
+container is left alone. It is the inverse of :meth:`~Tibs.extract` (see
+:ref:`scattered_fields`) and the bit-level version of the PDEP instruction::
+
+    >>> m = Mutibs('0b11010110')
+    >>> m.deposit('0b111', '0b10110000')   # write 3 bits into positions 0, 2, 3
+    >>> m.bin
+    '11110110'
+
+The value must be exactly ``mask.count()`` bits long. The non-mutating
+:meth:`Tibs.deposited` returns a new container instead of writing in place.
+
 Setting and unsetting bits
 ==========================
 
