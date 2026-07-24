@@ -1014,7 +1014,12 @@ impl Mutibs {
     /// The type codes ``b``, ``o``, ``x`` and ``X`` give the bit representation, and so
     /// keep any leading zeros. They are equivalent to the :attr:`~Mutibs.bin`,
     /// :attr:`~Mutibs.oct` and :attr:`~Mutibs.hex` properties. The type codes ``u`` and
-    /// ``i`` give the unsigned and signed integer interpretations instead.
+    /// ``i`` give the unsigned and signed integer interpretations, and ``e``, ``f`` and
+    /// ``g`` (with their uppercase forms) show the IEEE float value using Python's
+    /// scientific, fixed-point and general presentations; a float needs a length of 16,
+    /// 32 or 64 bits. All of these read the bits big-endian, the same as the matching
+    /// properties. To interpret them in another byte or bit order, format a view such as
+    /// ``self.le`` instead.
     ///
     /// The ``#`` flag adds a ``0b``, ``0o``, ``0x`` or ``0X`` prefix. The ``_`` option
     /// groups the digits, with the group size taken from the otherwise unused precision

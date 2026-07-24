@@ -253,6 +253,32 @@ def test_numeric_codes_ignore_bit_length(cls):
     assert format(cls('0b101'), 'i') == '-3'
 
 
+# Numeric codes: e / f / g (IEEE float)
+
+
+def test_float_codes_follow_float_formatting(cls):
+    # VALUE is 32 bits, a valid IEEE float length. The float codes borrow Python's
+    # own float presentations, so they must match formatting the float directly.
+    t = cls(VALUE)
+    for spec in ['e', 'E', 'f', 'F', 'g', 'G', '.3e', '.2f', '#g',
+                 '+.4e', '_g', '>15.2f', '015.3f', '^14g']:
+        assert format(t, spec) == format(t.f, spec), spec
+
+
+def test_float_code_matches_f_property(cls):
+    for length in (16, 32, 64):
+        t = cls.from_f(3.14159, length)
+        assert format(t, 'f') == format(t.f, 'f')
+        assert format(t, 'g') == format(t.f, 'g')
+
+
+def test_float_codes_need_an_ieee_length(cls):
+    for length in (8, 15, 17, 24, 31, 33, 63, 65, 128):
+        for code in 'efgEFG':
+            with pytest.raises(ValueError):
+                format(cls.from_zeros(length), code)
+
+
 # Empty containers
 
 
@@ -366,7 +392,7 @@ def test_group_size_rejected_for_numeric_codes(cls):
 
 
 def test_unknown_type_codes(cls):
-    for spec in ['d', 'f', 's', 'c', 'n', 'e', 'g', 'q', '%', 'B', 'O', 'U', 'I']:
+    for spec in ['d', 's', 'c', 'n', 'q', '%', 'B', 'O', 'U', 'I']:
         with pytest.raises(ValueError):
             format(cls(VALUE), spec)
 

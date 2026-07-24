@@ -34,16 +34,27 @@ properties:
 * ``x`` — hexadecimal. Length must be a multiple of 4.
 * ``X`` — upper case hexadecimal. Length must be a multiple of 4.
 
-The second are *interpretation* codes, which decode the bits as a number. These borrow
-the letters used by :class:`Dtype` rather than Python's ``d``, because a ``Tibs`` has
-both a signed and an unsigned reading and there's no sensible way to guess which you
-meant:
+The second are *interpretation* codes, which decode the bits as a number. The integer
+codes follow :class:`Dtype` rather than Python's ``d``: a ``Tibs`` has both a signed and
+an unsigned reading and there's no sensible way to guess which you meant, so it takes
+``u`` and ``i`` to say which. The float value then borrows Python's own ``e``, ``f`` and
+``g`` presentation codes:
 
 * ``u`` — the unsigned integer value, as given by :attr:`Tibs.u`.
 * ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`.
+* ``e``, ``f``, ``g`` — the IEEE float value, as given by :attr:`Tibs.f`, shown in
+  scientific, fixed-point or general form. The uppercase ``E``, ``F`` and ``G`` behave
+  as they do in Python. The length must be 16, 32 or 64 bits.
 
-Both families work at any length, though the interpretation codes need at least one bit
-to interpret.
+The ``u`` and ``i`` codes work at any length (they need at least one bit to interpret),
+while the float codes are limited to the three IEEE widths. The float codes borrow
+Python's float presentations unchanged, so ``:f`` is fixed-point, ``:e`` is scientific
+and ``:g`` trims trailing zeros, with the precision field meaning exactly what it does
+for a Python float::
+
+    >>> pi = Tibs.from_f(3.14159, 32)
+    >>> f"{pi:f}", f"{pi:.2f}", f"{pi:.3e}", f"{pi:g}"
+    ('3.141590', '3.14', '3.142e+00', '3.14159')
 
 So the same 32 bits can be shown four different ways::
 
@@ -136,7 +147,7 @@ padding is not available for ``b``, ``o``, ``x`` and ``X``::
     >>> f"{Tibs('0xf'):#06x}"
     Traceback (most recent call last):
     ...
-    ValueError: Zero padding is not allowed with the 'x' format type, because the padding could not be told apart from the data and would change its apparent length. Align with '<', '>' or '^' to pad with spaces instead, or use the 'u' or 'i' type code for a numeric interpretation.
+    ValueError: Zero padding is not allowed with the 'x' format type, because the padding could not be told apart from the data and would change its apparent length. Align with '<', '>' or '^' to pad with spaces instead, or use the 'u', 'i' or 'f' type code for a numeric interpretation.
 
 Zero padding an integer is harmless, because leading zeros don't change what an integer
 is. Here they would: a 4-bit value padded to ``'0x000f'`` reads as a 16-bit one, and

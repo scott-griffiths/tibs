@@ -1,4 +1,5 @@
 use crate::core::BitCollection;
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
@@ -145,10 +146,14 @@ impl FormatSpec {
             0 => {}
             1 => {
                 let c = chars[i];
-                if !matches!(c, 'b' | 'o' | 'x' | 'X' | 'u' | 'i') {
+                if !matches!(
+                    c,
+                    'b' | 'o' | 'x' | 'X' | 'u' | 'i' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G'
+                ) {
                     return Err(PyValueError::new_err(format!(
                         "Unknown format code '{c}' for object of type '{type_name}'. \
-                         Valid codes are 'b', 'o', 'x', 'X', 'u' and 'i'."
+                         Valid codes are 'b', 'o', 'x', 'X', 'u', 'i', 'e', 'E', 'f', 'F', \
+                         'g' and 'G'."
                     )));
                 }
                 parsed.ty = Some(c);
@@ -274,7 +279,7 @@ pub(crate) fn format_bit_collection(
         {
             return Err(PyValueError::new_err(format!(
                 "Format specifier '{spec}' needs a type code to go with it. \
-                 Use 'b', 'o', 'x' or 'X' for the bit representation, or 'u' or 'i' \
+                 Use 'b', 'o', 'x' or 'X' for the bit representation, or 'u', 'i' or 'f' \
                  for a numeric interpretation."
             )));
         }
@@ -282,30 +287,37 @@ pub(crate) fn format_bit_collection(
     };
 
     // The numeric interpretations really are numbers, so hand the rest of the spec
-    // to the Python int. That keeps '+', ',', '_', 'n' and zero padding behaving
-    // exactly as they do everywhere else, including their error messages.
-    if matches!(ty, 'u' | 'i') {
-        let value = if ty == 'u' {
+    // to the Python int or float. That keeps '+', ',', '_', 'n', precision and zero
+    // padding behaving exactly as they do everywhere else, including their error
+    // messages. 'u' and 'i' are tibs-only spellings for a Python decimal, while the
+    // float presentations 'e', 'f' and 'g' (and their uppercase forms) map straight
+    // onto Python's, so a bare ``:f`` is fixed-point just as it is for any other float.
+    // to_f64 rejects any length that is not 16, 32 or 64 bits.
+    let is_float = matches!(ty, 'e' | 'E' | 'f' | 'F' | 'g' | 'G');
+    if is_float || matches!(ty, 'u' | 'i') {
+        let value = if is_float {
+            bits.to_f64(false)?.into_bound_py_any(py)?
+        } else if ty == 'u' {
             bits.to_uint(py, false)?
         } else {
             bits.to_int(py, false)?
         };
-        let mut int_spec = String::with_capacity(spec.len());
-        int_spec.push_str(&spec[..spec.len() - ty.len_utf8()]);
-        int_spec.push('d');
-        return value.call_method1("__format__", (int_spec,))?.extract();
+        let mut num_spec = String::with_capacity(spec.len());
+        num_spec.push_str(&spec[..spec.len() - ty.len_utf8()]);
+        num_spec.push(if is_float { ty } else { 'd' });
+        return value.call_method1("__format__", (num_spec,))?.extract();
     }
 
     if let Some(sign) = parsed.sign {
         return Err(PyValueError::new_err(format!(
             "Sign '{sign}' is not allowed with the '{ty}' format type as a bit sequence \
-             has no sign. Use the 'u' or 'i' type code for a numeric interpretation."
+             has no sign. Use the 'u', 'i' or 'f' type code for a numeric interpretation."
         )));
     }
     if parsed.grouping == Some(',') {
         return Err(PyValueError::new_err(format!(
             "Comma grouping is not allowed with the '{ty}' format type. Use '_' to group \
-             digits, or the 'u' or 'i' type code for a numeric interpretation."
+             digits, or the 'u', 'i' or 'f' type code for a numeric interpretation."
         )));
     }
     if parsed.group_size.is_some() && parsed.grouping.is_none() {
@@ -326,7 +338,7 @@ pub(crate) fn format_bit_collection(
                 "Zero padding is not allowed with the '{ty}' format type, because the \
                  padding could not be told apart from the data and would change its \
                  apparent length. Align with '<', '>' or '^' to pad with spaces instead, \
-                 or use the 'u' or 'i' type code for a numeric interpretation."
+                 or use the 'u', 'i' or 'f' type code for a numeric interpretation."
             )
         } else {
             format!(
