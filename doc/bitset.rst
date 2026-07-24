@@ -44,6 +44,17 @@ To count the number of times a bit value or sequence of bits occurs use the
     >>> Tibs('0xef').count(1, 0, 4)
     3
 
+Counting a multi-bit pattern counts overlapping occurrences, the same way
+:meth:`~Tibs.find_all` reports them. The ``byte_aligned`` argument restricts the
+count to byte boundaries and also works when counting a single bit, so
+``count(1, byte_aligned=True)`` counts just the set bits that land on a byte
+boundary::
+
+    >>> Tibs('0b1111111').count('0b11')
+    6
+    >>> Tibs('0x80ff00').count(1, byte_aligned=True)
+    2
+
 Counting should be very fast, especially when just counting the number of ``1`` or ``0`` bits.
 
 .. _comparing_two_containers:

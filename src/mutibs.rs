@@ -3018,14 +3018,21 @@ impl Mutibs {
     ///
     /// With no ``value`` this counts the set bits, so ``count()`` is the same as ``count(1)``.
     ///
+    /// When ``value`` is a multi-bit pattern, overlapping occurrences are all counted,
+    /// just as they are by :meth:`find_all`. ``byte_aligned`` also applies to single-bit
+    /// counts: ``count(1, byte_aligned=True)`` counts the set bits that land on a byte
+    /// boundary.
+    ///
     /// .. code-block:: pycon
     ///
     ///     >>> Mutibs('0xef').count()
     ///     7
     ///     >>> Mutibs('0xef').count(1, 0, 4)
     ///     3
-    ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
+    ///     >>> Mutibs('0xff00ff').count([1, 1, 1])  # overlapping
     ///     12
+    ///     >>> Mutibs('0x80ff00').count(1, byte_aligned=True)
+    ///     2
     ///
     #[pyo3(signature = (value=None, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn count(
