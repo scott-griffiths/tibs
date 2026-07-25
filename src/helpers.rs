@@ -1,5 +1,6 @@
 mod bits;
 mod bitwise;
+mod digits;
 mod format;
 mod numeric;
 mod parse;
@@ -15,6 +16,7 @@ pub(crate) use bitwise::{
     for_each_pair_word, for_each_pair_word_bitslice, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, reverse_bitvec_in_place,
 };
+pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_padded_bytes};
 pub(crate) use format::format_bit_collection;
 pub(crate) use numeric::{
     FAST_INT_BITS, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name, push_f64_bytes,

@@ -1,8 +1,9 @@
 use crate::helpers::{
-    BS, BV, FAST_INT_BITS, LogicalOp, bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes,
-    count_bitslice, count_pair_bits, for_each_pair_word, for_each_pair_word_bitslice,
-    head_bit_offset, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
-    mask_padding_bits, normalize_split_position, reverse_padded_bits, validate_index,
+    BS, BV, FAST_INT_BITS, LogicalOp, bin_from_padded_bytes, bv_from_zeros, byte_order_name,
+    copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, for_each_pair_word,
+    for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
+    logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
+    normalize_split_position, oct_from_padded_bytes, reverse_padded_bits, validate_index,
     validate_slice,
 };
 use crate::mutibs::Mutibs;
@@ -452,11 +453,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     #[inline]
     fn to_binary(&self) -> String {
-        let mut s = String::with_capacity(self.len());
-        for bit in self.as_bitslice().iter() {
-            s.push(if *bit { '1' } else { '0' });
-        }
-        s
+        bin_from_padded_bytes(&self.left_aligned_byte_data(), self.len())
     }
 
     #[inline]
@@ -486,25 +483,25 @@ pub(crate) trait BitCollection: Sized + Clone {
     #[inline]
     fn build_oct_string(&self) -> String {
         debug_assert!(self.len().is_multiple_of(3));
-        let mut s = String::with_capacity(self.len() / 3);
-        for chunk in self.as_bitslice().chunks(3) {
-            let tribble = chunk.load_be::<u8>();
-            let oct_char = std::char::from_digit(tribble as u32, 8).unwrap();
-            s.push(oct_char);
-        }
-        s
+        oct_from_padded_bytes(&self.left_aligned_byte_data(), self.len())
     }
 
     #[inline]
     fn build_hex_string(&self) -> String {
         debug_assert!(self.len().is_multiple_of(4));
-        let mut s = String::with_capacity(self.len() / 4);
-        for chunk in self.as_bitslice().chunks(4) {
-            let nibble = chunk.load_be::<u8>();
-            let hex_char = std::char::from_digit(nibble as u32, 16).unwrap();
-            s.push(hex_char);
+        hex_from_padded_bytes(&self.left_aligned_byte_data(), self.len())
+    }
+
+    /// The bits left aligned into whole bytes, borrowed when the storage
+    /// already starts on a byte boundary and copied into place when it does
+    /// not. The padding bits of the final byte are left as they are, so
+    /// callers must only read the first `self.len()` bits.
+    #[inline]
+    fn left_aligned_byte_data(&self) -> Cow<'_, [u8]> {
+        match self.byte_aligned_raw_data() {
+            Some(bytes) => Cow::Borrowed(bytes),
+            None => Cow::Owned(self.to_padded_byte_data()),
         }
-        s
     }
 
     #[inline]
