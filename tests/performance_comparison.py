@@ -567,9 +567,11 @@ def main():
         print(rule)
         geometric_mean = math.prod(speedups) ** (1 / len(speedups))
         median_speedup = statistics.median(speedups)
+        arithmetic_mean = statistics.fmean(speedups)
         for label, value in (
-            ("Geometric mean", geometric_mean),
-            ("Median", median_speedup),
+                ("Arithmetic mean", arithmetic_mean),
+                ("Geometric mean", geometric_mean),
+                ("Median", median_speedup),
         ):
             comparison = (
                 f"{value:.2f}x faster" if value >= 1 else f"{1 / value:.2f}x slower"
