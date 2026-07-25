@@ -50,16 +50,45 @@ class ComparisonCase:
     equivalent: Callable[[Any, Any], bool] = operator.eq
 
 
+# A single sample has to last long enough that clock resolution and scheduler
+# noise are a small part of it. The fastest cases here take a few microseconds,
+# where timing one call at a time gives swings of 2x in either direction.
+MIN_SAMPLE_SECONDS = 0.002
+MAX_CALLS_PER_SAMPLE = 100_000
+
+
+def calls_per_sample(fn):
+    """How many calls to fold into one timed sample to get clear of the noise."""
+    started = time.perf_counter()
+    fn()
+    elapsed = time.perf_counter() - started
+    if elapsed >= MIN_SAMPLE_SECONDS:
+        return 1
+    if elapsed <= 0:
+        return MAX_CALLS_PER_SAMPLE
+    calls = math.ceil(MIN_SAMPLE_SECONDS / elapsed)
+    return min(calls, MAX_CALLS_PER_SAMPLE)
+
+
 def median_times(baseline_fn, tibs_fn, repeats):
-    """Time both functions while alternating which one runs first."""
-    times = {"baseline": [], "tibs": []}
+    """Time both functions while alternating which one runs first.
+
+    Each side gets its own call count, so a case where one side is orders of
+    magnitude faster still has both sides measured over a usable interval. The
+    reported time is per call either way.
+    """
     functions = {"baseline": baseline_fn, "tibs": tibs_fn}
+    counts = {name: calls_per_sample(fn) for name, fn in functions.items()}
+    times = {"baseline": [], "tibs": []}
     for repeat in range(repeats):
         order = ("baseline", "tibs") if repeat % 2 == 0 else ("tibs", "baseline")
         for name in order:
+            function = functions[name]
+            calls = counts[name]
             started = time.perf_counter()
-            functions[name]()
-            times[name].append(time.perf_counter() - started)
+            for _ in range(calls):
+                function()
+            times[name].append((time.perf_counter() - started) / calls)
     return statistics.median(times["baseline"]), statistics.median(times["tibs"])
 
 
@@ -450,20 +479,18 @@ def build_bitarray_cases(byte_count, value_count):
 
     def ba_pop():
         out = pop_bits.copy()
+        pop = out.pop
         total = 0
         while out:
-            total += out.pop()
+            total += pop()
         return total
 
     def tibs_pop():
         out = pop_tibs.to_mutibs()
-        # About half the time here is in the method lookup, which isn't cached in
-        # the same way as with the bitarray C extension. Hoisting it out of the
-        # loop with `pop = out.pop` speeds this up a lot, but the point of the
-        # case is the idiomatic version.
+        pop = out.pop
         total = 0
         while out:
-            total += out.pop()
+            total += pop()
         return total
 
     def ba_chunks():
