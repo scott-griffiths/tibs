@@ -1244,7 +1244,13 @@ pub(crate) fn count_bitvec(
     let alignment_mod8 = if byte_aligned { Some(0) } else { None };
 
     if needle.len() == 1 {
-        return Ok(count_single_bit(haystack, needle[0], start, end, byte_aligned));
+        return Ok(count_single_bit(
+            haystack,
+            needle[0],
+            start,
+            end,
+            byte_aligned,
+        ));
     }
 
     if let Some((byte_haystack, byte_needle, _byte_base)) =

@@ -1860,7 +1860,13 @@ impl Tibs {
             // No value given, so count the set bits.
             return match prepare_mask(mask, 1)? {
                 Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(haystack, true, start, end, byte_aligned)),
+                None => Ok(helpers::count_single_bit(
+                    haystack,
+                    true,
+                    start,
+                    end,
+                    byte_aligned,
+                )),
             };
         };
 
@@ -1868,7 +1874,13 @@ impl Tibs {
             return match prepare_mask(mask, 1)? {
                 // The only unset single-bit mask matches every bit.
                 Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(haystack, b, start, end, byte_aligned)),
+                None => Ok(helpers::count_single_bit(
+                    haystack,
+                    b,
+                    start,
+                    end,
+                    byte_aligned,
+                )),
             };
         }
 
