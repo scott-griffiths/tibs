@@ -19,7 +19,7 @@ use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
-use std::ffi::{CString, c_int, c_void};
+use std::ffi::{c_int, c_void};
 use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::sync::Arc;
@@ -630,8 +630,11 @@ impl Tibs {
             (*view).len = data_len as isize;
             (*view).readonly = 1;
             (*view).itemsize = 1;
+            // A 'static format string, so there is nothing to free on release and
+            // no allocation on export. This is what CPython's own PyBuffer_FillInfo
+            // does; consumers treat the field as read-only despite the *mut.
             (*view).format = if (flags & ffi::PyBUF_FORMAT) == ffi::PyBUF_FORMAT {
-                CString::new("B").unwrap().into_raw()
+                c"B".as_ptr().cast_mut()
             } else {
                 ptr::null_mut()
             };
@@ -652,13 +655,8 @@ impl Tibs {
         Ok(())
     }
 
-    unsafe fn __releasebuffer__(&self, view: *mut ffi::Py_buffer) {
-        unsafe {
-            if !(*view).format.is_null() {
-                drop(CString::from_raw((*view).format));
-            }
-        }
-    }
+    // No __releasebuffer__: the exported view owns nothing that needs freeing.
+    // CPython drops the reference stored in `view.obj` for us.
 
     /// Return string representations for printing.
     pub fn __str__(&self) -> String {

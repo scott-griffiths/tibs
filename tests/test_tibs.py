@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 import pytest
 from tibs import Tibs, Mutibs, ByteOrder, Codec
+import hashlib
+import io
 import random
+import sys
 
 
 def _reference_bits_from_bytes(data, offset=0, length=None):
@@ -336,6 +339,26 @@ def test_buffer_protocol_unaligned_length():
     mv = memoryview(a)
     assert len(mv) == 1
     assert bytes(mv) == b'\xa0'
+
+
+def test_buffer_protocol_simple_consumer():
+    # hashlib and BytesIO.write request PyBUF_SIMPLE, which asks for no format
+    # string. That is a separate branch from the memoryview() path above.
+    a = Tibs.from_bytes(b'hello world')
+    assert hashlib.sha256(a).hexdigest() == hashlib.sha256(b'hello world').hexdigest()
+    buffer = io.BytesIO()
+    buffer.write(a)
+    assert buffer.getvalue() == b'hello world'
+
+
+def test_buffer_protocol_repeated_export_releases_owner():
+    a = Tibs.from_bytes(b'hello world')
+    before = sys.getrefcount(a)
+    for _ in range(1000):
+        memoryview(a).release()
+    for _ in range(1000):
+        memoryview(a)
+    assert sys.getrefcount(a) == before
 
 
 def test_mutibs_raw_bytes_and_offset():
