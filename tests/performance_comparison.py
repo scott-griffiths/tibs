@@ -93,7 +93,8 @@ FAST_THRESHOLD = 1.2
 
 NAME_WIDTH = 26
 TIME_WIDTH = 13
-SPEEDUP_WIDTH = 10
+SPEEDUP_WIDTH = 9
+PAIR_WIDTH = TIME_WIDTH + SPEEDUP_WIDTH
 
 
 def colourise(text, colour, enabled):
@@ -106,6 +107,27 @@ def speedup_colour(speedup):
     if speedup > FAST_THRESHOLD:
         return GREEN
     return ""
+
+
+def relative_factor(speedup):
+    """How many times faster the faster side is, whichever side that is."""
+    if speedup >= 1:
+        return speedup
+    return 1 / speedup if speedup else float("inf")
+
+
+def relative_cells(speedup):
+    """Format both relative columns, leaving the slower side blank."""
+    factor = relative_factor(speedup)
+    if factor < 1.005:
+        # Would print as 1.00x, which reads as a win it didn't have.
+        return "", ""
+    text = f"{factor:.2f}x"
+    return ("", text) if speedup >= 1 else (text, "")
+
+
+def relative_cell(text, cell_colour, colour):
+    return colourise(text.rjust(SPEEDUP_WIDTH), cell_colour if text else "", colour)
 
 
 def result_summary(result):
@@ -742,23 +764,21 @@ boundaries, and ints have no length.
 """
 
 
-def run_table(title, baseline_label, cases, repeats, colour):
-    """Time every case, print the table, and return the speedups."""
-    print()
-    print(colourise(title, BOLD, colour))
-    print(f"Speedup is {baseline_label}_time / tibs_time.")
-    print()
+def time_cases(cases, baseline_label, repeats):
+    """Time every case, checking equivalence first, and return one row each.
 
-    header = (
-        f"{'case':<{NAME_WIDTH}}{baseline_label:>{TIME_WIDTH}}"
-        f"{'tibs':>{TIME_WIDTH}}{'speedup':>{SPEEDUP_WIDTH}}"
-    )
-    rule = "-" * len(header)
-    print(colourise(header, BOLD, colour))
-    print(rule)
-
-    speedups = []
+    The whole table has to be timed before any of it can be printed, since the
+    rows are ordered by the result. Progress goes to stderr so that it stays out
+    of the way when stdout is redirected.
+    """
+    progress = sys.stderr.isatty()
+    # Padded so that a short case name does not leave part of a longer one behind.
+    width = max(len(case.name) for case in cases) + 8
+    rows = []
     for case in cases:
+        if progress:
+            message = f"timing {case.name}".ljust(width)
+            print(f"\r{message}", end="", file=sys.stderr, flush=True)
         baseline_result = case.baseline_fn()
         tibs_result = case.tibs_fn()
         if not case.equivalent(baseline_result, tibs_result):
@@ -773,27 +793,58 @@ def run_table(title, baseline_label, cases, repeats, colour):
             case.baseline_fn, case.tibs_fn, repeats
         )
         speedup = baseline_time / tibs_time if tibs_time else float("inf")
+        rows.append((speedup, case.name, baseline_time, tibs_time))
+    if progress:
+        print("\r" + " " * width + "\r", end="", file=sys.stderr, flush=True)
+    rows.sort(key=lambda row: row[0], reverse=True)
+    return rows
+
+
+def run_table(title, baseline_label, cases, repeats, colour):
+    """Time every case, print the table, and return the speedups."""
+    rows = time_cases(cases, baseline_label, repeats)
+
+    print()
+    print(colourise(title, BOLD, colour))
+    print("Each case shows how many times faster the faster of the two was,")
+    print("with the best tibs result first.")
+    print()
+
+    header = (
+        f"{'case':<{NAME_WIDTH}}{baseline_label:^{PAIR_WIDTH}}{'tibs':^{PAIR_WIDTH}}"
+    )
+    rule = "-" * len(header)
+    print(colourise(header.rstrip(), BOLD, colour))
+    print(rule)
+
+    speedups = []
+    for speedup, name, baseline_time, tibs_time in rows:
         if baseline_time > 0 and tibs_time > 0:
             speedups.append(speedup)
-        speedup_text = f"{speedup:.2f}x".rjust(SPEEDUP_WIDTH)
+        # The winner is green whichever library it is: the column it lands in
+        # already says who won, so a second colour would only add noise.
+        baseline_relative, tibs_relative = relative_cells(speedup)
+        cell_colour = GREEN if relative_factor(speedup) > FAST_THRESHOLD else ""
         print(
-            f"{case.name:<{NAME_WIDTH}}"
-            f"{f'{baseline_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
-            f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
-            f"{colourise(speedup_text, speedup_colour(speedup), colour)}"
+            (
+                f"{name:<{NAME_WIDTH}}"
+                f"{f'{baseline_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+                f"{relative_cell(baseline_relative, cell_colour, colour)}"
+                f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+                f"{relative_cell(tibs_relative, cell_colour, colour)}"
+            ).rstrip()
         )
 
     if speedups:
         print(rule)
         for label, value in (
-                ("Arithmetic mean", statistics.fmean(speedups)),
                 ("Geometric mean", math.prod(speedups) ** (1 / len(speedups))),
                 ("Median", statistics.median(speedups)),
         ):
             comparison = (
                 f"{value:.2f}x faster" if value >= 1 else f"{1 / value:.2f}x slower"
             )
-            summary = f"Tibs is {comparison}".rjust(2 * TIME_WIDTH + SPEEDUP_WIDTH)
+            summary = f"Tibs is {comparison}".rjust(2 * PAIR_WIDTH)
             print(
                 f"{label:<{NAME_WIDTH}}"
                 f"{colourise(summary, speedup_colour(value), colour)}"
