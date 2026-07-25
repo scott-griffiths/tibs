@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Local performance comparison between tibs and bitarray.
+"""Local performance comparison between tibs and other ways of doing the job.
 
-Each case uses equivalent prepared inputs and idiomatic operations for both
-libraries. Results are checked for equivalence before timing. This is useful for
+Two separate tables, answering two different questions:
+
+* against bitarray: is tibs competitive with the other bit library?
+* against the standard library: do you need a bit library at all?
+
+Each case uses equivalent prepared inputs and idiomatic operations on both
+sides. Results are checked for equivalence before timing. This is useful for
 finding optimization opportunities and regressions, but is not an exhaustive
-overall score for either library.
+overall score for anything.
 """
 
 import argparse
+import array
 from collections.abc import Callable
 from dataclasses import dataclass
 import math
@@ -15,13 +21,14 @@ import operator
 import os
 import random
 import statistics
+import struct
 import sys
 import time
 from typing import Any
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from tibs import Mutibs, Tibs
+from tibs import Dtype, Mutibs, Tibs
 
 try:
     from bitarray import bitarray
@@ -38,22 +45,22 @@ def deterministic_bytes(size, seed):
 @dataclass(frozen=True)
 class ComparisonCase:
     name: str
-    bitarray_fn: Callable[[], Any]
+    baseline_fn: Callable[[], Any]
     tibs_fn: Callable[[], Any]
     equivalent: Callable[[Any, Any], bool] = operator.eq
 
 
-def median_times(bitarray_fn, tibs_fn, repeats):
-    """Time both functions while alternating which library runs first."""
-    times = {"bitarray": [], "tibs": []}
-    functions = {"bitarray": bitarray_fn, "tibs": tibs_fn}
+def median_times(baseline_fn, tibs_fn, repeats):
+    """Time both functions while alternating which one runs first."""
+    times = {"baseline": [], "tibs": []}
+    functions = {"baseline": baseline_fn, "tibs": tibs_fn}
     for repeat in range(repeats):
-        order = ("bitarray", "tibs") if repeat % 2 == 0 else ("tibs", "bitarray")
+        order = ("baseline", "tibs") if repeat % 2 == 0 else ("tibs", "baseline")
         for name in order:
             started = time.perf_counter()
             functions[name]()
             times[name].append(time.perf_counter() - started)
-    return statistics.median(times["bitarray"]), statistics.median(times["tibs"])
+    return statistics.median(times["baseline"]), statistics.median(times["tibs"])
 
 
 def make_bitarray(data):
@@ -72,6 +79,10 @@ def same_bits(bitarray_result, tibs_result):
     )
 
 
+def same_bytes(baseline_result, tibs_result):
+    return baseline_result == tibs_result.to_bytes()
+
+
 RESET = "\033[0m"
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -80,7 +91,7 @@ BOLD = "\033[1m"
 SLOW_THRESHOLD = 0.8
 FAST_THRESHOLD = 1.2
 
-NAME_WIDTH = 24
+NAME_WIDTH = 26
 TIME_WIDTH = 13
 SPEEDUP_WIDTH = 10
 
@@ -98,14 +109,15 @@ def speedup_colour(speedup):
 
 
 def result_summary(result):
-    if isinstance(result, (bitarray, Tibs, Mutibs)):
+    bit_types = (Tibs, Mutibs) if bitarray is None else (bitarray, Tibs, Mutibs)
+    if isinstance(result, bit_types):
         return f"{type(result).__name__}(len={len(result):,}, ones={result.count(1):,})"
     if isinstance(result, list) and len(result) > 10:
         return f"list(len={len(result):,}, first={result[0]!r}, last={result[-1]!r})"
     return repr(result)
 
 
-def build_cases(byte_count, value_count):
+def build_bitarray_cases(byte_count, value_count):
     search_bytes = deterministic_bytes(byte_count, "comparison-search")
     other_bytes = deterministic_bytes(byte_count, "comparison-other")
     search_tibs = Tibs.from_bytes(search_bytes)
@@ -492,6 +504,225 @@ def build_cases(byte_count, value_count):
     ]
 
 
+def build_stdlib_cases(byte_count, value_count):
+    """Cases where the standard library can do the same job as tibs.
+
+    Each case is modelled on an example from the Python documentation for the
+    module concerned, so that the standard library side is doing the job the way
+    its own docs present it. struct and array stop at byte boundaries and ints
+    have no length, so the overlap with tibs is only partial.
+    """
+    search_bytes = deterministic_bytes(byte_count, "comparison-search")
+    other_bytes = deterministic_bytes(byte_count, "comparison-other")
+    search_tibs = Tibs.from_bytes(search_bytes)
+    other_tibs = Tibs.from_bytes(other_bytes)
+    search_int = int.from_bytes(search_bytes, "big")
+    other_int = int.from_bytes(other_bytes, "big")
+    bit_count = byte_count * 8
+    width_mask = (1 << bit_count) - 1
+
+    rng = random.Random("comparison-values")
+    value_words = [rng.randrange(1 << 16) for _ in range(value_count)]
+    value_bytes = Tibs.from_values("u16", value_words).to_bytes()
+    value_floats = [rng.random() for _ in range(value_count)]
+
+    # struct's documented first example is pack('hhl', 1, 2, 3), a mixed-width
+    # record. Byte order is pinned so the sizes are standard rather than native.
+    rng = random.Random("comparison-records")
+    record_count = max(1, value_count // 4)
+    records = [
+        (
+            rng.randrange(-(1 << 15), 1 << 15),
+            rng.randrange(-(1 << 15), 1 << 15),
+            rng.randrange(-(1 << 31), 1 << 31),
+        )
+        for _ in range(record_count)
+    ]
+    # The docs recommend a compiled Struct when a format is reused, so the tibs
+    # side hoists its Dtypes to match rather than rebuilding them per field.
+    record_struct = struct.Struct(">hhl")
+    record_bytes = b"".join(record_struct.pack(*record) for record in records)
+    i16_dtype = Dtype("i16")
+    i32_dtype = Dtype("i32")
+
+    hex_string = search_bytes.hex()
+    prefixed_hex = "0x" + hex_string
+
+    # Taken from two thirds of the way in so both sides have to scan for it. A
+    # pattern near the start would flatter whichever side exits earliest.
+    aligned_pattern_start = byte_count * 2 // 3
+    aligned_pattern = search_bytes[aligned_pattern_start: aligned_pattern_start + 4]
+    aligned_pattern_tibs = Tibs.from_bytes(aligned_pattern)
+
+    u16_format = f">{len(value_words)}H"
+    f32_format = f">{len(value_floats)}f"
+
+    def struct_pack_records():
+        # struct docs: pack('hhl', 1, 2, 3)
+        return b"".join(record_struct.pack(*record) for record in records)
+
+    def tibs_pack_records():
+        # tibs has no multi-field pack, so a mixed record costs one call per
+        # field. Dtype.pack is the fastest spelling of that; Tibs.from_i is
+        # about 25% slower again.
+        return Tibs.from_joined(
+            piece
+            for first, second, third in records
+            for piece in (
+                i16_dtype.pack(first),
+                i16_dtype.pack(second),
+                i32_dtype.pack(third),
+            )
+        ).to_bytes()
+
+    def struct_unpack_records():
+        # struct docs: iter_unpack, "iteratively unpack from the buffer"
+        return list(record_struct.iter_unpack(record_bytes))
+
+    def tibs_unpack_records():
+        # to_i with explicit bounds beats Dtype.unpack here by about 40%.
+        bits = Tibs.from_bytes(record_bytes)
+        return [
+            (
+                bits.to_i(offset, offset + 16),
+                bits.to_i(offset + 16, offset + 32),
+                bits.to_i(offset + 32, offset + 64),
+            )
+            for offset in range(0, len(bits), 64)
+        ]
+
+    def struct_pack_u16():
+        # struct docs: a format character may be preceded by a repeat count,
+        # so '4h' means the same as 'hhhh'.
+        return struct.pack(u16_format, *value_words)
+
+    def tibs_pack_u16():
+        return Tibs.from_values("u16", value_words).to_bytes()
+
+    def struct_unpack_u16():
+        return list(struct.unpack(u16_format, value_bytes))
+
+    def tibs_unpack_u16():
+        return Tibs.from_bytes(value_bytes).to_values("u16")
+
+    def struct_pack_f32():
+        return struct.pack(f32_format, *value_floats)
+
+    def tibs_pack_f32():
+        return Tibs.from_values("f32", value_floats).to_bytes()
+
+    def struct_pack_u16_le():
+        return struct.pack(f"<{len(value_words)}H", *value_words)
+
+    def tibs_pack_u16_le():
+        return Dtype("u16_le").pack_values(value_words).to_bytes()
+
+    def array_to_bytes():
+        # array is native-endian, so a byteswap is needed to match the
+        # big-endian convention used throughout this script.
+        out = array.array("H", value_words)
+        out.byteswap()
+        return out.tobytes()
+
+    def array_from_bytes():
+        out = array.array("H")
+        out.frombytes(value_bytes)
+        out.byteswap()
+        return out.tolist()
+
+    def int_popcount():
+        # int docs: bit_count(), "also known as the population count"
+        return search_int.bit_count()
+
+    def tibs_popcount():
+        return search_tibs.count(1)
+
+    def same_value(int_result, tibs_result):
+        # Each side is left holding its own natural type, so the conversion
+        # happens here in the equivalence check rather than inside the timing.
+        return int_result == tibs_result.to_u()
+
+    def int_and():
+        return search_int & other_int
+
+    def tibs_and():
+        return search_tibs & other_tibs
+
+    def int_shift_left():
+        # An int has no length, so it grows on a left shift where tibs drops the
+        # bits shifted off the top. Masking back to width is the work a user has
+        # to do to get fixed-width behaviour from an int, so it counts.
+        return (search_int << 13) & width_mask
+
+    def tibs_shift_left():
+        return search_tibs << 13
+
+    def int_from_bytes():
+        # int docs: int.from_bytes(b'\x00\x10', byteorder='big')
+        return int.from_bytes(search_bytes, "big")
+
+    def tibs_from_bytes_to_u():
+        return Tibs.from_bytes(search_bytes).to_u()
+
+    def bytes_to_hex():
+        # bytes docs: b'\xf0\xf1\xf2'.hex()
+        return search_bytes.hex()
+
+    def tibs_to_hex():
+        return search_tibs.to_hex()
+
+    def bytes_from_hex():
+        # bytes docs: bytes.fromhex('2Ef0 F1f2  ')
+        return bytes.fromhex(hex_string)
+
+    def tibs_from_hex():
+        return Tibs.from_string(prefixed_hex).to_bytes()
+
+    def bytes_to_binary():
+        # format spec docs: 'b' produces binary digits, so format(byte, '08b')
+        # is the documented way to get fixed-width binary text. bin() alone
+        # drops leading zeros and prefixes '0b'.
+        return "".join(format(byte, "08b") for byte in search_bytes)
+
+    def tibs_to_binary():
+        return search_tibs.to_bin()
+
+    def bytes_aligned_find():
+        return search_bytes.find(aligned_pattern) * 8
+
+    def tibs_aligned_find():
+        return search_tibs.find(aligned_pattern_tibs, byte_aligned=True)
+
+    def bytes_aligned_count():
+        # bytes.count is non-overlapping and find_all overlaps. A 4-byte pattern
+        # drawn from random data effectively never overlaps itself, so the two
+        # agree here, but they would not for a self-similar pattern.
+        return search_bytes.count(aligned_pattern)
+
+    def tibs_aligned_count():
+        return len(search_tibs.find_all(aligned_pattern_tibs, byte_aligned=True))
+
+    return [
+        ComparisonCase("struct: pack hhl", struct_pack_records, tibs_pack_records),
+        ComparisonCase("struct: iter_unpack hhl", struct_unpack_records, tibs_unpack_records),
+        ComparisonCase("struct: pack u16", struct_pack_u16, tibs_pack_u16),
+        ComparisonCase("struct: unpack u16", struct_unpack_u16, tibs_unpack_u16),
+        ComparisonCase("struct: pack f32", struct_pack_f32, tibs_pack_f32),
+        ComparisonCase("struct: pack u16 le", struct_pack_u16_le, tibs_pack_u16_le),
+        ComparisonCase("array: u16 to bytes", array_to_bytes, tibs_pack_u16),
+        ComparisonCase("array: bytes to u16", array_from_bytes, tibs_unpack_u16),
+        ComparisonCase("int: popcount", int_popcount, tibs_popcount),
+        ComparisonCase("int: bitwise and", int_and, tibs_and, same_value),
+        ComparisonCase("int: shift left", int_shift_left, tibs_shift_left, same_value),
+        ComparisonCase("int: from bytes", int_from_bytes, tibs_from_bytes_to_u),
+        ComparisonCase("bytes: to hex", bytes_to_hex, tibs_to_hex),
+        ComparisonCase("bytes: from hex", bytes_from_hex, tibs_from_hex),
+        ComparisonCase("bytes: to binary str", bytes_to_binary, tibs_to_binary),
+        ComparisonCase("bytes: aligned find", bytes_aligned_find, tibs_aligned_find),
+        ComparisonCase("bytes: aligned count", bytes_aligned_count, tibs_aligned_count),
+    ]
+
+
 NOTE = """\
 Note: This is not a complete or impartial comparison of the two libraries, and it
 is not meant as a competition. The cases here are the ones that have been useful
@@ -501,7 +732,73 @@ slower than bitarray on a case, that points at something worth optimizing.
 
 I have tried to be fair and idiomatic in using bitarray - any inefficiencies
 are my fault and I'd be happy to correct them.
+
+The standard library table asks a different question: for a job that doesn't
+need bit-level addressing, is a dedicated library worth it at all? Each case is
+modelled on an example from the Python documentation for the module concerned,
+so the standard library is doing the job the way its own docs present it. Only
+the byte-aligned part of tibs overlaps here - struct and array stop at byte
+boundaries, and ints have no length.
 """
+
+
+def run_table(title, baseline_label, cases, repeats, colour):
+    """Time every case, print the table, and return the speedups."""
+    print()
+    print(colourise(title, BOLD, colour))
+    print(f"Speedup is {baseline_label}_time / tibs_time.")
+    print()
+
+    header = (
+        f"{'case':<{NAME_WIDTH}}{baseline_label:>{TIME_WIDTH}}"
+        f"{'tibs':>{TIME_WIDTH}}{'speedup':>{SPEEDUP_WIDTH}}"
+    )
+    rule = "-" * len(header)
+    print(colourise(header, BOLD, colour))
+    print(rule)
+
+    speedups = []
+    for case in cases:
+        baseline_result = case.baseline_fn()
+        tibs_result = case.tibs_fn()
+        if not case.equivalent(baseline_result, tibs_result):
+            raise AssertionError(
+                f"{case.name} returned different results: "
+                f"{baseline_label}={result_summary(baseline_result)}, "
+                f"tibs={result_summary(tibs_result)}"
+            )
+        del baseline_result, tibs_result
+
+        baseline_time, tibs_time = median_times(
+            case.baseline_fn, case.tibs_fn, repeats
+        )
+        speedup = baseline_time / tibs_time if tibs_time else float("inf")
+        if baseline_time > 0 and tibs_time > 0:
+            speedups.append(speedup)
+        speedup_text = f"{speedup:.2f}x".rjust(SPEEDUP_WIDTH)
+        print(
+            f"{case.name:<{NAME_WIDTH}}"
+            f"{f'{baseline_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+            f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+            f"{colourise(speedup_text, speedup_colour(speedup), colour)}"
+        )
+
+    if speedups:
+        print(rule)
+        for label, value in (
+                ("Arithmetic mean", statistics.fmean(speedups)),
+                ("Geometric mean", math.prod(speedups) ** (1 / len(speedups))),
+                ("Median", statistics.median(speedups)),
+        ):
+            comparison = (
+                f"{value:.2f}x faster" if value >= 1 else f"{1 / value:.2f}x slower"
+            )
+            summary = f"Tibs is {comparison}".rjust(2 * TIME_WIDTH + SPEEDUP_WIDTH)
+            print(
+                f"{label:<{NAME_WIDTH}}"
+                f"{colourise(summary, speedup_colour(value), colour)}"
+            )
+    return speedups
 
 
 def main():
@@ -510,6 +807,12 @@ def main():
     parser.add_argument("--values", type=int, default=20_000, help="u16 value count")
     parser.add_argument("--repeats", type=int, default=5, help="timing repeats per case")
     parser.add_argument("--no-color", action="store_true", help="disable coloured output")
+    parser.add_argument(
+        "--table",
+        choices=("bitarray", "stdlib", "both"),
+        default="both",
+        help="which comparison table to run",
+    )
     args = parser.parse_args()
 
     colour = not args.no_color and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
@@ -521,66 +824,39 @@ def main():
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
 
-    if bitarray is None:
-        raise SystemExit("bitarray is not installed; install it to run this local comparison.")
+    wants_bitarray = args.table in ("bitarray", "both")
+    if wants_bitarray and bitarray is None:
+        if args.table == "bitarray":
+            raise SystemExit(
+                "bitarray is not installed; install it to run this local comparison."
+            )
+        wants_bitarray = False
 
     print(NOTE)
     print(
         f"Running local comparison with {args.bytes:,} bytes, "
         f"{args.values:,} u16 values, {args.repeats} repeats."
     )
-    print("Lower times are better. Speedup is bitarray_time / tibs_time.")
-    print()
+    print("Lower times are better.")
+    if args.table != "stdlib" and not wants_bitarray:
+        print("Skipping the bitarray table: bitarray is not installed.")
 
-    header = f"{'case':<{NAME_WIDTH}}{'bitarray':>{TIME_WIDTH}}{'tibs':>{TIME_WIDTH}}{'speedup':>{SPEEDUP_WIDTH}}"
-    rule = "-" * len(header)
-    print(colourise(header, BOLD, colour))
-    print(rule)
-
-    speedups = []
-    for case in build_cases(args.bytes, args.values):
-        bitarray_result = case.bitarray_fn()
-        tibs_result = case.tibs_fn()
-        if not case.equivalent(bitarray_result, tibs_result):
-            raise AssertionError(
-                f"{case.name} returned different results: "
-                f"bitarray={result_summary(bitarray_result)}, "
-                f"tibs={result_summary(tibs_result)}"
-            )
-        del bitarray_result, tibs_result
-
-        bitarray_time, tibs_time = median_times(
-            case.bitarray_fn, case.tibs_fn, args.repeats
+    if wants_bitarray:
+        run_table(
+            "tibs vs bitarray",
+            "bitarray",
+            build_bitarray_cases(args.bytes, args.values),
+            args.repeats,
+            colour,
         )
-        speedup = bitarray_time / tibs_time if tibs_time else float("inf")
-        if bitarray_time > 0 and tibs_time > 0:
-            speedups.append(speedup)
-        speedup_text = f"{speedup:.2f}x".rjust(SPEEDUP_WIDTH)
-        print(
-            f"{case.name:<{NAME_WIDTH}}"
-            f"{f'{bitarray_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
-            f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
-            f"{colourise(speedup_text, speedup_colour(speedup), colour)}"
+    if args.table in ("stdlib", "both"):
+        run_table(
+            "tibs vs the standard library",
+            "stdlib",
+            build_stdlib_cases(args.bytes, args.values),
+            args.repeats,
+            colour,
         )
-
-    if speedups:
-        print(rule)
-        geometric_mean = math.prod(speedups) ** (1 / len(speedups))
-        median_speedup = statistics.median(speedups)
-        arithmetic_mean = statistics.fmean(speedups)
-        for label, value in (
-                ("Arithmetic mean", arithmetic_mean),
-                ("Geometric mean", geometric_mean),
-                ("Median", median_speedup),
-        ):
-            comparison = (
-                f"{value:.2f}x faster" if value >= 1 else f"{1 / value:.2f}x slower"
-            )
-            summary = f"Tibs is {comparison}".rjust(2 * TIME_WIDTH + SPEEDUP_WIDTH)
-            print(
-                f"{label:<{NAME_WIDTH}}"
-                f"{colourise(summary, speedup_colour(value), colour)}"
-            )
 
 
 if __name__ == "__main__":
