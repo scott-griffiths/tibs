@@ -389,6 +389,18 @@ def build_cases(byte_count, value_count):
     ]
 
 
+NOTE = """\
+Note: This is not a complete or impartial comparison of the two libraries, and it
+is not meant as a competition. The cases here are the ones that have been useful
+for tuning tibs, so treat the results as a regression check and a performance
+goal rather than an overall score for either library. Where tibs is markedly
+slower than bitarray on a case, that points at something worth optimizing.
+
+I have tried to be fair and idiomatic in using bitarray - any inefficiencies
+are my fault and I'd be happy to correct them.
+"""
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bytes", type=int, default=250_000, help="random data bytes")
@@ -406,6 +418,7 @@ def main():
     if bitarray is None:
         raise SystemExit("bitarray is not installed; install it to run this local comparison.")
 
+    print(NOTE)
     print(
         f"Running local comparison with {args.bytes:,} bytes, "
         f"{args.values:,} u16 values, {args.repeats} repeats."

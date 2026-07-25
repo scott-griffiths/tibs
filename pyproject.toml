@@ -58,6 +58,8 @@ dev = [
     "pytest-benchmark>=5.2.0",
     "pyright>=1.1.389",
     "build",
+    # Only used by tests/performance_comparison.py, which is run by hand.
+    "bitarray",
 ]
 
 [tool.maturin]
