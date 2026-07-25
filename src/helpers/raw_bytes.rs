@@ -121,6 +121,60 @@ pub(crate) fn copy_shifted_bytes(data: &[u8], bit_offset: usize, out: &mut [u8])
     *last = (data[last_index] << bit_offset) | (next >> right_shift);
 }
 
+/// Reverse the first `len_bits` bits of `bytes` in place.
+///
+/// The bits must be left aligned (bit zero is the most significant bit of
+/// `bytes[0]`) with the trailing `bytes.len() * 8 - len_bits` padding bits
+/// zeroed. The reversed bits are left aligned again, and the padding is
+/// still zero afterwards.
+pub(crate) fn reverse_padded_bits(bytes: &mut [u8], len_bits: usize) {
+    debug_assert_eq!(bytes.len(), len_bits.div_ceil(8));
+    reverse_all_bits(bytes);
+    // Reversing the whole buffer pushes the padding to the front, so the
+    // data now sits `pad` bits in and has to be pulled back to the start.
+    let pad = bytes.len() * 8 - len_bits;
+    if pad != 0 {
+        shift_bytes_left(bytes, pad);
+    }
+}
+
+/// Reverse every bit of `bytes`, so that bit `i` ends up at `8 * len - 1 - i`.
+///
+/// Kept as two separate sweeps rather than one combined pass because both of
+/// them auto-vectorize, which beats a scalar loop working in from both ends.
+#[inline]
+fn reverse_all_bits(bytes: &mut [u8]) {
+    bytes.reverse();
+    bytes
+        .iter_mut()
+        .for_each(|byte| *byte = byte.reverse_bits());
+}
+
+/// Shift the bits of `bytes` towards the front by `shift` (1..8) bits,
+/// zero filling at the end.
+fn shift_bytes_left(bytes: &mut [u8], shift: usize) {
+    debug_assert!((1..8).contains(&shift));
+    const WORD: usize = size_of::<u64>();
+    let len = bytes.len();
+    let Some(last) = len.checked_sub(1) else {
+        return;
+    };
+    let right = 8 - shift;
+    let mut index = 0usize;
+    // Each word needs the byte after it to supply the bits shifted in.
+    while index + WORD < len {
+        let word = u64::from_be_bytes(bytes[index..index + WORD].try_into().unwrap());
+        let carry = u64::from(bytes[index + WORD] >> right);
+        bytes[index..index + WORD].copy_from_slice(&((word << shift) | carry).to_be_bytes());
+        index += WORD;
+    }
+    while index < last {
+        bytes[index] = (bytes[index] << shift) | (bytes[index + 1] >> right);
+        index += 1;
+    }
+    bytes[last] <<= shift;
+}
+
 #[inline]
 pub(crate) fn mask_padding_bits(bytes: &mut [u8], len_bits: usize) {
     let remainder = len_bits & 7;

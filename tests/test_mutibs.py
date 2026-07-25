@@ -791,6 +791,56 @@ def test_reverse_idempotence():
     assert a == Tibs('0b10110')
 
 
+# The reverse is done a word at a time over the raw storage, so the lengths
+# that matter are the ones around word and byte boundaries, and the ones that
+# leave a partial byte of padding for the shift to mop up.
+REVERSE_LENGTHS = [0, 1, 2, 7, 8, 9, 15, 16, 17, 63, 64, 65, 71, 127, 128, 129, 255, 257, 1000, 1001]
+
+
+@pytest.mark.parametrize('length', REVERSE_LENGTHS)
+def test_reverse_matches_bit_string(length):
+    bits = ''.join('01101'[i % 5] for i in range(length))
+    a = Mutibs('0b' + bits) if bits else Mutibs()
+    a.reverse()
+    assert a.bin == bits[::-1]
+    assert len(a) == length
+
+
+@pytest.mark.parametrize('length', REVERSE_LENGTHS)
+def test_reverse_matches_reversed_copy(length):
+    a = Mutibs(Tibs.from_random(length, seed=b'reverse'))
+    original = Tibs(a)
+    a.reverse()
+    assert a == original.reversed()
+    a.reverse()
+    assert a == original
+
+
+@pytest.mark.parametrize('offset', range(9))
+@pytest.mark.parametrize('length', [0, 1, 5, 8, 13, 64, 100])
+def test_reverse_with_storage_starting_mid_byte(offset, length):
+    # Slicing gives storage that need not start on a byte boundary, which the
+    # offset handling in the reverse has to take into account.
+    source = ''.join('0110100011110000101'[i % 19] for i in range(offset + length))
+    a = Mutibs('0b' + source)[offset:offset + length]
+    assert a.bin == source[offset:]
+    a.reverse()
+    expected = source[offset:][::-1]
+    assert a.bin == expected
+    # Reading it back out through the byte-level paths must agree too.
+    if expected:
+        assert a.to_padded_bytes() == Mutibs('0b' + expected).to_padded_bytes()
+
+
+def test_reverse_leaves_padding_bits_clear():
+    # A non-whole-byte length pads the final byte; the reverse moves that
+    # padding to the front, so it has to be cleared rather than carried along.
+    a = Mutibs('0b1' + '0' * 11)
+    a.reverse()
+    assert a.bin == '0' * 11 + '1'
+    assert a.to_padded_bytes() == b'\x00\x10'
+
+
 def test_rol_basic():
     # Basic rotate left functionality
     a = Mutibs('0b1010')

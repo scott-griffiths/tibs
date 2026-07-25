@@ -2956,7 +2956,7 @@ impl Mutibs {
     ///     Mutibs('0b01101')
     ///
     pub fn reverse(mut slf: PyRefMut<'_, Self>) {
-        slf.as_mut_bitvec_ref().reverse();
+        helpers::reverse_bitvec_in_place(slf.as_mut_bitvec_ref());
     }
 
     /// Return a new instance with the bits reversed.

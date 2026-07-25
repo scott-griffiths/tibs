@@ -1,8 +1,9 @@
 use crate::helpers::{
     BS, BV, FAST_INT_BITS, LogicalOp, bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes,
     count_bitslice, count_pair_bits, for_each_pair_word, for_each_pair_word_bitslice,
-    logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
-    normalize_split_position, validate_index, validate_slice,
+    head_bit_offset, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
+    mask_padding_bits, normalize_split_position, reverse_padded_bits, validate_index,
+    validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -31,14 +32,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn raw_data(&self) -> (Vec<u8>, usize, usize) {
         let raw_bytes = self.get_raw_bytes();
-        let slice = self.as_bitslice();
-        let offset = match slice.domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
+        let offset = head_bit_offset(self.as_bitslice());
         (raw_bytes, offset, self.len())
     }
 
@@ -403,16 +397,14 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     /// Return a bit reversed copy
     fn reverse_copy(&self) -> Self {
-        if self.len().is_multiple_of(8) {
-            let mut bytes = self.to_padded_byte_data();
-            bytes.reverse();
-            bytes
-                .iter_mut()
-                .for_each(|byte| *byte = byte.reverse_bits());
-            return Self::from_bv(BV::from_vec(bytes));
+        let len = self.len();
+        if len < 2 {
+            return self.clone();
         }
-        let mut bv = self.to_bitvec();
-        bv.reverse();
+        let mut bytes = self.to_padded_byte_data();
+        reverse_padded_bits(&mut bytes, len);
+        let mut bv = BV::from_vec(bytes);
+        bv.truncate(len);
         Self::from_bv(bv)
     }
 

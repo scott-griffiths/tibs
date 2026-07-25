@@ -334,3 +334,21 @@ def test_reversed():
     m4 = m3.reversed()
     m4.reverse()
     assert m3 == m4
+
+
+@pytest.mark.parametrize('length', [0, 1, 2, 7, 8, 9, 15, 16, 17, 63, 64, 65, 127, 128, 129, 1001])
+def test_reversed_matches_bit_string(length):
+    bits = ''.join('01101'[i % 5] for i in range(length))
+    for cls in (Tibs, Mutibs):
+        a = cls('0b' + bits) if bits else cls()
+        assert a.reversed().bin == bits[::-1]
+        # The original must be left alone by the copying version.
+        assert a.bin == bits
+
+
+@pytest.mark.parametrize('offset', range(9))
+def test_reversed_with_storage_starting_mid_byte(offset):
+    source = ''.join('0110100011110000101'[i % 19] for i in range(offset + 37))
+    for cls in (Tibs, Mutibs):
+        a = cls('0b' + source)[offset:]
+        assert a.reversed().bin == source[offset:][::-1]

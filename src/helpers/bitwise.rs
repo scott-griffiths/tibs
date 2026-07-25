@@ -5,8 +5,8 @@
 //! this module knows about `Tibs`, `Mutibs` or Python; the collection-level
 //! logic that drives it lives in `core.rs`.
 
-use super::bits::{BS, BV};
-use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits};
+use super::bits::{BS, BV, head_bit_offset};
+use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
 use bitvec::prelude::*;
 
 #[inline]
@@ -45,6 +45,34 @@ pub(crate) fn copy_unaligned_padded_bytes(
 
     copy_shifted_bytes(bytes, bit_offset, out);
     mask_padding_bits(out, len_bits);
+}
+
+/// Reverse the bits of `bits` in place, working over the raw storage.
+///
+/// `BitSlice::reverse` swaps one bit at a time through bit pointers, which
+/// is hundreds of times slower than sweeping the bytes.
+pub(crate) fn reverse_bitvec_in_place(bits: &mut BV) {
+    let len = bits.len();
+    if len < 2 {
+        return;
+    }
+    let offset = head_bit_offset(bits.as_bitslice());
+    if offset == 0 {
+        let bytes = &mut bits.as_raw_mut_slice()[..len.div_ceil(8)];
+        // The bits past the end are dead storage and may hold anything, but
+        // the reversal moves them to the front, so clear them first.
+        mask_padding_bits(bytes, len);
+        reverse_padded_bits(bytes, len);
+        return;
+    }
+    // Storage starting mid byte cannot be reversed within itself, so realign
+    // it on the way through. The result then starts at bit zero.
+    let mut bytes = vec![0u8; len.div_ceil(8)];
+    copy_unaligned_padded_bytes(bits.as_raw_slice(), offset, len, &mut bytes);
+    reverse_padded_bits(&mut bytes, len);
+    let mut reversed = BV::from_vec(bytes);
+    reversed.truncate(len);
+    *bits = reversed;
 }
 
 #[derive(Clone, Copy)]
