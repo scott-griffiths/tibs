@@ -1087,9 +1087,15 @@ def _normalize_strict_bounds(length, start, end):
 @st.composite
 def bool_lists(draw, min_size=0, max_size=200):
     # Mix densities so low-entropy data stresses fallback search paths.
+    # The bits come from one bulk byte draw rather than a draw per bit: drawing
+    # each bit separately makes data generation cost far more than the tests.
     density = draw(st.sampled_from([2, 50, 98]))
     n = draw(st.integers(min_size, max_size))
-    return [draw(st.integers(0, 99)) < density for _ in range(n)]
+    raw = draw(st.binary(min_size=n, max_size=n))
+    # P(True) == density/100, and a byte of 0 is False so examples shrink
+    # towards all-zero bits.
+    threshold = 256 - round(density * 256 / 100)
+    return [b >= threshold for b in raw]
 
 
 @st.composite
