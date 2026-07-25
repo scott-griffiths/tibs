@@ -25,7 +25,7 @@ from tibs import Mutibs, Tibs
 
 try:
     from bitarray import bitarray
-    from bitarray.util import ba2int, int2ba
+    from bitarray.util import ba2int, int2ba, ones, random_p
 except ImportError:
     bitarray = None
 
@@ -67,6 +67,31 @@ def same_bits(bitarray_result, tibs_result):
             len(bitarray_result) == len(tibs_result)
             and bitarray_result.tobytes() == tibs_result.to_padded_bytes()
     )
+
+
+RESET = "\033[0m"
+RED = "\033[31m"
+GREEN = "\033[32m"
+BOLD = "\033[1m"
+
+SLOW_THRESHOLD = 0.8
+FAST_THRESHOLD = 1.2
+
+NAME_WIDTH = 24
+TIME_WIDTH = 13
+SPEEDUP_WIDTH = 10
+
+
+def colourise(text, colour, enabled):
+    return f"{colour}{text}{RESET}" if enabled and colour else text
+
+
+def speedup_colour(speedup):
+    if speedup < SLOW_THRESHOLD:
+        return RED
+    if speedup > FAST_THRESHOLD:
+        return GREEN
+    return ""
 
 
 def result_summary(result):
@@ -123,6 +148,14 @@ def build_cases(byte_count, value_count):
         [rng.randrange(bulk_set_bit_count) for _ in range(bulk_set_width)]
         for _ in range(value_count)
     ]
+
+    sieve_limit = min(bit_count, 2_000_000)
+    random_bit_count = min(bit_count, 2_000_000)
+    random_repeats = 10
+
+    pop_count = min(bit_count, 200_000)
+    pop_bits = search_bits[:pop_count]
+    pop_tibs = search_tibs[:pop_count]
 
     ba_piece = bitarray("10101", endian="big")
     tibs_piece = Tibs("0b10101")
@@ -335,6 +368,52 @@ def build_cases(byte_count, value_count):
             total += len(memoryview(search_tibs))
         return total
 
+    def ba_primes():
+        is_prime = ones(sieve_limit)
+        is_prime[:2] = False
+        for i in range(2, math.isqrt(sieve_limit) + 1):
+            if is_prime[i]:
+                is_prime[i * i:: i] = False
+        # bitarray counts non-overlapping occurrences, so it misses one of the
+        # two overlapping "101" hits in 3, 5, 7 - the only prime triple there is.
+        return is_prime.count(bitarray("101")) + 1
+
+    def tibs_primes():
+        is_prime = Mutibs.from_ones(sieve_limit)
+        is_prime.unset([0, 1])
+        for i in range(2, math.isqrt(sieve_limit) + 1):
+            if is_prime[i]:
+                is_prime.unset(range(i * i, sieve_limit, i))
+        return is_prime.count([1, 0, 1])
+
+    def ba_random():
+        for _ in range(random_repeats):
+            out = random_p(random_bit_count)
+        return len(out)
+
+    def tibs_random():
+        for _ in range(random_repeats):
+            out = Mutibs.from_random(random_bit_count)
+        return len(out)
+
+    def ba_pop():
+        out = pop_bits.copy()
+        total = 0
+        while out:
+            total += out.pop()
+        return total
+
+    def tibs_pop():
+        out = pop_tibs.to_mutibs()
+        # About half the time here is in the method lookup, which isn't cached in
+        # the same way as with the bitarray C extension. Hoisting it out of the
+        # loop with `pop = out.pop` speeds this up a lot, but the point of the
+        # case is the idiomatic version.
+        total = 0
+        while out:
+            total += out.pop()
+        return total
+
     def ba_chunks():
         count = 0
         for index in range(0, len(search_bits), 5):
@@ -384,6 +463,9 @@ def build_cases(byte_count, value_count):
         ComparisonCase("slice count", ba_slice_count, tibs_slice_count),
         ComparisonCase("pack u16", ba_pack_u16, tibs_pack_u16, same_bits),
         ComparisonCase("unpack u16", ba_unpack_u16, tibs_unpack_u16),
+        ComparisonCase("prime sieve", ba_primes, tibs_primes),
+        ComparisonCase("random generation", ba_random, tibs_random),
+        ComparisonCase("pop all bits", ba_pop, tibs_pop),
         ComparisonCase("chunks_iter", ba_chunks, tibs_chunks),
         ComparisonCase("repeated buffer view", ba_buffer_view, tibs_buffer_view),
     ]
@@ -406,7 +488,10 @@ def main():
     parser.add_argument("--bytes", type=int, default=250_000, help="random data bytes")
     parser.add_argument("--values", type=int, default=20_000, help="u16 value count")
     parser.add_argument("--repeats", type=int, default=5, help="timing repeats per case")
+    parser.add_argument("--no-color", action="store_true", help="disable coloured output")
     args = parser.parse_args()
+
+    colour = not args.no_color and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 
     if args.bytes < 2:
         parser.error("--bytes must be at least 2")
@@ -426,6 +511,11 @@ def main():
     print("Lower times are better. Speedup is bitarray_time / tibs_time.")
     print()
 
+    header = f"{'case':<{NAME_WIDTH}}{'bitarray':>{TIME_WIDTH}}{'tibs':>{TIME_WIDTH}}{'speedup':>{SPEEDUP_WIDTH}}"
+    rule = "-" * len(header)
+    print(colourise(header, BOLD, colour))
+    print(rule)
+
     speedups = []
     for case in build_cases(args.bytes, args.values):
         bitarray_result = case.bitarray_fn()
@@ -444,26 +534,30 @@ def main():
         speedup = bitarray_time / tibs_time if tibs_time else float("inf")
         if bitarray_time > 0 and tibs_time > 0:
             speedups.append(speedup)
+        speedup_text = f"{speedup:.2f}x".rjust(SPEEDUP_WIDTH)
         print(
-            f"{case.name:24s} bitarray={bitarray_time * 1e3:8.3f} ms "
-            f"tibs={tibs_time * 1e3:8.3f} ms speedup={speedup:6.2f}x"
+            f"{case.name:<{NAME_WIDTH}}"
+            f"{f'{bitarray_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+            f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+            f"{colourise(speedup_text, speedup_colour(speedup), colour)}"
         )
 
     if speedups:
+        print(rule)
         geometric_mean = math.prod(speedups) ** (1 / len(speedups))
         median_speedup = statistics.median(speedups)
-        print()
-        if geometric_mean >= 1:
-            print(f"Geometric mean: Tibs is {geometric_mean:.2f}x faster.")
-        else:
-            print(
-                "Geometric mean: "
-                f"Tibs is {1 / geometric_mean:.2f}x slower."
+        for label, value in (
+            ("Geometric mean", geometric_mean),
+            ("Median", median_speedup),
+        ):
+            comparison = (
+                f"{value:.2f}x faster" if value >= 1 else f"{1 / value:.2f}x slower"
             )
-        if median_speedup >= 1:
-            print(f"Median: Tibs is {median_speedup:.2f}x faster.")
-        else:
-            print(f"Median: Tibs is {1 / median_speedup:.2f}x slower.")
+            summary = f"Tibs is {comparison}".rjust(2 * TIME_WIDTH + SPEEDUP_WIDTH)
+            print(
+                f"{label:<{NAME_WIDTH}}"
+                f"{colourise(summary, speedup_colour(value), colour)}"
+            )
 
 
 if __name__ == "__main__":
