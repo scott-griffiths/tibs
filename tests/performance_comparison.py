@@ -25,7 +25,7 @@ from tibs import Mutibs, Tibs
 
 try:
     from bitarray import bitarray
-    from bitarray.util import ba2int, int2ba, ones, random_p
+    from bitarray.util import ba2int, int2ba, ones, random_p, zeros
 except ImportError:
     bitarray = None
 
@@ -57,6 +57,9 @@ def median_times(bitarray_fn, tibs_fn, repeats):
 
 
 def make_bitarray(data):
+    # frombytes copies, which matches Tibs.from_bytes. bitarray(buffer=data) is
+    # a zero-copy alternative, but it aliases the source and is read-only, so it
+    # is not the same operation.
     bits = bitarray(endian="big")
     bits.frombytes(data)
     return bits
@@ -228,8 +231,7 @@ def build_cases(byte_count, value_count):
         return out
 
     def ba_bulk_index_set():
-        out = bitarray(bulk_set_bit_count, endian="big")
-        out.setall(0)
+        out = zeros(bulk_set_bit_count, endian="big")
         for positions in bulk_set_positions:
             out[positions] = 1
         return out
@@ -280,11 +282,19 @@ def build_cases(byte_count, value_count):
     def tibs_invert():
         return ~search_tibs
 
+    # Both libraries reverse in place, so this measures the reverse itself
+    # rather than a copy. The two buffers are reversed the same number of
+    # times, so they stay in step with each other.
+    reverse_bits = search_bits.copy()
+    reverse_tibs = search_tibs.to_mutibs()
+
     def ba_reverse():
-        return search_bits[::-1]
+        reverse_bits.reverse()
+        return reverse_bits
 
     def tibs_reverse():
-        return search_tibs.reversed()
+        reverse_tibs.reverse()
+        return reverse_tibs
 
     def ba_shift_left():
         return search_bits << 13
@@ -293,6 +303,9 @@ def build_cases(byte_count, value_count):
         return search_tibs << 13
 
     def ba_index_reads():
+        # Kept as a per-index loop to match the tibs side. bitarray can also
+        # gather in bulk with `search_bits[read_positions].count(1)`, which is
+        # ~2.3x faster here; tibs has no equivalent fancy-indexing read.
         return sum(search_bits[pos] for pos in read_positions)
 
     def tibs_index_reads():
@@ -339,6 +352,10 @@ def build_cases(byte_count, value_count):
         return total
 
     def ba_pack_u16():
+        # struct.pack + frombytes is ~50x faster than this loop, but struct is
+        # equally available to tibs, so using it would compare struct with
+        # itself rather than the two libraries. int2ba is bitarray's own route,
+        # and it is the only route for a non-byte-aligned width such as u12.
         out = bitarray(endian="big")
         for value in value_words:
             out.extend(int2ba(value, length=16, endian="big"))
@@ -348,6 +365,7 @@ def build_cases(byte_count, value_count):
         return Tibs.from_values("u16", value_words)
 
     def ba_unpack_u16():
+        # As with packing, struct.unpack is excluded as it is available to both.
         bits = make_bitarray(value_bytes)
         return [ba2int(bits[index: index + 16]) for index in range(0, len(bits), 16)]
 
@@ -415,6 +433,9 @@ def build_cases(byte_count, value_count):
         return total
 
     def ba_chunks():
+        # bitarray has no chunk iterator, and count(sub_bitarray) counts
+        # non-overlapping hits at any offset rather than on a 5-bit stride,
+        # so the slice-compare loop is the equivalent spelling.
         count = 0
         for index in range(0, len(search_bits), 5):
             if search_bits[index: index + 5] == chunk_target_bits:
@@ -450,7 +471,7 @@ def build_cases(byte_count, value_count):
         ComparisonCase("unaligned slices x100", ba_slice, tibs_slice, same_bits),
         ComparisonCase("concatenate", ba_concat, tibs_concat, same_bits),
         ComparisonCase("invert", ba_invert, tibs_invert, same_bits),
-        ComparisonCase("reverse", ba_reverse, tibs_reverse, same_bits),
+        ComparisonCase("reverse in place", ba_reverse, tibs_reverse, same_bits),
         ComparisonCase("shift left", ba_shift_left, tibs_shift_left, same_bits),
         ComparisonCase("random index reads", ba_index_reads, tibs_index_reads),
         ComparisonCase("to bool list", ba_to_bool_list, tibs_to_bool_list),
