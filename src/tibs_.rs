@@ -1331,7 +1331,7 @@ impl Tibs {
     ///
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)")]
-    pub fn from_string(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
+    pub fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         let bv = str_to_bv(s)?;
         Ok(Tibs::from_bv(bv))
     }

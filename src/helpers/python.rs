@@ -263,7 +263,7 @@ fn py_type_name(any: &Bound<'_, PyAny>) -> String {
 
 pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     // Is it a string?
-    if let Ok(any_string) = any.extract::<String>() {
+    if let Ok(any_string) = any.extract::<&str>() {
         let bv = str_to_bv(any_string)?;
         return Ok(bv);
     }
