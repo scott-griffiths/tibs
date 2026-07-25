@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import pytest
 from hypothesis import given, strategies as st
 from tibs import Tibs, Mutibs
@@ -298,10 +299,13 @@ def test_multibyte_fill_is_counted_in_code_points(cls):
 
 def test_absurd_width_raises_instead_of_aborting(cls):
     # A width too large to allocate must raise a catchable MemoryError rather
-    # than aborting the process or raising a Rust PanicException.
+    # than aborting the process or raising a Rust PanicException. These widths
+    # overflow Py_ssize_t on 32 bit platforms, where CPython's own format spec
+    # parser rejects them with a ValueError before __format__ is reached.
+    expected = MemoryError if sys.maxsize > 2 ** 32 else (MemoryError, ValueError)
     t = cls('0xff')
     for spec in ['1' + '0' * 18 + 'x', '9' * 19 + 'x', '€>' + '9' * 19 + 'x']:
-        with pytest.raises(MemoryError):
+        with pytest.raises(expected):
             format(t, spec)
 
 

@@ -99,11 +99,28 @@ Added
   change the apparent length of the value, where for an integer it changes nothing.
   Pad with `<`, `>` or `^` and a non-digit fill instead, or use `u` or `i`.
 
+* Added a `tibs.__version__` string, alongside the `tibs.__author__` that was
+  already there.
+
 Changed
 
 * Inverting an empty `Tibs` or `Mutibs` with `~` now returns an empty container
   instead of raising a `ValueError`. This matches what `Tibs.inverted` and
   `Mutibs.invert` already did when there were no bits to invert.
+
+Performance improvements
+
+* The `bin`, `oct` and `hex` properties and the `to_bin`, `to_oct` and `to_hex`
+  methods now build their string from whole bytes at a time instead of looking
+  at each bit or digit in turn.
+* Binary, octal and hex strings are parsed several digits at a time straight
+  into bytes, which speeds up construction from a string. This made the cache of
+  recently parsed strings redundant, so it has been removed, and with it the
+  `hex`, `lru` and `once_cell` dependencies.
+* `from_values` and `Dtype.pack_values` pack whole bytes at a time for numeric
+  dtypes whose length is a multiple of 8 bits.
+* `Mutibs.reverse` now takes the same byte-level fast path that `reversed`
+  already used, rather than reversing a bit at a time.
 
 ### July 18th 2026: version 1.1
 

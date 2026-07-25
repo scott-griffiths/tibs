@@ -16,6 +16,7 @@ use pyo3::prelude::*;
 
 #[pymodule]
 fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("__author__", "Scott Griffiths")?;
     m.add_class::<tibs_::Tibs>()?;
     m.add_class::<mutibs::Mutibs>()?;
