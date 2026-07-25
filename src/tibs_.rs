@@ -329,15 +329,101 @@ fn validate_dtype_value_length(dtype: &Dtype, bv: BV) -> PyResult<BV> {
     Ok(bv)
 }
 
+/// How the byte-wise path in [`bv_from_values_iter`] packs one value.
+///
+/// Only numeric dtypes that are a whole number of bytes long qualify, so the
+/// byte order and the sign are settled once for the whole sequence rather than
+/// per value.
+enum BytewisePacker {
+    Int {
+        byte_length: usize,
+        is_little_endian: bool,
+        signed: bool,
+    },
+    Float {
+        byte_length: usize,
+        is_little_endian: bool,
+    },
+}
+
+impl BytewisePacker {
+    /// Decide whether `dtype` qualifies, without touching the values. This has
+    /// to be settled up front, because returning `None` after consuming part
+    /// of a one-shot iterable would lose those items.
+    fn for_dtype(dtype: &Dtype) -> PyResult<Option<Self>> {
+        if dtype.length == 0 || !dtype.length.is_multiple_of(8) {
+            return Ok(None);
+        }
+        let byte_length = dtype.length / 8;
+        let kind = dtype.kind;
+        if !matches!(kind, DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float) {
+            return Ok(None);
+        }
+        let is_little_endian = ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+        Ok(Some(match kind {
+            DtypeKind::Float => BytewisePacker::Float {
+                byte_length,
+                is_little_endian,
+            },
+            _ => BytewisePacker::Int {
+                byte_length,
+                is_little_endian,
+                signed: kind == DtypeKind::Int,
+            },
+        }))
+    }
+
+    fn byte_length(&self) -> usize {
+        match *self {
+            BytewisePacker::Int { byte_length, .. } | BytewisePacker::Float { byte_length, .. } => {
+                byte_length
+            }
+        }
+    }
+
+    fn push(&self, out: &mut Vec<u8>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        match *self {
+            BytewisePacker::Int {
+                byte_length,
+                is_little_endian,
+                signed,
+            } => helpers::push_int_bytes(out, value, byte_length, is_little_endian, signed),
+            BytewisePacker::Float {
+                byte_length,
+                is_little_endian,
+            } => {
+                helpers::push_f64_bytes(out, value.extract::<f64>()?, byte_length, is_little_endian)
+            }
+        }
+    }
+}
+
 pub(crate) fn bv_from_values_iter(
     py: Python<'_>,
     dtype: &Dtype,
     iterable: &Bound<'_, PyAny>,
 ) -> PyResult<BV> {
-    let capacity = iterable
-        .len()
-        .ok()
-        .and_then(|len| len.checked_mul(dtype.length));
+    let hint = iterable.len().ok();
+    // A dtype that packs into whole bytes can be built as a byte buffer and
+    // converted once at the end. The general path below allocates a `BitVec`
+    // per value and appends it a bit at a time, which costs far more than the
+    // conversion itself for a long sequence.
+    if let Some(packer) = BytewisePacker::for_dtype(dtype)? {
+        let byte_length = packer.byte_length();
+        let capacity = hint.and_then(|len| len.checked_mul(byte_length));
+        let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+        for (index, item) in iterable.try_iter()?.enumerate() {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+            }
+            packer.push(&mut bytes, &item?)?;
+        }
+        return Ok(BV::from_vec(bytes));
+    }
+
+    let capacity = hint.and_then(|len| len.checked_mul(dtype.length));
     let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
     for (index, item) in iterable.try_iter()?.enumerate() {
@@ -411,15 +497,23 @@ pub(crate) fn py_values_from_range(
     }
 
     let count = selected_len / dtype.length;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
     let mut values = Vec::with_capacity(count);
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+    // One window is reused for the whole sequence, with only its offset moving
+    // between values. Taking a fresh slice each time would clone the `Arc` once
+    // per value for a read that never outlives the loop.
+    let mut window = bits.get_slice_unchecked(start, dtype.length);
+    let base_offset = window.offset;
     for index in 0..count {
         if index >= check_at {
             py.check_signals()?;
             check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
-        let value = bits.get_slice_unchecked(start + index * dtype.length, dtype.length);
-        values.push(py_from_value(py, dtype, &value)?);
+        window.offset = base_offset + index * dtype.length;
+        values.push(py_from_value(py, dtype, &window)?);
     }
     Ok(values)
 }

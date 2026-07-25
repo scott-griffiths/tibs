@@ -16,7 +16,10 @@ pub(crate) use bitwise::{
     logical_op_with_matching_bytes, reverse_bitvec_in_place,
 };
 pub(crate) use format::format_bit_collection;
-pub(crate) use numeric::{FAST_INT_BITS, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name};
+pub(crate) use numeric::{
+    FAST_INT_BITS, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name, push_f64_bytes,
+    push_int_bytes,
+};
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{
     bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, convert_to_bool, promote_to_bv,

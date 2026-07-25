@@ -424,6 +424,109 @@ def test_from_values_propagates_item_errors():
         Tibs.from_values(d, [1, 256])
 
 
+# from_values packs a byte-aligned numeric dtype through a bulk byte path
+# rather than one BitVec per value. These check it agrees with from_value,
+# which always takes the general path.
+
+BYTE_ALIGNED_SPECS = [
+    f"{kind}{length}{suffix}"
+    for kind in ("u", "i")
+    for length in (8, 16, 24, 32, 40, 64, 72, 128)
+    for suffix in ("", "_be", "_le")
+] + [f"f{length}{suffix}" for length in (16, 32, 64) for suffix in ("", "_be", "_le")]
+
+
+def _sample_values(spec):
+    if spec.startswith("f"):
+        return [0.0, -0.0, 1.0, -2.5, 0.125, float("inf"), float("-inf")]
+    length = int(spec[1:].split("_")[0])
+    if spec.startswith("u"):
+        top = (1 << length) - 1
+        return [0, 1, top, top - 1, top // 2, top // 3]
+    low, high = -(1 << (length - 1)), (1 << (length - 1)) - 1
+    return [0, 1, -1, low, high, low + 1, high - 1]
+
+
+@pytest.mark.parametrize("spec", BYTE_ALIGNED_SPECS)
+def test_from_values_bulk_path_matches_from_value(spec):
+    values = _sample_values(spec)
+    expected = Tibs.from_joined([Tibs.from_value(spec, v) for v in values])
+
+    assert Tibs.from_values(spec, values) == expected
+    assert Mutibs.from_values(spec, values) == Mutibs(expected)
+    assert Tibs.from_values(spec, iter(values)) == expected
+    assert Tibs.from_values(spec, tuple(values)) == expected
+    assert Tibs.from_values(spec, []) == Tibs()
+
+
+@pytest.mark.parametrize("spec", BYTE_ALIGNED_SPECS)
+def test_from_values_bulk_path_round_trips(spec):
+    values = _sample_values(spec)
+    decoded = Tibs.from_values(spec, values).to_values(spec)
+    if spec.startswith("f"):
+        # f16 and f32 round to their own precision, so compare via from_value.
+        assert decoded == [Tibs.from_value(spec, v).to_value(spec) for v in values]
+    else:
+        assert decoded == values
+
+
+@pytest.mark.parametrize("spec", ["u8", "u16_le", "i32", "u64", "u72", "f32"])
+def test_from_values_bulk_path_reports_bad_items_like_from_value(spec):
+    for bad in ("nope", None, [1]):
+        with pytest.raises(TypeError) as bulk:
+            Tibs.from_values(spec, [bad])
+        with pytest.raises(TypeError) as single:
+            Tibs.from_value(spec, bad)
+        assert str(bulk.value) == str(single.value)
+
+
+@pytest.mark.parametrize("spec", ["u8", "u16", "u16_le", "i16", "i32", "u64", "i64", "u72"])
+def test_from_values_bulk_path_reports_overflow_like_from_value(spec):
+    length = int(spec[1:].split("_")[0])
+    if spec.startswith("u"):
+        out_of_range = [(1 << length), -1]
+    else:
+        out_of_range = [1 << (length - 1), -(1 << (length - 1)) - 1]
+
+    for value in out_of_range:
+        with pytest.raises(OverflowError) as bulk:
+            Tibs.from_values(spec, [0, value])
+        with pytest.raises(OverflowError) as single:
+            Tibs.from_value(spec, value)
+        assert str(bulk.value) == str(single.value)
+
+
+def test_from_values_bulk_path_accepts_index_objects():
+    class Index:
+        def __init__(self, value):
+            self.value = value
+
+        def __index__(self):
+            return self.value
+
+    assert Tibs.from_values("u8", [Index(1), Index(255)]) == Tibs.from_hex("01ff")
+    assert Tibs.from_values("u72", [Index(1)]) == Tibs.from_hex("000000000000000001")
+    with pytest.raises(OverflowError, match="does not fit"):
+        Tibs.from_values("u8", [Index(256)])
+
+
+def test_from_values_leaves_iterable_alone_when_bulk_path_does_not_apply():
+    # The bulk path has to be ruled out before any item is pulled, or a
+    # one-shot iterable would lose the items it had already yielded.
+    values = (x for x in [1, 2, 3])
+    assert Tibs.from_values("u12", values) == Tibs.from_hex("001002003")
+    assert list(values) == []
+
+
+def test_to_values_reuses_its_window_without_aliasing():
+    # to_values walks the sequence with a single moving window, so container
+    # dtypes have to come back as independent objects.
+    bits = Tibs.from_hex("01020304")
+    assert bits.to_values("bits8") == [Tibs.from_hex(h) for h in ("01", "02", "03", "04")]
+    assert bits.to_values("bytes8") == [b"\x01", b"\x02", b"\x03", b"\x04"]
+    assert bits.to_values("hex8") == ["01", "02", "03", "04"]
+
+
 def test_to_values_iter_uint():
     d = Dtype("u8")
     t = Tibs.from_values(d, [1, 2, 3])

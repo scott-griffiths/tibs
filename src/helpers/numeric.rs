@@ -54,21 +54,18 @@ fn to_index<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     unsafe { Bound::from_owned_ptr_or_err(py, indexed) }
 }
 
-/// Convert an integer of any size through `int.to_bytes`.
+/// Call `int.to_bytes` on `value`, reporting an overflow against the field
+/// rather than against the byte count `to_bytes` was given.
 ///
-/// The bytes come back with the value right-aligned in `length.div_ceil(8)`
-/// bytes, so for a length that isn't a whole number of bytes the leading pad
-/// bits have to be checked before they're dropped: `to_bytes` only knows
-/// whether the value fitted in the bytes, not whether it fitted in the field.
-fn bv_from_big_int(
-    value: &Bound<'_, PyAny>,
+/// The value comes back right-aligned in `byte_length` bytes.
+fn big_int_to_bytes<'py>(
+    value: &Bound<'py, PyAny>,
     length: usize,
+    byte_length: usize,
     is_little_endian: bool,
     signed: bool,
-) -> PyResult<BV> {
-    let value = to_index(value)?;
+) -> PyResult<Bound<'py, PyBytes>> {
     let py = value.py();
-    let byte_length = length.div_ceil(8);
     let byte_order = byte_order_name(is_little_endian);
     let args = (byte_length, byte_order);
 
@@ -84,11 +81,28 @@ fn bv_from_big_int(
     let bytes = match call {
         Ok(bytes) => bytes,
         Err(err) if err.is_instance_of::<PyOverflowError>(py) => {
-            return Err(overflow_error(&value, length, signed));
+            return Err(overflow_error(value, length, signed));
         }
         Err(err) => return Err(err),
     };
-    let bytes = bytes.cast_into::<PyBytes>()?;
+    bytes.cast_into::<PyBytes>().map_err(PyErr::from)
+}
+
+/// Convert an integer of any size through `int.to_bytes`.
+///
+/// The bytes come back with the value right-aligned in `length.div_ceil(8)`
+/// bytes, so for a length that isn't a whole number of bytes the leading pad
+/// bits have to be checked before they're dropped: `to_bytes` only knows
+/// whether the value fitted in the bytes, not whether it fitted in the field.
+fn bv_from_big_int(
+    value: &Bound<'_, PyAny>,
+    length: usize,
+    is_little_endian: bool,
+    signed: bool,
+) -> PyResult<BV> {
+    let value = to_index(value)?;
+    let byte_length = length.div_ceil(8);
+    let bytes = big_int_to_bytes(&value, length, byte_length, is_little_endian, signed)?;
     let bits = BS::from_slice(bytes.as_bytes());
 
     // A little-endian byte order is only allowed for whole-byte lengths, so
@@ -175,6 +189,95 @@ pub(crate) fn bv_from_int(
     bv_from_big_int(value, length, is_little_endian, true)
 }
 
+/// Append `value` to `out` as the `byte_length` bytes of a byte-aligned int
+/// dtype.
+///
+/// This is the bulk counterpart of [`bv_from_uint`] and [`bv_from_int`]. Those
+/// return a fresh `BitVec` per value, which the caller then has to append a
+/// bit at a time; packing a whole number of bytes at a known offset lets the
+/// bytes be written straight into the output buffer instead. Errors are
+/// reported exactly as the single-value functions report them.
+pub(crate) fn push_int_bytes(
+    out: &mut Vec<u8>,
+    value: &Bound<'_, PyAny>,
+    byte_length: usize,
+    is_little_endian: bool,
+    signed: bool,
+) -> PyResult<()> {
+    debug_assert!(byte_length > 0);
+    let length = byte_length * 8;
+    if byte_length <= FAST_INT_BITS / 8 {
+        // As in `bv_from_uint`, a failed extraction drops through to the
+        // general path, which reports the reason against the field length.
+        let raw = if signed {
+            value.extract::<i64>().ok().and_then(|value| {
+                let fits = length == FAST_INT_BITS || {
+                    let limit = 1i64 << (length - 1);
+                    value >= -limit && value < limit
+                };
+                if fits { Some(value as u64) } else { None }
+            })
+        } else {
+            value.extract::<u64>().ok().and_then(|value| {
+                if length == FAST_INT_BITS || value < (1u64 << length) {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(raw) = raw {
+            if is_little_endian {
+                out.extend_from_slice(&raw.to_le_bytes()[..byte_length]);
+            } else {
+                out.extend_from_slice(&raw.to_be_bytes()[8 - byte_length..]);
+            }
+            return Ok(());
+        }
+        // Out of range, or something that only becomes an integer through
+        // `__index__`. Both fall through to the general path below, which
+        // handles the second case and raises the same overflow error as the
+        // single-value functions for the first.
+    }
+    let value = to_index(value)?;
+    let bytes = big_int_to_bytes(&value, length, byte_length, is_little_endian, signed)?;
+    out.extend_from_slice(bytes.as_bytes());
+    Ok(())
+}
+
+/// Append `value` to `out` as the `byte_length` bytes of a float dtype. The
+/// byte-wise counterpart of [`bv_from_f64`], and it rejects the same lengths.
+pub(crate) fn push_f64_bytes(
+    out: &mut Vec<u8>,
+    value: f64,
+    byte_length: usize,
+    is_little_endian: bool,
+) -> PyResult<()> {
+    macro_rules! push {
+        ($bits:expr) => {{
+            let bits = $bits;
+            if is_little_endian {
+                out.extend_from_slice(&bits.to_le_bytes());
+            } else {
+                out.extend_from_slice(&bits.to_be_bytes());
+            }
+        }};
+    }
+    match byte_length {
+        8 => push!(value.to_bits()),
+        4 => push!((value as f32).to_bits()),
+        2 => push!(f16::from_f64(value).to_bits()),
+        _ => return Err(unsupported_float_length(byte_length * 8)),
+    }
+    Ok(())
+}
+
+fn unsupported_float_length(length: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
+    ))
+}
+
 pub(crate) fn bv_from_f64(value: f64, length: usize, is_little_endian: bool) -> PyResult<BV> {
     let bv = match length {
         64 => {
@@ -206,11 +309,7 @@ pub(crate) fn bv_from_f64(value: f64, length: usize, is_little_endian: bool) -> 
             }
             bv
         }
-        _ => {
-            return Err(PyValueError::new_err(format!(
-                "Unsupported float bit length '{length}'. Only 16, 32 and 64 are supported."
-            )));
-        }
+        _ => return Err(unsupported_float_length(length)),
     };
     Ok(bv)
 }
