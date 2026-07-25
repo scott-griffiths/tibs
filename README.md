@@ -172,12 +172,12 @@ The regression benchmarks cover operations such as:
 - typed packing and unpacking such as `u16` value streams
 - a sieve workload using `Mutibs` as a large mutable bitset
 
-For local comparisons, [`tests/performance_comparison_new.py`](tests/performance_comparison_new.py)
+For local comparisons, [`tests/performance_comparison.py`](tests/performance_comparison.py)
 checks common operations against `bitarray`. With
 `bitarray` installed, run:
 
 ```bash
-python tests/performance_comparison_new.py --bytes 250000 --values 20000 --repeats 5
+python tests/performance_comparison.py
 ```
 
 Benchmarks are machine-dependent, but the mean speedup over bitarray will typically be > 2x.
