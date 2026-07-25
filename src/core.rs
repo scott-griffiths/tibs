@@ -16,7 +16,6 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyInt};
 use std::borrow::Cow;
-use std::fmt;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
 pub(crate) trait BitCollection: Sized + Clone {
@@ -27,9 +26,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn get_raw_bytes(&self) -> Vec<u8>;
 
-    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
-        None
-    }
+    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)>;
 
     fn raw_data(&self) -> (Vec<u8>, usize, usize) {
         let raw_bytes = self.get_raw_bytes();
@@ -834,56 +831,12 @@ impl BitCollection for Mutibs {
     }
 }
 
-impl fmt::Debug for Tibs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.len() > 100 {
-            return f
-                .debug_struct("Tibs")
-                .field(
-                    "hex",
-                    &self.get_slice_unchecked(0, 100).to_hex(None, None).unwrap(),
-                )
-                .field("length", &self.len())
-                .finish();
-        }
-        if self.len().is_multiple_of(4) {
-            return f
-                .debug_struct("Tibs")
-                .field("hex", &self.to_hex(None, None).unwrap())
-                .field("length", &self.len())
-                .finish();
-        }
-        f.debug_struct("Tibs")
-            .field("bin", &BitCollection::to_binary(self))
-            .field("length", &self.len())
-            .finish()
-    }
-}
-
+// Only Tibs needs a PartialEq impl, for View::__eq__ comparing its source.
+// The Python-level `==` on Tibs and Mutibs goes through their __eq__ methods,
+// which compare bit slices directly rather than through this trait.
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.as_bitslice() == other.as_bitslice()
-    }
-}
-
-impl PartialEq<Mutibs> for Tibs {
-    #[inline]
-    fn eq(&self, other: &Mutibs) -> bool {
-        self.as_bitslice() == other.as_bitvec_ref()
-    }
-}
-
-impl PartialEq for Mutibs {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.as_bitvec_ref() == other.as_bitvec_ref()
-    }
-}
-
-impl PartialEq<Tibs> for Mutibs {
-    #[inline]
-    fn eq(&self, other: &Tibs) -> bool {
-        self.as_bitvec_ref() == other.as_bitslice()
     }
 }
