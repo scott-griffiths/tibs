@@ -1,14 +1,13 @@
 use crate::codec as tibs_codec;
-use crate::core::{
-    BitCollection, LogicalOp, concatenate_bitcollections, deposit_masked,
-};
+use crate::core::{BitCollection, concatenate_bitcollections};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
+    BS, BV, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
     bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, find_bitvec, find_bitvec_aligned, promote_to_bv, str_to_bv,
-    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    bv_from_zeros, bytes_like_to_vec, deposit_masked, find_bitvec, find_bitvec_aligned,
+    promote_to_bv, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,

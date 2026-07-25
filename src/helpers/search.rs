@@ -1,6 +1,6 @@
 use super::bits::{BS, BV};
+use super::bitwise::count_bitslice;
 use super::raw_bytes::byte_search_prep;
-use crate::core::count_bitslice;
 use bitvec::domain::Domain;
 use memchr::memmem;
 use pyo3::prelude::*;

@@ -74,3 +74,16 @@ pub(crate) fn validate_slice(
     }
     Ok((start as usize, end as usize))
 }
+
+pub(crate) fn normalize_split_position(position: isize, length: usize) -> PyResult<usize> {
+    let mut normalized = position;
+    if normalized < 0 {
+        normalized += length as isize;
+    }
+    if normalized < 0 || normalized > length as isize {
+        return Err(PyValueError::new_err(format!(
+            "Split position {position} is out of range for length of {length}."
+        )));
+    }
+    Ok(normalized as usize)
+}

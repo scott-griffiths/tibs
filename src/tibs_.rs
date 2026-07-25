@@ -1,13 +1,13 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, LogicalOp, concatenate_bitcollections};
+use crate::core::{BitCollection, concatenate_bitcollections};
 use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
-    BS, BV, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int,
-    bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec,
-    find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv, validate_index,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    BS, BV, LogicalOp, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros,
+    bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
