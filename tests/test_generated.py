@@ -1153,6 +1153,115 @@ class TestRustCoverageGaps:
         with pytest.raises(ValueError):
             Mutibs.from_bin("0b10X01")
 
+    def test_bitwise_tests_against_a_mutibs_stored_at_a_bit_offset(self):
+        # A Mutibs slice can have storage that starts mid-byte, which leaves
+        # the raw-bytes fast path unavailable and takes the bitslice fallback.
+        t = Tibs("0x0f1e2d3c4b5a6978")[3:40]
+        m = Mutibs("0x0f1e2d3c4b5a")[3:40]
+        reference = Tibs("0x0f1e2d3c4b5a")[3:40]
+
+        assert t.count_and(m) == t.count_and(reference)
+        assert t.intersects(m) == t.intersects(reference)
+        assert t.is_subset_of(m) == t.is_subset_of(reference)
+
+    def test_rfind_falls_back_to_kmp_after_too_many_filter_failures(self):
+        # The reverse prefix scan filters on the needle's last 64 bits. A long
+        # run of set bits matches that filter over and over without the leading
+        # zeros ever matching, exhausting the failure budget and handing over
+        # to the KMP search.
+        needle = Tibs("0b" + "0" * 8 + "1" * 64)
+        haystack = Tibs("0b" + "0" * 8 + "1" * 2064)
+
+        assert haystack.rfind(needle) == 0
+        assert haystack.find(needle) == 0
+        assert Tibs("0b" + "1" * 2064).rfind(needle) is None
+
+    def test_byte_aligned_rfind_of_a_needle_that_is_not_a_whole_number_of_bytes(self):
+        # A byte-aligned search for a whole number of bytes is handed to a
+        # byte-level scan, so the prefix filter's own alignment adjustment is
+        # only reached by a long needle whose length is not a multiple of 8.
+        needle = Tibs("0b" + "0" * 6 + "1" * 64)
+        haystack = Tibs("0b" + "0" * 6 + "1" * 2064)
+
+        assert haystack.rfind(needle, byte_aligned=True) == 0
+        assert haystack.find(needle, byte_aligned=True) == 0
+        assert Tibs("0b" + "1" * 2064).rfind(needle, byte_aligned=True) is None
+
+
+def _varint_bits(value):
+    """Encode a length the way codec.rs's encode_varint does."""
+    groups = []
+    while True:
+        groups.append(value & 0x7F)
+        value >>= 7
+        if value == 0:
+            break
+    groups.reverse()
+    return "".join(
+        ("1" if i + 1 < len(groups) else "0") + format(group, "07b")
+        for i, group in enumerate(groups)
+    )
+
+
+def _encoded(codec, byte_length, payload=b""):
+    """A long-form encode() header with a hand-chosen payload byte length."""
+    bits = "00" + format(codec, "03b") + "000" + _varint_bits(byte_length)
+    return int(bits, 2).to_bytes(len(bits) // 8, "big") + payload
+
+
+RAW, RICE, ZSTD = 0b000, 0b001, 0b010
+
+# byte_length * 8 still fits in a usize, but adding the header does not.
+OVERSIZED = 2**61 - 1
+# byte_length * 8 does not fit in a usize at all.
+UNSCALABLE = 2**61
+
+
+class TestDecodeHeaderOverflow:
+    # Hand-built headers that drive the checked arithmetic in codec.rs. Every
+    # one must be rejected rather than wrapping around or panicking.
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_raw_payload_length_overflows_when_added_to_the_header(self, cls):
+        with pytest.raises(ValueError, match="too large to decode"):
+            cls.decode(_encoded(RAW, OVERSIZED))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_rice_payload_length_overflows_when_added_to_the_header(self, cls):
+        # One padding byte, so the config-block length check passes first.
+        with pytest.raises(ValueError, match="too large to decode"):
+            cls.decode(_encoded(RICE, OVERSIZED, b"\x00"))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_zstd_payload_length_overflows_when_added_to_the_header(self, cls):
+        with pytest.raises(ValueError, match="too large to decode"):
+            cls.decode(_encoded(ZSTD, OVERSIZED))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_payload_length_overflows_when_scaled_to_bits(self, cls):
+        with pytest.raises(ValueError, match="too large to decode"):
+            cls.decode(_encoded(RAW, UNSCALABLE))
+
+
+class TestDecodeMalformedZstdPayload:
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_payload_that_is_not_a_zstd_frame(self, cls):
+        payload = b"\x00\x00\x00\x00"
+        with pytest.raises(ValueError, match="could not be decoded"):
+            cls.decode(_encoded(ZSTD, len(payload), payload))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_frame_header_without_a_decompressed_size(self, cls):
+        payload = bytes.fromhex("28b52ffd0000")
+        with pytest.raises(ValueError, match="did not include its decompressed size"):
+            cls.decode(_encoded(ZSTD, len(payload), payload))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_frame_with_a_corrupt_body(self, cls):
+        payload = bytes.fromhex("28b52ffd24ff00ffffffff")
+        with pytest.raises(ValueError, match="could not be decoded"):
+            cls.decode(_encoded(ZSTD, len(payload), payload))
+
 
 # ---------------------------------------------------------------------------
 # Property-based fuzz tests (hypothesis).
