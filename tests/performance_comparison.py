@@ -728,10 +728,13 @@ def build_stdlib_cases(byte_count, value_count):
         return Tibs.from_string(prefixed_hex).to_bytes()
 
     def bytes_to_binary():
-        # format spec docs: 'b' produces binary digits, so format(byte, '08b')
-        # is the documented way to get fixed-width binary text. bin() alone
-        # drops leading zeros and prefixes '0b'.
-        return "".join(format(byte, "08b") for byte in search_bytes)
+        # Converting the whole buffer to one int and formatting that is much
+        # faster than joining format(byte, '08b') per byte, which spends its
+        # time allocating one small string object per byte rather than on the
+        # conversion. int -> str is linear for base 2 (only decimal is
+        # superlinear, and only decimal is capped by int_max_str_digits). The
+        # explicit width is needed because an int has no length of its own.
+        return format(int.from_bytes(search_bytes, "big"), f"0{bit_count}b")
 
     def tibs_to_binary():
         return search_tibs.to_bin()
