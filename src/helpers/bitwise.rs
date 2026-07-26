@@ -395,6 +395,28 @@ pub(crate) fn deposit_masked(bits: &mut BS, value: &BS, mask: &BS) {
     }
 }
 
+/// The number of set bits in a run of whole bytes.
+///
+/// Sixty-four bits at a time, with the up-to-seven bytes left over counted
+/// singly. The word loop reads through `chunks_exact` rather than casting the
+/// run to `&[u64]`: `body` is a slice into the middle of someone's storage, so
+/// it need not start on a word boundary and need not be a whole number of
+/// words, and a cast that has to reject either case would send the entire scan
+/// - not just the odd bytes at the end - down the byte-at-a-time path.
+#[inline]
+fn count_ones_in_bytes(bytes: &[u8]) -> usize {
+    let mut chunks = bytes.chunks_exact(8);
+    let mut ones = 0;
+    for chunk in chunks.by_ref() {
+        // Byte order is irrelevant to a popcount, so read native-endian.
+        ones += u64::from_ne_bytes(chunk.try_into().unwrap()).count_ones() as usize;
+    }
+    for &byte in chunks.remainder() {
+        ones += byte.count_ones() as usize;
+    }
+    ones
+}
+
 pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
     let mut ones = 0;
 
@@ -403,22 +425,7 @@ pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
             if let Some(h) = head {
                 ones += h.into_bitslice().count_ones();
             }
-            if let Ok(words) = bytemuck::try_cast_slice::<u8, usize>(body) {
-                // Considerable speed increase by casting data to usize if possible.
-                for &word in words {
-                    ones += word.count_ones() as usize;
-                }
-                // Handle the remainder not fitting into usize
-                let remainder_start = std::mem::size_of_val(words);
-                for &byte in &body[remainder_start..] {
-                    ones += byte.count_ones() as usize;
-                }
-            } else {
-                // Fallback for architectures where alignment is strict
-                for &byte in body {
-                    ones += byte.count_ones() as usize;
-                }
-            }
+            ones += count_ones_in_bytes(body);
             if let Some(t) = tail {
                 ones += t.into_bitslice().count_ones();
             }

@@ -36,12 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bytemuck"
-version = "1.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8efb64bd706a16a1bdde310ae86b351e4d21550d98d056f22f8a7f7a2183fec"
-
-[[package]]
 name = "cc"
 version = "1.2.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -485,7 +479,6 @@ name = "tibs"
 version = "1.2.0"
 dependencies = [
  "bitvec",
- "bytemuck",
  "half",
  "memchr",
  "pyo3",

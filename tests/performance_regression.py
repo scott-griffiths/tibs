@@ -25,6 +25,13 @@ POP_BYTES = SEARCH_BYTES[:6_250]
 SEARCH_TIBS = Tibs.from_bytes(SEARCH_BYTES)
 OTHER_TIBS = Tibs.from_bytes(OTHER_BYTES)
 COUNT_TIBS = Tibs.from_bytes(COUNT_BYTES)
+# Counting reads the storage a 64-bit word at a time, and these are the two
+# shapes that stop the run being a clean array of words: a length that leaves a
+# part-word at the end, and a start that is not on a word boundary. COUNT_TIBS
+# itself is a whole number of words either way, so on its own it cannot tell a
+# word-at-a-time scan from a byte-at-a-time one.
+COUNT_TIBS_PART_WORD_TAIL = COUNT_TIBS[:-1]
+COUNT_TIBS_UNALIGNED_START = COUNT_TIBS[8:]
 COUNT_TIBS_MINUS_THREE = COUNT_TIBS[:-3]
 COUNT_BYTES_MINUS_THREE_PADDED = COUNT_BYTES[:-1] + bytes([COUNT_BYTES[-1] & 0b1111_1000])
 COUNT_BITS_MINUS_SIX = len(COUNT_BYTES) * 8 - 6
@@ -182,6 +189,28 @@ def test_counting(benchmark):
         total = 0
         for _ in range(10):
             total += COUNT_TIBS.count(1)
+        return total
+
+    total = benchmark(counting)
+    assert total > 0
+
+
+def test_counting_part_word_tail(benchmark):
+    def counting():
+        total = 0
+        for _ in range(10):
+            total += COUNT_TIBS_PART_WORD_TAIL.count(1)
+        return total
+
+    total = benchmark(counting)
+    assert total > 0
+
+
+def test_counting_unaligned_start(benchmark):
+    def counting():
+        total = 0
+        for _ in range(10):
+            total += COUNT_TIBS_UNALIGNED_START.count(1)
         return total
 
     total = benchmark(counting)
