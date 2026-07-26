@@ -20,8 +20,10 @@
 
 ----
 
-``tibs`` is a Rust-backed Python library for binary data that does not assume
-everything fits neatly into bytes. Use it for packets, registers, instruction
+``tibs`` is a Python library for binary data that does not assume
+everything fits neatly into bytes. It's 100% written in Rust and has excellent performance.
+
+Use it for packets, registers, instruction
 formats, bitsets, compressed data and streams where fields can have many different
 interpretations and be any number of bits long.
 
@@ -40,46 +42,43 @@ common platforms; if there are issues then please let me know.
 The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
 
 
-## What Tibs is
+## Overview
 
-Tibs is a sequence of bits — like `bytes`, but the unit is the bit and the length
-can be anything. That sequence is the whole object: you slice it, concatenate it,
-search and replace inside it at bit granularity, or pin searches to byte boundaries
-for stream parsing. Immutable `Tibs` gives stable values and cheap slices; `Mutibs`
-gives in-place edits, just as `bytes` pairs with `bytearray`.
+The tibs library provides two main classes: `Tibs`, which is an immutable sequence of bits
+(similar to how `bytes` works in Python as a sequence of bytes) and `Mutibs`, which is a mutable version (similar to `bytearray` in Python).
+
+A `Tibs` can be thought of as just a sequence of bits. It provides an interface very similar
+to `bytes` and other Python containers - you can slice it, concatenate, search it etc. in a
+familiar way, with `Mutibs` adding on mutating methods.
 
 > `find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `chunks` · `+` · `in`
 
-On top of those bits, the same object gives you two lenses — two ways of reading and
-writing the sequence without ever copying it into another type.
+This 'container of bits' mental model might be all that you need, but the library also gives
+you two broad views of the binary data.
 
-**Read it as typed fields.** Pull integers, floats, strings, hex or binary of any
-bit length straight out of the bits, without hand-rolling shifts and masks. A view
-handles little-endian ordering and LSB0 field labels so you don't reshuffle data
+1. **As typed fields.** Pull integers, floats, strings, hex or binary of any
+bit length straight out of the bits, without hand-rolling shifts and masks. Little-endian ordering and LSB0 field labels are handled elegantly so you don't reshuffle data
 yourself, and `extract` / `deposit` reach fields that are scattered across a word.
 
 > `from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extract` / `deposit` · f-string formatting
 
-**Read it as a set of bits.** Bitwise algebra, cardinalities and set predicates, with
-no intermediate object built along the way. `Mutibs` doubles as a large mutable bitset.
+2. **As a set of bits.** Bitwise algebra, cardinalities and set predicates, with
+no intermediate object built along the way. `Mutibs` can be used as a large mutable bitset.
 
 > `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
 
 These aren't separate modes or separate types — it's one object, and the lenses are
 just different questions you ask of the same bits.
 
-And it's fast — often significantly faster than similar libraries, with a Rust core
-and a performance regression suite in CI. It can also compress and serialize itself
-when you need to put the bits on disk or the wire.
-
-> `encode` / `decode` — `Rice`, `Zstd`, `Raw`
+And it's fast — usually significantly faster than similar libraries, 100% written in Rust
+and with a large emphasis on performance.
 
 
-## Quick taste
+## A Taster
 
-The sequence and its two lenses, in code.
+Some real code to illustrate.
 
-**The sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
+**As a sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
 slicing, hashing and holding stable values. `Mutibs` is its mutable counterpart,
 for patching in place.
 
@@ -104,7 +103,7 @@ Tibs('0xac804f4b')
 
 ```
 
-**Read it as typed fields.** Pull fields out as integers, floats or bytes, letting
+**As typed fields.** Pull fields out as integers, floats or bytes, letting
 a view take care of byte order and bit numbering — the sort of job that gets awkward
 quickly with plain bytes and masks.
 
@@ -117,7 +116,7 @@ quickly with plain bytes and masks.
 
 ```
 
-**Read it as a set of bits.** Compare containers as sets — cardinalities and
+**As a set of bits.** Compare containers as sets — cardinalities and
 predicates that never build an intermediate object.
 
 ```pycon
@@ -133,27 +132,10 @@ True
 
 ```
 
-And it's all one object. This log scanner *searches* a byte stream, slices out
-each header, and reads its fields as integers, in one pass:
-
-```pycon
->>> sync = Tibs("0xaa55")
->>> log = bytes.fromhex("00 ff aa 55 11 02 c0 01 7f aa 55 22 01 40 aa")
->>> bits = Tibs(log)
->>> records = []
->>> for start in bits.find_all_iter(sync, byte_aligned=True):
-...     payload_len = bits[start + 24:start + 32].u
-...     payload = bits[start + 32:start + 32 + payload_len * 8]
-...     if len(payload) == payload_len * 8:
-...         records.append((bits[start + 16:start + 24].u, payload.bytes))
->>> records
-[(17, b'\xc0\x01'), (34, b'@')]
-
-```
 
 The full documentation covers construction from ints, floats, bytes and strings;
-endianness; searching and replacing; rotations; bit indexing; serialization; and
-worked examples.
+endianness; searching and replacing; rotations; bit indexing; serialization; views; dtypes and
+much more.
 
 ## Performance
 
@@ -162,25 +144,15 @@ Tibs is written in Rust with PyO3. The repository contains a dedicated
 [CI workflow](.github/workflows/performance.yaml) that compare benchmark
 medians against the base commit.
 
-The regression benchmarks cover operations such as:
-
-- bit-pattern search, reverse search and byte-aligned search
-- logical operations on large aligned and unaligned slices
-- counting, inversion, shifting, reversing and concatenation
-- bulk mutation, slice replacement, deletion, append and pop
-- bytes conversion, random generation and bool-list construction
-- typed packing and unpacking such as `u16` value streams
-- a sieve workload using `Mutibs` as a large mutable bitset
-
 For local comparisons, [`tests/performance_comparison.py`](tests/performance_comparison.py)
-checks common operations against `bitarray`. With
+checks common operations against the `bitarray` library and the standard Python library. With
 `bitarray` installed, run:
 
 ```bash
 python tests/performance_comparison.py
 ```
 
-Benchmarks are machine-dependent, but the mean speedup over bitarray will typically be > 2x.
+Benchmarks are machine-dependent, but tibs is often almost unreasonably fast.
 
 ## Examples
 
@@ -216,11 +188,11 @@ on most, though several use more than one.
 
 ## Project status
 
-Tibs has reached the 1.0 stable API milestone. Documented public behavior will
-remain compatible across future 1.x releases. It is used to power the `bitstring` 
+Tibs has passed the 1.0 stable API milestone. Documented public behavior will
+remain compatible across future 1.x releases. It is already used to power the `bitstring` 
 library and gets several million downloads per month.
 
-There are over 1000 unit tests, including Hypothesis tests and performance
+There are thousands of unit tests, including Hypothesis tests and performance
 benchmarks.
 
 
