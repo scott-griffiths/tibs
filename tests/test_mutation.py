@@ -224,6 +224,63 @@ def test_copy_method():
     assert s is not t
 
 
+class TestSpliceAgainstList:
+    """Edits are done over the raw bytes, so they have to agree with a list of
+    bools at every combination of length, position and storage alignment that
+    lands the moved run on a different side of a byte boundary."""
+
+    # Slicing keeps the original head index, so `Mutibs(...)[head:]` is how a
+    # bit vector whose storage starts mid-byte is reached from Python.
+    HEADS = (0, 1, 3, 7, 8)
+    LENGTHS = (0, 1, 7, 8, 9, 15, 16, 17, 63, 64, 65, 130)
+
+    @staticmethod
+    def pair(length, head):
+        bits = "".join("01101001000111"[i % 14] for i in range(head + length))
+        return Mutibs("0b" + bits)[head:] if bits else Mutibs(), bits[head:]
+
+    @pytest.mark.parametrize("head", HEADS)
+    @pytest.mark.parametrize("length", LENGTHS)
+    def test_insert(self, length, head):
+        for position in range(length + 1):
+            for inserted in ("0b1", "0b01", "0xf", "0b101010101"):
+                mutable, model = self.pair(length, head)
+                mutable.insert(position, inserted)
+                value = Tibs(inserted).to_bin()
+                assert mutable.to_bin() == model[:position] + value + model[position:]
+
+    @pytest.mark.parametrize("head", HEADS)
+    @pytest.mark.parametrize("length", LENGTHS)
+    def test_delete_index(self, length, head):
+        for position in range(length):
+            mutable, model = self.pair(length, head)
+            del mutable[position]
+            assert mutable.to_bin() == model[:position] + model[position + 1 :]
+
+    @pytest.mark.parametrize("head", HEADS)
+    @pytest.mark.parametrize("length", LENGTHS)
+    def test_slice_assignment(self, length, head):
+        for start in range(length + 1):
+            for stop in (start, start + 1, start + 7, start + 9, length):
+                for value in ("", "0b1", "0b0110", "0xabc"):
+                    mutable, model = self.pair(length, head)
+                    mutable[start:stop] = Tibs(value) if value else Tibs()
+                    expected = list(model)
+                    expected[start:stop] = list(Tibs(value).to_bin() if value else "")
+                    assert mutable.to_bin() == "".join(expected)
+
+    @pytest.mark.parametrize("head", HEADS)
+    @pytest.mark.parametrize("length", LENGTHS)
+    def test_delete_extended_slice(self, length, head):
+        for step in (-3, -2, 2, 5):
+            for start, stop in ((0, length), (1, length - 1), (3, 9)):
+                mutable, model = self.pair(length, head)
+                del mutable[start:stop:step]
+                expected = list(model)
+                del expected[start:stop:step]
+                assert mutable.to_bin() == "".join(expected)
+
+
 class TestRepr:
     def test_standard_repr(self):
         a = Tibs.from_string("0o12345")

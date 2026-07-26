@@ -130,6 +130,24 @@ impl Tibs {
         self.as_bitslice()
     }
 
+    /// The storage bytes covering the bits, with the bit offset of the first
+    /// bit within them.
+    ///
+    /// Unlike [`raw_data_ref`](Self::raw_data_ref) this always succeeds, by
+    /// folding a backing store that itself starts part way into a byte into
+    /// the returned offset.
+    #[inline]
+    pub(crate) fn raw_data_with_offset(&self) -> (&[u8], usize) {
+        let physical_start = helpers::head_bit_offset(self.data.as_bitslice()) + self.offset;
+        let byte_start = physical_start / 8;
+        let bit_offset = physical_start % 8;
+        let byte_len = (bit_offset + self.length).div_ceil(8);
+        (
+            &self.data.as_raw_slice()[byte_start..byte_start + byte_len],
+            bit_offset,
+        )
+    }
+
     #[inline]
     pub(crate) fn raw_bytes(&self) -> Vec<u8> {
         let bit_offset = match self.as_bitslice().domain() {

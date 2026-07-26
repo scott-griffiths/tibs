@@ -5,9 +5,9 @@ use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
     bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, deposit_masked, find_bitvec, find_bitvec_aligned,
-    promote_to_bv, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, find_bitvec, find_bitvec_aligned,
+    move_bits, promote_to_bv, str_to_bv, validate_index, validate_length,
+    validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -225,50 +225,102 @@ impl Mutibs {
         }
     }
 
-    pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &BS) {
-        if start >= end {
-            // This is an insertion in Python
-            let tail = self.as_mut_bitvec_ref().split_off(start);
-            self.as_mut_bitvec_ref().extend_from_bitslice(value);
-            self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
-        } else if end - start == value.len() {
-            // This is an overwrite, so no need to move data around.
-            let storage_start = self.storage_head_offset() + start;
-            if storage_start.is_multiple_of(8)
-                && value.len().is_multiple_of(8)
-                && let bitvec::domain::Domain::Region {
-                    head: None,
-                    body,
-                    tail: None,
-                } = value.domain()
-            {
-                let start_byte = storage_start / 8;
-                self.data.as_raw_mut_slice()[start_byte..start_byte + body.len()]
-                    .copy_from_slice(body);
-                return;
-            }
-            self.as_mut_bitvec_ref()[start..start + value.len()].copy_from_bitslice(value);
-        } else {
-            let tail = self.as_mut_bitvec_ref().split_off(end);
-            self.as_mut_bitvec_ref().truncate(start);
-            self.as_mut_bitvec_ref().extend_from_bitslice(value);
-            self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
+    /// Install `bytes` as the storage, keeping only the first `length` bits.
+    #[inline]
+    fn set_data_from_bytes(&mut self, mut bytes: Vec<u8>, length: usize) {
+        bytes.truncate(length.div_ceil(8));
+        let mut data = BV::from_vec(bytes);
+        data.truncate(length);
+        self.data = data;
+    }
+
+    /// Replace the bits in `[start, end)` with `value`.
+    ///
+    /// The bits before `start` never move, so the edit is a slide of the bits
+    /// after `end` and nothing more. Storage that starts mid-byte cannot be
+    /// grown in place, so that case is realigned into a new buffer instead.
+    fn splice_raw(
+        &mut self,
+        start: usize,
+        end: usize,
+        value: &[u8],
+        value_offset: usize,
+        value_len: usize,
+    ) {
+        let length = self.len();
+        debug_assert!(start <= end && end <= length);
+        let new_length = length - (end - start) + value_len;
+        let target = start + value_len;
+        let head = self.storage_head_offset();
+
+        if head != 0 {
+            let mut bytes = vec![0u8; new_length.div_ceil(8)];
+            let source = self.data.as_raw_slice();
+            copy_bits(&mut bytes, 0, source, head, start);
+            copy_bits(&mut bytes, start, value, value_offset, value_len);
+            copy_bits(&mut bytes, target, source, head + end, length - end);
+            self.set_data_from_bytes(bytes, new_length);
+            return;
         }
+
+        let mut bytes = std::mem::take(&mut self.data).into_vec();
+        let byte_length = new_length.div_ceil(8);
+        if bytes.len() < byte_length {
+            bytes.resize(byte_length, 0);
+        }
+        move_bits(&mut bytes, end, target, length - end);
+        copy_bits(&mut bytes, start, value, value_offset, value_len);
+        self.set_data_from_bytes(bytes, new_length);
+    }
+
+    pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
+        // A slice that runs backwards is an insertion at `start` in Python.
+        let end = end.max(start);
+        let (value_bytes, value_offset) = value.raw_data_with_offset();
+        if end - start == value.len() {
+            // An overwrite moves no data, so write straight over the bytes.
+            let storage_start = self.storage_head_offset() + start;
+            copy_bits(
+                self.data.as_raw_mut_slice(),
+                storage_start,
+                value_bytes,
+                value_offset,
+                value.len(),
+            );
+            return;
+        }
+        self.splice_raw(start, end, value_bytes, value_offset, value.len());
     }
 
     fn delete_slice(&mut self, start: usize, end: usize) {
-        // The byte-drain fast path requires the storage to begin at a byte
-        // boundary, which slicing does not always preserve.
-        if self.storage_head_offset() == 0 && start.is_multiple_of(8) && end.is_multiple_of(8) {
-            let new_len = self.len() - (end - start);
-            let mut bytes = std::mem::take(&mut self.data).into_vec();
-            bytes.drain(start / 8..end / 8);
-            let mut data = BV::from_vec(bytes);
-            data.truncate(new_len);
-            self.data = data;
-        } else {
-            self.data.drain(start..end);
+        self.splice_raw(start, end, &[], 0, 0);
+    }
+
+    /// Remove the bits at `positions`, which must be sorted and distinct.
+    ///
+    /// The surviving runs are packed into a new buffer in one pass, rather
+    /// than closing up the gap once per deleted bit.
+    fn delete_positions(&mut self, positions: &[usize]) {
+        if positions.is_empty() {
+            return;
         }
+        let length = self.len();
+        debug_assert!(positions.iter().all(|&pos| pos < length));
+        let new_length = length - positions.len();
+        let head = self.storage_head_offset();
+        let source = self.data.as_raw_slice();
+
+        let mut bytes = vec![0u8; new_length.div_ceil(8)];
+        let mut written = 0;
+        let mut read = 0;
+        for &pos in positions {
+            copy_bits(&mut bytes, written, source, head + read, pos - read);
+            written += pos - read;
+            read = pos + 1;
+        }
+        copy_bits(&mut bytes, written, source, head + read, length - read);
+
+        self.set_data_from_bytes(bytes, new_length);
     }
 
     #[inline]
@@ -626,15 +678,8 @@ impl Mutibs {
             pos = self.len() as isize;
         }
         let insert_pos = pos as usize;
-        if bs.len() == 1 {
-            self.as_mut_bitvec_ref()
-                .insert(insert_pos, bs.as_bitslice()[0]);
-            return Ok(());
-        }
-        let tail = self.as_mut_bitvec_ref().split_off(insert_pos);
-        self.as_mut_bitvec_ref()
-            .extend_from_bitslice(bs.as_bitslice());
-        self.as_mut_bitvec_ref().extend_from_bitslice(&tail);
+        let (bytes, offset) = bs.raw_data_with_offset();
+        self.splice_raw(insert_pos, insert_pos, bytes, offset, bs.len());
         Ok(())
     }
 
@@ -1962,7 +2007,7 @@ impl Mutibs {
             if step == 1 {
                 debug_assert!(start >= 0);
                 debug_assert!(stop >= 0);
-                slf.set_slice(start as usize, stop as usize, tibs.as_bitslice());
+                slf.set_slice(start as usize, stop as usize, &tibs);
                 return Ok(());
             }
             if step == 0 {
@@ -2038,7 +2083,7 @@ impl Mutibs {
                     "Bit index {index} out of range for length {length}"
                 )));
             }
-            self.as_mut_bitvec_ref().remove(index as usize);
+            self.delete_slice(index as usize, index as usize + 1);
             return Ok(());
         }
         if let Ok(slice) = key.cast::<PySlice>() {
@@ -2072,9 +2117,7 @@ impl Mutibs {
                 };
 
                 to_remove.sort();
-                for i in to_remove.into_iter().rev() {
-                    self.as_mut_bitvec_ref().remove(i);
-                }
+                self.delete_positions(&to_remove);
             }
             return Ok(());
         }

@@ -8,6 +8,7 @@ mod python;
 mod random;
 mod raw_bytes;
 mod search;
+mod splice;
 mod validation;
 
 pub(crate) use bits::{BS, BV, bv_from_ones, bv_from_zeros, head_bit_offset};
@@ -37,6 +38,7 @@ pub(crate) use search::{
     find_bitvec_masked_aligned, find_bitvec_with_lps_aligned, rfind_bitvec_aligned,
     rfind_bitvec_with_reversed_lps_aligned,
 };
+pub(crate) use splice::{copy_bits, move_bits};
 pub(crate) use validation::{
     normalize_split_position, validate_index, validate_length, validate_logical_op_lengths,
     validate_shift, validate_slice,
