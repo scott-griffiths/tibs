@@ -11,7 +11,7 @@ mod search;
 mod splice;
 mod validation;
 
-pub(crate) use bits::{BS, BV, bv_from_ones, bv_from_zeros, head_bit_offset};
+pub(crate) use bits::{BS, BV, BitAccumulator, bv_from_ones, bv_from_zeros, head_bit_offset};
 pub(crate) use bitwise::{
     LogicalOp, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, deposit_masked,
     for_each_pair_word, for_each_pair_word_bitslice, logical_op_with_aligned_bytes,
@@ -21,7 +21,7 @@ pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_p
 pub(crate) use format::format_bit_collection;
 pub(crate) use numeric::{
     FAST_INT_BITS, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name, push_f64_bytes,
-    push_int_bytes,
+    push_int_bits, push_int_bytes,
 };
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{

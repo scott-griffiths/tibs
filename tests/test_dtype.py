@@ -511,11 +511,112 @@ def test_from_values_bulk_path_accepts_index_objects():
 
 
 def test_from_values_leaves_iterable_alone_when_bulk_path_does_not_apply():
-    # The bulk path has to be ruled out before any item is pulled, or a
+    # Which path to take has to be settled before any item is pulled, or a
     # one-shot iterable would lose the items it had already yielded.
-    values = (x for x in [1, 2, 3])
-    assert Tibs.from_values("u12", values) == Tibs.from_hex("001002003")
+    values = (x for x in ["aa", "bb", "cc"])
+    assert Tibs.from_values("hex8", values) == Tibs.from_hex("aabbcc")
     assert list(values) == []
+
+
+# A numeric dtype that isn't a whole number of bytes long takes a third path,
+# packing the values end to end through a bit accumulator. These check it too
+# agrees with from_value, across the widths where it changes how a value is
+# converted: up to 57 bits a value is shifted into place as a u64, and beyond
+# that it goes through int.to_bytes.
+
+BIT_LEVEL_SPECS = [
+    f"{kind}{length}"
+    for kind in ("u", "i")
+    for length in (1, 2, 3, 7, 9, 12, 17, 31, 33, 55, 56, 57, 58, 63, 65, 71, 127, 129)
+] + ["bool"]
+
+
+def _sample_bit_level_values(spec):
+    if spec == "bool":
+        return [True, False, 0, 1, True, True, False]
+    length = int(spec[1:])
+    if spec.startswith("u"):
+        top = (1 << length) - 1
+        return [0, 1, top, top - 1, top // 2, top // 3]
+    low, high = -(1 << (length - 1)), (1 << (length - 1)) - 1
+    # i1 holds only -1 and 0, so the usual samples have to be filtered.
+    candidates = [0, 1, -1, low, high, low + 1, high - 1]
+    return [value for value in candidates if low <= value <= high]
+
+
+@pytest.mark.parametrize("spec", BIT_LEVEL_SPECS)
+def test_from_values_bit_path_matches_from_value(spec):
+    values = _sample_bit_level_values(spec)
+    expected = Tibs.from_joined([Tibs.from_value(spec, v) for v in values])
+
+    assert Tibs.from_values(spec, values) == expected
+    assert Mutibs.from_values(spec, values) == Mutibs(expected)
+    assert Tibs.from_values(spec, iter(values)) == expected
+    assert Tibs.from_values(spec, tuple(values)) == expected
+    assert Tibs.from_values(spec, []) == Tibs()
+
+
+@pytest.mark.parametrize("spec", BIT_LEVEL_SPECS)
+def test_from_values_bit_path_round_trips(spec):
+    values = _sample_bit_level_values(spec)
+    packed = Tibs.from_values(spec, values)
+
+    if spec == "bool":
+        assert len(packed) == len(values)
+        assert packed.to_values(spec) == [bool(v) for v in values]
+    else:
+        assert len(packed) == len(values) * int(spec[1:])
+        assert packed.to_values(spec) == values
+
+
+@pytest.mark.parametrize("spec", ["u1", "u12", "i12", "u57", "i57", "u65", "bool"])
+def test_from_values_bit_path_reports_bad_items_like_from_value(spec):
+    for bad in ("nope", None, [1]):
+        with pytest.raises(TypeError) as bulk:
+            Tibs.from_values(spec, [bad])
+        with pytest.raises(TypeError) as single:
+            Tibs.from_value(spec, bad)
+        assert str(bulk.value) == str(single.value)
+
+
+@pytest.mark.parametrize("spec", ["u1", "u3", "u12", "i12", "u57", "i57", "u58", "u65", "i129"])
+def test_from_values_bit_path_reports_overflow_like_from_value(spec):
+    length = int(spec[1:])
+    if spec.startswith("u"):
+        out_of_range = [(1 << length), -1]
+    else:
+        out_of_range = [1 << (length - 1), -(1 << (length - 1)) - 1]
+
+    for value in out_of_range:
+        with pytest.raises(OverflowError) as bulk:
+            Tibs.from_values(spec, [0, value])
+        with pytest.raises(OverflowError) as single:
+            Tibs.from_value(spec, value)
+        assert str(bulk.value) == str(single.value)
+
+
+def test_from_values_bit_path_accepts_index_objects():
+    class Index:
+        def __init__(self, value):
+            self.value = value
+
+        def __index__(self):
+            return self.value
+
+    assert Tibs.from_values("u12", [Index(1), Index(0xFFF)]) == Tibs.from_hex("001fff")
+    assert Tibs.from_values("u65", [Index(1)]) == Tibs.from_bin("0" * 64 + "1")
+    with pytest.raises(OverflowError, match="does not fit"):
+        Tibs.from_values("u12", [Index(0x1000)])
+
+
+def test_from_values_bit_path_carries_across_byte_boundaries():
+    # Values that don't divide into bytes have to run straight on from each
+    # other, with the last one padded out only as far as the next byte.
+    assert Tibs.from_values("u4", [0xA, 0xB, 0xC]) == Tibs.from_bin("101010111100")
+    assert Tibs.from_values("u12", [0xABC, 0xDEF]) == Tibs.from_hex("abcdef")
+    assert Tibs.from_values("u3", [0b101] * 8) == Tibs.from_bin("101" * 8)
+    assert Tibs.from_values("u1", [1, 0, 1]) == Tibs.from_bin("101")
+    assert Tibs.from_values("u9", [0x1FF, 0]) == Tibs.from_bin("1" * 9 + "0" * 9)
 
 
 def test_to_values_reuses_its_window_without_aliasing():

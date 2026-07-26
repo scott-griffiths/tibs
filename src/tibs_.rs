@@ -416,6 +416,69 @@ impl BytewisePacker {
     }
 }
 
+/// How the bit-wise path in [`bv_from_values_iter`] packs one value.
+///
+/// The counterpart to [`BytewisePacker`] for the dtypes it turns down because
+/// their length is not a whole number of bytes, so that values have to be
+/// packed end to end across byte boundaries rather than written out whole.
+enum BitwisePacker {
+    Int { length: usize, signed: bool },
+    Bool,
+}
+
+impl BitwisePacker {
+    /// Decide whether `dtype` qualifies, under the same up-front rule as
+    /// [`BytewisePacker::for_dtype`].
+    ///
+    /// Unlike that one this needs no byte order: a length that isn't a whole
+    /// number of bytes cannot carry an explicit byte order, because `Dtype`
+    /// rejects the combination when it is built, so these are all big-endian.
+    fn for_dtype(dtype: &Dtype) -> Option<Self> {
+        // A bool dtype is one bit long, likewise by construction.
+        if dtype.kind == DtypeKind::Bool {
+            return Some(BitwisePacker::Bool);
+        }
+        if dtype.length == 0 || dtype.length.is_multiple_of(8) {
+            return None;
+        }
+        match dtype.kind {
+            DtypeKind::Uint => Some(BitwisePacker::Int {
+                length: dtype.length,
+                signed: false,
+            }),
+            DtypeKind::Int => Some(BitwisePacker::Int {
+                length: dtype.length,
+                signed: true,
+            }),
+            _ => None,
+        }
+    }
+
+    fn length(&self) -> usize {
+        match *self {
+            BitwisePacker::Int { length, .. } => length,
+            BitwisePacker::Bool => 1,
+        }
+    }
+
+    fn push(&self, out: &mut helpers::BitAccumulator, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        match *self {
+            BitwisePacker::Int { length, signed } => {
+                helpers::push_int_bits(out, value, length, signed)
+            }
+            BitwisePacker::Bool => match helpers::convert_to_bool(value) {
+                Some(bit) => {
+                    out.push(u64::from(bit), 1);
+                    Ok(())
+                }
+                None => Err(PyTypeError::new_err(
+                    "bool dtype values must be True, False, 0 or 1.",
+                )),
+            },
+        }
+    }
+}
+
 pub(crate) fn bv_from_values_iter(
     py: Python<'_>,
     dtype: &Dtype,
@@ -439,6 +502,23 @@ pub(crate) fn bv_from_values_iter(
             packer.push(&mut bytes, &item?)?;
         }
         return Ok(BV::from_vec(bytes));
+    }
+
+    // The same trick for a dtype that straddles byte boundaries: the values go
+    // through a bit accumulator that writes out whole bytes, so this too ends
+    // in a single conversion rather than a per-value allocate-and-append.
+    if let Some(packer) = BitwisePacker::for_dtype(dtype) {
+        let capacity = hint.and_then(|len| len.checked_mul(packer.length()));
+        let mut out = helpers::BitAccumulator::with_bit_capacity(capacity);
+        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+        for (index, item) in iterable.try_iter()?.enumerate() {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+            }
+            packer.push(&mut out, &item?)?;
+        }
+        return Ok(out.into_bitvec());
     }
 
     let capacity = hint.and_then(|len| len.checked_mul(dtype.length));

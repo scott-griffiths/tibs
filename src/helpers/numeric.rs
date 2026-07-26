@@ -1,4 +1,4 @@
-use super::bits::{BS, BV};
+use super::bits::{BS, BV, BitAccumulator};
 use bitvec::prelude::*;
 use half::f16;
 use pyo3::exceptions::{PyOverflowError, PyValueError};
@@ -242,6 +242,64 @@ pub(crate) fn push_int_bytes(
     let value = to_index(value)?;
     let bytes = big_int_to_bytes(&value, length, byte_length, is_little_endian, signed)?;
     out.extend_from_slice(bytes.as_bytes());
+    Ok(())
+}
+
+/// Append `value` to `out` as the `length` bits of an int dtype, for a length
+/// that isn't a whole number of bytes.
+///
+/// The bit-level counterpart of [`push_int_bytes`], for the same reason: the
+/// single-value functions each allocate a `BitVec` that the caller then has to
+/// append a bit at a time. A length that isn't a whole number of bytes is
+/// necessarily big-endian, since the other byte orders are rejected when the
+/// dtype is built, so there's no byte order to thread through here. Errors are
+/// reported exactly as the single-value functions report them.
+pub(crate) fn push_int_bits(
+    out: &mut BitAccumulator,
+    value: &Bound<'_, PyAny>,
+    length: usize,
+    signed: bool,
+) -> PyResult<()> {
+    debug_assert!(length > 0);
+    debug_assert!(
+        !length.is_multiple_of(8),
+        "a whole-byte field packs bytewise"
+    );
+    // A field that fits in a `u64` is shifted into place directly. The bound is
+    // strict because a length that isn't a whole number of bytes is never 64,
+    // which keeps the mask below from overflowing.
+    if length < FAST_INT_BITS {
+        // As in `push_int_bytes`, a failed extraction or an out-of-range value
+        // drops through to the general path, which reports the reason against
+        // the field length.
+        let mask = (1u64 << length) - 1;
+        let raw = if signed {
+            value.extract::<i64>().ok().and_then(|value| {
+                let limit = 1i64 << (length - 1);
+                let fits = value >= -limit && value < limit;
+                if fits {
+                    Some(value as u64 & mask)
+                } else {
+                    None
+                }
+            })
+        } else {
+            value
+                .extract::<u64>()
+                .ok()
+                .and_then(|value| if value <= mask { Some(value) } else { None })
+        };
+        if let Some(raw) = raw {
+            out.push_wide(raw, length);
+            return Ok(());
+        }
+    }
+    let bv = if signed {
+        bv_from_int(value, length, false)?
+    } else {
+        bv_from_uint(value, length, false)?
+    };
+    out.push_bits(&bv);
     Ok(())
 }
 
