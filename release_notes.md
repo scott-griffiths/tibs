@@ -129,6 +129,18 @@ Added
 * Added a `tibs.__version__` string, alongside the `tibs.__author__` that was
   already there.
 
+* Free-threaded Python (3.14t) is now a supported configuration, with wheels
+  built for it and the test suite run against them. Tibs declares that it does
+  not need the global interpreter lock, so importing it doesn't switch the GIL
+  back on, and work on separate containers runs on separate threads in parallel
+  rather than taking turns.
+
+  A `Tibs` is immutable and can be shared freely between threads. A `Mutibs`
+  cannot: if two threads use the same one at the same time, one of them gets a
+  `RuntimeError` telling it the object is already borrowed, so give each thread
+  its own container or guard the shared one with a lock. Nothing here changes
+  on a normal build of Python, where the GIL serializes the calls anyway.
+
 Changed
 
 * Inverting an empty `Tibs` or `Mutibs` with `~` now returns an empty container
