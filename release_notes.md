@@ -34,7 +34,7 @@ Added
 
 * `count` now takes a `byte_aligned` parameter, so a pattern can be counted on
   byte boundaries only, matching `find` and `find_all`.
-* 
+
   ```python
   >>> Tibs('0x1f2e3f').count('0x0f', mask='0x0f', byte_aligned=True)
   2
@@ -98,6 +98,25 @@ Added
   the data, so zero padding is rejected for `b`, `o`, `x` and `X` — it would silently
   change the apparent length of the value, where for an integer it changes nothing.
   Pad with `<`, `>` or `^` and a non-digit fill instead, or use `u` or `i`.
+
+* `Tibs` now exports the buffer protocol, so it can be passed straight to
+  anything that takes a bytes-like object — `memoryview(t)`, `array.array`,
+  `numpy.frombuffer`, a socket or file `write`, and so on — without copying its
+  data first.
+
+  ```python
+  >>> bytes(memoryview(Tibs('0xff00')))
+  b'\xff\x00'
+  ```
+
+  The buffer is read-only and covers whole bytes, so for a length that isn't a
+  multiple of 8 the last byte includes the padding bits, which are not masked to
+  zero. Exporting needs the underlying storage to start on a byte boundary; when
+  it doesn't (after slicing at a bit offset, say) a `BufferError` is raised, and
+  `to_bytes` or `to_padded_bytes` will give you an owned copy instead.
+
+  This is deliberately not offered on `Mutibs`. Its storage moves as the
+  container is edited, so a borrowed view of it could not be kept valid.
 
 * Added a `tibs.__version__` string, alongside the `tibs.__author__` that was
   already there.

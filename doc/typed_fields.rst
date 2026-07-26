@@ -104,6 +104,32 @@ If you're rendering rather than converting, these representations are also
 available through Python's format mini-language, so ``f"{t:#x}"`` and ``f"{t:_.8b}"``
 do what you'd expect. See :ref:`formatting` for the details.
 
+A ``Tibs`` also exports the buffer protocol, so where you want to hand the bytes
+to something else rather than own a copy of them you can pass it directly to
+anything that takes a bytes-like object::
+
+    >>> t = Tibs('0xff00')
+    >>> bytes(memoryview(t))
+    b'\xff\x00'
+
+That covers ``memoryview``, ``array.array``, ``numpy.frombuffer``, and writing to
+a socket or a file, none of which then need a copy of the data. The buffer is
+read-only and always covers whole bytes, so for a length that isn't a multiple of
+8 the final byte includes the padding bits, which are not masked to zero. It also
+needs the underlying storage to start on a byte boundary, which isn't the case
+for every ``Tibs`` — one made by slicing at a bit offset, for example::
+
+    >>> memoryview(Tibs('0xffff')[3:])
+    Traceback (most recent call last):
+    ...
+    BufferError: Cannot export a buffer for this Tibs: its data does not start on a byte boundary. Use to_bytes() or to_padded_bytes() to get an owned copy instead.
+
+Use :meth:`Tibs.to_bytes` or :meth:`Tibs.to_padded_bytes` for an owned copy when
+that happens.
+
+``Mutibs`` does not export a buffer. Its storage is reallocated and shifted as the
+container is edited, so a borrowed view of it could not be kept valid.
+
 
 Repeated fixed-width values
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
