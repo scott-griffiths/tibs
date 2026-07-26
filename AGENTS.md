@@ -6,7 +6,7 @@ This file gives project-specific guidance for automated coding assistants and co
 
 - Tibs is a Python library for binary data, implemented in Rust with PyO3 and built with maturin.
 - The public Python package exposes immutable `Tibs`, mutable `Mutibs`, `View`, and enum types from `src/lib.rs`.
-- The package targets Python 3.10+ through `pyo3/abi3-py310`; continue supporting Python 3.10 unless explicitly instructed otherwise.
+- The package targets Python 3.11+ through `pyo3/abi3-py311`, so one abi3 wheel covers every supported version. The 3.11 floor is set by the buffer protocol, which only entered the limited ABI in that version. Continue supporting Python 3.11 unless explicitly instructed otherwise.
 - The project has reached the 1.0 API milestone. Treat documented public API behavior as stable across 1.x releases; API changes should be explicit and well justified, and must update tests, docs, examples, and type stubs to match.
 - Rust uses edition 2024. Prefer local patterns in `src/` over introducing new abstractions.
 

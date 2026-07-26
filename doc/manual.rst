@@ -153,7 +153,7 @@ To install use ::
 
 
 There are pre-built wheels for most configurations - if there are issues then please let me know.
-Tibs works with Python 3.10 and later.
+Tibs works with Python 3.11 and later.
 
 
 How the manual is organised

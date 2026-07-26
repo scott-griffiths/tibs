@@ -2,6 +2,14 @@
 
 ### Unreleased: version 1.2
 
+Backwardly incompatible changes
+
+* Minimum Python version now 3.11 instead of 3.10. Python 3.10 reaches its end
+  of life in October 2026, and dropping it lets a single abi3 wheel cover every
+  supported version — the buffer protocol added below is only part of Python's
+  stable ABI from 3.11, so supporting 3.10 meant building and testing a separate
+  version-pinned wheel for it.
+
 Added
 
 * Six methods for comparing two containers without building an intermediate

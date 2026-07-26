@@ -34,7 +34,7 @@ library, which is by the same author.
 pip install tibs
 ```
 
-Tibs works with Python 3.10 and later. There are pre-built wheels for most
+Tibs works with Python 3.11 and later. There are pre-built wheels for most
 common platforms; if there are issues then please let me know.
 
 The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
