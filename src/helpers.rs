@@ -13,8 +13,8 @@ mod validation;
 
 pub(crate) use bits::{BS, BV, BitAccumulator, bv_from_ones, bv_from_zeros, head_bit_offset};
 pub(crate) use bitwise::{
-    LogicalOp, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, deposit_masked,
-    for_each_pair_word, for_each_pair_word_bitslice, logical_op_with_aligned_bytes,
+    LogicalOp, any_pair_bits, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
+    deposit_masked, for_each_pair_word_bitslice, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, reverse_bitvec_in_place,
 };
 pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_padded_bytes};

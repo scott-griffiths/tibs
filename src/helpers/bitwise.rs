@@ -216,11 +216,8 @@ fn edge_masks(offset: usize, len: usize) -> (u8, u8) {
 
 /// The number of set bits in `op(lhs, rhs)` over the live range only.
 ///
-/// Kept separate from `for_each_pair_word` because it must not carry a
-/// per-word branch: counting is pure throughput, and a callback that can stop
-/// the loop early stops the compiler vectorising it. For the same reason the
-/// operation is dispatched here, once, so that each inner loop is compiled with
-/// it inlined rather than re-matching an enum on every word.
+/// The operation is dispatched here, once, so that each inner loop is compiled
+/// with it inlined rather than re-matching an enum on every word.
 #[inline]
 pub(crate) fn count_pair_bits(
     lhs: &[u8],
@@ -312,59 +309,165 @@ where
     count
 }
 
-/// Feed `op(lhs, rhs)` to `on_word` in chunks, covering the live bit range and
-/// nothing else, and stopping early if `on_word` returns false. Used by the
-/// predicates, where stopping early is the whole point.
-pub(crate) fn for_each_pair_word<F>(
+/// How many words the predicate scan folds together before testing for a hit.
+///
+/// Testing each word on its own puts a branch in the inner loop, which stops
+/// the compiler vectorising it and costs the predicates several times the
+/// throughput of the counting path over the same data. Folding a block of words
+/// together with `or` and testing once keeps the loop straight, and the early
+/// exit only loses whatever is left of the block it is in: at most 512 bits of
+/// extra scanning, against a full pass over the operands saved.
+const ANY_BLOCK_WORDS: usize = 8;
+const ANY_BLOCK_BYTES: usize = ANY_BLOCK_WORDS * 8;
+
+/// Whether `op(lhs, rhs)` has any set bit in the live range, stopping early.
+///
+/// The counterpart to [`count_pair_bits`], and dispatched the same way: the
+/// operation is matched here, once, so that each inner loop is compiled with it
+/// inlined instead of re-matching an enum on every word.
+#[inline]
+pub(crate) fn any_pair_bits(
     lhs: &[u8],
     lhs_offset: usize,
     rhs: &[u8],
     rhs_offset: usize,
     len: usize,
     op: LogicalOp,
-    mut on_word: F,
-) where
-    F: FnMut(u64) -> bool,
+) -> bool {
+    macro_rules! tested {
+        ($word:expr, $byte:expr) => {
+            any_pair_bits_with(lhs, lhs_offset, rhs, rhs_offset, len, $word, $byte)
+        };
+    }
+    match op {
+        LogicalOp::Or => tested!(|a, b| a | b, |a, b| a | b),
+        LogicalOp::And => tested!(|a, b| a & b, |a, b| a & b),
+        LogicalOp::Xor => tested!(|a, b| a ^ b, |a, b| a ^ b),
+        LogicalOp::AndNot => tested!(|a, b| a & !b, |a, b| a & !b),
+    }
+}
+
+fn any_pair_bits_with<W, B>(
+    lhs: &[u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    word_op: W,
+    byte_op: B,
+) -> bool
+where
+    W: Fn(u64, u64) -> u64,
+    B: Fn(u8, u8) -> u8,
 {
     debug_assert!(lhs_offset < 8);
     debug_assert!(rhs_offset < 8);
     if len == 0 {
-        return;
+        return false;
     }
-    let last = lhs.len() - 1;
     debug_assert_eq!(lhs.len(), (lhs_offset + len).div_ceil(8));
-
+    let last = lhs.len() - 1;
     let rhs_shift = rhs_offset as isize - lhs_offset as isize;
     let (head_mask, tail_mask) = edge_masks(lhs_offset, len);
-    let pair_byte = |index: usize| op.byte(lhs[index], align_byte(rhs, index, rhs_shift));
+    let pair_byte = |index: usize| byte_op(lhs[index], align_byte(rhs, index, rhs_shift));
 
     if last == 0 {
-        on_word((pair_byte(0) & head_mask & tail_mask) as u64);
-        return;
+        return pair_byte(0) & head_mask & tail_mask != 0;
     }
-    if !on_word((pair_byte(0) & head_mask) as u64) {
-        return;
+    // The two partial ends are the only bytes needing masking, so take them
+    // first and leave the middle as a clean run that no branch has to skirt.
+    if pair_byte(0) & head_mask != 0 || pair_byte(last) & tail_mask != 0 {
+        return true;
     }
-    // Bytes strictly between the two partial ends are wholly live, so they need
-    // no masking and can go 64 bits at a time.
+
+    if rhs_shift == 0 {
+        // Byte order is irrelevant to a test against zero, so read
+        // native-endian and skip the byte swap that the shifted path needs.
+        debug_assert_eq!(lhs.len(), rhs.len());
+        let (left, right) = (&lhs[1..last], &rhs[1..last]);
+        let mut left_blocks = left.chunks_exact(ANY_BLOCK_BYTES);
+        let mut right_blocks = right.chunks_exact(ANY_BLOCK_BYTES);
+        for (left_block, right_block) in left_blocks.by_ref().zip(right_blocks.by_ref()) {
+            let mut hits = 0u64;
+            for (left_chunk, right_chunk) in
+                left_block.chunks_exact(8).zip(right_block.chunks_exact(8))
+            {
+                hits |= word_op(
+                    u64::from_ne_bytes(left_chunk.try_into().unwrap()),
+                    u64::from_ne_bytes(right_chunk.try_into().unwrap()),
+                );
+            }
+            if hits != 0 {
+                return true;
+            }
+        }
+        return any_pair_bytes(
+            left_blocks.remainder(),
+            right_blocks.remainder(),
+            word_op,
+            byte_op,
+        );
+    }
+
+    // Storage at differing bit offsets: the same blocking, over words that have
+    // to be shifted into line one at a time.
     let mut index = 1;
+    while index + ANY_BLOCK_BYTES <= last && index + ANY_BLOCK_BYTES <= rhs.len() {
+        let mut hits = 0u64;
+        for word_index in (index..index + ANY_BLOCK_BYTES).step_by(8) {
+            hits |= word_op(
+                read_be_u64(lhs, word_index),
+                aligned_rhs_word(rhs, word_index, rhs_shift),
+            );
+        }
+        if hits != 0 {
+            return true;
+        }
+        index += ANY_BLOCK_BYTES;
+    }
     while index + 8 <= last && index + 8 <= rhs.len() {
-        let word = op.word(
+        if word_op(
             read_be_u64(lhs, index),
             aligned_rhs_word(rhs, index, rhs_shift),
-        );
-        if !on_word(word) {
-            return;
+        ) != 0
+        {
+            return true;
         }
         index += 8;
     }
     while index < last {
-        if !on_word(pair_byte(index) as u64) {
-            return;
+        if pair_byte(index) != 0 {
+            return true;
         }
         index += 1;
     }
-    on_word((pair_byte(last) & tail_mask) as u64);
+    false
+}
+
+/// The under-a-block tail of a pair of byte runs held at the same bit offset,
+/// tested a word at a time and then a byte at a time.
+fn any_pair_bytes<W, B>(left: &[u8], right: &[u8], word_op: W, byte_op: B) -> bool
+where
+    W: Fn(u64, u64) -> u64,
+    B: Fn(u8, u8) -> u8,
+{
+    debug_assert_eq!(left.len(), right.len());
+    let mut left_chunks = left.chunks_exact(8);
+    let mut right_chunks = right.chunks_exact(8);
+    for (left_chunk, right_chunk) in left_chunks.by_ref().zip(right_chunks.by_ref()) {
+        if word_op(
+            u64::from_ne_bytes(left_chunk.try_into().unwrap()),
+            u64::from_ne_bytes(right_chunk.try_into().unwrap()),
+        ) != 0
+        {
+            return true;
+        }
+    }
+    left_chunks
+        .remainder()
+        .iter()
+        .zip(right_chunks.remainder())
+        .any(|(&left_byte, &right_byte)| byte_op(left_byte, right_byte) != 0)
 }
 
 /// Fallback for operands whose underlying storage does not start on a byte

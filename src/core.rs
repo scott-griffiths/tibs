@@ -1,6 +1,6 @@
 use crate::helpers::{
-    BS, BV, FAST_INT_BITS, LogicalOp, bin_from_padded_bytes, bv_from_zeros, byte_order_name,
-    copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, for_each_pair_word,
+    BS, BV, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes, bv_from_zeros,
+    byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
     for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
     logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
     normalize_split_position, oct_from_padded_bytes, reverse_padded_bits, validate_index,
@@ -72,21 +72,23 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
-    /// Whether `op(self, other)` has any set bit, stopping at the first one.
+    /// Whether `op(self, other)` has any set bit, stopping early once one is
+    /// found.
     fn pairwise_any(&self, other: &impl BitCollection, op: LogicalOp) -> bool {
         debug_assert!(self.len() == other.len());
-        let mut found = false;
-        let test = |word: u64| {
-            found = word != 0;
-            !found
-        };
         match (self.raw_data_ref(), other.raw_data_ref()) {
             (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) => {
-                for_each_pair_word(lhs, lhs_offset, rhs, rhs_offset, self.len(), op, test)
+                any_pair_bits(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
             }
-            _ => for_each_pair_word_bitslice(self.as_bitslice(), other.as_bitslice(), op, test),
+            _ => {
+                let mut found = false;
+                for_each_pair_word_bitslice(self.as_bitslice(), other.as_bitslice(), op, |word| {
+                    found = word != 0;
+                    !found
+                });
+                found
+            }
         }
-        found
     }
 
     /// Read the bits of `self` where `mask` is set, compacted into a new
