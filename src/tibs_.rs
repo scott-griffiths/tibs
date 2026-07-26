@@ -13,6 +13,7 @@ use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesItera
 use crate::mutibs::Mutibs;
 use crate::view::View;
 use bitvec::prelude::*;
+use half::f16;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::ffi;
@@ -399,6 +400,15 @@ impl BytewisePacker {
         }
     }
 
+    /// The type [`push`](Self::push) converts without running any Python code.
+    /// See [`for_each_value`].
+    fn plain_type(&self) -> *mut ffi::PyTypeObject {
+        match *self {
+            BytewisePacker::Int { .. } => &raw mut ffi::PyLong_Type,
+            BytewisePacker::Float { .. } => &raw mut ffi::PyFloat_Type,
+        }
+    }
+
     fn push(&self, out: &mut Vec<u8>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         match *self {
             BytewisePacker::Int {
@@ -461,6 +471,13 @@ impl BitwisePacker {
         }
     }
 
+    /// The type [`push`](Self::push) converts without running any Python code.
+    /// See [`for_each_value`]. A bool dtype takes `True` and `False` too, but
+    /// they are not of exactly this type and so go the owned route.
+    fn plain_type(&self) -> *mut ffi::PyTypeObject {
+        &raw mut ffi::PyLong_Type
+    }
+
     fn push(&self, out: &mut helpers::BitAccumulator, value: &Bound<'_, PyAny>) -> PyResult<()> {
         match *self {
             BitwisePacker::Int { length, signed } => {
@@ -479,6 +496,75 @@ impl BitwisePacker {
     }
 }
 
+/// Hand every value of `iterable` to `visit`, checking for interrupts as it
+/// goes.
+///
+/// A `list` or `tuple` is read by index instead of through the iterator
+/// protocol, which saves an interpreter round trip per value: under the limited
+/// ABI even a reference count change is a call into the interpreter, and that
+/// is a large share of the work when converting one value is a handful of
+/// instructions. The standard library's own packing pays neither, because it is
+/// handed its values as a C array.
+///
+/// Items read this way are borrowed rather than owned, which is only sound
+/// while `visit` cannot run Python code that might drop them. `plain` is the
+/// type it converts without running any: an item of exactly that type is
+/// borrowed, and anything else is handed over owned.
+fn for_each_value(
+    py: Python<'_>,
+    iterable: &Bound<'_, PyAny>,
+    plain: *mut ffi::PyTypeObject,
+    mut visit: impl FnMut(&Bound<'_, PyAny>) -> PyResult<()>,
+) -> PyResult<()> {
+    let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+    let mut interrupt_check = |index: usize| -> PyResult<()> {
+        if index >= check_at {
+            py.check_signals()?;
+            check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+        }
+        Ok(())
+    };
+
+    // Exact types only. A subclass can define its own `__iter__`, and walking
+    // one by index would not give the sequence that iterating it does.
+    let is_type = |ty| unsafe { ffi::Py_IS_TYPE(iterable.as_ptr(), ty) } != 0;
+    let item_at = if is_type(&raw mut ffi::PyList_Type) {
+        ffi::PyList_GetItem
+    } else if is_type(&raw mut ffi::PyTuple_Type) {
+        ffi::PyTuple_GetItem
+    } else {
+        for (index, item) in iterable.try_iter()?.enumerate() {
+            interrupt_check(index)?;
+            visit(&item?)?;
+        }
+        return Ok(());
+    };
+
+    for index in 0..iterable.len()? {
+        interrupt_check(index)?;
+        // SAFETY: the index is in bounds of the length read above, and the
+        // sequence holds the item for as long as the pointer is used here.
+        let item = unsafe { item_at(iterable.as_ptr(), index as ffi::Py_ssize_t) };
+        if item.is_null() {
+            // A list that has run short can only mean an earlier value was
+            // converted by Python code that removed items from it. Stop here,
+            // as iterating it would.
+            unsafe { ffi::PyErr_Clear() };
+            return Ok(());
+        }
+        if unsafe { ffi::Py_IS_TYPE(item, plain) } != 0 {
+            // SAFETY: converting a value of exactly this type runs no Python
+            // code, so nothing can drop the item while the borrow is live.
+            let borrowed = unsafe { Borrowed::from_ptr(py, item) };
+            visit(&borrowed)?;
+        } else {
+            let owned = unsafe { Bound::from_borrowed_ptr(py, item) };
+            visit(&owned)?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn bv_from_values_iter(
     py: Python<'_>,
     dtype: &Dtype,
@@ -493,14 +579,9 @@ pub(crate) fn bv_from_values_iter(
         let byte_length = packer.byte_length();
         let capacity = hint.and_then(|len| len.checked_mul(byte_length));
         let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
-        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
-        for (index, item) in iterable.try_iter()?.enumerate() {
-            if index >= check_at {
-                py.check_signals()?;
-                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-            }
-            packer.push(&mut bytes, &item?)?;
-        }
+        for_each_value(py, iterable, packer.plain_type(), |item| {
+            packer.push(&mut bytes, item)
+        })?;
         return Ok(BV::from_vec(bytes));
     }
 
@@ -510,14 +591,9 @@ pub(crate) fn bv_from_values_iter(
     if let Some(packer) = BitwisePacker::for_dtype(dtype) {
         let capacity = hint.and_then(|len| len.checked_mul(packer.length()));
         let mut out = helpers::BitAccumulator::with_bit_capacity(capacity);
-        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
-        for (index, item) in iterable.try_iter()?.enumerate() {
-            if index >= check_at {
-                py.check_signals()?;
-                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-            }
-            packer.push(&mut out, &item?)?;
-        }
+        for_each_value(py, iterable, packer.plain_type(), |item| {
+            packer.push(&mut out, item)
+        })?;
         return Ok(out.into_bitvec());
     }
 
@@ -534,6 +610,127 @@ pub(crate) fn bv_from_values_iter(
     Ok(bv)
 }
 
+/// Which reading a [`BytewiseUnpacker`] gives the raw bits it has loaded.
+#[derive(Clone, Copy)]
+enum NumericReading {
+    Uint,
+    Int,
+    Float,
+}
+
+/// How the byte-wise path in [`py_from_value_parts`] decodes one value.
+///
+/// The counterpart to [`BytewisePacker`], and for the same reason: a numeric
+/// dtype that is a whole number of bytes long and fits in a `u64` can be
+/// assembled straight from the backing bytes, so the byte order and the sign
+/// are settled once and `bitvec`'s slice-then-load-bit-by-bit drops out. Over a
+/// sequence that setup is hoisted out of the loop as well.
+#[derive(Clone, Copy)]
+struct BytewiseUnpacker {
+    reading: NumericReading,
+    byte_length: usize,
+    is_little_endian: bool,
+}
+
+impl BytewiseUnpacker {
+    /// Decide whether a dtype qualifies, under the same rule as
+    /// [`BytewisePacker::for_dtype`] plus a `u64` ceiling: anything longer
+    /// needs the big-integer path that the general route already has.
+    fn for_parts(
+        dtype_kind: DtypeKind,
+        dtype_length: usize,
+        byte_order: ByteOrder,
+    ) -> PyResult<Option<Self>> {
+        if dtype_length == 0
+            || dtype_length > helpers::FAST_INT_BITS
+            || !dtype_length.is_multiple_of(8)
+        {
+            return Ok(None);
+        }
+        let byte_length = dtype_length / 8;
+        let reading = match dtype_kind {
+            DtypeKind::Uint => NumericReading::Uint,
+            DtypeKind::Int => NumericReading::Int,
+            // Only the three float widths there are. Any other length drops
+            // through to the general path, which raises for it.
+            DtypeKind::Float if matches!(byte_length, 2 | 4 | 8) => NumericReading::Float,
+            _ => return Ok(None),
+        };
+        let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
+        Ok(Some(Self {
+            reading,
+            byte_length,
+            is_little_endian,
+        }))
+    }
+
+    fn for_dtype(dtype: &Dtype) -> PyResult<Option<Self>> {
+        Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
+    }
+
+    /// The raw bits of the value at `index`, right-aligned in a `u64`.
+    ///
+    /// `bytes` holds the values end to end, the first of them starting `shift`
+    /// bits into `bytes[0]`. Every value is a whole number of bytes long, so
+    /// that shift is the same for all of them.
+    #[inline]
+    fn load(&self, bytes: &[u8], shift: u32, index: usize) -> u64 {
+        let start = index * self.byte_length;
+        let mut buf = [0u8; 8];
+        // A big-endian value goes at the top of the buffer and a little-endian
+        // one at the bottom, so that either `from_*_bytes` reads the untouched
+        // bytes as leading zeros and leaves the value right-aligned.
+        let dest = if self.is_little_endian {
+            &mut buf[..self.byte_length]
+        } else {
+            &mut buf[8 - self.byte_length..]
+        };
+        if shift == 0 {
+            dest.copy_from_slice(&bytes[start..start + self.byte_length]);
+        } else {
+            for (offset, slot) in dest.iter_mut().enumerate() {
+                let position = start + offset;
+                // The trailing byte is there whenever the shift needs it,
+                // because the span was sized to cover every bit of the range.
+                let next = bytes.get(position + 1).copied().unwrap_or(0);
+                *slot = (bytes[position] << shift) | (next >> (8 - shift));
+            }
+        }
+        if self.is_little_endian {
+            u64::from_le_bytes(buf)
+        } else {
+            u64::from_be_bytes(buf)
+        }
+    }
+
+    /// The value at `index` as a Python object.
+    #[inline]
+    fn value<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        shift: u32,
+        index: usize,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let raw = self.load(bytes, shift, index);
+        match self.reading {
+            // Anything narrower than 64 bits fits an `i64`, and that is the
+            // cheaper of the two integer objects to build.
+            NumericReading::Uint if self.byte_length == 8 => raw.into_bound_py_any(py),
+            NumericReading::Uint => (raw as i64).into_bound_py_any(py),
+            NumericReading::Int => {
+                let pad = helpers::FAST_INT_BITS - self.byte_length * 8;
+                (((raw << pad) as i64) >> pad).into_bound_py_any(py)
+            }
+            NumericReading::Float => match self.byte_length {
+                8 => f64::from_bits(raw).into_bound_py_any(py),
+                4 => (f32::from_bits(raw as u32) as f64).into_bound_py_any(py),
+                _ => f16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
+            },
+        }
+    }
+}
+
 pub(crate) fn py_from_value_parts(
     py: Python<'_>,
     dtype_kind: DtypeKind,
@@ -547,6 +744,12 @@ pub(crate) fn py_from_value_parts(
             value.len(),
             dtype_length
         )));
+    }
+
+    if let Some(unpacker) = BytewiseUnpacker::for_parts(dtype_kind, dtype_length, byte_order)? {
+        if let Some((bytes, shift, _)) = value.raw_data_ref() {
+            return Ok(unpacker.value(py, bytes, shift as u32, 0)?.unbind());
+        }
     }
 
     match dtype_kind {
@@ -600,6 +803,25 @@ pub(crate) fn py_values_from_range(
     }
     let mut values = Vec::with_capacity(count);
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+
+    // A dtype that reads out of whole bytes takes them from the backing store
+    // directly, with the byte order and the sign settled once for the whole
+    // sequence. See `BytewiseUnpacker`.
+    if let Some(unpacker) = BytewiseUnpacker::for_dtype(dtype)? {
+        let window = bits.get_slice_unchecked(start, selected_len);
+        if let Some((bytes, shift, _)) = window.raw_data_ref() {
+            let shift = shift as u32;
+            for index in 0..count {
+                if index >= check_at {
+                    py.check_signals()?;
+                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+                }
+                values.push(unpacker.value(py, bytes, shift, index)?.unbind());
+            }
+            return Ok(values);
+        }
+    }
+
     // One window is reused for the whole sequence, with only its offset moving
     // between values. Taking a fresh slice each time would clone the `Arc` once
     // per value for a read that never outlives the loop.

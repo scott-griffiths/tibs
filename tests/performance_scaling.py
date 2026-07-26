@@ -21,6 +21,19 @@ Ground rules, so that the numbers mean something:
 Run it with no arguments for the console table. ``--markdown`` writes a table
 whose rows link back to the code that produced them, ``--svg`` draws time
 against size, and ``--json`` gives the raw numbers.
+
+To measure the effect of a change to tibs, keep the ``--json`` from before it
+and pass that file to ``--compare`` afterwards::
+
+    python tests/performance_scaling.py --json before.json
+    ... change something, rebuild ...
+    python tests/performance_scaling.py --compare before.json --json after.json
+
+The comparison divides each tibs change by the change in bitarray's time on the
+same row. bitarray is the same library in both runs, so whatever it does is the
+machine, and dividing it out is what tells a real improvement apart from a cool
+CPU. Runs on an idle laptop have disagreed by a quarter, which is larger than
+most of the differences worth chasing.
 """
 
 from __future__ import annotations
@@ -784,6 +797,142 @@ def print_table(measurements: Sequence[Measurement]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Comparing this run with an earlier one
+# ---------------------------------------------------------------------------
+
+# Two runs of this script on an idle machine have been seen to disagree by a
+# quarter, so a change smaller than this is not worth reading anything into even
+# after the control below has been divided out.
+NOISE_BAND = 1.15
+
+
+@dataclass(frozen=True)
+class Change:
+    """One workload at one size, measured twice."""
+
+    measurement: Measurement
+    bitarray_before: float
+    tibs_before: float
+
+    @property
+    def tibs_factor(self) -> float:
+        """How much faster tibs got; above one is an improvement."""
+        return self.tibs_before / self.measurement.tibs_time
+
+    @property
+    def control_factor(self) -> float:
+        """The same for bitarray, which is where the drift shows up."""
+        return self.bitarray_before / self.measurement.bitarray_time
+
+    @property
+    def adjusted(self) -> float:
+        """The tibs change with the machine drift divided out.
+
+        bitarray is the same library in both runs, so any change in its time on
+        a row is the machine rather than the code: a warmer CPU, a different
+        memory layout, another process. Dividing the tibs change by it is what
+        separates a real improvement from a lucky afternoon, and it is why the
+        baseline has to be a run of this same script rather than a note of the
+        tibs timings alone.
+        """
+        return self.tibs_factor / self.control_factor if self.control_factor else float("inf")
+
+
+def load_baseline(path: str) -> tuple[dict[str, Any], dict[tuple[str, int], dict[str, Any]]]:
+    with open(path, encoding="utf-8") as source:
+        payload = json.load(source)
+    return payload, {(row["workload"], row["size"]): row for row in payload["measurements"]}
+
+
+def format_change(factor: float) -> str:
+    if 0.95 <= factor <= 1.05:
+        return "no change"
+    if factor > 1:
+        return f"{factor:.2f}× faster"
+    return f"{1 / factor:.2f}× slower"
+
+
+def print_comparison(measurements: Sequence[Measurement], path: str) -> None:
+    """Print how this run differs from an earlier --json run of this script."""
+    payload, rows = load_baseline(path)
+    changes = [
+        Change(
+            measurement,
+            rows[(measurement.workload.name, measurement.size)]["bitarray_seconds"],
+            rows[(measurement.workload.name, measurement.size)]["tibs_seconds"],
+        )
+        for measurement in measurements
+        if (measurement.workload.name, measurement.size) in rows
+    ]
+    if not changes:
+        raise SystemExit(f"{path} has no workload and size in common with this run")
+
+    print()
+    print(f"Compared with {path}")
+    recorded = payload.get("created")
+    print(f"  before: {payload['environment']}" + (f", recorded {recorded}" if recorded else ""))
+    print(f"  after:  {environment()}")
+    if payload["environment"] != environment():
+        # Different machine or different library versions: the control column
+        # below is then measuring that difference too, and cannot be trusted.
+        print("  warning: the two runs are not from the same environment")
+
+    header = (
+        f"{'workload':<{NAME_WIDTH}}{'size':>{SIZE_WIDTH}}"
+        f"{'before':>{TIME_WIDTH}}{'after':>{TIME_WIDTH}}{'change':>16}{'adjusted':>12}"
+    )
+    rule = "-" * len(header)
+    group = None
+    for change in changes:
+        item = change.measurement.workload
+        if item.group != group:
+            group = item.group
+            print()
+            print(group)
+            print(header)
+            print(rule)
+        # The verdict is in the main table already, so it is repeated here only
+        # when it changed sides, which is the part worth seeing twice.
+        before = format_verdict(change.bitarray_before / change.tibs_before)
+        after = format_verdict(change.measurement.speedup)
+        flip = "" if before.split()[0] == after.split()[0] else f"   {before} -> {after}"
+        print(
+            (
+                f"{item.name:<{NAME_WIDTH}}"
+                f"{format_size(change.measurement.size, item.unit):>{SIZE_WIDTH}}"
+                f"{format_time(change.tibs_before):>{TIME_WIDTH}}"
+                f"{format_time(change.measurement.tibs_time):>{TIME_WIDTH}}"
+                f"{format_change(change.tibs_factor):>16}"
+                f"{f'{change.adjusted:.2f}×':>12}"
+                f"{flip}"
+            ).rstrip()
+        )
+
+    adjusted = [change.adjusted for change in changes]
+    control = sorted(change.control_factor for change in changes)
+    missing = len(rows) - len(changes)
+    print()
+    print(
+        f"{len(changes)} rows matched"
+        + (f", {missing} in the baseline not measured here" if missing > 0 else "")
+    )
+    print(
+        "tibs, geometric mean of the drift-adjusted change: "
+        f"{format_change(geometric_mean(adjusted))}"
+    )
+    print(
+        f"faster by more than {(NOISE_BAND - 1) * 100:.0f}%: "
+        f"{sum(1 for value in adjusted if value > NOISE_BAND)} rows; "
+        f"slower: {sum(1 for value in adjusted if value < 1 / NOISE_BAND)} rows"
+    )
+    print(
+        "bitarray control, which should have stood still: "
+        f"{format_change(control[0])} to {format_change(control[-1])}, "
+        f"median {format_change(control[len(control) // 2])}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Markdown table
 # ---------------------------------------------------------------------------
 
@@ -1015,6 +1164,7 @@ def main() -> None:
     parser.add_argument("--markdown", metavar="PATH", help="write a linked markdown table ('-' for stdout)")
     parser.add_argument("--svg", metavar="PATH", help="write a time against size chart")
     parser.add_argument("--json", metavar="PATH", help="write the raw measurements ('-' for stdout)")
+    parser.add_argument("--compare", metavar="PATH", help="also report the change since an earlier --json run")
     parser.add_argument("--theme", choices=tuple(THEMES), default="light", help="chart colours (default light)")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="repository the source links point into")
     parser.add_argument("--ref", default="main", help="branch or tag the source links point at (default main)")
@@ -1037,15 +1187,23 @@ def main() -> None:
     if bitarray is None:
         raise SystemExit("bitarray is not installed; install it to run this comparison.")
 
+    if args.compare and not os.path.exists(args.compare):
+        # Checked before the run rather than after it, so a typo costs a second
+        # instead of a minute.
+        parser.error(f"{args.compare} does not exist")
+
     measurements = run(chosen, args.repeats, sys.stderr.isatty())
 
     print_table(measurements)
+    if args.compare:
+        print_comparison(measurements, args.compare)
 
     if args.markdown:
         write(args.markdown, markdown_table(measurements, args.repo, args.ref))
     if args.json:
         payload = {
             "environment": environment(),
+            "created": time.strftime("%Y-%m-%d %H:%M:%S"),
             "measurements": [
                 {
                     "workload": measurement.workload.name,

@@ -398,3 +398,62 @@ def test_from_bytes_reads_as_python_int(data):
     t = Tibs.from_bytes(data)
     assert t.u == int.from_bytes(data, "big")
     assert t.i == int.from_bytes(data, "big", signed=True)
+
+
+# ---------------------------------------------------------------------------
+# Reading a field out of the storage bytes
+#
+# Fields of up to 64 bits are assembled from the bytes they sit in rather than
+# walked bit by bit, so the reading has to hold for every combination of where
+# the field starts within a byte and how long it is - including when the
+# storage itself starts part way into a byte.
+# ---------------------------------------------------------------------------
+
+SPREAD = bytes((index * 37 + 11) % 256 for index in range(24))
+
+
+@pytest.mark.parametrize("offset", range(64))
+def test_word_sized_reads_at_every_offset_and_length(cls, offset):
+    whole = cls.from_bytes(SPREAD)
+    for length in range(1, 65):
+        if offset + length > len(whole):
+            break
+        field = whole[offset: offset + length]
+        expected = int(field.bin, 2)
+        assert field.to_u() == expected
+        assert whole.to_u(offset, offset + length) == expected
+        signed = expected - (1 << length) if field[0] else expected
+        assert field.to_i() == signed
+        assert whole.to_i(offset, offset + length) == signed
+
+
+@pytest.mark.parametrize("head", range(1, 8))
+def test_word_sized_reads_when_the_storage_starts_part_way_into_a_byte(cls, head):
+    shifted = (cls.from_ones(head) + cls.from_bytes(SPREAD))[head:]
+    assert shifted == cls.from_bytes(SPREAD)
+    for offset in range(0, 48, 5):
+        for length in range(1, 65):
+            expected = int(shifted[offset: offset + length].bin, 2)
+            assert shifted.to_u(offset, offset + length) == expected
+
+
+@pytest.mark.parametrize("length", [16, 32, 64])
+@pytest.mark.parametrize("offset", range(8))
+def test_float_reads_at_every_offset(cls, length, offset):
+    packed = cls.from_f(1.5, length)
+    padded = cls.from_ones(offset) + packed
+    assert padded.to_f(offset, offset + length) == 1.5
+    assert padded[offset:].to_f() == 1.5
+
+
+@pytest.mark.parametrize("head", range(1, 8))
+def test_little_endian_reads_when_the_storage_starts_part_way_into_a_byte(head):
+    # Storage that begins mid-byte is the one route by which a little-endian
+    # read reaches the general load rather than the byte-wise unpacker.
+    for spec, value in [("u16_le", 65535), ("i32_le", -7), ("u64_le", 1 << 63),
+                        ("f16_le", 1.5), ("f32_le", -2.5), ("f64_le", 1.5)]:
+        dtype = Dtype(spec)
+        packed = Mutibs.from_zeros(head) + Mutibs(dtype.pack(value))
+        del packed[:head]
+        assert dtype.unpack(packed) == value
+        assert dtype.unpack_values(packed) == [value]

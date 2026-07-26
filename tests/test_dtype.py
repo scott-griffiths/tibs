@@ -844,3 +844,106 @@ def test_old_dtype_method_names_are_not_exposed():
 
     for name in ["to_dtypes", "to_values_iter"]:
         assert not hasattr(Mutibs, name)
+
+
+SPREAD_BYTES = bytes((index * 37 + 11) % 256 for index in range(64))
+
+
+@pytest.mark.parametrize("dtype", ["u16", "i16", "u24", "u32", "i32", "f32", "u64", "i64", "f64"])
+@pytest.mark.parametrize("offset", range(8))
+def test_to_values_from_an_unaligned_start(dtype, offset):
+    source = Tibs.from_bytes(SPREAD_BYTES)
+    length = Dtype(dtype).length
+    values = Dtype(dtype).unpack_values(source[: len(source) // length * length])
+    shifted = Tibs.from_zeros(offset) + Dtype(dtype).pack_values(values)
+    assert shifted[offset:].to_values(dtype) == values
+    assert shifted.to_value(dtype, offset, offset + Dtype(dtype).length) == values[0]
+
+
+@pytest.mark.parametrize("dtype", ["u16_le", "i32_le", "f64_le"])
+@pytest.mark.parametrize("offset", [0, 3, 7])
+def test_to_values_little_endian_from_an_unaligned_start(dtype, offset):
+    source = Tibs.from_bytes(SPREAD_BYTES)
+    length = Dtype(dtype).length
+    values = Dtype(dtype).unpack_values(source[: len(source) // length * length])
+    shifted = Tibs.from_ones(offset) + Dtype(dtype).pack_values(values)
+    assert shifted[offset:].to_values(dtype) == values
+
+
+def test_to_values_when_the_storage_starts_part_way_into_a_byte():
+    a = Mutibs.from_bytes(b"\x01\x02\x03\x04\x05\x06\x07\x08")
+    del a[:3]
+    assert a.to_values("u16", 0, 48) == Tibs(a)[:48].to_values("u16")
+    assert a.to_values("i16", 0, 48) == Tibs(a)[:48].to_values("i16")
+    assert a.to_values("f32", 0, 32) == Tibs(a)[:32].to_values("f32")
+
+
+def test_values_above_the_signed_range_round_trip():
+    values = [0, (1 << 63) - 1, 1 << 63, (1 << 64) - 1]
+    assert Tibs.from_values("u64", values).to_values("u64") == values
+    with pytest.raises(OverflowError):
+        Tibs.from_values("u64", [1 << 64])
+    with pytest.raises(OverflowError):
+        Tibs.from_values("u64", [-1])
+
+
+@pytest.mark.parametrize(
+    "iterable",
+    [
+        [1, 2, 3],
+        (1, 2, 3),
+        iter([1, 2, 3]),
+        (value for value in [1, 2, 3]),
+        range(1, 4),
+    ],
+)
+def test_from_values_accepts_any_iterable(iterable):
+    assert Tibs.from_values("u8", iterable) == Tibs("0x010203")
+
+
+def test_from_values_uses_a_sequence_subclass_iterator():
+    class Backwards(list):
+        def __iter__(self):
+            return reversed([list.__getitem__(self, i) for i in range(len(self))])
+
+    class Fixed(tuple):
+        def __iter__(self):
+            return iter([9, 9])
+
+    assert Tibs.from_values("u8", Backwards([1, 2, 3])) == Tibs("0x030201")
+    assert Tibs.from_values("u8", Fixed((1, 2))) == Tibs("0x0909")
+
+
+@pytest.mark.parametrize("dtype", ["u8", "u12", "bool"])
+def test_from_values_accepts_bools_and_index_objects(dtype):
+    class One:
+        def __index__(self):
+            return 1
+
+    assert Tibs.from_values(dtype, [One(), True, 1]) == Tibs.from_values(dtype, [1, 1, 1])
+    assert Tibs.from_values(dtype, [0, False]) == Tibs.from_values(dtype, [0, 0])
+
+
+@pytest.mark.parametrize("dtype", ["u8", "u12"])
+def test_from_values_survives_a_list_edited_while_it_is_read(dtype):
+    # Converting a value can run Python code, and that code can reach the list
+    # being packed. Whatever it does, packing has to stop at the end of it.
+    shrinking = [1, None, 3, 4, 5]
+
+    class Shrink:
+        def __index__(self):
+            del shrinking[2:]
+            return 2
+
+    shrinking[1] = Shrink()
+    assert Tibs.from_values(dtype, shrinking) == Tibs.from_values(dtype, [1, 2])
+
+    growing = [None, 2]
+
+    class Grow:
+        def __index__(self):
+            growing.append(3)
+            return 1
+
+    growing[0] = Grow()
+    assert Tibs.from_values(dtype, growing) == Tibs.from_values(dtype, [1, 2])

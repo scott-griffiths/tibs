@@ -217,14 +217,23 @@ pub(crate) fn push_int_bytes(
                 };
                 if fits { Some(value as u64) } else { None }
             })
-        } else {
-            value.extract::<u64>().ok().and_then(|value| {
-                if length == FAST_INT_BITS || value < (1u64 << length) {
-                    Some(value)
+        } else if length < FAST_INT_BITS {
+            // Extracting as `i64` is the cheaper of the two conversions: it
+            // goes straight to `PyLong_AsLong`, where `u64` first has to ask
+            // the object whether it is an int, which under the limited ABI is
+            // a C API call of its own. A field of fewer than 64 bits has no
+            // use for the wider type: a negative value, or one too big for an
+            // `i64`, drops through to the general path exactly as before.
+            value.extract::<i64>().ok().and_then(|value| {
+                let raw = value as u64;
+                if value >= 0 && raw < (1u64 << length) {
+                    Some(raw)
                 } else {
                     None
                 }
             })
+        } else {
+            value.extract::<u64>().ok()
         };
         if let Some(raw) = raw {
             if is_little_endian {
@@ -284,10 +293,16 @@ pub(crate) fn push_int_bits(
                 }
             })
         } else {
-            value
-                .extract::<u64>()
-                .ok()
-                .and_then(|value| if value <= mask { Some(value) } else { None })
+            // As in `push_int_bytes`, an `i64` extraction is the cheaper one
+            // and a field of fewer than 64 bits never needs more.
+            value.extract::<i64>().ok().and_then(|value| {
+                let raw = value as u64;
+                if value >= 0 && raw <= mask {
+                    Some(raw)
+                } else {
+                    None
+                }
+            })
         };
         if let Some(raw) = raw {
             out.push_wide(raw, length);
