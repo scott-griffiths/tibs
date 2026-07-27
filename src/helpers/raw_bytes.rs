@@ -1,4 +1,5 @@
 use super::bits::{BS, BV};
+use bitvec::domain::Domain;
 use bitvec::prelude::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -33,6 +34,42 @@ pub(crate) fn byte_search_prep<'h, 'n>(
     let haystack_bytes = bits_to_byte_cow(&haystack[start_byte * 8..end_byte * 8]);
     let needle_bytes = bits_to_byte_cow(needle);
     Some((haystack_bytes, needle_bytes, start_byte))
+}
+
+/// The storage bytes covering `bits`, with the bit offset at which `bits`
+/// starts within them.
+///
+/// Borrows when the run already fills whole bytes, which is the usual case.
+/// Otherwise the two part-bytes at the ends are copied out and the whole middle
+/// is memcpy'd, so this stays a byte-wide operation either way.
+pub(crate) fn bitslice_storage(bits: &BS) -> (Cow<'_, [u8]>, usize) {
+    match bits.domain() {
+        Domain::Enclave(elem) => (
+            Cow::Owned(vec![elem.load_value()]),
+            elem.head().into_inner() as usize,
+        ),
+        Domain::Region {
+            head: None,
+            body,
+            tail: None,
+        } => (Cow::Borrowed(body), 0),
+        Domain::Region { head, body, tail } => {
+            let mut out = Vec::with_capacity(body.len() + 2);
+            let offset = match head {
+                Some(partial) => {
+                    let index = partial.head().into_inner() as usize;
+                    out.push(partial.load_value());
+                    index
+                }
+                None => 0,
+            };
+            out.extend_from_slice(body);
+            if let Some(partial) = tail {
+                out.push(partial.load_value());
+            }
+            (Cow::Owned(out), offset)
+        }
+    }
 }
 
 fn bits_to_byte_cow(bits: &BS) -> Cow<'_, [u8]> {
@@ -121,12 +158,6 @@ pub(crate) fn copy_shifted_bytes(data: &[u8], bit_offset: usize, out: &mut [u8])
     *last = (data[last_index] << bit_offset) | (next >> right_shift);
 }
 
-/// Reverse the first `len_bits` bits of `bytes` in place.
-///
-/// The bits must be left aligned (bit zero is the most significant bit of
-/// `bytes[0]`) with the trailing `bytes.len() * 8 - len_bits` padding bits
-/// zeroed. The reversed bits are left aligned again, and the padding is
-/// still zero afterwards.
 /// Reverse each `width`-byte group of `bytes` in place, which is the byte
 /// order swap.
 ///
@@ -156,6 +187,12 @@ pub(crate) fn reverse_byte_groups(bytes: &mut [u8], width: usize) {
     }
 }
 
+/// Reverse the first `len_bits` bits of `bytes` in place.
+///
+/// The bits must be left aligned (bit zero is the most significant bit of
+/// `bytes[0]`) with the trailing `bytes.len() * 8 - len_bits` padding bits
+/// zeroed. The reversed bits are left aligned again, and the padding is
+/// still zero afterwards.
 pub(crate) fn reverse_padded_bits(bytes: &mut [u8], len_bits: usize) {
     debug_assert_eq!(bytes.len(), len_bits.div_ceil(8));
     reverse_all_bits(bytes);

@@ -1,9 +1,11 @@
 use super::bits::{BS, BV};
 use super::bitwise::count_bitslice;
-use super::raw_bytes::byte_search_prep;
+use super::raw_bytes::{bitslice_storage, byte_search_prep};
+use super::splice::copy_bits;
 use bitvec::domain::Domain;
 use memchr::memmem;
 use pyo3::prelude::*;
+use std::borrow::Cow;
 
 pub(crate) const SIGNAL_CHECK_INTERVAL: usize = 65_536;
 
@@ -38,6 +40,269 @@ pub(crate) fn compute_lps(py: Python<'_>, pattern: &BS) -> PyResult<Vec<usize>> 
     Ok(lps)
 }
 
+// --- Searching over bytes at any bit offset -----------------------------
+//
+// `memmem` matches whole bytes, so a search that may land part way through one
+// looks like it cannot use it. It can. A needle placed at bit offset `r` still
+// covers a run of whole bytes in the middle, and that run is what `memmem`
+// looks for; the handful of bits hanging off either end confirm each hit.
+// There are only eight offsets, so eight scans cover every position a match
+// could take, and eight vectorised substring searches still beat walking the
+// haystack a bit at a time by a wide margin.
+//
+// A byte-aligned search needs only the one offset its alignment allows, which
+// is why `byte_aligned=True` no longer cares whether the needle is a whole
+// number of bytes.
+
+/// The needle's whole bytes when it begins `head` bits after a byte boundary.
+struct PhasePattern {
+    /// Needle bits before the first whole byte. Also the distance back from
+    /// the core to the start of the match.
+    head: usize,
+    core: Vec<u8>,
+}
+
+/// A needle prepared for byte-wise searching at every bit offset it could
+/// match at.
+struct BytewiseSearch<'a> {
+    hay: Cow<'a, [u8]>,
+    /// Bit offset of `haystack`'s first bit within `hay`.
+    hay_offset: usize,
+    needle: &'a BS,
+    needle_len: usize,
+    patterns: Vec<PhasePattern>,
+    start: usize,
+    end: usize,
+}
+
+impl<'a> BytewiseSearch<'a> {
+    /// `None` when the needle is too short to cover a whole byte at one of the
+    /// offsets wanted, which leaves those cases to the bit-at-a-time scanners.
+    fn new(
+        haystack: &'a BS,
+        needle: &'a BS,
+        start: usize,
+        end: usize,
+        alignment_mod8: Option<usize>,
+    ) -> Option<Self> {
+        let needle_len = needle.len();
+        if needle_len == 0 || needle_len > end.saturating_sub(start) {
+            return None;
+        }
+        let (hay, hay_offset) = bitslice_storage(haystack);
+        let (needle_bytes, needle_offset) = bitslice_storage(needle);
+
+        // A match at haystack position `p` puts its core at byte
+        // `(hay_offset + p + head) / 8`, so `p` is congruent to
+        // `-(head + hay_offset)` mod 8 and an alignment requirement picks out
+        // exactly one head.
+        let heads: Vec<usize> = match alignment_mod8 {
+            Some(required) => vec![(8 - ((required + hay_offset) % 8)) % 8],
+            None => (0..8).collect(),
+        };
+
+        let mut patterns = Vec::with_capacity(heads.len());
+        for head in heads {
+            if needle_len < head + 8 {
+                return None;
+            }
+            let core_len = (needle_len - head) / 8;
+            let mut core = vec![0u8; core_len];
+            copy_bits(
+                &mut core,
+                0,
+                &needle_bytes,
+                needle_offset + head,
+                core_len * 8,
+            );
+            patterns.push(PhasePattern { head, core });
+        }
+
+        Some(BytewiseSearch {
+            hay,
+            hay_offset,
+            needle,
+            needle_len,
+            patterns,
+            start,
+            end,
+        })
+    }
+
+    /// The match position implied by a core found at byte `core_byte`, once
+    /// the bits outside the core and the bounds have been checked.
+    fn confirm(
+        &self,
+        pattern: &PhasePattern,
+        core_byte: usize,
+        lo: usize,
+        hi: usize,
+    ) -> Option<usize> {
+        let position = (8 * core_byte).checked_sub(pattern.head + self.hay_offset)?;
+        if position < lo || position + self.needle_len > hi {
+            return None;
+        }
+        let base = self.hay_offset + position;
+        let after_core = pattern.head + pattern.core.len() * 8;
+        for index in (0..pattern.head).chain(after_core..self.needle_len) {
+            if bit_at(&self.hay, base + index) != self.needle[index] {
+                return None;
+            }
+        }
+        Some(position)
+    }
+
+    /// Report every match at one bit offset that starts in `lo..hi`, in order.
+    /// `on_match` returns false to stop early.
+    ///
+    /// Narrowing `lo`/`hi` shrinks the bytes `memmem` is given, which is what
+    /// makes the later offsets cheap once an earlier one has found something.
+    fn scan<F>(&self, pattern: &PhasePattern, reverse: bool, lo: usize, hi: usize, mut on_match: F)
+    where
+        F: FnMut(usize) -> bool,
+    {
+        let core_len = pattern.core.len();
+        if core_len == 0 || hi < lo + self.needle_len {
+            return;
+        }
+        // Only the bytes a match starting in `lo..hi` could reach into.
+        let low = (self.hay_offset + lo) / 8;
+        let high = (self.hay_offset + hi).div_ceil(8).min(self.hay.len());
+        if high <= low || high - low < core_len {
+            return;
+        }
+        let window = &self.hay[low..high];
+
+        if reverse {
+            let mut upto = window.len();
+            while let Some(found) = memmem::rfind(&window[..upto], &pattern.core) {
+                if let Some(position) = self.confirm(pattern, low + found, lo, hi)
+                    && !on_match(position)
+                {
+                    return;
+                }
+                // `found + core_len <= upto`, so this always shrinks.
+                upto = found + core_len - 1;
+                if upto < core_len {
+                    return;
+                }
+            }
+        } else {
+            let mut from = 0;
+            while from + core_len <= window.len() {
+                let Some(found) = memmem::find(&window[from..], &pattern.core) else {
+                    return;
+                };
+                let at = from + found;
+                if let Some(position) = self.confirm(pattern, low + at, lo, hi)
+                    && !on_match(position)
+                {
+                    return;
+                }
+                from = at + 1;
+            }
+        }
+    }
+}
+
+#[inline]
+fn bit_at(bytes: &[u8], bit: usize) -> bool {
+    (bytes[bit >> 3] >> (7 - (bit & 7))) & 1 == 1
+}
+
+/// First (or last) match, searching over bytes at every offset a match could
+/// take. The outer `None` means the needle was unsuitable and the caller
+/// should fall back.
+fn try_find_bytewise(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+    reverse: bool,
+) -> PyResult<Option<Option<usize>>> {
+    let Some(search) = BytewiseSearch::new(haystack, needle, start, end, alignment_mod8) else {
+        return Ok(None);
+    };
+    // Each offset's own scan stops at its first hit; the answer is the best of
+    // the eight, since the offsets interleave. Once one has been found, the
+    // rest only have to beat it, so the searched range keeps shrinking.
+    let mut best: Option<usize> = None;
+    let (mut lo, mut hi) = (search.start, search.end);
+    for pattern in &search.patterns {
+        py.check_signals()?;
+        let mut first = None;
+        search.scan(pattern, reverse, lo, hi, |position| {
+            first = Some(position);
+            false
+        });
+        if let Some(position) = first {
+            let better = match best {
+                None => true,
+                Some(current) if reverse => position > current,
+                Some(current) => position < current,
+            };
+            if better {
+                best = Some(position);
+                if reverse {
+                    lo = position;
+                } else {
+                    hi = position + search.needle_len;
+                }
+            }
+        }
+    }
+    Ok(Some(best))
+}
+
+/// Every match position, ascending.
+fn try_find_all_bytewise(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Option<Vec<u64>>> {
+    let Some(search) = BytewiseSearch::new(haystack, needle, start, end, alignment_mod8) else {
+        return Ok(None);
+    };
+    let mut matches = Vec::new();
+    for pattern in &search.patterns {
+        py.check_signals()?;
+        search.scan(pattern, false, search.start, search.end, |position| {
+            matches.push(position as u64);
+            true
+        });
+    }
+    // Each offset produced an ascending run; the offsets interleave.
+    matches.sort_unstable();
+    Ok(Some(matches))
+}
+
+fn try_count_bytewise(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &BS,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+) -> PyResult<Option<usize>> {
+    let Some(search) = BytewiseSearch::new(haystack, needle, start, end, alignment_mod8) else {
+        return Ok(None);
+    };
+    let mut count = 0;
+    for pattern in &search.patterns {
+        py.check_signals()?;
+        search.scan(pattern, false, search.start, search.end, |_| {
+            count += 1;
+            true
+        });
+    }
+    Ok(Some(count))
+}
+
 pub(crate) fn find_bitvec(
     py: Python<'_>,
     haystack: &BS,
@@ -63,6 +328,10 @@ pub(crate) fn find_bitvec_aligned(
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
+        return Ok(found);
+    }
+    if let Some(found) = try_find_bytewise(py, haystack, needle, start, end, alignment_mod8, false)?
+    {
         return Ok(found);
     }
     if needle.len() <= 64 {
@@ -100,6 +369,10 @@ pub(crate) fn find_bitvec_with_lps_aligned(
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
         return Ok(found);
     }
+    if let Some(found) = try_find_bytewise(py, haystack, needle, start, end, alignment_mod8, false)?
+    {
+        return Ok(found);
+    }
     if needle.len() <= 64 {
         return find_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
     }
@@ -129,6 +402,10 @@ pub(crate) fn rfind_bitvec_aligned(
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
+        return Ok(found);
+    }
+    if let Some(found) = try_find_bytewise(py, haystack, needle, start, end, alignment_mod8, true)?
+    {
         return Ok(found);
     }
     if needle.len() <= 64 {
@@ -210,6 +487,11 @@ pub(crate) fn collect_find_all_positions(
             byte_current = byte_pos + 1;
         }
 
+        return Ok(matches);
+    }
+
+    if let Some(matches) = try_find_all_bytewise(py, haystack, needle, start, end, alignment_mod8)?
+    {
         return Ok(matches);
     }
 
@@ -1276,6 +1558,10 @@ pub(crate) fn count_bitvec(
             count += 1;
             byte_current = byte_pos + 1;
         }
+        return Ok(count);
+    }
+
+    if let Some(count) = try_count_bytewise(py, haystack, needle, start, end, alignment_mod8)? {
         return Ok(count);
     }
 
