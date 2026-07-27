@@ -366,13 +366,16 @@ def test_mutibs_raw_bytes_and_offset():
     b = a[4:]
     b += '0x77'
     assert b == Tibs('0xf77')
+    # The offset says where the value starts within the bytes returned, and is
+    # what has to be fed back to read them. Slicing a Mutibs copies rather than
+    # sharing, so the copy is free to start on a byte boundary and does; only
+    # Tibs, which slices by sharing storage, has to report a non-zero offset.
     raw_bytes, offset, length = b.to_raw_data()
-    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == Tibs('0x0f77')
-    assert offset == 4
+    assert Tibs.from_bytes(raw_bytes, offset, length) == Tibs('0xf77')
+    assert length == 12
     assert b == Tibs('0xf77')
     raw_bytes, offset, length = b.as_raw_data()
-    assert Tibs.from_bytes(raw_bytes) & '0x0fff' == Tibs('0x0f77')
-    assert offset == 4
+    assert Tibs.from_bytes(raw_bytes, offset, length) == Tibs('0xf77')
     assert length == 12
     assert b == Tibs()
 

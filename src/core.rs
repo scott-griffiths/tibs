@@ -816,7 +816,7 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
-        Self::from_bv(self.as_bitslice()[start_bit..start_bit + length].to_bitvec())
+        Self::from_bv(Mutibs::copied_range(self, start_bit, length))
     }
 
     #[inline]

@@ -215,6 +215,27 @@ GUARDS: list[Guard] = [
         fast=lambda: Mutibs(BIG_T),
         limit=4.0,
     ),
+    # ---- 4b. slicing a Mutibs -------------------------------------------
+    # Slicing a Mutibs copies (unlike Tibs, which shares storage and is close
+    # to free), so a whole-object copy is the right reference: both allocate
+    # and fill about a megabit. The mid-byte case additionally needs a shift
+    # pass, which is what the looser limit allows for.
+    Guard(
+        name="M[8:] vs Mutibs(M)",
+        site="core.rs get_slice_unchecked for Mutibs -> copied_range",
+        slow=lambda: BIG_M[8:],
+        fast=lambda: Mutibs(BIG_M),
+        limit=3.0,
+        same_result=False,
+    ),
+    Guard(
+        name="M[3:] unaligned vs Mutibs(M)",
+        site="core.rs get_slice_unchecked for Mutibs -> copied_range",
+        slow=lambda: BIG_M[3:],
+        fast=lambda: Mutibs(BIG_M),
+        limit=5.0,
+        same_result=False,
+    ),
     # ---- 5. the concatenation family ------------------------------------
     Guard(
         name="from_joined([a, b]) vs a + b",

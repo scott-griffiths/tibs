@@ -47,6 +47,31 @@ pub(crate) fn copy_unaligned_padded_bytes(
     mask_padding_bits(out, len_bits);
 }
 
+/// The `len_bits` bits starting `bit_offset` bits into `bytes`, returned as
+/// left aligned bytes with any trailing padding cleared.
+///
+/// `bytes` must hold at least `(bit_offset + len_bits)` bits.
+pub(crate) fn padded_bytes_from_offset(
+    bytes: &[u8],
+    bit_offset: usize,
+    len_bits: usize,
+) -> Vec<u8> {
+    debug_assert!(bit_offset < 8);
+    if len_bits == 0 {
+        return Vec::new();
+    }
+    let byte_length = len_bits.div_ceil(8);
+    debug_assert!(bytes.len() >= byte_length);
+    if bit_offset == 0 {
+        let mut out = bytes[..byte_length].to_vec();
+        mask_padding_bits(&mut out, len_bits);
+        return out;
+    }
+    let mut out = vec![0u8; byte_length];
+    copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, &mut out);
+    out
+}
+
 /// Reverse the bits of `bits` in place, working over the raw storage.
 ///
 /// `BitSlice::reverse` swaps one bit at a time through bit pointers, which

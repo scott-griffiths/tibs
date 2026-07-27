@@ -6,7 +6,7 @@ use crate::helpers::{
     BS, BV, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
     bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, find_bitvec, find_bitvec_aligned,
-    move_bits, promote_to_bv, str_to_bv, validate_index, validate_length,
+    move_bits, padded_bytes_from_offset, promote_to_bv, str_to_bv, validate_index, validate_length,
     validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{
@@ -84,22 +84,34 @@ impl Mutibs {
         self.as_bitvec_ref().as_bitslice()
     }
 
-    /// A copy of the bits as an owned BitVec.
+    /// A copy of `length` bits starting `start_bit` bits in, as an owned
+    /// BitVec whose own storage starts on a byte boundary.
     ///
-    /// Routing through the byte data makes this a memcpy where `BitVec::clone`
-    /// walks the storage element by element. The copy also starts on a byte
-    /// boundary even when the source did not, which is what `Tibs::to_bitvec`
-    /// already produced, so the two promotion paths now agree and later
-    /// operations meet aligned data.
-    #[inline]
-    pub(crate) fn to_bitvec(&self) -> BV {
-        let len = self.len();
-        if len == 0 {
+    /// Copying through the raw bytes is a shift-and-copy sweep. The obvious
+    /// spelling, `self.as_bitslice()[range].to_bitvec()`, instead rebuilds the
+    /// storage one element at a time *and* keeps whatever head offset the
+    /// source had, which then denies the byte-wide paths to everything done to
+    /// the result afterwards. Landing on bit zero also makes this agree with
+    /// `Tibs::to_bitvec`, so both promotion routes now produce the same shape.
+    ///
+    /// `start_bit + length` must be within the bit length.
+    pub(crate) fn copied_range(&self, start_bit: usize, length: usize) -> BV {
+        debug_assert!(start_bit + length <= self.len());
+        if length == 0 {
             return BV::new();
         }
-        let mut result = BV::from_vec(<Self as BitCollection>::to_padded_byte_data(self));
-        result.truncate(len);
+        // Where the wanted bits begin within the backing storage, which itself
+        // need not start on a byte boundary.
+        let absolute = self.storage_head_offset() + start_bit;
+        let bytes = &self.data.as_raw_slice()[absolute / 8..];
+        let mut result = BV::from_vec(padded_bytes_from_offset(bytes, absolute % 8, length));
+        result.truncate(length);
         result
+    }
+
+    #[inline]
+    pub(crate) fn to_bitvec(&self) -> BV {
+        self.copied_range(0, self.len())
     }
 
     #[inline]
