@@ -5,8 +5,9 @@
 //! this module knows about `Tibs`, `Mutibs` or Python; the collection-level
 //! logic that drives it lives in `core.rs`.
 
-use super::bits::{BS, BV, head_bit_offset};
+use super::bits::{BS, BV, BitAccumulator, head_bit_offset};
 use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
+use super::splice::{copy_bits, move_bits};
 use bitvec::prelude::*;
 
 #[inline]
@@ -98,6 +99,41 @@ pub(crate) fn reverse_bitvec_in_place(bits: &mut BV) {
     let mut reversed = BV::from_vec(bytes);
     reversed.truncate(len);
     *bits = reversed;
+}
+
+/// Rotate the `len` bits starting `offset` bits into `bytes` left by `by`.
+///
+/// `BitSlice::rotate_left` carries at most one word per pass and does a
+/// full-width `copy_within` on every one of them, so it costs `O(len * by)`:
+/// rotating a megabit by half its length takes seconds. Rotating is really
+/// just a three-way move, so this costs `O(len)` however far it rotates.
+///
+/// The bits outside the rotated span are left alone, so this is safe to point
+/// at a range inside a larger buffer.
+pub(crate) fn rotate_bits_left(bytes: &mut [u8], offset: usize, len: usize, by: usize) {
+    debug_assert!(by <= len);
+    debug_assert!(offset + len <= bytes.len() * 8);
+    if by == 0 || by == len {
+        return;
+    }
+    // Whichever of the two pieces is smaller becomes the temporary, so the
+    // extra allocation is at most half the span however lopsided the rotation.
+    let wrapping = by.min(len - by);
+    let mut saved = vec![0u8; wrapping.div_ceil(8)];
+    if by <= len - by {
+        // The leading `by` bits wrap round to the end: stash them, slide the
+        // rest down over where they were, then write them back at the end.
+        copy_bits(&mut saved, 0, bytes, offset, by);
+        move_bits(bytes, offset + by, offset, len - by);
+        copy_bits(bytes, offset + len - by, &saved, 0, by);
+    } else {
+        // The same rotation read from the other end: the trailing `len - by`
+        // bits move to the front, so stash those instead.
+        let tail = len - by;
+        copy_bits(&mut saved, 0, bytes, offset + by, tail);
+        move_bits(bytes, offset, offset + tail, by);
+        copy_bits(bytes, offset, &saved, 0, tail);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -515,6 +551,122 @@ where
 /// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
 /// be the same length and `value` must be `mask.count_ones()` bits long; both
 /// are the caller's responsibility to check.
+/// Move the bits of `x` picked out by `m` down to the low end, keeping their
+/// order and clearing everything above them.
+///
+/// Hacker's Delight figure 7-9, "compress right". Six parallel-prefix rounds
+/// move each selected bit past the cleared bits below it, so the whole word is
+/// done branchlessly in a fixed number of operations however the mask falls.
+/// x86 has this as a single `PEXT` instruction, but it needs runtime feature
+/// detection, is famously slow on pre-Zen 3 AMD, and has no aarch64 equivalent,
+/// so the portable version earns its place.
+#[inline]
+fn compress_bits(mut x: u64, mut m: u64) -> u64 {
+    x &= m;
+    let mut mk = !m << 1;
+    for i in 0..6 {
+        let mut mp = mk ^ (mk << 1);
+        mp ^= mp << 2;
+        mp ^= mp << 4;
+        mp ^= mp << 8;
+        mp ^= mp << 16;
+        mp ^= mp << 32;
+        let mv = mp & m;
+        m = (m ^ mv) | (mv >> (1 << i));
+        let t = x & mv;
+        x = (x ^ t) | (t >> (1 << i));
+        mk &= !mp;
+    }
+    x
+}
+
+/// Above this many set bits in a word, [`compress_bits`] costs less than
+/// picking the bits out one at a time.
+///
+/// Compress is a fixed six rounds however few bits it moves, while picking
+/// costs a handful of instructions per bit, so the two cross over at a low
+/// count. A sparse mask - one set bit every word or two, which is what a mask
+/// built from scattered positions looks like - would otherwise pay the full
+/// fixed cost per word to collect a single bit.
+const SPARSE_WORD_BITS: usize = 8;
+
+/// The bits of `s` picked out by `m`, in order, right-aligned in the low
+/// `selected` bits. Walks the set positions, so it costs per set bit.
+#[inline]
+fn pick_bits(s: u64, m: u64, selected: usize) -> u64 {
+    debug_assert_eq!(m.count_ones() as usize, selected);
+    let mut rest = m;
+    let mut value = 0u64;
+    while rest != 0 {
+        // The highest remaining set bit is the earliest in the run, so taking
+        // them from the top builds the value in order.
+        let from_top = rest.leading_zeros();
+        value = (value << 1) | ((s >> (63 - from_top)) & 1);
+        rest &= !(1u64 << (63 - from_top));
+    }
+    value
+}
+
+/// Gather the bits of `src` at the positions set in `mask`, packed together
+/// (the PEXT operation).
+///
+/// `src` and `mask` are left-aligned runs holding `len_bits` bits each, and
+/// `ones` is `mask`'s population count. Walking the mask's set positions and
+/// pushing one bit at a time costs a bit-pointer round trip per set bit; this
+/// takes a word at a time, and skips or copies whole words outright where the
+/// mask is uniform, which is the shape most masks actually have.
+pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, ones: usize) -> BV {
+    debug_assert!(src.len() >= len_bits.div_ceil(8));
+    debug_assert!(mask.len() >= len_bits.div_ceil(8));
+    let mut out = BitAccumulator::with_bit_capacity(Some(ones));
+
+    let whole_words = len_bits / 64;
+    for index in 0..whole_words {
+        let at = index * 8;
+        // Big-endian reads because `Msb0` makes the first bit of the run the
+        // most significant bit of the word, which is where compress wants it.
+        let m = read_be_u64(mask, at);
+        if m == 0 {
+            continue;
+        }
+        if m == u64::MAX && out.is_byte_aligned() {
+            // The whole word is selected and the output happens to sit on a
+            // byte boundary, so these bytes go straight across untouched.
+            out.push_aligned_bytes(&src[at..at + 8]);
+            continue;
+        }
+        let s = read_be_u64(src, at);
+        let selected = m.count_ones() as usize;
+        if m == u64::MAX {
+            out.push_wide(s, 64);
+        } else if selected <= SPARSE_WORD_BITS {
+            out.push(pick_bits(s, m, selected), selected);
+        } else {
+            out.push_wide(compress_bits(s, m), selected);
+        }
+    }
+
+    // Fewer than 64 bits left over, so gather them into one final word.
+    let done = whole_words * 64;
+    if done < len_bits {
+        let rest = len_bits - done;
+        let byte_start = done / 8;
+        let byte_count = rest.div_ceil(8);
+        let mut source = [0u8; 8];
+        let mut selector = [0u8; 8];
+        source[..byte_count].copy_from_slice(&src[byte_start..byte_start + byte_count]);
+        selector[..byte_count].copy_from_slice(&mask[byte_start..byte_start + byte_count]);
+        // Drop anything past the end of the value, which the padding may hold.
+        let m = u64::from_be_bytes(selector) & (!0u64 << (64 - rest));
+        if m != 0 {
+            let s = u64::from_be_bytes(source);
+            out.push_wide(compress_bits(s, m), m.count_ones() as usize);
+        }
+    }
+
+    out.into_bitvec()
+}
+
 pub(crate) fn deposit_masked(bits: &mut BS, value: &BS, mask: &BS) {
     debug_assert_eq!(bits.len(), mask.len());
     debug_assert_eq!(value.len(), mask.count_ones());

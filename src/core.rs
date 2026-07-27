@@ -1,7 +1,7 @@
 use crate::helpers::{
     BS, BV, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes, bv_from_zeros,
     byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
-    for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
+    extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
     logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
     normalize_split_position, oct_from_padded_bytes, reverse_padded_bits, validate_index,
     validate_slice,
@@ -96,14 +96,17 @@ pub(crate) trait BitCollection: Sized + Clone {
     /// and `mask` must be the same length.
     fn extract_masked(&self, mask: &impl BitCollection) -> BV {
         debug_assert!(self.len() == mask.len());
-        let bits = self.as_bitslice();
-        let mask_bits = mask.as_bitslice();
-        let mut out = BV::with_capacity(mask_bits.count_ones());
-        // Walking the mask's set positions skips its zero runs.
-        for pos in mask_bits.iter_ones() {
-            out.push(bits[pos]);
+        let len = self.len();
+        if len == 0 {
+            return BV::new();
         }
-        out
+        let ones = mask.count(true);
+        extract_masked_bytes(
+            &self.padded_byte_data_cow(),
+            &mask.padded_byte_data_cow(),
+            len,
+            ones,
+        )
     }
 
     #[inline]

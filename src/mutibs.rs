@@ -6,8 +6,8 @@ use crate::helpers::{
     BS, BV, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
     bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, find_bitvec, find_bitvec_aligned,
-    move_bits, padded_bytes_from_offset, promote_to_bv, str_to_bv, validate_index, validate_length,
-    validate_logical_op_lengths, validate_shift, validate_slice,
+    move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -548,12 +548,15 @@ impl Mutibs {
 
         let (start, end) = validate_slice(self.len(), start, end)?;
         if start != end {
-            let n = n % (end - start);
-            if rotate_left {
-                self.as_mut_bitvec_ref()[start..end].rotate_left(n);
-            } else {
-                self.as_mut_bitvec_ref()[start..end].rotate_right(n);
-            }
+            let span = end - start;
+            let n = n % span;
+            // Rotating right by n is rotating left by the rest of the span.
+            let by = if rotate_left { n } else { (span - n) % span };
+            // The span is measured from the first bit of the value, which need
+            // not be the first bit of the storage.
+            let head = self.storage_head_offset();
+            let bytes = self.as_mut_bitvec_ref().as_raw_mut_slice();
+            rotate_bits_left(bytes, head + start, span, by);
         }
         Ok(())
     }

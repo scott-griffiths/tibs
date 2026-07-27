@@ -87,6 +87,27 @@ impl BitAccumulator {
         self.push(value & ((1u64 << low) - 1), low);
     }
 
+    /// Whether the next push would start on a byte boundary, and so whether
+    /// [`Self::push_aligned_bytes`] may be used.
+    #[inline]
+    pub(crate) fn is_byte_aligned(&self) -> bool {
+        self.pending == 0
+    }
+
+    /// Append whole bytes directly, skipping the carry register.
+    ///
+    /// Only valid while the accumulator sits on a byte boundary, which
+    /// [`Self::is_byte_aligned`] reports. Runs that are already whole bytes
+    /// are common enough - any stretch of a mask that selects everything, or
+    /// a field copied wholesale - to be worth not funnelling a byte at a time
+    /// through the carry.
+    #[inline]
+    pub(crate) fn push_aligned_bytes(&mut self, bytes: &[u8]) {
+        debug_assert!(self.is_byte_aligned());
+        self.bytes.extend_from_slice(bytes);
+        self.length += bytes.len() * 8;
+    }
+
     /// Append every bit of `bits`, most significant first.
     ///
     /// The general-purpose entry point, for values that the caller could not
