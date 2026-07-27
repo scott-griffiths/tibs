@@ -28,7 +28,8 @@ formats, bitsets, compressed data and streams where fields can have many differe
 interpretations and be any number of bits long.
 
 It is used to power the popular [bitstring](https://github.com/scott-griffiths/bitstring)
-library, which is by the same author.
+library, which is by the same author. The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
+
 
 ## Install
 
@@ -39,36 +40,38 @@ pip install tibs
 Tibs works with Python 3.11 and later. There are pre-built wheels for most
 common platforms; if there are issues then please let me know.
 
-The full documentation is available on [Read the Docs](https://tibs.readthedocs.io/en/latest/).
-
-
 ## Overview
 
 The tibs library provides two main classes: `Tibs`, which is an immutable sequence of bits
 (similar to how `bytes` works in Python as a sequence of bytes) and `Mutibs`, which is a mutable version (similar to `bytearray` in Python).
 
-A `Tibs` can be thought of as just a sequence of bits. It provides an interface very similar
+### 1. A container of bits
+
+`Tibs` provides an interface very similar
 to `bytes` and other Python containers - you can slice it, concatenate, search it etc. in a
 familiar way, with `Mutibs` adding on mutating methods.
 
-> `find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `chunks` · `+` · `in`
+`find` · `rfind` · `find_all` · `replace` · `count` · `starts_with` · `split_at` · `chunks` · `+` · `in`
 
 This 'container of bits' mental model might be all that you need, but the library also gives
 you two broad views of the binary data.
 
-1. **As typed fields.** Pull integers, floats, strings, hex or binary of any
+### 2. As Typed fields
+
+Pull integers, floats, strings, hex or binary of any
 bit length straight out of the bits, without hand-rolling shifts and masks. Little-endian ordering and LSB0 field labels are handled elegantly so you don't reshuffle data
 yourself, and `extract` / `deposit` reach fields that are scattered across a word.
 
-> `from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extract` / `deposit` · f-string formatting
+`from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extract` / `deposit` · f-string formatting
 
-2. **As a set of bits.** Bitwise algebra, cardinalities and set predicates, with
+### 3. As a set of bits
+
+Bitwise algebra, cardinalities and set predicates, with
 no intermediate object built along the way. `Mutibs` can be used as a large mutable bitset.
 
-> `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
+`&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
 
-These aren't separate modes or separate types — it's one object, and the lenses are
-just different questions you ask of the same bits.
+These aren't separate modes or types — it's one object, with a rich interface to ask different questions of the same bits.
 
 And it's fast — usually significantly faster than similar libraries, 100% written in Rust
 and with a large emphasis on performance.
@@ -78,7 +81,7 @@ and with a large emphasis on performance.
 
 Some real code to illustrate.
 
-**As a sequence of bits.** `Tibs` works like `bytes`, except that the unit is the bit instead of the byte. `Mutibs` is its mutable counterpart, for patching in place.
+**As a container of bits.** `Tibs` works like `bytes`, except that the unit is the bit instead of the byte. `Mutibs` is its mutable counterpart, for patching in place.
 
 ```pycon
 >>> from tibs import Tibs
