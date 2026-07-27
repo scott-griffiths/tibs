@@ -78,57 +78,67 @@ and with a large emphasis on performance.
 
 Some real code to illustrate.
 
-**As a sequence of bits.** `Tibs` is immutable, like `bytes` — good for parsing,
-slicing, hashing and holding stable values. `Mutibs` is its mutable counterpart,
-for patching in place.
+**As a sequence of bits.** `Tibs` works like `bytes`, except that the unit is the bit instead of the byte. `Mutibs` is its mutable counterpart, for patching in place.
 
 ```pycon
 >>> from tibs import Tibs
->>> # Four flag bits, a 12-bit integer, then two payload bytes.
->>> packet = Tibs.from_joined(["0b1010", Tibs.from_u(3200, 12), b"OK"])
->>> packet
-Tibs('0xac804f4b')
+>>> # A 5-bit header, a message, then 3 bits of padding: nothing is byte aligned.
+>>> frame = Tibs('0b10110') + b'the cat rarely blinked' + [0, 0, 0]
+>>> bytes(frame).find(b'cat')      # as bytes, the message has been scrambled
+-1
+>>> pos = frame.find(b'cat')       # but the tibs still knows where it is
+>>> pos, frame[pos:pos + 24].bytes
+(37, b'cat')
 
->>> flags, size, payload = packet.split_at([4, 16])
->>> flags.bin, size.u, payload.bytes
-('1010', 3200, b'OK')
-
->>> patched = packet.to_mutibs()
->>> patched[4:16] = Tibs.from_u(2047, 12)
->>> patched[-8:] = b"!"
->>> patched
-Mutibs('0xa7ff4f21')
->>> packet  # the original is untouched
-Tibs('0xac804f4b')
+>>> patched = frame.to_mutibs()
+>>> patched[pos:pos + 24] = b'squirrel'
+>>> patched[5:-3].bytes
+b'the squirrel rarely blinked'
+>>> len(frame), len(patched)       # 40 bits longer, spliced in at bit 37
+(184, 224)
 
 ```
 
-**As typed fields.** Pull fields out as integers, floats or bytes, letting
-a view take care of byte order and bit numbering — the sort of job that gets awkward
-quickly with plain bytes and masks.
+**As typed fields.** Read and write integers, floats and strings of any bit length,
+with a view taking care of byte order and bit numbering — the sort of job that gets
+awkward quickly with plain bytes and masks.
 
 ```pycon
->>> # Linux eBPF: little-endian instruction, LSB0 field labels.
->>> instruction = Tibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11")).lsb0.le
->>> dst_reg = instruction.field(11, 8).u
->>> f"r{dst_reg} += {instruction.field(63, 32):#x}"
-'r1 += 0x11223344'
+>>> # What's inside a float? A sign bit, an 8-bit exponent and a 23-bit fraction.
+>>> x = Tibs.from_f(-118.625, 32)
+>>> f"{x:_.8b}"                    # grouped into bytes to make it readable
+'11000010_11101101_01000000_00000000'
+>>> sign, exponent, fraction = x.split_at([1, 9])
+>>> (-1) ** sign.u * 2 ** (exponent.u - 127) * (1 + fraction.u / 2 ** 23)
+-118.625
+
+>>> Tibs(b'\x00\x40\xed\xc2').le.f     # the same value, from a little-endian file
+-118.625
+>>> Tibs.from_u(x.u + 1, 32).f         # the adjacent float32, one bit away
+-118.62500762939453
 
 ```
 
-**As a set of bits.** Compare containers as sets — cardinalities and
-predicates that never build an intermediate object.
+**As a set of bits.** Bitwise algebra and cardinalities over millions of bits, without
+building an intermediate object just to count it.
 
 ```pycon
->>> # Are all the required capability bits granted?
->>> required, granted = Tibs('0b0010_1000'), Tibs('0b1010_1100')
->>> required.is_subset_of(granted)
-True
+>>> from math import isqrt
+>>> from tibs import Mutibs
+>>> # A sieve of Eratosthenes over ten million numbers, one bit each.
+>>> limit = 10_000_000
+>>> sieve = Mutibs.from_ones(limit)
+>>> sieve.unset([0, 1])
+>>> for p in range(2, isqrt(limit) + 1):
+...     if sieve[p]:
+...         sieve.unset(range(p * p, limit, p))
+...
+>>> sieve.count(1)                     # primes below ten million
+664579
 
->>> # Hamming distance between two 256-bit fingerprints.
->>> a, b = Tibs.from_random(256, seed=b'doc-a'), Tibs.from_random(256, seed=b'doc-b')
->>> a.count_xor(b)
-138
+>>> # Counting twin, cousin and sexy primes: pairs 2, 4 and 6 apart:
+>>> [sieve.count_and(sieve >> d) for d in (2, 4, 6)]
+[58980, 58622, 117207]
 
 ```
 
