@@ -30,7 +30,8 @@ pub(crate) use python::{
 };
 pub(crate) use random::bv_from_random;
 pub(crate) use raw_bytes::{
-    bv_from_bytes_slice, byte_search_prep, mask_padding_bits, reverse_padded_bits,
+    bv_from_bytes_slice, byte_search_prep, mask_padding_bits, reverse_byte_groups,
+    reverse_padded_bits,
 };
 pub(crate) use search::{
     MaskedMatcher, SIGNAL_CHECK_INTERVAL, collect_find_all_positions,
@@ -39,7 +40,7 @@ pub(crate) use search::{
     find_bitvec_masked_aligned, find_bitvec_with_lps_aligned, rfind_bitvec_aligned,
     rfind_bitvec_with_reversed_lps_aligned,
 };
-pub(crate) use splice::{copy_bits, move_bits};
+pub(crate) use splice::{copy_bits, fill_bits, move_bits};
 pub(crate) use validation::{
     normalize_split_position, validate_index, validate_length, validate_logical_op_lengths,
     validate_shift, validate_slice,

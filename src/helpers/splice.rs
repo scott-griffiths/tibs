@@ -127,6 +127,30 @@ pub(crate) fn copy_bits(
 
 /// Move `len` bits within `bytes` from bit `src_offset` to bit `dst_offset`,
 /// leaving every bit outside the destination range untouched.
+/// Set the `len` bits starting at `offset` to `value`.
+///
+/// Whole bytes go out with a `memset`; only the up-to-seven bits at each end
+/// are written singly. `BitSlice::fill` walks every bit through a bit pointer.
+pub(crate) fn fill_bits(bytes: &mut [u8], offset: usize, len: usize, value: bool) {
+    if len == 0 {
+        return;
+    }
+    debug_assert!(offset + len <= bytes.len() * 8);
+
+    let lead = bits_to_boundary(offset, len);
+    for i in 0..lead {
+        set_bit(bytes, offset + i, value);
+    }
+
+    let whole = (len - lead) >> 3;
+    let first = (offset + lead) >> 3;
+    bytes[first..first + whole].fill(if value { !0u8 } else { 0u8 });
+
+    for i in lead + whole * 8..len {
+        set_bit(bytes, offset + i, value);
+    }
+}
+
 pub(crate) fn move_bits(bytes: &mut [u8], src_offset: usize, dst_offset: usize, len: usize) {
     if len == 0 || src_offset == dst_offset {
         return;

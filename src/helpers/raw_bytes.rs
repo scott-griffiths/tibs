@@ -127,6 +127,35 @@ pub(crate) fn copy_shifted_bytes(data: &[u8], bit_offset: usize, out: &mut [u8])
 /// `bytes[0]`) with the trailing `bytes.len() * 8 - len_bits` padding bits
 /// zeroed. The reversed bits are left aligned again, and the padding is
 /// still zero afterwards.
+/// Reverse each `width`-byte group of `bytes` in place, which is the byte
+/// order swap.
+///
+/// The widths that matter are the ones integers come in, and for those the
+/// reversal is one `bswap` instruction rather than a loop over the group, so
+/// they get their own arms and the run vectorises.
+pub(crate) fn reverse_byte_groups(bytes: &mut [u8], width: usize) {
+    macro_rules! swap_as {
+        ($ty:ty, $n:expr) => {
+            for group in bytes.chunks_exact_mut($n) {
+                let value = <$ty>::from_ne_bytes(group.try_into().unwrap());
+                group.copy_from_slice(&value.swap_bytes().to_ne_bytes());
+            }
+        };
+    }
+    match width {
+        1 => {}
+        2 => swap_as!(u16, 2),
+        4 => swap_as!(u32, 4),
+        8 => swap_as!(u64, 8),
+        16 => swap_as!(u128, 16),
+        _ => {
+            for group in bytes.chunks_exact_mut(width) {
+                group.reverse();
+            }
+        }
+    }
+}
+
 pub(crate) fn reverse_padded_bits(bytes: &mut [u8], len_bits: usize) {
     debug_assert_eq!(bytes.len(), len_bits.div_ceil(8));
     reverse_all_bits(bytes);

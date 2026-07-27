@@ -3,8 +3,8 @@ use crate::helpers::{
     bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
     extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
     logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
-    normalize_split_position, oct_from_padded_bytes, reverse_padded_bits, validate_index,
-    validate_slice,
+    normalize_split_position, oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits,
+    validate_index, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -440,9 +440,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
 
         let mut bytes = self.to_byte_data()?;
-        for chunk in bytes.chunks_mut(byte_length) {
-            chunk.reverse();
-        }
+        reverse_byte_groups(&mut bytes, byte_length);
         Ok(BitCollection::from_bv(BV::from_vec(bytes)))
     }
 

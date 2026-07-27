@@ -7,10 +7,10 @@ use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
     bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, find_bitvec, find_bitvec_aligned,
-    head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left,
-    str_to_bv, validate_index, validate_length, validate_logical_op_lengths, validate_shift,
-    validate_slice,
+    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, fill_bits, find_bitvec,
+    find_bitvec_aligned, head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv,
+    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -140,6 +140,28 @@ impl Mutibs {
         let mut grown = BV::from_vec(bytes);
         grown.truncate(new_len);
         self.data = grown;
+    }
+
+    /// Shift the value in place by `by` bits, zero filling the vacated end.
+    ///
+    /// `by` must not exceed the bit length. bitvec's `shift_start`/`shift_end`
+    /// carry one bit at a time; this is a byte-wide slide and a `memset`.
+    pub(crate) fn shift_in_place(&mut self, by: usize, towards_start: bool) {
+        let len = self.len();
+        debug_assert!(by <= len);
+        if by == 0 || len == 0 {
+            return;
+        }
+        let head = self.storage_head_offset();
+        let bytes = self.as_mut_bitvec_ref().as_raw_mut_slice();
+        let keep = len - by;
+        if towards_start {
+            move_bits(bytes, head + by, head, keep);
+            fill_bits(bytes, head + keep, by, false);
+        } else {
+            move_bits(bytes, head, head + by, keep);
+            fill_bits(bytes, head, by, false);
+        }
     }
 
     /// Append every bit of `bits` in place.
@@ -599,7 +621,19 @@ impl Mutibs {
             &self.get_slice_unchecked(start, end - start),
             byte_length,
         )?;
-        self.as_mut_bitvec_ref()[start..end].copy_from_bitslice(swapped.as_bitslice());
+        // Write back over bytes; `copy_from_bitslice` moves a bit at a time
+        // even when, as here, both sides are byte aligned.
+        let span = end - start;
+        let head = self.storage_head_offset();
+        let source_head = swapped.storage_head_offset();
+        let source = swapped.as_bitvec_ref().as_raw_slice();
+        copy_bits(
+            self.data.as_raw_mut_slice(),
+            head + start,
+            source,
+            source_head,
+            span,
+        );
         Ok(())
     }
 
@@ -3622,7 +3656,7 @@ impl Mutibs {
     pub fn __ilshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         // Shifting by the whole length or more zero-fills, matching __lshift__.
         let shift = validate_shift(&*slf, n)?.min(slf.len());
-        slf.as_mut_bitvec_ref().shift_start(shift);
+        slf.shift_in_place(shift, true);
         Ok(())
     }
 
@@ -3643,7 +3677,7 @@ impl Mutibs {
     pub fn __irshift__(mut slf: PyRefMut<'_, Self>, n: i64) -> PyResult<()> {
         // Shifting by the whole length or more zero-fills, matching __rshift__.
         let shift = validate_shift(&*slf, n)?.min(slf.len());
-        slf.as_mut_bitvec_ref().shift_end(shift);
+        slf.shift_in_place(shift, false);
         Ok(())
     }
 
