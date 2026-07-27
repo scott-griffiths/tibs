@@ -1,6 +1,6 @@
 use crate::helpers::{
-    BS, BV, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes, bv_from_zeros,
-    byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
+    BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
+    bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
     extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
     logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
     normalize_split_position, oct_from_padded_bytes, reverse_padded_bits, validate_index,
@@ -258,25 +258,9 @@ pub(crate) trait BitCollection: Sized + Clone {
         count_bitslice(self.as_bitslice(), count_ones)
     }
 
+    #[inline]
     fn multiply(&self, n: usize) -> Self {
-        let len = self.len();
-        if n == 0 || len == 0 {
-            return BitCollection::empty();
-        }
-        let mut bv = BV::with_capacity(len * n);
-        bv.extend_from_bitslice(self.as_bitslice());
-
-        let mut copies = 1;
-        while copies <= n / 2 {
-            let current = bv.clone();
-            bv.extend_from_bitslice(&current);
-            copies *= 2;
-        }
-        while copies < n {
-            bv.extend_from_bitslice(self.as_bitslice());
-            copies += 1;
-        }
-        Self::from_bv(bv)
+        Self::from_bv(repeat_bitcollection(self, n))
     }
 
     fn collect_chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
@@ -749,26 +733,50 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 }
 
+/// `count` copies of `bits`, laid end to end.
+///
+/// One byte-wide pass per copy, so the cost is the size of the result.
+/// `BitSlice::repeat` and the doubling this replaces both moved the same bits
+/// a bit at a time.
+pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> BV {
+    let len = bits.len();
+    if count == 0 || len == 0 {
+        return BV::new();
+    }
+    let mut out = BitConcat::with_bit_capacity(len * count);
+    match bits.raw_data_ref() {
+        Some((bytes, offset, _)) => {
+            for _ in 0..count {
+                out.push_run(bytes, offset, len);
+            }
+        }
+        None => {
+            let bytes = bits.padded_byte_data_cow();
+            for _ in 0..count {
+                out.push_run(&bytes, 0, len);
+            }
+        }
+    }
+    out.into_bitvec()
+}
+
+/// Append every bit of `bits` to `out`, borrowing its storage where the layout
+/// allows and realigning into an owned copy only when it does not.
+pub(crate) fn push_collection_run(out: &mut BitConcat, bits: &impl BitCollection) {
+    match bits.raw_data_ref() {
+        Some((bytes, offset, _)) => out.push_run(bytes, offset, bits.len()),
+        None => out.push_run(&bits.padded_byte_data_cow(), 0, bits.len()),
+    }
+}
+
 pub(crate) fn concatenate_bitcollections(
     left: &impl BitCollection,
     right: &impl BitCollection,
 ) -> BV {
-    let len = left.len() + right.len();
-    if left.len().is_multiple_of(8) {
-        let left = left.padded_byte_data_cow();
-        let right = right.padded_byte_data_cow();
-        let mut bytes = Vec::with_capacity(len.div_ceil(8));
-        bytes.extend_from_slice(&left);
-        bytes.extend_from_slice(&right);
-        let mut result = BV::from_vec(bytes);
-        result.truncate(len);
-        return result;
-    }
-
-    let mut result = BV::with_capacity(len);
-    result.extend_from_bitslice(left.as_bitslice());
-    result.extend_from_bitslice(right.as_bitslice());
-    result
+    let mut out = BitConcat::with_bit_capacity(left.len() + right.len());
+    push_collection_run(&mut out, left);
+    push_collection_run(&mut out, right);
+    out.into_bitvec()
 }
 
 impl BitCollection for Tibs {

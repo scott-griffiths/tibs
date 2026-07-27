@@ -1,13 +1,16 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, concatenate_bitcollections};
+use crate::core::{
+    BitCollection, concatenate_bitcollections, push_collection_run, repeat_bitcollection,
+};
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64,
-    bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
+    BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
+    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, find_bitvec, find_bitvec_aligned,
-    move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv,
-    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left,
+    str_to_bv, validate_index, validate_length, validate_logical_op_lengths, validate_shift,
+    validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -114,6 +117,42 @@ impl Mutibs {
         self.copied_range(0, self.len())
     }
 
+    /// Append the `len` bits starting `offset` bits into `src`, in place.
+    ///
+    /// Grows the byte storage and copies over bytes. Rebuilding into a fresh
+    /// buffer would make a loop of appends quadratic, so this keeps the
+    /// `Vec`'s amortised growth, and `extend_from_bitslice` - which does grow
+    /// amortised - copies a bit at a time.
+    pub(crate) fn append_run(&mut self, src: &[u8], offset: usize, len: usize) {
+        if len == 0 {
+            return;
+        }
+        if self.storage_head_offset() != 0 {
+            // Storage starting mid byte cannot be appended to over bytes, so
+            // realign it once; the result starts at bit zero.
+            self.data = self.to_bitvec();
+        }
+        let old_len = self.len();
+        let new_len = old_len + len;
+        let mut bytes = std::mem::take(&mut self.data).into_vec();
+        bytes.resize(new_len.div_ceil(8), 0);
+        copy_bits(&mut bytes, old_len, src, offset, len);
+        let mut grown = BV::from_vec(bytes);
+        grown.truncate(new_len);
+        self.data = grown;
+    }
+
+    /// Append every bit of `bits` in place.
+    pub(crate) fn append_collection(&mut self, bits: &impl BitCollection) {
+        match bits.raw_data_ref() {
+            Some((bytes, offset, _)) => self.append_run(bytes, offset, bits.len()),
+            None => {
+                let bytes = bits.padded_byte_data_cow().into_owned();
+                self.append_run(&bytes, 0, bits.len())
+            }
+        }
+    }
+
     #[inline]
     pub(crate) fn as_mut_bitvec_ref(&mut self) -> &mut BV {
         &mut self.data
@@ -157,22 +196,10 @@ impl Mutibs {
         }
 
         let item = unsafe { Bound::from_borrowed_ptr(list.py(), first) };
-        // BitSlice::repeat panics on an empty slice, so return the empty
-        // result directly in that case.
         if let Ok(tibs) = item.extract::<PyRef<Tibs>>() {
-            let bits = tibs.as_bitslice();
-            Some(if bits.is_empty() {
-                BV::new()
-            } else {
-                bits.repeat(count)
-            })
+            Some(repeat_bitcollection(&*tibs, count))
         } else if let Ok(mutibs) = item.extract::<PyRef<Mutibs>>() {
-            let bits = mutibs.as_bitslice();
-            Some(if bits.is_empty() {
-                BV::new()
-            } else {
-                bits.repeat(count)
-            })
+            Some(repeat_bitcollection(&*mutibs, count))
         } else {
             None
         }
@@ -198,21 +225,21 @@ impl Mutibs {
     }
 
     fn join_parts(parts: Vec<JoinedPart<'_>>, total_len: usize) -> PyResult<BV> {
-        // Copy into pre-sized storage instead of repeatedly growing the
-        // BitVec. This matters when joining many small bit containers.
-        let mut bv = bv_from_zeros(total_len);
-        let mut bit_index = 0;
+        // Copy into storage sized once, over bytes. `copy_from_bitslice` moves
+        // a bit at a time even when both sides are byte aligned.
+        let mut out = BitConcat::with_bit_capacity(total_len);
         for part in parts {
-            let bits = match &part {
-                JoinedPart::Tibs(tibs) => tibs.as_bitslice(),
-                JoinedPart::Mutibs(mutibs) => mutibs.as_bitslice(),
-                JoinedPart::Owned(bv) => bv.as_bitslice(),
-            };
-            let next_index = bit_index + bits.len();
-            bv[bit_index..next_index].copy_from_bitslice(bits);
-            bit_index = next_index;
+            match &part {
+                JoinedPart::Tibs(tibs) => push_collection_run(&mut out, &**tibs),
+                JoinedPart::Mutibs(mutibs) => push_collection_run(&mut out, &**mutibs),
+                JoinedPart::Owned(bv) => out.push_run(
+                    bv.as_raw_slice(),
+                    head_bit_offset(bv.as_bitslice()),
+                    bv.len(),
+                ),
+            }
         }
-        Ok(bv)
+        Ok(out.into_bitvec())
     }
 
     #[inline]
@@ -3372,17 +3399,15 @@ impl Mutibs {
         if bs.as_ptr() == slf.as_ptr() {
             // If bs is slf, clone inner bits first then extend
             let bits_clone = slf.to_bitvec();
-            slf.as_mut_bitvec_ref().extend_from_bitslice(&bits_clone);
+            slf.append_run(bits_clone.as_raw_slice(), 0, bits_clone.len());
         } else if let Ok(tibs) = bs.extract::<PyRef<Tibs>>() {
             // Existing tibs containers can be borrowed directly; avoid
             // materializing a temporary Tibs through the generic converter.
-            slf.as_mut_bitvec_ref()
-                .extend_from_bitslice(tibs.as_bitslice());
+            slf.append_collection(&*tibs);
         } else if let Ok(mutibs) = bs.extract::<PyRef<Mutibs>>() {
             // Mutibs inputs also expose a stable bit slice while we hold the
             // Python reference.
-            slf.as_mut_bitvec_ref()
-                .extend_from_bitslice(mutibs.as_bitslice());
+            slf.append_collection(&*mutibs);
         } else {
             let bits = promote_to_bv(bs)?;
             if slf.is_empty() {
@@ -3390,7 +3415,11 @@ impl Mutibs {
                 // rather than copying it into another allocation.
                 *slf.as_mut_bitvec_ref() = bits;
             } else {
-                slf.as_mut_bitvec_ref().extend_from_bitslice(&bits);
+                slf.append_run(
+                    bits.as_raw_slice(),
+                    head_bit_offset(bits.as_bitslice()),
+                    bits.len(),
+                );
             }
         }
         Ok(())
@@ -3415,19 +3444,18 @@ impl Mutibs {
     #[pyo3(signature = (bs, /), text_signature = "($self, bs, /)")]
     pub fn extend_left<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
         // Check for self-prepending
+        // Prepending has to build a new buffer either way, so both arms lay
+        // the two runs down over bytes rather than growing a BitVec by bits.
         if bs.as_ptr() == slf.as_ptr() {
-            let mut new_data = slf.to_bitvec();
-            new_data.extend_from_bitslice(slf.as_bitvec_ref());
-            *slf.as_mut_bitvec_ref() = new_data;
+            let doubled = concatenate_bitcollections(&*slf, &*slf);
+            *slf.as_mut_bitvec_ref() = doubled;
         } else {
             let to_prepend = Tibs::extract(bs.as_borrowed())?;
             if to_prepend.is_empty() {
                 return Ok(());
             }
-            let mut new_data = BV::with_capacity(to_prepend.len() + slf.len());
-            new_data.extend_from_bitslice(to_prepend.as_bitslice());
-            new_data.extend_from_bitslice(slf.as_bitvec_ref());
-            *slf.as_mut_bitvec_ref() = new_data;
+            let joined = concatenate_bitcollections(&to_prepend, &*slf);
+            *slf.as_mut_bitvec_ref() = joined;
         }
         Ok(())
     }
@@ -3716,19 +3744,12 @@ impl Mutibs {
             1 => Ok(()),
             i => {
                 let n = i as usize;
-                let orig_data = slf.to_bitvec();
-                let len = slf.len();
-                slf.reserve(len * (n - 1));
-                let mut mul = 1;
-                while mul * 2 <= n {
-                    // Double the length
-                    let current = slf.to_bitvec();
-                    slf.as_mut_bitvec_ref().extend_from_bitslice(&current);
-                    mul *= 2;
-                }
-                while mul < n {
-                    slf.as_mut_bitvec_ref().extend_from_bitslice(&orig_data);
-                    mul += 1;
+                // One byte-wide pass per copy, so the total is the size of the
+                // result. Doubling moved the same bits but a bit at a time.
+                let original = slf.to_bitvec();
+                let len = original.len();
+                for _ in 1..n {
+                    slf.append_run(original.as_raw_slice(), 0, len);
                 }
                 Ok(())
             }

@@ -136,6 +136,63 @@ pub(crate) fn rotate_bits_left(bytes: &mut [u8], offset: usize, len: usize, by: 
     }
 }
 
+/// Lays bit runs end to end into one buffer.
+///
+/// Growing a `BitVec` with `extend_from_bitslice` per piece copies a bit at a
+/// time. This moves whole bytes instead, which is the difference between
+/// memcpy speed and roughly fifty times slower.
+///
+/// A run that starts on a byte boundary and comes from byte-aligned storage -
+/// the common case, and the whole of an aligned concatenation - is appended
+/// without the buffer ever being zeroed. Only a run landing part way through a
+/// byte pays for that, and only over its own bytes.
+pub(crate) struct BitConcat {
+    bytes: Vec<u8>,
+    length: usize,
+}
+
+impl BitConcat {
+    pub(crate) fn with_bit_capacity(total_bits: usize) -> Self {
+        BitConcat {
+            bytes: Vec::with_capacity(total_bits.div_ceil(8)),
+            length: 0,
+        }
+    }
+
+    /// Append the `len` bits starting `offset` bits into `src`.
+    pub(crate) fn push_run(&mut self, src: &[u8], offset: usize, len: usize) {
+        if len == 0 {
+            return;
+        }
+        debug_assert!(offset < 8);
+        debug_assert!(src.len() >= (offset + len).div_ceil(8));
+        if offset == 0 && self.length.is_multiple_of(8) {
+            debug_assert_eq!(self.bytes.len(), self.length / 8);
+            // Both ends are on byte boundaries, so this is a straight copy and
+            // nothing has to be cleared first.
+            let whole = len / 8;
+            self.bytes.extend_from_slice(&src[..whole]);
+            let tail = len - whole * 8;
+            if tail > 0 {
+                // Drop the source's padding; a later run overwrites those bits.
+                self.bytes.push(src[whole] & (!0u8 << (8 - tail)));
+            }
+        } else {
+            let end = self.length + len;
+            // Only the bytes this run reaches into need to exist yet.
+            self.bytes.resize(end.div_ceil(8), 0);
+            copy_bits(&mut self.bytes, self.length, src, offset, len);
+        }
+        self.length += len;
+    }
+
+    pub(crate) fn into_bitvec(self) -> BV {
+        let mut bv = BV::from_vec(self.bytes);
+        bv.truncate(self.length);
+        bv
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum LogicalOp {
     Or,
