@@ -44,9 +44,20 @@ use std::ops::Not;
 ///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
 #[pyclass(freelist = 8, sequence, skip_from_py_object, module = "tibs")]
-#[derive(Clone)]
 pub struct Mutibs {
     pub data: BV,
+}
+
+// Not derived: a derived Clone would call BitVec's own Clone, which rebuilds the
+// storage one element at a time. Going through to_bitvec copies bytes instead.
+// Every copying method here (inverted, reversed, rotated_*, inserted, ...) is
+// written as `self.clone()` followed by a mutation, so this one impl carries the
+// whole family.
+impl Clone for Mutibs {
+    #[inline]
+    fn clone(&self) -> Self {
+        Mutibs::from_bv(self.to_bitvec())
+    }
 }
 
 enum JoinedPart<'py> {
@@ -73,9 +84,22 @@ impl Mutibs {
         self.as_bitvec_ref().as_bitslice()
     }
 
+    /// A copy of the bits as an owned BitVec.
+    ///
+    /// Routing through the byte data makes this a memcpy where `BitVec::clone`
+    /// walks the storage element by element. The copy also starts on a byte
+    /// boundary even when the source did not, which is what `Tibs::to_bitvec`
+    /// already produced, so the two promotion paths now agree and later
+    /// operations meet aligned data.
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
-        self.data.clone()
+        let len = self.len();
+        if len == 0 {
+            return BV::new();
+        }
+        let mut result = BV::from_vec(<Self as BitCollection>::to_padded_byte_data(self));
+        result.truncate(len);
+        result
     }
 
     #[inline]

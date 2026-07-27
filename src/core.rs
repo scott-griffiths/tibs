@@ -232,6 +232,15 @@ pub(crate) trait BitCollection: Sized + Clone {
             // For negative step, the end_bit is inclusive, but the start_bit is exclusive.
             debug_assert!(step < 0);
             let adjusted_end_bit = (end_bit + 1) as usize;
+            // A step of -1 is a plain reversal of a contiguous run, which
+            // reverse_copy does over bytes. Collecting it bit by bit like the
+            // other steps below costs hundreds of times more.
+            if step == -1 {
+                let length = start_bit as usize + 1 - adjusted_end_bit;
+                return Ok(self
+                    .get_slice_unchecked(adjusted_end_bit, length)
+                    .reverse_copy());
+            }
             Ok(Self::from_bv(
                 self.as_bitslice()[adjusted_end_bit..=start_bit as usize]
                     .iter()
