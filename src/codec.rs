@@ -67,62 +67,53 @@ fn rice_decode_int(bits: &BS, start: usize, k: u8) -> PyResult<(usize, usize)> {
 }
 
 fn zstd_compress_bytes<C: BitCollection>(bits: &C) -> PyResult<Vec<u8>> {
-    let bit_length = bits.len();
-    let data_byte_length = bit_length.div_ceil(8);
-    let raw_bit_padding = data_byte_length * 8 - bit_length;
-
-    let mut raw = bits.to_bitvec();
-    for _ in 0..raw_bit_padding {
-        raw.push(false);
-    }
-
-    zstd::bulk::compress(&raw.into_vec(), 0)
+    zstd::bulk::compress(&bits.padded_byte_data_cow(), 0)
         .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be encoded: {e}")))
 }
 
-fn encode_as_zstd_from_compressed<C: BitCollection>(bits: &C, compressed: Vec<u8>) -> BV {
-    let mut bv = BV::new();
-    bv.push(false);
-    bv.push(true);
-    bv.push(false);
+/// Three-bit markers that follow the two-bit codec tag.
+const RAW_MARKER: u8 = 0b000;
+const ZSTD_MARKER: u8 = 0b010;
+
+/// The byte a Raw or Zstd encoding opens with.
+///
+/// Two zero bits of codec tag, a three-bit marker, then the count of padding
+/// bits: eight bits exactly, so the varint that follows and the payload after
+/// it both land on byte boundaries. That is what lets those two encodings be
+/// assembled as bytes rather than pushed a bit at a time.
+#[inline]
+fn body_header_byte(marker: u8, bit_padding: usize) -> u8 {
+    debug_assert!(marker < 8);
+    debug_assert!(bit_padding < 8);
+    (marker << 3) | bit_padding as u8
+}
+
+fn encode_as_zstd_bytes<C: BitCollection>(bits: &C, compressed: Vec<u8>) -> Vec<u8> {
     let bit_padding = if bits.len().is_multiple_of(8) {
         0
     } else {
         8 - bits.len() % 8
     };
-    for shift in (0..3).rev() {
-        bv.push((bit_padding >> shift) & 1 == 1);
-    }
-    bv.extend(encode_varint(compressed.len() as u64));
-    bv.extend(BV::from_vec(compressed));
-    bv
+    let varint = encode_varint_bytes(compressed.len() as u64);
+    let mut out = Vec::with_capacity(1 + varint.len() + compressed.len());
+    out.push(body_header_byte(ZSTD_MARKER, bit_padding));
+    out.extend_from_slice(&varint);
+    out.extend_from_slice(&compressed);
+    out
 }
 
-fn encode_as_zstd<C: BitCollection>(bits: &C) -> PyResult<BV> {
-    Ok(encode_as_zstd_from_compressed(
-        bits,
-        zstd_compress_bytes(bits)?,
-    ))
-}
-
-fn encode_as_raw<C: BitCollection>(bits: &C) -> BV {
+fn encode_as_raw_bytes<C: BitCollection>(bits: &C) -> Vec<u8> {
     let bit_length = bits.len();
     let data_byte_length = bit_length.div_ceil(8);
     let bit_padding = data_byte_length * 8 - bit_length;
 
-    let mut bv = BV::new();
-    bv.push(false);
-    bv.push(false);
-    bv.push(false);
-    for shift in (0..3).rev() {
-        bv.push((bit_padding >> shift) & 1 == 1);
-    }
-    bv.extend(encode_varint(data_byte_length as u64));
-    bv.extend(bits.to_bitvec());
-    for _ in 0..bit_padding {
-        bv.push(false);
-    }
-    bv
+    let varint = encode_varint_bytes(data_byte_length as u64);
+    let mut out = Vec::with_capacity(1 + varint.len() + data_byte_length);
+    out.push(body_header_byte(RAW_MARKER, bit_padding));
+    out.extend_from_slice(&varint);
+    // The payload is already the padded byte data, so it copies straight in.
+    out.extend_from_slice(&bits.padded_byte_data_cow());
+    out
 }
 
 fn rice_encoded_gaps(bits: &BS, sparse_bit: bool) -> Vec<usize> {
@@ -350,7 +341,9 @@ fn decode_zstd_payload<C: BitCollection>(
     Ok(C::from_bv(decompressed[..out_end].to_bitvec()))
 }
 
-fn encode_varint(mut u: u64) -> BV {
+/// A varint as whole bytes: seven bits of payload each, most significant group
+/// first, with the top bit set on every byte but the last.
+fn encode_varint_bytes(mut u: u64) -> Vec<u8> {
     let mut chunks: Vec<u8> = Vec::new();
     loop {
         chunks.push((u & 0x7f) as u8);
@@ -361,15 +354,15 @@ fn encode_varint(mut u: u64) -> BV {
     }
     chunks.reverse();
 
-    let mut out: BV = BV::with_capacity(chunks.len() * 8);
-    for (i, chunk) in chunks.iter().enumerate() {
-        let continuation = i + 1 < chunks.len();
-        out.push(continuation);
-        for shift in (0..7).rev() {
-            out.push(((chunk >> shift) & 1) == 1);
-        }
+    let last = chunks.len() - 1;
+    for chunk in &mut chunks[..last] {
+        *chunk |= 0x80;
     }
-    out
+    chunks
+}
+
+fn encode_varint(u: u64) -> BV {
+    BV::from_vec(encode_varint_bytes(u))
 }
 
 fn decode_varint(bits: &BS) -> PyResult<(usize, usize)> {
@@ -533,7 +526,7 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                 let raw_bit_length = raw_encoded_bit_length(bit_length);
                 let mut best_codec = Codec::Raw;
                 let mut best_bit_length = raw_bit_length;
-                let mut zstd_encoded: Option<BV> = None;
+                let mut best_compressed: Option<Vec<u8>> = None;
 
                 let ones_count = bits.count(true);
                 let sparse_bit = ones_count < bit_length / 2;
@@ -552,40 +545,37 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
 
                 if let Ok(zstd_compressed) = zstd_compress_bytes(bits) {
                     let zstd_bit_length = 8
-                        + encode_varint(zstd_compressed.len() as u64).len()
+                        + encode_varint_bytes(zstd_compressed.len() as u64).len() * 8
                         + zstd_compressed.len() * 8;
 
                     if zstd_bit_length < best_bit_length {
                         best_codec = Codec::Zstd;
-                        zstd_encoded = Some(encode_as_zstd_from_compressed(bits, zstd_compressed));
+                        best_compressed = Some(zstd_compressed);
                     }
                 }
                 match best_codec {
-                    Codec::Raw => bv.extend(encode_as_raw(bits)),
+                    // Raw and Zstd are whole bytes from their first bit, so
+                    // they are returned as bytes rather than rebuilt through
+                    // the bit vector.
+                    Codec::Raw => return Ok(encode_as_raw_bytes(bits)),
+                    Codec::Zstd => {
+                        let compressed = best_compressed
+                            .expect("zstd encoding should be available when selected");
+                        return Ok(encode_as_zstd_bytes(bits, compressed));
+                    }
                     Codec::Rice => bv.extend(encode_as_rice(bits, sparse_bit)),
-                    Codec::Zstd => bv.extend(
-                        zstd_encoded.expect("zstd encoding should be available when selected"),
-                    ),
                     Codec::Auto => unreachable!(),
                 }
             }
         },
-        Codec::Raw => {
-            bv.push(false);
-            bv.push(false);
-            bv.extend(encode_as_raw(bits));
-        }
+        Codec::Raw => return Ok(encode_as_raw_bytes(bits)),
         Codec::Rice => {
             bv.push(false);
             bv.push(false);
             let sparse_bit = bits.count(true) < bits.len() / 2;
             bv.extend(encode_as_rice(bits, sparse_bit));
         }
-        Codec::Zstd => {
-            bv.push(false);
-            bv.push(false);
-            bv.extend(encode_as_zstd(bits)?);
-        }
+        Codec::Zstd => return Ok(encode_as_zstd_bytes(bits, zstd_compress_bytes(bits)?)),
     }
 
     Ok(bv.into_vec())
