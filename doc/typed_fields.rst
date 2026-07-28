@@ -3,7 +3,7 @@
 Typed fields
 ------------
 
-The first lens onto the bits reads and writes them as typed values — unsigned and
+Bits can be read and written as typed values — unsigned and
 signed integers, floats, and string or byte representations — of any bit length,
 without hand-rolling shifts and masks. Nothing is copied into another type: the
 value is decoded from, or encoded into, the same underlying bits.

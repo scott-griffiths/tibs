@@ -3,7 +3,7 @@
 A set of bits
 -------------
 
-The second lens treats the container as a *set of positions* — a ``1`` means the
+This chapter treats the container as a *set of positions* — a ``1`` means the
 position is "present" and a ``0`` means "absent". Under this reading the natural
 operations are bitwise algebra, cardinalities and set predicates. Flags, masks,
 permission sets, Bloom filters and feature fingerprints are all this shape, and a

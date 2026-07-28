@@ -50,48 +50,89 @@ gives in-place edits. The constructors and most methods are shared, so throughou
 the manual an example using one usually applies equally to the other.
 
 
-What Tibs is
-^^^^^^^^^^^^
+Overview
+^^^^^^^^
 
 A ``Tibs`` is a **sequence of bits** — like ``bytes``, but the unit is the bit and
-the length can be anything. That sequence is the whole object: you slice it,
-concatenate it, search and replace inside it at bit granularity, or pin searches
-to byte boundaries for stream parsing.
+the length can be anything. ``Tibs`` provides an interface very similar to
+``bytes`` and other Python containers: you can slice it, concatenate it, search
+and replace inside it at bit granularity, or pin searches to byte boundaries for
+stream parsing, all in a familiar way.
 
-On top of those bits, the same object gives you **two lenses** — two ways of
-reading and writing the sequence without ever copying it into another type:
+This 'container of bits' mental model might be all that you need, but the
+library also gives you two broad views of the binary data:
 
-* **Typed fields.** Read and write integers, floats and strings of any bit length,
-  with views handling byte order and LSB0 bit labels for you.
+* **Typed fields.** Pull integers, floats, strings, hex or binary of any bit
+  length straight out of the bits, without hand-rolling shifts and masks.
+  Little-endian ordering and LSB0 field labels are handled elegantly so you
+  don't reshuffle data yourself.
 * **A set of bits.** Bitwise algebra, cardinalities and set predicates, with no
-  intermediate object built along the way.
+  intermediate object built along the way. ``Mutibs`` can be used as a large
+  mutable bitset.
 
-These aren't separate modes or separate types — it's one object, and the lenses
-are just different questions you ask of the same bits.
+These aren't separate modes or types — it's one object, with a rich interface
+to ask different questions of the same bits.
 
 
-Quick taste
-^^^^^^^^^^^
+A Taster
+^^^^^^^^
 
-Build a packet from mixed pieces, split it into fields, and read each field as a
-typed value::
+**As a container of bits.** ``Tibs`` works like ``bytes``, except that the unit
+is the bit instead of the byte. ``Mutibs`` is its mutable counterpart, for
+patching in place::
 
-    >>> packet = Tibs.from_joined(["0b1010", Tibs.from_u(3200, 12), b"OK"])
-    >>> packet
-    Tibs('0xac804f4b')
-    >>> flags, size, payload = packet.split_at([4, 16])
-    >>> flags.bin, size.u, payload.bytes
-    ('1010', 3200, b'OK')
+    >>> # A 5-bit header, a message, then 3 bits of padding: nothing is byte aligned.
+    >>> frame = Tibs('0b10110') + b'the cat rarely blinked' + [0, 0, 0]
+    >>> bytes(frame).find(b'cat')      # as bytes, the message has been scrambled
+    -1
+    >>> pos = frame.find(b'cat')       # but the tibs still knows where it is
+    >>> pos, frame[pos:pos + 24].bytes
+    (37, b'cat')
 
-The same object also answers set-style questions about its bits — here, whether
-every required capability bit is granted::
+    >>> patched = frame.to_mutibs()
+    >>> patched[pos:pos + 24] = b'squirrel'
+    >>> patched[5:-3].bytes
+    b'the squirrel rarely blinked'
+    >>> len(frame), len(patched)       # 40 bits longer, spliced in at bit 37
+    (184, 224)
 
-    >>> required, granted = Tibs('0b0010_1000'), Tibs('0b1010_1100')
-    >>> required.is_subset_of(granted)
-    True
+**As typed fields.** Read and write integers, floats and strings of any bit
+length, with a view taking care of byte order and bit numbering — the sort of
+job that gets awkward quickly with plain bytes and masks::
 
-That is the sequence, the typed-fields lens and the set-of-bits lens, all on one
-value. The :doc:`examples` work through larger versions of the same ideas.
+    >>> # What's inside a float? A sign bit, an 8-bit exponent and a 23-bit fraction.
+    >>> x = Tibs.from_f(-118.625, 32)
+    >>> f"{x:_.8b}"                    # grouped into bytes to make it readable
+    '11000010_11101101_01000000_00000000'
+    >>> sign, exponent, fraction = x.split_at([1, 9])
+    >>> (-1) ** sign.u * 2 ** (exponent.u - 127) * (1 + fraction.u / 2 ** 23)
+    -118.625
+
+    >>> Tibs(b'\x00\x40\xed\xc2').le.f     # the same value, from a little-endian file
+    -118.625
+    >>> Tibs.from_u(x.u + 1, 32).f         # the adjacent float32, one bit away
+    -118.62500762939453
+
+**As a set of bits.** Bitwise algebra and cardinalities over millions of bits,
+without building an intermediate object just to count it::
+
+    >>> from math import isqrt
+    >>> # A sieve of Eratosthenes over ten million numbers, one bit each.
+    >>> limit = 10_000_000
+    >>> sieve = Mutibs.from_ones(limit)
+    >>> sieve.unset([0, 1])
+    >>> for p in range(2, isqrt(limit) + 1):
+    ...     if sieve[p]:
+    ...         sieve.unset(range(p * p, limit, p))
+    ...
+    >>> sieve.count(1)                     # primes below ten million
+    664579
+
+    >>> # Counting twin, cousin and sexy primes: pairs 2, 4 and 6 apart:
+    >>> [sieve.count_and(sieve >> d) for d in (2, 4, 6)]
+    [58980, 58622, 117207]
+
+The :doc:`examples` work through larger versions of the same ideas.
 
 
 Constructors at a glance
@@ -159,7 +200,7 @@ Tibs works with Python 3.11 and later.
 How the manual is organised
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The chapters follow the substrate and its two lenses.
+The chapters follow the bits and the two ways of reading them.
 
 *The bits as a container*
 
