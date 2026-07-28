@@ -606,18 +606,17 @@ where
     }
 }
 
-/// Scatter `value`'s bits into the positions of `bits` where `mask` is set,
-/// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
-/// be the same length and `value` must be `mask.count_ones()` bits long; both
-/// are the caller's responsibility to check.
 /// Whether two runs of bits hold the same value.
 ///
 /// Two runs are equal exactly when nothing differs, and "does anything differ"
 /// is `any_pair_bits` with `Xor` — the same word-at-a-time walk over the raw
-/// storage that `intersects` uses, stopping at the first difference.
-/// `BitSlice`'s own `PartialEq` instead assembles a word from each side per 64
-/// bits (`chunks(64)` then `load_be`) rather than reading the bytes, which
-/// costs about twenty times more.
+/// storage that `intersects` uses, stopping at the first difference. That
+/// beats `BitSlice`'s own `PartialEq`, which assembles a word from each side
+/// per 64 bits (`chunks(64)` then `load_be`), but only once the storage is in
+/// hand: resolving a run that starts or ends mid byte copies all of it up
+/// front, allocating for a short one and giving up the early exit for any.
+/// The candidate checks in `search.rs` fail inside their first word nearly
+/// every time, and measured slower over the bytes, so they keep `PartialEq`.
 pub(crate) fn bitslices_equal(left: &BS, right: &BS) -> bool {
     let len = left.len();
     if len != right.len() {
@@ -754,6 +753,10 @@ pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, one
     out.into_bitvec()
 }
 
+/// Scatter `value`'s bits into the positions of `bits` where `mask` is set,
+/// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
+/// be the same length and `value` must be `mask.count_ones()` bits long; both
+/// are the caller's responsibility to check.
 pub(crate) fn deposit_masked(bits: &mut BS, value: &BS, mask: &BS) {
     debug_assert_eq!(bits.len(), mask.len());
     debug_assert_eq!(value.len(), mask.count_ones());

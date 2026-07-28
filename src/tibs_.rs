@@ -13,7 +13,6 @@ use crate::helpers::{
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
-use bitvec::prelude::*;
 use half::f16;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
@@ -50,27 +49,12 @@ impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
 
-        let bits = self.to_bitslice();
-
-        let mut words = bits.chunks_exact(64);
-        for chunk in words.by_ref() {
-            state.write_u64(chunk.load_be::<u64>());
-        }
-
-        let mut bytes = words.remainder().chunks_exact(8);
-        for chunk in bytes.by_ref() {
-            state.write_u8(chunk.load_be::<u8>());
-        }
-
-        let tail = bytes.remainder();
-        if !tail.is_empty() {
-            let mut last = 0u8;
-            for bit in tail {
-                last = (last << 1) | (*bit as u8);
-            }
-            last <<= 8 - tail.len();
-            state.write_u8(last);
-        }
+        // The left aligned bytes with the trailing padding cleared, which two
+        // equal runs share however their storage happens to be offset - the
+        // same normalisation `PartialEq` compares over. Handing the hasher the
+        // whole run in one call replaces a walk that assembled it 64 bits at a
+        // time through `load_be` and fed the result out a word at a time.
+        state.write(&self.padded_byte_data_cow());
     }
 }
 
