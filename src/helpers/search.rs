@@ -327,6 +327,9 @@ pub(crate) fn find_bitvec_aligned(
 ) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
+    if needle.len() > end - start {
+        return Ok(None);
+    }
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
         return Ok(found);
     }
@@ -334,61 +337,10 @@ pub(crate) fn find_bitvec_aligned(
     {
         return Ok(found);
     }
-    if needle.len() <= 64 {
-        return find_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
-    }
-    match find_large_prefix_scan(py, haystack, needle, start, end, alignment_mod8)? {
-        PrefixScan::Found(pos) => Ok(Some(pos)),
-        PrefixScan::NotFound => Ok(None),
-        PrefixScan::Fallback(resume) => {
-            let lps = compute_lps(py, needle)?;
-            find_bitvec_impl_with_lps_aligned(
-                py,
-                haystack,
-                needle,
-                &lps,
-                resume,
-                end,
-                alignment_mod8,
-            )
-        }
-    }
-}
-
-pub(crate) fn find_bitvec_with_lps_aligned(
-    py: Python<'_>,
-    haystack: &BS,
-    needle: &BS,
-    lps: &[usize],
-    start: usize,
-    end: usize,
-    alignment_mod8: Option<usize>,
-) -> PyResult<Option<usize>> {
-    debug_assert!(end >= start);
-    debug_assert!(end <= haystack.len());
-    if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
-        return Ok(found);
-    }
-    if let Some(found) = try_find_bytewise(py, haystack, needle, start, end, alignment_mod8, false)?
-    {
-        return Ok(found);
-    }
-    if needle.len() <= 64 {
-        return find_bitvec_small(py, haystack, needle, start, end, alignment_mod8);
-    }
-    match find_large_prefix_scan(py, haystack, needle, start, end, alignment_mod8)? {
-        PrefixScan::Found(pos) => Ok(Some(pos)),
-        PrefixScan::NotFound => Ok(None),
-        PrefixScan::Fallback(resume) => find_bitvec_impl_with_lps_aligned(
-            py,
-            haystack,
-            needle,
-            lps,
-            resume,
-            end,
-            alignment_mod8,
-        ),
-    }
+    // A needle that fits in the range is only declined above when it is too
+    // short to cover a whole byte at one of the offsets wanted, so it is always
+    // well within the windowed scanner's 64-bit pattern.
+    find_bitvec_small(py, haystack, needle, start, end, alignment_mod8)
 }
 
 pub(crate) fn rfind_bitvec_aligned(
@@ -873,8 +825,8 @@ fn rfind_bitvec_small(
     Ok(found)
 }
 
-/// Number of leading (or trailing, for reverse searches) needle bits used as a
-/// fast filter when the needle is too long for a `SmallPattern`.
+/// Number of trailing needle bits used as a fast filter when the needle is too
+/// long for a `SmallPattern`.
 const PREFIX_FILTER_BITS: usize = 64;
 /// After this many failed candidate verifications the filter gives up and the
 /// caller falls back to KMP, keeping the worst case linear.
@@ -883,63 +835,14 @@ const PREFIX_FILTER_BUDGET: usize = 64;
 enum PrefixScan {
     Found(usize),
     NotFound,
-    /// Verification budget exhausted. Forward scans resume KMP from the
-    /// contained start position; reverse scans rescan with it as the new end.
+    /// Verification budget exhausted; KMP rescans with the contained position
+    /// as its new end.
     Fallback(usize),
 }
 
-/// Search for a needle longer than 64 bits by scanning for its first 64 bits
-/// and verifying the remainder at each candidate position.
-fn find_large_prefix_scan(
-    py: Python<'_>,
-    haystack: &BS,
-    needle: &BS,
-    start: usize,
-    end: usize,
-    alignment_mod8: Option<usize>,
-) -> PyResult<PrefixScan> {
-    debug_assert!(needle.len() > PREFIX_FILTER_BITS);
-    let needle_len = needle.len();
-    if needle_len > end - start {
-        return Ok(PrefixScan::NotFound);
-    }
-    let rest = &needle[PREFIX_FILTER_BITS..];
-    let mut found = None;
-    let mut fallback = None;
-    let mut failures = 0usize;
-    for_each_small_match(
-        py,
-        haystack,
-        &needle[..PREFIX_FILTER_BITS],
-        start,
-        end,
-        alignment_mod8,
-        |pos| {
-            if pos + needle_len > end {
-                return false;
-            }
-            if haystack[pos + PREFIX_FILTER_BITS..pos + needle_len] == rest[..] {
-                found = Some(pos);
-                return false;
-            }
-            failures += 1;
-            if failures >= PREFIX_FILTER_BUDGET {
-                fallback = Some(pos + 1);
-                return false;
-            }
-            true
-        },
-    )?;
-    Ok(match (found, fallback) {
-        (Some(pos), _) => PrefixScan::Found(pos),
-        (None, Some(resume)) => PrefixScan::Fallback(resume),
-        (None, None) => PrefixScan::NotFound,
-    })
-}
-
-/// Reverse counterpart of `find_large_prefix_scan`, operating on the
-/// bit-reversed needle: scan backwards for the needle's last 64 bits and
-/// verify the leading remainder at each candidate.
+/// Search backwards for a needle longer than 64 bits, operating on the
+/// bit-reversed needle: scan for the needle's last 64 bits and verify the
+/// leading remainder at each candidate.
 fn rfind_large_prefix_scan(
     py: Python<'_>,
     haystack: &BS,
@@ -1453,51 +1356,6 @@ fn rfind_kmp_reversed(
         }
     }
 
-    Ok(None)
-}
-
-fn find_bitvec_impl_with_lps_aligned(
-    py: Python<'_>,
-    haystack: &BS,
-    needle: &BS,
-    lps: &[usize],
-    start: usize,
-    end: usize,
-    alignment_mod8: Option<usize>,
-) -> PyResult<Option<usize>> {
-    if needle.is_empty() || needle.len() > end - start {
-        return Ok(None);
-    }
-    let needle_len = needle.len();
-    let mut i = start;
-    let mut j = 0;
-    let mut check_at = start.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
-
-    while i < end {
-        while i < check_at {
-            if needle[j] == haystack[i] {
-                i += 1;
-                j += 1;
-
-                if j == needle_len {
-                    let match_pos = i - j;
-                    if matches_alignment(match_pos, alignment_mod8) {
-                        return Ok(Some(match_pos));
-                    }
-                    // Continue searching for a byte-aligned match
-                    j = lps[j - 1];
-                }
-            } else if j != 0 {
-                j = lps[j - 1];
-            } else {
-                i += 1;
-            }
-        }
-        if i < end {
-            py.check_signals()?;
-            check_at = i.saturating_add(SIGNAL_CHECK_INTERVAL).min(end);
-        }
-    }
     Ok(None)
 }
 

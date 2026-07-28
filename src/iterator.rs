@@ -122,11 +122,9 @@ impl FindAllIterator {
                 helpers::compute_lps(py, reversed_needle.as_bitslice())?
             };
             (reversed_needle, lps)
-        } else if using_small_search {
-            (needle, Vec::new())
         } else {
-            let lps = helpers::compute_lps(py, needle.as_bitslice())?;
-            (needle, lps)
+            // Only the reverse path falls back to KMP, so only it needs a table.
+            (needle, Vec::new())
         };
 
         let iter_obj = Self {
@@ -245,11 +243,10 @@ impl FindAllIterator {
                 if slf.end.saturating_sub(current_pos) < needle_len {
                     return Ok(None); // No space left for the needle or already past the end
                 }
-                helpers::find_bitvec_with_lps_aligned(
+                helpers::find_bitvec_aligned(
                     py,
                     haystack_rs.as_bitslice(),
                     slf.search_needle.as_bitslice(),
-                    lps,
                     current_pos,
                     slf.end,
                     alignment_mod8,
