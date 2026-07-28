@@ -1162,7 +1162,9 @@ class TestRustCoverageGaps:
 
         assert t.count_and(m) == t.count_and(reference)
         assert t.intersects(m) == t.intersects(reference)
+        assert t.is_disjoint(m) == t.is_disjoint(reference)
         assert t.is_subset_of(m) == t.is_subset_of(reference)
+        assert t.is_superset_of(m) == t.is_superset_of(reference)
 
     def test_rfind_falls_back_to_kmp_after_too_many_filter_failures(self):
         # The reverse prefix scan filters on the needle's last 64 bits. A long

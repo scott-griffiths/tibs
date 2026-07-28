@@ -1806,13 +1806,29 @@ def test_pairwise_operations():
     assert a.count_xor(b) == 2
     assert a.count_andnot(b) == 1
     assert a.intersects(b) is True
+    assert a.is_disjoint(b) is False
     assert a.is_subset_of(b) is False
+    assert a.is_superset_of(b) is False
     assert Mutibs('0b1000').is_subset_of('0b1010') is True
+    assert Mutibs('0b1010').is_superset_of('0b1000') is True
+    assert Mutibs('0b1100').is_disjoint('0b0011') is True
+    # The empty container, all zeros and all ones.
+    empty, zeros, ones = Mutibs(''), Mutibs('0b0000'), Mutibs('0b1111')
+    assert empty.is_disjoint(empty) is True
+    assert empty.is_superset_of(empty) is True
+    assert zeros.is_disjoint(ones) is True
+    assert ones.is_disjoint(ones) is False
+    assert ones.is_superset_of(zeros) is True
+    assert zeros.is_superset_of(ones) is False
     # Mutibs and Tibs operands are interchangeable.
     assert a.count_and(Tibs('0b1010')) == 1
     assert Tibs('0b1100').count_and(a) == 2
+    assert a.is_superset_of(Tibs('0b0100')) is True
     with pytest.raises(ValueError):
         a.count_and('0b101')
+    for call in [lambda: a.is_disjoint('0b101'), lambda: a.is_superset_of('0b101')]:
+        with pytest.raises(ValueError):
+            call()
 
 
 def test_pairwise_matches_tibs_when_unaligned():
@@ -1826,7 +1842,9 @@ def test_pairwise_matches_tibs_when_unaligned():
             assert a.count_xor(b) == (ta ^ tb).count(1)
             assert a.count_andnot(b) == ta.count(1) - (ta & tb).count(1)
             assert a.intersects(b) == (ta & tb).any()
+            assert a.is_disjoint(b) == (not (ta & tb).any())
             assert a.is_subset_of(b) == ((ta & tb) == ta)
+            assert a.is_superset_of(b) == ((ta & tb) == tb)
 
 
 def test_invert_empty_special_method():

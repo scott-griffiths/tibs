@@ -12,11 +12,12 @@ Backwardly incompatible changes
 
 Added
 
-* Six methods for comparing two containers without building an intermediate
-  object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`
-  and `is_subset_of`. The counts are equivalent to `(a & b).count(1)` and so on,
-  and `count_xor` is the Hamming distance. Both containers must be the same
-  length, as for the `&`, `|` and `^` operators.
+* Eight methods for comparing two containers without building an intermediate
+  object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
+  `is_disjoint`, `is_subset_of` and `is_superset_of`. The counts are equivalent
+  to `(a & b).count(1)` and so on, and `count_xor` is the Hamming distance.
+  Both containers must be the same length, as for the `&`, `|` and `^`
+  operators.
 
   ```python
   >>> a, b = Tibs('0b1100'), Tibs('0b1010')
@@ -24,12 +25,16 @@ Added
   2
   >>> Tibs('0b1010').is_subset_of('0b1011')
   True
+  >>> Tibs('0b1011').is_superset_of('0b1010')
+  True
+  >>> Tibs('0b1100').is_disjoint('0b0011')
+  True
   ```
 
   Skipping the intermediate object makes the counts around 3x faster for short
-  containers and much more than that for long ones. `intersects` and
-  `is_subset_of` stop as soon as they know the answer, so they can return
-  almost immediately where building `a & b` would have to do all the work.
+  containers and much more than that for long ones. The four predicates stop as
+  soon as they know the answer, so they can return almost immediately where
+  building `a & b` would have to do all the work.
 
 * The `value` parameter of `count` is now optional, and counts the set bits when
   it's not given, so `t.count()` is the same as `t.count(1)`. This matches the

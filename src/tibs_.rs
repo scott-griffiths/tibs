@@ -2810,6 +2810,28 @@ impl Tibs {
         Ok(self.pairwise_any(&other, LogicalOp::And))
     }
 
+    /// Return whether no bit is set in both this Tibs and another.
+    ///
+    /// The negation of :meth:`intersects`. Equivalent to ``not (self & other).any()``,
+    /// but stops at the first bit set in both instead of building the
+    /// intermediate ``Tibs``.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: ``True`` if no position is set in both, otherwise ``False``.
+    /// :raises ValueError: if the two Tibs have differing lengths.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b1100').is_disjoint('0b0011')
+    ///     True
+    ///     >>> Tibs('0b1100').is_disjoint('0b1010')
+    ///     False
+    ///
+    pub fn is_disjoint(&self, other: Tibs) -> PyResult<bool> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        Ok(!self.pairwise_any(&other, LogicalOp::And))
+    }
+
     /// Return whether every bit set in this Tibs is also set in another.
     ///
     /// Equivalent to ``(self & other) == self``, but stops at the first bit set
@@ -2829,6 +2851,29 @@ impl Tibs {
     pub fn is_subset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
+    }
+
+    /// Return whether every bit set in another is also set in this Tibs.
+    ///
+    /// The mirror of :meth:`is_subset_of`. Equivalent to ``(self & other) == other``,
+    /// but stops at the first bit set there and not here.
+    ///
+    /// :param object other: The other bits. This can be anything promotable to ``Tibs``.
+    /// :return: ``True`` if every position set in the other is set here, otherwise ``False``.
+    /// :raises ValueError: if the two Tibs have differing lengths.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0b1010').is_superset_of('0b1000')
+    ///     True
+    ///     >>> Tibs('0b1010').is_superset_of('0b1100')
+    ///     False
+    ///
+    pub fn is_superset_of(&self, other: Tibs) -> PyResult<bool> {
+        validate_logical_op_lengths(self.len(), other.len())?;
+        // `and not` with the operands the other way round: the first bit
+        // present in `other` and missing here ends the walk.
+        Ok(!other.pairwise_any(self, LogicalOp::AndNot))
     }
 
     /// Read the bits at the positions set in a mask, packed together.

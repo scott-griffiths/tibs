@@ -1083,20 +1083,22 @@ def test_find_with_mask_against_reference():
 
 
 def _pairwise_reference(a, b):
-    """The six operations spelled out with the pre-existing operators."""
+    """The eight operations spelled out with the pre-existing operators."""
     return (
         (a & b).count(1),
         (a | b).count(1),
         (a ^ b).count(1),
         a.count(1) - (a & b).count(1),
         (a & b).any(),
+        not (a & b).any(),
         (a & b) == a,
+        (a & b) == b,
     )
 
 
 def _pairwise_actual(a, b):
     return (a.count_and(b), a.count_or(b), a.count_xor(b), a.count_andnot(b),
-            a.intersects(b), a.is_subset_of(b))
+            a.intersects(b), a.is_disjoint(b), a.is_subset_of(b), a.is_superset_of(b))
 
 
 def test_pairwise_worked_example():
@@ -1106,10 +1108,14 @@ def test_pairwise_worked_example():
     assert a.count_xor(b) == 2     # positions 1, 2 — the Hamming distance
     assert a.count_andnot(b) == 1  # position 1
     assert a.intersects(b) is True
+    assert a.is_disjoint(b) is False
     assert a.is_subset_of(b) is False
+    assert a.is_superset_of(b) is False  # position 2 is set in b but not in a
     # A set bit means membership, so the operations ignore matching zeros.
     assert Tibs('0b1000').is_subset_of('0b1010') is True
+    assert Tibs('0b1010').is_superset_of('0b1000') is True
     assert Tibs('0b1100').intersects('0b0011') is False
+    assert Tibs('0b1100').is_disjoint('0b0011') is True
 
 
 def test_pairwise_promotes_arguments():
@@ -1117,6 +1123,8 @@ def test_pairwise_promotes_arguments():
     assert Tibs('0xff').count_and(b'\x0f') == 4
     assert Tibs('0xff').count_and(Mutibs('0x0f')) == 4
     assert Tibs('0b1010').is_subset_of([1, 1, 1, 1]) is True
+    assert Tibs('0b1111').is_superset_of([1, 0, 1, 0]) is True
+    assert Tibs('0xff').is_disjoint(b'\x00') is True
 
 
 def test_pairwise_edge_cases():
@@ -1124,21 +1132,32 @@ def test_pairwise_edge_cases():
     # The empty set is a subset of everything and intersects nothing.
     assert zeros.is_subset_of('0b1010') is True
     assert zeros.intersects(ones) is False
+    assert zeros.is_disjoint(ones) is True
     assert empty.is_subset_of(empty) is True
+    assert empty.is_superset_of(empty) is True
     assert empty.intersects(empty) is False
+    assert empty.is_disjoint(empty) is True
     assert empty.count_and(empty) == 0
     # Subset is reflexive, and mutual subsets are equal.
     for t in [empty, zeros, ones, Tibs('0b1010')]:
         assert t.is_subset_of(t) is True
+        assert t.is_superset_of(t) is True
     assert ones.is_subset_of(zeros) is False
     assert zeros.is_subset_of(ones) is True
+    # Superset is subset with the operands swapped.
+    assert ones.is_superset_of(zeros) is True
+    assert zeros.is_superset_of(ones) is False
+    # Everything is disjoint from all-zeros, including all-zeros itself.
+    assert zeros.is_disjoint(zeros) is True
+    assert ones.is_disjoint(ones) is False
 
 
 def test_pairwise_length_mismatch():
     a = Tibs('0b1010')
     for call in [lambda: a.count_and('0b101'), lambda: a.count_or('0b101'),
                  lambda: a.count_xor('0b101'), lambda: a.count_andnot('0b101'),
-                 lambda: a.intersects('0b101'), lambda: a.is_subset_of('0b101')]:
+                 lambda: a.intersects('0b101'), lambda: a.is_disjoint('0b101'),
+                 lambda: a.is_subset_of('0b101'), lambda: a.is_superset_of('0b101')]:
         with pytest.raises(ValueError):
             call()
 
@@ -1169,8 +1188,13 @@ def test_pairwise_identities():
         assert a.count_xor(b) == a.count_andnot(b) + b.count_andnot(a)
         assert a.count_or(b) == a.count(1) + b.count(1) - a.count_and(b)
         assert a.intersects(b) == (a.count_and(b) > 0)
+        assert a.is_disjoint(b) == (a.count_and(b) == 0)
         assert a.is_subset_of(b) == (a.count_andnot(b) == 0)
+        assert a.is_superset_of(b) == (b.count_andnot(a) == 0)
         assert (a.is_subset_of(b) and b.is_subset_of(a)) == (a == b)
+        # Each new predicate is the mirror or the negation of an old one.
+        assert a.is_disjoint(b) == (not a.intersects(b))
+        assert a.is_superset_of(b) == b.is_subset_of(a)
 
 
 def test_count_defaults_to_set_bits():

@@ -70,17 +70,22 @@ building anything in between, which is typically several times faster:
      - ``a.count() - a.count_and(b)``
    * - ``a.intersects(b)``
      - ``(a & b).any()``
+   * - ``a.is_disjoint(b)``
+     - ``not (a & b).any()``
    * - ``a.is_subset_of(b)``
      - ``(a & b) == a``
+   * - ``a.is_superset_of(b)``
+     - ``(a & b) == b``
 
 The four counting methods are :meth:`~Tibs.count_and`, :meth:`~Tibs.count_or`,
-:meth:`~Tibs.count_xor` and :meth:`~Tibs.count_andnot`; the two predicates are
-:meth:`~Tibs.intersects` and :meth:`~Tibs.is_subset_of`. Both containers must be
-the same length, as they must be for ``&``, ``|`` and ``^``.
+:meth:`~Tibs.count_xor` and :meth:`~Tibs.count_andnot`; the four predicates are
+:meth:`~Tibs.intersects`, :meth:`~Tibs.is_disjoint`, :meth:`~Tibs.is_subset_of`
+and :meth:`~Tibs.is_superset_of`. Both containers must be the same length, as
+they must be for ``&``, ``|`` and ``^``.
 
 It helps to think of a container as the *set of positions where the bit is set* -
 so a ``1`` means "present" and a ``0`` means "absent", rather than being a second
-kind of value that could match. That is what makes the last two asymmetric between
+kind of value that could match. That is what makes the predicates asymmetric between
 ``1`` and ``0``::
 
     >>> a, b = Tibs('0b1100'), Tibs('0b1010')
@@ -98,8 +103,12 @@ Flags are the case where this reads most naturally::
     >>> granted = Tibs('0b1011')
     >>> Tibs('0b1010').is_subset_of(granted)
     True
+    >>> granted.is_superset_of('0b1010')
+    True
+    >>> granted.is_disjoint('0b0100')
+    True
 
-The two predicates stop as soon as they know the answer, so on large containers
+The predicates stop as soon as they know the answer, so on large containers
 where the answer comes early they finish in a fraction of the time that building
 ``a & b`` would take. See :doc:`example_fingerprints` for a worked example.
 
