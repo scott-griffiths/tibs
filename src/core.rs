@@ -1,10 +1,10 @@
 use crate::helpers::{
     BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
-    bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
-    extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset, hex_from_padded_bytes,
-    logical_op_with_aligned_bytes, logical_op_with_matching_bytes, mask_padding_bits,
-    normalize_split_position, oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits,
-    validate_index, validate_slice,
+    bitslices_equal, bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice,
+    count_pair_bits, extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset,
+    hex_from_padded_bytes, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
+    mask_padding_bits, normalize_split_position, oct_from_padded_bytes, reverse_byte_groups,
+    reverse_padded_bits, validate_index, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -165,7 +165,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn starts_with(&self, prefix: impl BitCollection) -> bool {
         let n = prefix.len();
         if n <= self.len() {
-            *prefix.as_bitslice() == self.as_bitslice()[..n]
+            bitslices_equal(prefix.as_bitslice(), &self.as_bitslice()[..n])
         } else {
             false
         }
@@ -179,7 +179,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
         let n = suffix.len();
         if n <= self.len() {
-            *suffix.as_bitslice() == self.as_bitslice()[self.len() - n..]
+            bitslices_equal(suffix.as_bitslice(), &self.as_bitslice()[self.len() - n..])
         } else {
             false
         }
@@ -857,6 +857,6 @@ impl BitCollection for Mutibs {
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_bitslice() == other.as_bitslice()
+        bitslices_equal(self.as_bitslice(), other.as_bitslice())
     }
 }

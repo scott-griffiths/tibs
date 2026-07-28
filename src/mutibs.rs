@@ -5,12 +5,12 @@ use crate::core::{
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
-    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, fill_bits, find_bitvec,
-    find_bitvec_aligned, head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv,
-    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    BS, BV, BitConcat, LogicalOp, MaskedMatcher, bitslices_equal, bv_from_bin, bv_from_bools,
+    bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones,
+    bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked,
+    fill_bits, find_bitvec, find_bitvec_aligned, head_bit_offset, move_bits,
+    padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv, validate_index,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -939,10 +939,10 @@ impl Mutibs {
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Tibs>>() {
-            return Ok(self.as_bitslice() == other.as_bitslice());
+            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
         }
         if let Ok(other) = other.extract::<PyRef<'_, Mutibs>>() {
-            return Ok(self.as_bitslice() == other.as_bitslice());
+            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
         }
         Ok(false)
     }

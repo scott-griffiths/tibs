@@ -6,7 +6,9 @@
 //! logic that drives it lives in `core.rs`.
 
 use super::bits::{BS, BV, BitAccumulator, head_bit_offset};
-use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
+use super::raw_bytes::{
+    bitslice_storage, copy_shifted_bytes, mask_padding_bits, reverse_padded_bits,
+};
 use super::splice::{copy_bits, move_bits};
 use bitvec::prelude::*;
 
@@ -608,6 +610,34 @@ where
 /// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
 /// be the same length and `value` must be `mask.count_ones()` bits long; both
 /// are the caller's responsibility to check.
+/// Whether two runs of bits hold the same value.
+///
+/// Two runs are equal exactly when nothing differs, and "does anything differ"
+/// is `any_pair_bits` with `Xor` — the same word-at-a-time walk over the raw
+/// storage that `intersects` uses, stopping at the first difference.
+/// `BitSlice`'s own `PartialEq` instead assembles a word from each side per 64
+/// bits (`chunks(64)` then `load_be`) rather than reading the bytes, which
+/// costs about twenty times more.
+pub(crate) fn bitslices_equal(left: &BS, right: &BS) -> bool {
+    let len = left.len();
+    if len != right.len() {
+        return false;
+    }
+    if len == 0 {
+        return true;
+    }
+    let (left_bytes, left_offset) = bitslice_storage(left);
+    let (right_bytes, right_offset) = bitslice_storage(right);
+    !any_pair_bits(
+        &left_bytes,
+        left_offset,
+        &right_bytes,
+        right_offset,
+        len,
+        LogicalOp::Xor,
+    )
+}
+
 /// Move the bits of `x` picked out by `m` down to the low end, keeping their
 /// order and clearing everything above them.
 ///
