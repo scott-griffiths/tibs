@@ -91,6 +91,23 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
+    /// Whether `self` and `other` hold the same bits.
+    ///
+    /// Goes through the raw storage, so a length that is not a whole number of
+    /// bytes costs the same as one that is. `bitslices_equal` has to reach for
+    /// `bitslice_storage`, which can only borrow when the bits exactly fill
+    /// their bytes and otherwise copies the partial head or tail element into
+    /// an owned buffer first. For a short run those two allocations are the
+    /// entire cost of the comparison.
+    #[inline]
+    fn bits_equal(&self, other: &impl BitCollection) -> bool {
+        let len = self.len();
+        if len != other.len() {
+            return false;
+        }
+        len == 0 || !self.pairwise_any(other, LogicalOp::Xor)
+    }
+
     /// Read the bits of `self` where `mask` is set, compacted into a new
     /// bit vector of length `mask.count_ones()` (the PEXT operation). `self`
     /// and `mask` must be the same length.
@@ -162,13 +179,44 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
     }
 
-    fn starts_with(&self, prefix: impl BitCollection) -> bool {
-        let n = prefix.len();
-        if n <= self.len() {
-            bitslices_equal(prefix.as_bitslice(), &self.as_bitslice()[..n])
-        } else {
-            false
+    /// Whether the `n` bits of `self` starting at `skip` match `edge`.
+    ///
+    /// Shared by [`starts_with`](Self::starts_with) and
+    /// [`ends_with`](Self::ends_with), which differ only in where they start.
+    /// Comparing over the raw storage keeps an edge that is not a whole number
+    /// of bytes as cheap as one that is - see [`bits_equal`](Self::bits_equal)
+    /// for what the bit-slice route costs instead.
+    fn edge_equal(&self, edge: &impl BitCollection, skip: usize) -> bool {
+        let n = edge.len();
+        debug_assert!(skip + n <= self.len());
+        if n == 0 {
+            return true;
         }
+        match (self.raw_data_ref(), edge.raw_data_ref()) {
+            (Some((bytes, offset, _)), Some((edge_bytes, edge_offset, _))) => {
+                // `any_pair_bits` takes the byte span of the comparison from
+                // the length of its first slice, so this has to be trimmed to
+                // exactly the bytes holding the `n` bits, not left running to
+                // the end of `self`.
+                let start = offset + skip;
+                let head = start / 8;
+                let head_offset = start % 8;
+                let byte_len = (head_offset + n).div_ceil(8);
+                !any_pair_bits(
+                    &bytes[head..head + byte_len],
+                    head_offset,
+                    edge_bytes,
+                    edge_offset,
+                    n,
+                    LogicalOp::Xor,
+                )
+            }
+            _ => bitslices_equal(edge.as_bitslice(), &self.as_bitslice()[skip..skip + n]),
+        }
+    }
+
+    fn starts_with(&self, prefix: impl BitCollection) -> bool {
+        prefix.len() <= self.len() && self.edge_equal(&prefix, 0)
     }
 
     #[inline]
@@ -177,12 +225,7 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     fn ends_with(&self, suffix: impl BitCollection) -> bool {
-        let n = suffix.len();
-        if n <= self.len() {
-            bitslices_equal(suffix.as_bitslice(), &self.as_bitslice()[self.len() - n..])
-        } else {
-            false
-        }
+        suffix.len() <= self.len() && self.edge_equal(&suffix, self.len() - suffix.len())
     }
 
     /// Returns the bool value at a given bit index.
@@ -853,10 +896,10 @@ impl BitCollection for Mutibs {
 
 // Only Tibs needs a PartialEq impl, for View::__eq__ comparing its source.
 // The Python-level `==` on Tibs and Mutibs goes through their __eq__ methods,
-// which compare bit slices directly rather than through this trait.
+// which reach the same comparison directly.
 impl PartialEq for Tibs {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        bitslices_equal(self.as_bitslice(), other.as_bitslice())
+        self.bits_equal(other)
     }
 }

@@ -4,11 +4,10 @@ use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
-    BS, BV, LogicalOp, bitslices_equal, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
-    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned,
-    str_to_bv, validate_index, validate_length, validate_logical_op_lengths, validate_shift,
-    validate_slice,
+    BS, BV, LogicalOp, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
+    bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros,
+    bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -1373,11 +1372,14 @@ impl Tibs {
     /// True
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Tibs>>() {
-            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
+        // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
+        // Python exception when the other side is the class not tried first.
+        if let Ok(other) = other.cast::<Tibs>() {
+            return Ok(self.bits_equal(other.get()));
         }
-        if let Ok(other) = other.extract::<PyRef<'_, Mutibs>>() {
-            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
+        if let Ok(other) = other.cast::<Mutibs>() {
+            let other = other.borrow();
+            return Ok(self.bits_equal(&*other));
         }
         Ok(false)
     }
@@ -2621,15 +2623,10 @@ impl Tibs {
                 return Ok(Bound::from_owned_ptr(py, obj).unbind());
             }
         }
-        if let Ok(index) = key.extract::<isize>() {
-            let index = validate_index(index, self.length)?;
-            // SAFETY: validate_index guarantees index < self.length.
-            let value = unsafe { self.bit_at_unchecked(index) };
-            let py_value = PyBool::new(py, value);
-            return Ok(py_value.to_owned().into());
-        }
-
-        // Handle slice indexing
+        // Handle slice indexing. This is checked before the general integer
+        // extraction below because that extraction raises and discards a Python
+        // exception for a key it cannot convert, which costs more than the
+        // slice itself.
         if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
             let (start, stop, step) = (indices.start, indices.stop, indices.step);
@@ -2645,6 +2642,16 @@ impl Tibs {
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
+        }
+
+        // Anything else that can still act as an index, such as a NumPy
+        // integer, which the `PyLong_Check` above does not accept.
+        if let Ok(index) = key.extract::<isize>() {
+            let index = validate_index(index, self.length)?;
+            // SAFETY: validate_index guarantees index < self.length.
+            let value = unsafe { self.bit_at_unchecked(index) };
+            let py_value = PyBool::new(py, value);
+            return Ok(py_value.to_owned().into());
         }
 
         Err(PyTypeError::new_err("Index must be an integer or a slice."))

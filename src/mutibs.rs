@@ -5,12 +5,12 @@ use crate::core::{
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
-    BS, BV, BitConcat, LogicalOp, MaskedMatcher, bitslices_equal, bv_from_bin, bv_from_bools,
-    bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones,
-    bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked,
-    fill_bits, find_bitvec, find_bitvec_aligned, head_bit_offset, move_bits,
-    padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv, validate_index,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
+    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
+    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, fill_bits, find_bitvec,
+    find_bitvec_aligned, head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv,
+    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -966,11 +966,14 @@ impl Mutibs {
     /// True
     ///
     pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Tibs>>() {
-            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
+        // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
+        // Python exception when the other side is the class not tried first.
+        if let Ok(other) = other.cast::<Tibs>() {
+            return Ok(self.bits_equal(other.get()));
         }
-        if let Ok(other) = other.extract::<PyRef<'_, Mutibs>>() {
-            return Ok(bitslices_equal(self.as_bitslice(), other.as_bitslice()));
+        if let Ok(other) = other.cast::<Mutibs>() {
+            let other = other.borrow();
+            return Ok(self.bits_equal(&*other));
         }
         Ok(false)
     }
@@ -2052,14 +2055,9 @@ impl Mutibs {
                 return Ok(Bound::from_owned_ptr(py, obj).unbind());
             }
         }
-        // Handle integer indexing
-        if let Ok(index) = key.extract::<isize>() {
-            let value: bool = self.get_index(index)?;
-            let py_value = PyBool::new(py, value);
-            return Ok(py_value.to_owned().into());
-        }
-
-        // Handle slice indexing
+        // Handle slice indexing. Checked before the general integer extraction
+        // below because that extraction raises and discards a Python exception
+        // for a key it cannot convert, which costs more than the slice itself.
         if let Ok(slice) = key.cast::<PySlice>() {
             let indices = slice.indices(self.len() as isize)?;
             let (start, stop, step) = (indices.start, indices.stop, indices.step);
@@ -2075,6 +2073,14 @@ impl Mutibs {
             };
             let py_obj = Py::new(py, result)?.into_pyobject(py)?;
             return Ok(py_obj.into());
+        }
+
+        // Anything else that can still act as an index, such as a NumPy
+        // integer, which the `PyLong_Check` above does not accept.
+        if let Ok(index) = key.extract::<isize>() {
+            let value: bool = self.get_index(index)?;
+            let py_value = PyBool::new(py, value);
+            return Ok(py_value.to_owned().into());
         }
 
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
@@ -2111,7 +2117,12 @@ impl Mutibs {
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let length = slf.len();
-        if let Ok(index) = key.extract::<isize>() {
+        // Fast path for exact int keys, then slices, and only then the general
+        // integer extraction, which raises and discards a Python exception for
+        // a key it cannot convert.
+        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0
+            && let Ok(index) = key.extract::<isize>()
+        {
             if value.is_truthy()? {
                 slf.set_index(index)?;
             } else {
@@ -2179,6 +2190,16 @@ impl Mutibs {
 
             return Ok(());
         }
+        // Anything else that can still act as an index, such as a NumPy
+        // integer, which the `PyLong_Check` above does not accept.
+        if let Ok(index) = key.extract::<isize>() {
+            if value.is_truthy()? {
+                slf.set_index(index)?;
+            } else {
+                slf.unset_index(index)?;
+            }
+            return Ok(());
+        }
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
     }
 
@@ -2202,7 +2223,12 @@ impl Mutibs {
     ///
     pub fn __delitem__(&mut self, key: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
-        if let Ok(mut index) = key.extract::<i64>() {
+        // Fast path for exact int keys, then slices, and only then the general
+        // integer extraction, which raises and discards a Python exception for
+        // a key it cannot convert.
+        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0
+            && let Ok(mut index) = key.extract::<i64>()
+        {
             if index < 0 {
                 index += length as i64;
             }
@@ -2247,6 +2273,20 @@ impl Mutibs {
                 to_remove.sort();
                 self.delete_positions(&to_remove);
             }
+            return Ok(());
+        }
+        // Anything else that can still act as an index, such as a NumPy
+        // integer, which the `PyLong_Check` above does not accept.
+        if let Ok(mut index) = key.extract::<i64>() {
+            if index < 0 {
+                index += length as i64;
+            }
+            if index < 0 || index >= length as i64 {
+                return Err(PyIndexError::new_err(format!(
+                    "Bit index {index} out of range for length {length}"
+                )));
+            }
+            self.delete_slice(index as usize, index as usize + 1);
             return Ok(());
         }
         Err(PyTypeError::new_err("Index must be an integer or a slice."))
