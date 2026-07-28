@@ -40,9 +40,10 @@ or as assertions::
 
     .venv/bin/python -m pytest tests/performance_guards.py
 
-Every guard here is currently expected to FAIL. They describe the audit of
-2026-07-27 rather than the state of the code, and each one names the call site
-responsible so the list doubles as a worklist.
+These began as the worklist for the audit of 2026-07-27, when all of them
+failed. All but one now pass, so they have turned into what they were always
+meant to become: a guard against the same mistakes coming back. Each one names
+the call site it is about.
 """
 
 from __future__ import annotations
@@ -86,6 +87,7 @@ assert BIG_T.find(NEEDLE_41) is None, "needle must be absent for the search guar
 
 SET_POSITIONS_RANGE = range(0, BITS, 8)
 SET_POSITIONS_LIST = list(SET_POSITIONS_RANGE)
+SET_POSITIONS_TUPLE = tuple(SET_POSITIONS_RANGE)
 
 # Targets for the guards whose operation mutates in place. Each is used by one
 # guard only, so repeated timed calls cannot interfere with another case.
@@ -96,13 +98,15 @@ BIG_M_ROTATE = Mutibs(BIG_T)
 BIG_M_SWAP = Mutibs(BIG_T)
 BIG_M_SET_RANGE = Mutibs.from_zeros(BITS)
 BIG_M_SET_LIST = Mutibs.from_zeros(BITS)
+BIG_M_SET_TUPLE = Mutibs.from_zeros(BITS)
 
-# set() from a range and from a list must land on the same bits, or the guard
-# below would be timing two different amounts of work.
-_probe_range, _probe_list = Mutibs.from_zeros(BITS), Mutibs.from_zeros(BITS)
+# The range, list and tuple spellings must land on the same bits, or the
+# guards below would be timing two different amounts of work.
+_probe_range, _probe_list, _probe_tuple = (Mutibs.from_zeros(BITS) for _ in range(3))
 _probe_range.set(SET_POSITIONS_RANGE)
 _probe_list.set(SET_POSITIONS_LIST)
-assert _probe_range == _probe_list
+_probe_tuple.set(SET_POSITIONS_TUPLE)
+assert _probe_range == _probe_list == _probe_tuple
 
 # One round is aimed at this long. Short enough to keep the whole module quick,
 # long enough that perf_counter's resolution is not part of the answer.
@@ -329,13 +333,33 @@ GUARDS: list[Guard] = [
         limit=6.0,
         same_result=False,
     ),
-    # ---- 13. set() from a list ------------------------------------------
+    # ---- 13. set() from a sequence of positions --------------------------
+    # The reference is Python summing the *same list*, because that is the
+    # honest floor here: both have to read 125,000 integer objects, and no
+    # amount of work on the bit side removes that. This guard first compared
+    # against `set(range)`, which touches no Python object at all, and so
+    # measured a cost the list form cannot avoid rather than a defect - the
+    # fast path already reads the list quicker than `sum` does.
+    #
+    # It still catches the regression that matters. Dropping the borrowed
+    # reference walk for pyo3's generic extraction takes this from 0.9x to
+    # 1.9x, and the fully generic iterator path to 4.1x.
     Guard(
-        name="set(list) vs set(range)",
-        site="mutibs.rs:2025 collect_position_indices - per-item pyo3 extract",
+        name="set(list) vs sum(list)",
+        site="mutibs.rs set_from_list -> validate_sequence_indices",
         slow=lambda: BIG_M_SET_LIST.set(SET_POSITIONS_LIST),
-        fast=lambda: BIG_M_SET_RANGE.set(SET_POSITIONS_RANGE),
-        limit=3.0,
+        fast=lambda: sum(SET_POSITIONS_LIST),
+        limit=1.4,
+        same_result=False,
+    ),
+    # Tuples take the same borrowed-reference path as lists, not the generic
+    # one, so the two spellings should cost the same.
+    Guard(
+        name="set(tuple) vs set(list)",
+        site="mutibs.rs set_from_tuple -> validate_sequence_indices",
+        slow=lambda: BIG_M_SET_TUPLE.set(SET_POSITIONS_TUPLE),
+        fast=lambda: BIG_M_SET_LIST.set(SET_POSITIONS_LIST),
+        limit=1.3,
         same_result=False,
     ),
     # ---- 14. to_values('u1') --------------------------------------------

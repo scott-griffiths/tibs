@@ -486,33 +486,59 @@ impl Mutibs {
     }
 
     fn set_from_list(&mut self, value: bool, list: &Bound<'_, PyList>) -> PyResult<()> {
+        let items = list.as_ptr();
+        self.set_from_sequence_items(value, list.py(), list.len(), |index| unsafe {
+            ffi::PyList_GetItem(items, index)
+        })
+    }
+
+    fn set_from_tuple(&mut self, value: bool, tuple: &Bound<'_, PyTuple>) -> PyResult<()> {
+        let items = tuple.as_ptr();
+        self.set_from_sequence_items(value, tuple.py(), tuple.len(), |index| unsafe {
+            ffi::PyTuple_GetItem(items, index)
+        })
+    }
+
+    /// Set or unset `count` positions read straight from a sequence.
+    ///
+    /// All the positions are read and checked before any bit is written, so a
+    /// bad index leaves the Mutibs untouched.
+    fn set_from_sequence_items(
+        &mut self,
+        value: bool,
+        py: Python<'_>,
+        count: usize,
+        get: impl Fn(ffi::Py_ssize_t) -> *mut ffi::PyObject,
+    ) -> PyResult<()> {
         const STACK_CAPACITY: usize = 16;
 
-        let count = list.len();
         if count <= STACK_CAPACITY {
             let mut indices = [0usize; STACK_CAPACITY];
-            self.validate_list_indices(list, &mut indices[..count])?;
+            self.validate_sequence_indices(py, &mut indices[..count], get)?;
             self.write_bits_raw(&indices[..count], value);
         } else {
             let mut indices = vec![0usize; count];
-            self.validate_list_indices(list, &mut indices)?;
+            self.validate_sequence_indices(py, &mut indices, get)?;
             self.write_bits_raw(&indices, value);
         }
         Ok(())
     }
 
-    fn validate_list_indices(
+    /// Read and range-check one bit position per entry of `indices`.
+    ///
+    /// `get` returns a borrowed reference to the item at an index, which stays
+    /// valid while the sequence is held under the GIL. Reading the items
+    /// directly avoids pyo3's generic extraction building its own `Vec`, which
+    /// costs about a third more.
+    fn validate_sequence_indices(
         &self,
-        list: &Bound<'_, PyList>,
+        py: Python<'_>,
         indices: &mut [usize],
+        get: impl Fn(ffi::Py_ssize_t) -> *mut ffi::PyObject,
     ) -> PyResult<()> {
-        debug_assert_eq!(list.len(), indices.len());
-        let py = list.py();
         let len = self.len();
         for (position, index) in indices.iter_mut().enumerate() {
-            // The index is in bounds and the borrowed item remains valid while
-            // the list is held under the GIL.
-            let item = unsafe { ffi::PyList_GetItem(list.as_ptr(), position as ffi::Py_ssize_t) };
+            let item = get(position as ffi::Py_ssize_t);
             let value = if unsafe { ffi::PyLong_Check(item) } != 0 {
                 unsafe { ffi::PyLong_AsSsize_t(item) }
             } else {
@@ -553,6 +579,8 @@ impl Mutibs {
     ) -> PyResult<()> {
         if let Ok(list) = pos.cast::<PyList>() {
             self.set_from_list(value, list)?;
+        } else if let Ok(tuple) = pos.cast::<PyTuple>() {
+            self.set_from_tuple(value, tuple)?;
         } else if let Ok(index) = pos.extract::<isize>() {
             if value {
                 self.set_index(index)?;
