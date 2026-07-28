@@ -732,6 +732,75 @@ impl BytewiseUnpacker {
     }
 }
 
+/// Unpacker for integer dtypes narrower than a byte.
+///
+/// [`BytewiseUnpacker`] needs whole bytes, so `u1`..`u7` and their signed twins
+/// fell through to the general route, which rebuilds a `Tibs` window and
+/// re-dispatches on the dtype for every value. A field this narrow spans at
+/// most two bytes, so one shift and a mask lift it out.
+#[derive(Clone, Copy)]
+struct SubByteUnpacker {
+    length: usize,
+    signed: bool,
+}
+
+impl SubByteUnpacker {
+    fn for_parts(
+        dtype_kind: DtypeKind,
+        dtype_length: usize,
+        byte_order: ByteOrder,
+    ) -> Option<Self> {
+        if dtype_length == 0 || dtype_length >= 8 {
+            return None;
+        }
+        // A byte order has no meaning inside a single byte, and asking for one
+        // is an error the general path already reports.
+        if byte_order != ByteOrder::Unspecified {
+            return None;
+        }
+        let signed = match dtype_kind {
+            DtypeKind::Uint => false,
+            DtypeKind::Int => true,
+            _ => return None,
+        };
+        Some(Self {
+            length: dtype_length,
+            signed,
+        })
+    }
+
+    fn for_dtype(dtype: &Dtype) -> Option<Self> {
+        Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
+    }
+
+    /// The value at `index` as a Python object.
+    ///
+    /// `bytes` holds the values end to end, the first starting `shift` bits
+    /// into `bytes[0]`.
+    #[inline]
+    fn value<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        shift: usize,
+        index: usize,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let bit = shift + index * self.length;
+        let byte = bit >> 3;
+        let offset = bit & 7;
+        // `Msb0` puts the field's first bit at the top, and the field is short
+        // enough that two bytes always cover it.
+        let window = ((bytes[byte] as u16) << 8) | bytes.get(byte + 1).copied().unwrap_or(0) as u16;
+        let raw = (window >> (16 - offset - self.length)) & ((1u16 << self.length) - 1);
+        if self.signed {
+            let pad = 16 - self.length;
+            ((((raw << pad) as i16) >> pad) as i64).into_bound_py_any(py)
+        } else {
+            (raw as i64).into_bound_py_any(py)
+        }
+    }
+}
+
 pub(crate) fn py_from_value_parts(
     py: Python<'_>,
     dtype_kind: DtypeKind,
@@ -750,6 +819,11 @@ pub(crate) fn py_from_value_parts(
     if let Some(unpacker) = BytewiseUnpacker::for_parts(dtype_kind, dtype_length, byte_order)? {
         if let Some((bytes, shift, _)) = value.raw_data_ref() {
             return Ok(unpacker.value(py, bytes, shift as u32, 0)?.unbind());
+        }
+    }
+    if let Some(unpacker) = SubByteUnpacker::for_parts(dtype_kind, dtype_length, byte_order) {
+        if let Some((bytes, shift, _)) = value.raw_data_ref() {
+            return Ok(unpacker.value(py, bytes, shift, 0)?.unbind());
         }
     }
 
@@ -812,6 +886,22 @@ pub(crate) fn py_values_from_range(
         let window = bits.get_slice_unchecked(start, selected_len);
         if let Some((bytes, shift, _)) = window.raw_data_ref() {
             let shift = shift as u32;
+            for index in 0..count {
+                if index >= check_at {
+                    py.check_signals()?;
+                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+                }
+                values.push(unpacker.value(py, bytes, shift, index)?.unbind());
+            }
+            return Ok(values);
+        }
+    }
+
+    // Integer dtypes narrower than a byte read out of the same backing store,
+    // one shift and mask each.
+    if let Some(unpacker) = SubByteUnpacker::for_dtype(dtype) {
+        let window = bits.get_slice_unchecked(start, selected_len);
+        if let Some((bytes, shift, _)) = window.raw_data_ref() {
             for index in 0..count {
                 if index >= check_at {
                     py.check_signals()?;
