@@ -3339,7 +3339,30 @@ impl Mutibs {
         Mutibs::from_bv(self.to_bitvec())
     }
 
-    /// Create and return a Tibs instance from a copy of the Mutibs data.
+
+    /// Return the callable and arguments that recreate the Mutibs.
+    ///
+    /// Used by :mod:`pickle` and by :func:`copy.deepcopy`. The Mutibs that comes
+    /// back is a new object, independent of the one that was pickled or copied.
+    ///
+    /// :return: A tuple of :meth:`Mutibs.decode` and the encoded bytes to pass to it.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> import pickle
+    ///     >>> pickle.loads(pickle.dumps(Mutibs('0b110101')))
+    ///     Mutibs('0b110101')
+    ///
+    pub fn __reduce__(&self, py: Python<'_>) -> PyResult<(Py<PyAny>, (Py<PyBytes>,))> {
+        // Codec::Raw rather than the Codec::Auto default of `encode`: pickling
+        // and deep copying should cost about what copying costs, and Auto
+        // measures the alternative codecs and compresses on every call.
+        let encoded = PyBytes::new(py, &self.encode(Some(Codec::Raw))?);
+        let decode = py.get_type::<Self>().getattr("decode")?;
+        Ok((decode.unbind(), (encoded.unbind(),)))
+    }
+
+        /// Create and return a Tibs instance from a copy of the Mutibs data.
     ///
     /// This copies the underlying binary data, giving a new independent Tibs object.
     /// If you no longer need the Mutibs, consider using :meth:`as_tibs` instead to avoid the copy.

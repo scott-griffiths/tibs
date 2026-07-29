@@ -2,7 +2,8 @@
 
 import pytest
 import copy
-from tibs import Tibs, Mutibs
+import pickle
+from tibs import Tibs, Mutibs, Codec
 
 
 class TestFind:
@@ -1006,6 +1007,98 @@ class TestManyDifferentThings:
         a = Tibs("0xabc")
         b = copy.copy(a)
         assert id(a) == id(b)
+
+
+class TestPickle:
+    protocols = list(range(pickle.HIGHEST_PROTOCOL + 1))
+
+    def test_tibs_round_trip(self):
+        a = Tibs("0b110101")
+        for protocol in self.protocols:
+            b = pickle.loads(pickle.dumps(a, protocol))
+            assert type(b) is Tibs
+            assert b == a
+
+    def test_mutibs_round_trip(self):
+        a = Mutibs("0x1234, 0b1")
+        for protocol in self.protocols:
+            b = pickle.loads(pickle.dumps(a, protocol))
+            assert type(b) is Mutibs
+            assert b == a
+
+    @pytest.mark.parametrize("length", [1, 2, 7, 9, 15, 17, 63, 65, 100, 1001])
+    def test_lengths_that_are_not_a_multiple_of_eight(self, length):
+        for cls in (Tibs, Mutibs):
+            a = cls.from_random(length, seed=b"pickle")
+            b = pickle.loads(pickle.dumps(a))
+            assert len(b) == length
+            assert b == a
+
+    def test_unaligned_slice(self):
+        # A slice can start part way through its parent's storage, so the
+        # encoding has to normalise rather than hand over the raw bytes.
+        parent = Tibs.from_random(400, seed=b"slice")
+        for offset in range(8):
+            a = parent[offset:offset + 101]
+            assert pickle.loads(pickle.dumps(a)) == a
+            m = a.to_mutibs()
+            assert pickle.loads(pickle.dumps(m)) == m
+
+    def test_empty(self):
+        for cls in (Tibs, Mutibs):
+            a = cls()
+            b = pickle.loads(pickle.dumps(a))
+            assert type(b) is cls
+            assert len(b) == 0
+            assert b == a
+
+    def test_large(self):
+        for cls in (Tibs, Mutibs):
+            a = cls.from_random(1_000_003, seed=b"large")
+            assert pickle.loads(pickle.dumps(a)) == a
+
+    def test_tibs_equality_and_hash_preserved(self):
+        a = Tibs("0xabcd")[3:]
+        b = pickle.loads(pickle.dumps(a))
+        assert b == a
+        assert hash(b) == hash(a)
+        assert len({a, b}) == 1
+
+    def test_nested_in_a_container(self):
+        original = {"a": Tibs("0b1101"), "b": [Mutibs("0x0f"), Tibs()]}
+        restored = pickle.loads(pickle.dumps(original))
+        assert restored == original
+
+    def test_deepcopy_tibs(self):
+        a = Tibs("0b1101011")
+        b = copy.deepcopy(a)
+        assert b == a
+
+    def test_deepcopy_mutibs_is_independent(self):
+        a = Mutibs("0b1101011")
+        b = copy.deepcopy(a)
+        assert b == a
+        b.invert()
+        b.append(1)
+        assert a == Mutibs("0b1101011")
+        assert b == Mutibs("0b00101001")
+
+    def test_deepcopy_of_a_container_of_mutibs(self):
+        a = Mutibs("0x00")
+        original = [a, a]
+        copied = copy.deepcopy(original)
+        copied[0].set(0)
+        # The two list entries were the same object, so they still are.
+        assert copied[0] == copied[1] == Mutibs("0x80")
+        assert a == Mutibs("0x00")
+
+    def test_reduce_uses_decode_and_raw_encoded_bytes(self):
+        for cls in (Tibs, Mutibs):
+            a = cls("0b110101")
+            func, args = a.__reduce__()
+            assert func == cls.decode
+            assert args == (a.encode(Codec.Raw),)
+            assert func(*args) == a
 
 
 class TestSet:

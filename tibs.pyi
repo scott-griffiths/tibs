@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, ClassVar, overload, Iterable, Iterator, SupportsIndex, Union
+from typing import Any, Callable, ClassVar, overload, Iterable, Iterator, SupportsIndex, Union
 
 __version__: str
 __author__: str
@@ -492,6 +492,8 @@ class Tibs:
 
     def __copy__(self) -> Tibs: ...
 
+    def __reduce__(self) -> tuple[Callable[[bytes], Tibs], tuple[bytes]]: ...
+
     def rfind(self, b: _TibsLike, start: int | None = None, end: int | None = None,
               byte_aligned: bool = False, mask: _TibsLike | None = None) -> int | None: ...
 
@@ -875,6 +877,8 @@ class Mutibs:
     def __rshift__(self, n: int) -> Mutibs: ...
 
     def __copy__(self) -> Mutibs: ...
+
+    def __reduce__(self) -> tuple[Callable[[bytes], Mutibs], tuple[bytes]]: ...
 
     def to_tibs(self) -> Tibs: ...
 

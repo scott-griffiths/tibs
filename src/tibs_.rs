@@ -2363,7 +2363,29 @@ impl Tibs {
         slf.into()
     }
 
-    /// Find last occurrence of a bit sequence.
+
+    /// Return the callable and arguments that recreate the Tibs.
+    ///
+    /// Used by :mod:`pickle` and by :func:`copy.deepcopy`.
+    ///
+    /// :return: A tuple of :meth:`Tibs.decode` and the encoded bytes to pass to it.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> import pickle
+    ///     >>> pickle.loads(pickle.dumps(Tibs('0b110101')))
+    ///     Tibs('0b110101')
+    ///
+    pub fn __reduce__(&self, py: Python<'_>) -> PyResult<(Py<PyAny>, (Py<PyBytes>,))> {
+        // Codec::Raw rather than the Codec::Auto default of `encode`: pickling
+        // and deep copying should cost about what copying costs, and Auto
+        // measures the alternative codecs and compresses on every call.
+        let encoded = PyBytes::new(py, &self.encode(Some(Codec::Raw))?);
+        let decode = py.get_type::<Self>().getattr("decode")?;
+        Ok((decode.unbind(), (encoded.unbind(),)))
+    }
+
+        /// Find last occurrence of a bit sequence.
     ///
     /// Returns the bit position if found, or None if not found.
     ///

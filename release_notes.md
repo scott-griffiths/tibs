@@ -131,6 +131,18 @@ Added
   This is deliberately not offered on `Mutibs`. Its storage moves as the
   container is edited, so a borrowed view of it could not be kept valid.
 
+* `Tibs` and `Mutibs` can now be pickled, so they can be sent through
+  `multiprocessing`, stored in a cache, or deep copied with `copy.deepcopy`,
+  which previously raised a `TypeError`. The pickled state is the `Codec.Raw`
+  encoding, so any bit length is restored exactly and pickling costs about what
+  copying costs — pickle the result of `encode()` yourself if you want the
+  compression that `Codec.Auto` can give.
+
+  ```python
+  >>> pickle.loads(pickle.dumps(Tibs('0b110101')))
+  Tibs('0b110101')
+  ```
+
 * Added a `tibs.__version__` string, alongside the `tibs.__author__` that was
   already there.
 
