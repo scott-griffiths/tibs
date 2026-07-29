@@ -330,6 +330,16 @@ pub(crate) fn find_bitvec_aligned(
     if needle.len() > end - start {
         return Ok(None);
     }
+    if needle.len() == 1 {
+        return Ok(find_single_bit(
+            haystack,
+            needle[0],
+            start,
+            end,
+            alignment_mod8,
+            false,
+        ));
+    }
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, false) {
         return Ok(found);
     }
@@ -353,6 +363,16 @@ pub(crate) fn rfind_bitvec_aligned(
 ) -> PyResult<Option<usize>> {
     debug_assert!(end >= start);
     debug_assert!(end <= haystack.len());
+    if needle.len() == 1 {
+        return Ok(find_single_bit(
+            haystack,
+            needle[0],
+            start,
+            end,
+            alignment_mod8,
+            true,
+        ));
+    }
     if let Some(found) = try_find_byte_search(haystack, needle, start, end, alignment_mod8, true) {
         return Ok(found);
     }
@@ -454,6 +474,119 @@ pub(crate) fn collect_find_all_positions(
     collect_find_all_positions_kmp(py, haystack, needle, start, end, alignment_mod8)
 }
 
+/// The first (or last, when `reverse`) position in `haystack[start..end]`
+/// holding `value`, honouring an optional byte-alignment requirement.
+///
+/// A one-bit needle can never reach the byte-wise scanners, because it is too
+/// short to cover a whole byte at any offset, so without this it would fall all
+/// the way through to the windowed scan that steps one bit at a time. Skipping
+/// over the storage bytes that hold no candidate turns a scan of a million bits
+/// from 1.4ms into 5us, and is also what `collect_single_bit_positions` does
+/// while gathering every position rather than just the first.
+fn find_single_bit(
+    haystack: &BS,
+    value: bool,
+    start: usize,
+    end: usize,
+    alignment_mod8: Option<usize>,
+    reverse: bool,
+) -> Option<usize> {
+    if start >= end {
+        return None;
+    }
+    if let Some(required) = alignment_mod8 {
+        // Only every eighth position is a candidate, so the byte skipping below
+        // has nothing to skip. Stepping the candidates directly is already
+        // eight times less work than the windowed scan did.
+        let first = first_aligned(start, required);
+        if first >= end {
+            return None;
+        }
+        if !reverse {
+            return (first..end).step_by(8).find(|&pos| haystack[pos] == value);
+        }
+        let last = first + (end - 1 - first) / 8 * 8;
+        return (first..=last)
+            .rev()
+            .step_by(8)
+            .find(|&pos| haystack[pos] == value);
+    }
+
+    let slice = &haystack[start..end];
+    let found = match slice.domain() {
+        Domain::Region { head, body, tail } => {
+            let head_bits = head.map_or(0, |partial| partial.into_bitslice().len());
+            let tail_start = head_bits + body.len() * 8;
+            let head_hit =
+                || head.and_then(|partial| edge_bit(partial.into_bitslice(), value, reverse));
+            let body_hit = || byte_run_bit(body, value, reverse).map(|pos| head_bits + pos);
+            let tail_hit = || {
+                tail.and_then(|partial| edge_bit(partial.into_bitslice(), value, reverse))
+                    .map(|pos| tail_start + pos)
+            };
+            match reverse {
+                false => head_hit().or_else(body_hit).or_else(tail_hit),
+                true => tail_hit().or_else(body_hit).or_else(head_hit),
+            }
+        }
+        // A run living inside a single element has no body to skip over.
+        Domain::Enclave(_) => edge_bit(slice, value, reverse),
+    };
+    found.map(|pos| start + pos)
+}
+
+/// The first (or last) bit equal to `value` in a run of at most one element.
+#[inline]
+fn edge_bit(bits: &BS, value: bool, reverse: bool) -> Option<usize> {
+    // Walked a bit at a time on purpose. This only ever runs over a partial
+    // element, so at most eight bits, and bitvec's own `last_one`/`last_zero`
+    // underflow on a partial element whose live bits are all the other value -
+    // harmless in release, where the wrapped index is discarded, but a panic in
+    // a debug build.
+    match reverse {
+        false => (0..bits.len()).find(|&index| bits[index] == value),
+        true => (0..bits.len()).rev().find(|&index| bits[index] == value),
+    }
+}
+
+/// The bit index within `bytes` of the first (or last) bit equal to `value`.
+///
+/// Bytes made entirely of the other value are skipped eight at a time, which is
+/// what makes this worth having over walking the bits.
+fn byte_run_bit(bytes: &[u8], value: bool, reverse: bool) -> Option<usize> {
+    let skip = if value { 0 } else { u8::MAX };
+    let skip_word = u64::from_ne_bytes([skip; 8]);
+    // Each `chunks_exact` remainder sits at the end the scan finishes on, so
+    // the byte-at-a-time pass below picks it up either way.
+    let index = if !reverse {
+        let mut offset = 0;
+        for chunk in bytes.chunks_exact(8) {
+            if u64::from_ne_bytes(chunk.try_into().unwrap()) != skip_word {
+                break;
+            }
+            offset += 8;
+        }
+        offset + bytes[offset..].iter().position(|&byte| byte != skip)?
+    } else {
+        let mut limit = bytes.len();
+        for chunk in bytes.rchunks_exact(8) {
+            if u64::from_ne_bytes(chunk.try_into().unwrap()) != skip_word {
+                break;
+            }
+            limit -= 8;
+        }
+        bytes[..limit].iter().rposition(|&byte| byte != skip)?
+    };
+    // Msb0 storage, so the leading zeros of the byte count down to its first
+    // set bit and the trailing zeros up to its last.
+    let byte = if value { bytes[index] } else { !bytes[index] };
+    let within = match reverse {
+        false => byte.leading_zeros(),
+        true => 7 - byte.trailing_zeros(),
+    };
+    Some(index * 8 + within as usize)
+}
+
 fn collect_single_bit_positions(
     py: Python<'_>,
     haystack: &BS,
@@ -482,26 +615,82 @@ fn collect_single_bit_positions(
         return Ok(matches);
     }
 
+    // `iter_ones` on a `u8` store steps one byte at a time whether or not that
+    // byte holds anything, so a sparse container spends all its time on empty
+    // storage. Going through the domain lets the body skip eight bytes at once.
     let slice = &haystack[start..end];
-    if value {
-        for pos in slice.iter_ones() {
-            matches.push((start + pos) as u64);
-            if matches.len() >= check_at {
-                py.check_signals()?;
-                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+    match slice.domain() {
+        Domain::Region { head, body, tail } => {
+            let head_bits = head.map_or(0, |partial| partial.into_bitslice().len());
+            if let Some(partial) = head {
+                collect_edge_bits(partial.into_bitslice(), value, start, &mut matches);
+            }
+            collect_byte_run_bits(py, body, value, start + head_bits, &mut matches)?;
+            if let Some(partial) = tail {
+                let base = start + head_bits + body.len() * 8;
+                collect_edge_bits(partial.into_bitslice(), value, base, &mut matches);
             }
         }
-    } else {
-        for pos in slice.iter_zeros() {
-            matches.push((start + pos) as u64);
-            if matches.len() >= check_at {
-                py.check_signals()?;
-                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
-            }
-        }
+        Domain::Enclave(_) => collect_edge_bits(slice, value, start, &mut matches),
     }
 
     Ok(matches)
+}
+
+/// Append the position of every bit equal to `value` in a run of at most one
+/// element, offset by `base`.
+#[inline]
+fn collect_edge_bits(bits: &BS, value: bool, base: usize, matches: &mut Vec<u64>) {
+    for index in 0..bits.len() {
+        if bits[index] == value {
+            matches.push((base + index) as u64);
+        }
+    }
+}
+
+/// Append the position of every bit in `bytes` equal to `value`, offset by
+/// `base`. Eight bytes made entirely of the other value are skipped with a
+/// single comparison, which is what makes a sparse container cheap.
+fn collect_byte_run_bits(
+    py: Python<'_>,
+    bytes: &[u8],
+    value: bool,
+    base: usize,
+    matches: &mut Vec<u64>,
+) -> PyResult<()> {
+    let skip = if value { 0 } else { u8::MAX };
+    let skip_word = u64::from_ne_bytes([skip; 8]);
+    let mut check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+    let mut index = 0;
+    while index + 8 <= bytes.len() {
+        let chunk: [u8; 8] = bytes[index..index + 8].try_into().unwrap();
+        if u64::from_ne_bytes(chunk) != skip_word {
+            for (offset, &byte) in chunk.iter().enumerate() {
+                collect_bits_in_byte(byte, value, base + (index + offset) * 8, matches);
+            }
+            if matches.len() >= check_at {
+                py.check_signals()?;
+                check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+            }
+        }
+        index += 8;
+    }
+    for (offset, &byte) in bytes.iter().enumerate().skip(index) {
+        collect_bits_in_byte(byte, value, base + offset * 8, matches);
+    }
+    Ok(())
+}
+
+/// Append the position within one byte of every bit equal to `value`.
+#[inline]
+fn collect_bits_in_byte(byte: u8, value: bool, base: usize, matches: &mut Vec<u64>) {
+    // Msb0 storage, so the leading zeros count down to the next bit wanted.
+    let mut remaining = if value { byte } else { !byte };
+    while remaining != 0 {
+        let index = remaining.leading_zeros();
+        matches.push((base + index as usize) as u64);
+        remaining &= !(0x80u8 >> index);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1285,6 +1474,17 @@ pub(crate) fn rfind_bitvec_with_reversed_lps_aligned(
 ) -> PyResult<Option<usize>> {
     if reversed_needle.is_empty() || reversed_needle.len() > end - start {
         return Ok(None);
+    }
+    if reversed_needle.len() == 1 {
+        // A one-bit needle is its own reverse.
+        return Ok(find_single_bit(
+            haystack,
+            reversed_needle[0],
+            start,
+            end,
+            alignment_mod8,
+            true,
+        ));
     }
     if reversed_needle.len() <= 64 {
         return rfind_bitvec_small(

@@ -76,6 +76,14 @@ HALF_T = Tibs.from_random(HALF, seed=b"tibs-guards-half")
 HALF_T_UNALIGNED = Tibs.from_random(HALF + 3, seed=b"tibs-guards-odd")
 
 ALL_ONES = Tibs.from_ones(BITS)
+ALL_ZEROS = Tibs.from_zeros(BITS)
+
+# A one-bit needle, and a container holding few enough of them that collecting
+# their positions is a measurement of the scan rather than of list building.
+ONE_BIT = Tibs("0b1")
+SPARSE_T = Tibs.from_zeros(BITS).set_at(range(0, BITS, BITS // 100))
+assert ALL_ZEROS.find(ONE_BIT) is None, "the single-bit search guards must miss"
+assert SPARSE_T.count() == 100
 
 # Needles that are absent, so a search has to scan the whole haystack and both
 # sides of a search pair return the same answer. 40 bits is a whole number of
@@ -370,6 +378,42 @@ GUARDS: list[Guard] = [
         slow=lambda: BIG_T.to_values("u1"),
         fast=lambda: BIG_T.to_bools(),
         limit=2.5,
+    ),
+    # ---- 15. finding a single bit ---------------------------------------
+    # A one-bit needle is too short to cover a whole byte at any offset, so it
+    # can never reach the byte-wise scanners and used to fall all the way
+    # through to the windowed scan that steps one bit at a time. Both sides
+    # here read every byte of the same container and neither builds anything:
+    # the find misses, and the count has to look at all of it regardless.
+    Guard(
+        name="find(single bit) vs count()",
+        site="search.rs find_bitvec_aligned - find_single_bit fast path",
+        slow=lambda: ALL_ZEROS.find(ONE_BIT),
+        fast=lambda: ALL_ZEROS.count(),
+        limit=4.0,
+        same_result=False,
+    ),
+    Guard(
+        name="rfind(single bit) vs count()",
+        site="search.rs rfind_bitvec_aligned - find_single_bit fast path",
+        slow=lambda: ALL_ZEROS.rfind(ONE_BIT),
+        fast=lambda: ALL_ZEROS.count(),
+        limit=4.0,
+        same_result=False,
+    ),
+    # ---- 16. collecting the positions of a sparse set --------------------
+    # `iter_ones` on a `u8` store steps a byte at a time whether or not the
+    # byte holds anything, so a sparse container spends everything on empty
+    # storage. With a hundred set bits in a million the returned list is small
+    # enough that this is a scan measurement, matched against a count of the
+    # same bits.
+    Guard(
+        name="find_all(single bit, sparse) vs count()",
+        site="search.rs collect_single_bit_positions - byte skipping",
+        slow=lambda: SPARSE_T.find_all(ONE_BIT),
+        fast=lambda: SPARSE_T.count(),
+        limit=4.0,
+        same_result=False,
     ),
 ]
 

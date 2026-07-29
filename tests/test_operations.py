@@ -84,6 +84,100 @@ class TestRfind:
             a.rfind("", byte_aligned=True)
 
 
+class TestSingleBitSearch:
+    """A one-bit needle takes its own route through the search code.
+
+    It is too short to cover a whole byte at any offset, so it can never reach
+    the byte-wise scanners, and it gets a fast path that skips over storage
+    holding nothing instead of walking the bits. That path has to agree with
+    everything else at every storage offset and around each partial byte, and
+    it is also how a bitset reads its positions back out - see
+    ``doc/bitset.rst``.
+    """
+
+    @staticmethod
+    def reference(bits, value, start, end, byte_aligned):
+        positions = range(start, end)
+        if byte_aligned:
+            positions = [p for p in positions if p % 8 == 0]
+        return [p for p in positions if bits[p] == value]
+
+    def test_find_single_bit(self):
+        t = Tibs("0b10110001")
+        assert t.find([1]) == 0
+        assert t.find([0]) == 1
+        assert t.find([1], start=1) == 2
+        assert t.find([1], start=4) == 7
+        assert t.find([1], start=8) is None
+        assert t.rfind([1]) == 7
+        assert t.rfind([0]) == 6
+
+    def test_find_all_single_bit(self):
+        t = Tibs("0b10110001")
+        assert t.find_all([1]) == [0, 2, 3, 7]
+        assert t.find_all([0]) == [1, 4, 5, 6]
+        assert t.find_all("0b1") == [0, 2, 3, 7]
+        assert list(t.find_all_iter([1])) == [0, 2, 3, 7]
+        assert list(t.rfind_all_iter([1])) == [7, 3, 2, 0]
+
+    def test_absent_single_bit(self):
+        assert Tibs.from_zeros(1000).find([1]) is None
+        assert Tibs.from_zeros(1000).rfind([1]) is None
+        assert Tibs.from_zeros(1000).find_all([1]) == []
+        assert Tibs.from_ones(1000).find([0]) is None
+        assert Tibs.from_ones(1000).rfind([0]) is None
+        assert Tibs.from_ones(1000).find_all([0]) == []
+
+    def test_single_bit_at_the_far_end(self):
+        # The lone bit sits in the tail byte, past every full word the scan
+        # skips over.
+        for length in (7, 8, 9, 63, 64, 65, 71, 72, 73, 1000, 1001):
+            t = Tibs.from_zeros(length).set_at(length - 1)
+            assert t.find([1]) == length - 1, length
+            assert t.rfind([1]) == length - 1, length
+            assert t.find([0]) == 0, length
+            assert t.rfind([0]) == length - 2, length
+
+    def test_partial_element_with_no_match(self):
+        # bitvec's own last_one/last_zero underflow on a partial element whose
+        # live bits are all the other value, which is a panic in a debug build.
+        for length in range(1, 9):
+            assert Tibs.from_zeros(length).rfind([1]) is None, length
+            assert Tibs.from_ones(length).rfind([0]) is None, length
+            assert Tibs.from_zeros(length).find([1]) is None, length
+            assert Tibs.from_ones(length).find([0]) is None, length
+
+    @pytest.mark.parametrize("offset", range(8))
+    def test_matches_reference_at_every_storage_offset(self, offset):
+        # Slicing a longer container leaves the run starting part way through a
+        # byte, so the head, body and tail of the storage all get exercised.
+        pattern = "0b" + "1000000100000000000010010000000000000001000000001"
+        for length in (1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 48):
+            bits = [c == "1" for c in pattern[2 : 2 + length]]
+            t = Tibs([False] * offset + bits)[offset:]
+            assert list(t) == bits
+            for value in (True, False):
+                needle = [int(value)]
+                for start, end in ((0, length), (0, 1), (length - 1, length)):
+                    for byte_aligned in (False, True):
+                        want = self.reference(bits, value, start, end, byte_aligned)
+                        kwargs = dict(start=start, end=end, byte_aligned=byte_aligned)
+                        assert t.find_all(needle, **kwargs) == want
+                        assert list(t.find_all_iter(needle, **kwargs)) == want
+                        assert list(t.rfind_all_iter(needle, **kwargs)) == want[::-1]
+                        first = want[0] if want else None
+                        last = want[-1] if want else None
+                        assert t.find(needle, **kwargs) == first
+                        assert t.rfind(needle, **kwargs) == last
+
+    def test_mutibs_single_bit(self):
+        m = Mutibs.from_zeros(12)
+        m.set([0, 3, 4])
+        assert m.find_all([1]) == [0, 3, 4]
+        assert m.find([1], start=1) == 3
+        assert m.rfind([1]) == 4
+
+
 class TestShift:
     def test_shift_left(self):
         s = Tibs.from_string("0b1010")

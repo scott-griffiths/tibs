@@ -119,6 +119,7 @@ while the iterator was live. Convert with :meth:`Mutibs.to_tibs` (copy) or
 iterator-returning methods such as :meth:`Tibs.chunks_iter`; see
 :doc:`tibs_vs_mutibs`.
 
+.. _searching:
 
 Searching
 ^^^^^^^^^
@@ -186,7 +187,9 @@ use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
 to move the data if you no longer need the mutable object.
 
 Scanning a byte stream for markers and pulling records out of it is a common use
-— see :doc:`example_log_scan`.
+— see :doc:`example_log_scan`. A one-bit needle is the other common case: it
+turns these methods into "where are the set bits?", which is how a bitset reads
+its positions back out — see :ref:`getting_the_positions_out`.
 
 .. _searching_with_a_mask:
 

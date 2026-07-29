@@ -156,3 +156,39 @@ The :meth:`Tibs.any` and :meth:`Tibs.all` methods mirror Python's built-in
 They are most useful when the bit sequence itself is the data, for example when
 checking whether a mask has any flags set, or whether every flag in a required
 set is present.
+
+
+.. _getting_the_positions_out:
+
+Getting the positions out
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Counting tells you how many positions are in the set. Sooner or later you want
+to know *which*, and there is no separate method for that - the searching
+methods do it, given a one-bit pattern to look for::
+
+    >>> t = Tibs('0b10110001')
+    >>> t.find_all([1])
+    [0, 2, 3, 7]
+    >>> t.find_all([0])
+    [1, 4, 5, 6]
+
+The ``[1]`` is a one-bit pattern, and ``'0b1'`` says the same thing if you
+prefer.
+
+When you only want to walk the positions, :meth:`Tibs.find_all_iter` yields them
+one at a time without building the list::
+
+    >>> for pos in Tibs('0b10110001').find_all_iter([1]):
+    ...     print(pos)
+    0
+    2
+    3
+    7
+
+These all work on a ``Mutibs`` too, except the iterator forms, which are
+``Tibs``-only because the contents could change while the iterator was live.
+
+There is more on all of these in :ref:`Searching <searching>`, including
+``start``/``end`` bounds, ``byte_aligned`` and searching with a mask. For a set of
+positions being built and then read back, see :doc:`example_sieve`.
