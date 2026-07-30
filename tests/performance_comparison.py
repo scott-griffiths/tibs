@@ -588,11 +588,13 @@ def build_stdlib_cases(byte_count, value_count):
         for _ in range(record_count)
     ]
     # The docs recommend a compiled Struct when a format is reused, so the tibs
-    # side hoists its Dtypes to match rather than rebuilding them per field.
+    # side hoists a DtypeTuple to match rather than rebuilding dtypes per field.
+    # DtypeTuple("(i16, i16, i32)") is the mixed-width record dtype added in
+    # the Dtype expansion, so a whole record round-trips in one pack/unpack
+    # call rather than one call per field.
     record_struct = struct.Struct(">hhl")
     record_bytes = b"".join(record_struct.pack(*record) for record in records)
-    i16_dtype = Dtype("i16")
-    i32_dtype = Dtype("i32")
+    record_dtype = Dtype("(i16, i16, i32)")
 
     hex_string = search_bytes.hex()
     prefixed_hex = "0x" + hex_string
@@ -611,34 +613,22 @@ def build_stdlib_cases(byte_count, value_count):
         return b"".join(record_struct.pack(*record) for record in records)
 
     def tibs_pack_records():
-        # tibs has no multi-field pack, so a mixed record costs one call per
-        # field. Dtype.pack is the fastest spelling of that; Tibs.from_i is
-        # about 25% slower again.
-        return Tibs.from_joined(
-            piece
-            for first, second, third in records
-            for piece in (
-                i16_dtype.pack(first),
-                i16_dtype.pack(second),
-                i32_dtype.pack(third),
-            )
-        ).to_bytes()
+        # DtypeTuple.pack_values (via Tibs.from_values) packs every field of
+        # every record in one call rather than one call per field, at about
+        # the same speed as the old hand-rolled per-field version it replaced.
+        # A compound dtype has no fast bytewise path the way a single numeric
+        # dtype does (see BytewisePacker in tibs_.rs), so it is still the
+        # widest gap against struct in this file: worth optimizing.
+        return Tibs.from_values(record_dtype, records).to_bytes()
 
     def struct_unpack_records():
         # struct docs: iter_unpack, "iteratively unpack from the buffer"
         return list(record_struct.iter_unpack(record_bytes))
 
     def tibs_unpack_records():
-        # to_i with explicit bounds beats Dtype.unpack here by about 40%.
-        bits = Tibs.from_bytes(record_bytes)
-        return [
-            (
-                bits.to_i(offset, offset + 16),
-                bits.to_i(offset + 16, offset + 32),
-                bits.to_i(offset + 32, offset + 64),
-            )
-            for offset in range(0, len(bits), 64)
-        ]
+        # DtypeTuple.unpack_values (via Tibs.to_values) mirrors iter_unpack:
+        # one call decodes every record instead of slicing each field by hand.
+        return Tibs.from_bytes(record_bytes).to_values(record_dtype)
 
     def struct_pack_u16():
         # struct docs: a format character may be preceded by a repeat count,
