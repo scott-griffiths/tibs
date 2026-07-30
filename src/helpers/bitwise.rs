@@ -529,6 +529,25 @@ pub(crate) fn any_pair_bits(
     }
 }
 
+/// Whether the live range contains `value`, stopping after the block that
+/// contains the first match.
+///
+/// This is the unary form of [`any_pair_bits`]. Reusing its blocked word scan
+/// keeps the full-scan case vectorisable while preserving early exit to within
+/// 512 bits.
+#[inline]
+pub(crate) fn contains_bit(bytes: &[u8], bit_offset: usize, len: usize, value: bool) -> bool {
+    any_pair_bits_with(
+        bytes,
+        bit_offset,
+        bytes,
+        bit_offset,
+        len,
+        |word, _| if value { word } else { !word },
+        |byte, _| if value { byte } else { !byte },
+    )
+}
+
 fn any_pair_bits_with<W, B>(
     lhs: &[u8],
     lhs_offset: usize,

@@ -1,7 +1,7 @@
 use crate::helpers::{
     BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
-    bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
-    extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
+    bv_from_zeros, byte_order_name, contains_bit, copy_unaligned_padded_bytes, count_bitslice,
+    count_pair_bits, extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
     oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, validate_index,
     validate_slice,
@@ -31,6 +31,18 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn raw_data(&self) -> (Vec<u8>, usize, usize) {
         let (bytes, offset, length) = self.raw_data_ref();
         (bytes.to_vec(), offset, length)
+    }
+
+    #[inline]
+    fn all_set(&self) -> bool {
+        let (bytes, offset, length) = self.raw_data_ref();
+        !contains_bit(bytes, offset, length, false)
+    }
+
+    #[inline]
+    fn any_set(&self) -> bool {
+        let (bytes, offset, length) = self.raw_data_ref();
+        contains_bit(bytes, offset, length, true)
     }
 
     #[inline]

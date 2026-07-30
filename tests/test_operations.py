@@ -1250,6 +1250,21 @@ class TestAllAndAny:
         a = Tibs("0xfff")
         assert a.all()
 
+    def test_all_any_across_storage_boundaries(self):
+        parents = (
+            Tibs.from_zeros(160),
+            Tibs.from_ones(160),
+            Tibs.from_random(160, seed=b'all-any'),
+        )
+        for cls in (Tibs, Mutibs):
+            for parent in parents:
+                for offset in range(8):
+                    for length in (0, 1, 7, 8, 9, 63, 64, 65, 129):
+                        bits = cls(parent)[offset:offset + length]
+                        reference = Tibs(bits)
+                        assert bits.all() == all(reference)
+                        assert bits.any() == any(reference)
+
     ###################
 
 

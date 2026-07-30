@@ -3108,7 +3108,7 @@ impl Mutibs {
     ///     False
     ///
     pub fn all(&self) -> bool {
-        self.as_bitvec_ref().all()
+        <Self as BitCollection>::all_set(self)
     }
 
     /// Return True if any bits are equal to 1, otherwise return False.
@@ -3123,7 +3123,7 @@ impl Mutibs {
     ///     True
     ///
     pub fn any(&self) -> bool {
-        self.as_bitvec_ref().any()
+        <Self as BitCollection>::any_set(self)
     }
 
     /// Find last occurrence of a bit sequence.

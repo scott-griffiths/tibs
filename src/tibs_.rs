@@ -2820,7 +2820,7 @@ impl Tibs {
     ///
     #[inline]
     pub fn all(&self) -> bool {
-        self.to_bitslice().all()
+        <Self as BitCollection>::all_set(self)
     }
 
     /// Return True if any bits are equal to 1, otherwise return False.
@@ -2836,7 +2836,7 @@ impl Tibs {
     ///
     #[inline]
     pub fn any(&self) -> bool {
-        self.to_bitslice().any()
+        <Self as BitCollection>::any_set(self)
     }
 
     /// Return a new Tibs with one or many bits set to 1.
