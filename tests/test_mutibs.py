@@ -741,6 +741,26 @@ def test_replace_with_count_zero():
     assert a == Tibs('0b10101010')
 
 
+def test_replace_across_word_and_storage_boundaries():
+    old_value = Tibs.from_random(129, seed=b'replace-old')
+    old = Tibs.from_u(old_value.to_u(), len(old_value))
+    source = Tibs('0b011') + old + Tibs('0b0011011') + old + Tibs('0b10')
+    assert old.to_raw_data()[1] != 0
+
+    for replacement_length in (125, 129, 134):
+        replacement_value = Tibs.from_random(
+            replacement_length, seed=b'replace-new'
+        )
+        replacement = Tibs.from_u(replacement_value.to_u(), replacement_length)
+        target = Mutibs.from_u(source.to_u(), len(source))
+        assert target.to_raw_data()[1] != 0
+        assert replacement.to_raw_data()[1] != 0
+
+        expected = Tibs.from_bin(source.bin.replace(old.bin, replacement.bin))
+        assert target.replace(old, replacement) == 2
+        assert target == expected
+
+
 def test_reverse_basic():
     # Basic reverse functionality
     a = Mutibs('0b1010')

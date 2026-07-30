@@ -709,8 +709,6 @@ impl Mutibs {
         let mask = prepare_mask(mask, old.len())?;
 
         let (search_start, search_end) = validate_slice(self.len(), start, end)?;
-        let search_old = old;
-        let replace_new = new;
         let mut countdown = count.unwrap_or(i64::MAX);
         if countdown < 0 {
             return Err(PyValueError::new_err(format!(
@@ -722,7 +720,7 @@ impl Mutibs {
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
         let matcher = mask
             .as_ref()
-            .map(|mask| MaskedMatcher::new(search_old.as_bitslice(), mask.as_bitslice(), false));
+            .map(|mask| MaskedMatcher::new(old.as_bitslice(), mask.as_bitslice(), false));
 
         let mut starting_points: Vec<usize> = Vec::new();
         let mut current_pos = search_start;
@@ -738,7 +736,7 @@ impl Mutibs {
                 None => find_bitvec(
                     py,
                     self.as_bitvec_ref(),
-                    search_old.as_bitslice(),
+                    old.as_bitslice(),
                     current_pos,
                     search_end,
                     byte_aligned,
@@ -746,7 +744,7 @@ impl Mutibs {
             };
             if let Some(found_pos) = found {
                 starting_points.push(found_pos);
-                current_pos = found_pos + search_old.len();
+                current_pos = found_pos + old.len();
                 countdown -= 1;
             } else {
                 break;
@@ -758,17 +756,45 @@ impl Mutibs {
         }
 
         let replacements = starting_points.len();
-        starting_points.sort_unstable();
-        let mut result = BV::new();
-        let mut last_pos = 0;
-        for &pos in &starting_points {
-            result.extend_from_bitslice(&self.as_bitvec_ref()[last_pos..pos]);
-            result.extend_from_bitslice(replace_new.as_bitslice());
-            last_pos = pos + search_old.len();
+        let (replacement, replacement_offset, _) = new.raw_data_ref();
+        if old.len() == new.len() {
+            let target_offset = self.storage_head_offset();
+            let target = self.data.as_raw_mut_slice();
+            for &pos in &starting_points {
+                copy_bits(
+                    target,
+                    target_offset + pos,
+                    replacement,
+                    replacement_offset,
+                    new.len(),
+                );
+            }
+            return Ok(replacements);
         }
-        result.extend_from_bitslice(&self.as_bitvec_ref()[last_pos..]);
 
-        *self.as_mut_bitvec_ref() = result;
+        let retained_bits = self.len() - old.len() * replacements;
+        let result_len = new
+            .len()
+            .checked_mul(replacements)
+            .and_then(|inserted| retained_bits.checked_add(inserted))
+            .ok_or_else(|| PyOverflowError::new_err("The replacement result is too large."))?;
+        let mut result = BitConcat::with_bit_capacity(result_len);
+        let source_offset = self.storage_head_offset();
+        let source = self.data.as_raw_slice();
+        let mut source_pos = 0;
+        for &pos in &starting_points {
+            let unchanged = pos - source_pos;
+            let absolute = source_offset + source_pos;
+            result.push_run(&source[absolute / 8..], absolute % 8, unchanged);
+            result.push_run(replacement, replacement_offset, new.len());
+            source_pos = pos + old.len();
+        }
+        let tail = self.len() - source_pos;
+        let absolute = source_offset + source_pos;
+        result.push_run(&source[absolute / 8..], absolute % 8, tail);
+
+        self.data = result.into_bitvec();
+        debug_assert_eq!(self.len(), result_len);
         Ok(replacements)
     }
 
