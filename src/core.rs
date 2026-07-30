@@ -618,26 +618,25 @@ pub(crate) trait BitCollection: Sized + Clone {
     ) -> PyResult<Bound<'py, PyAny>> {
         let length = self.len();
         let pad = (8 - length % 8) % 8;
-        let bytes = if pad == 0 {
-            self.to_padded_byte_data()
-        } else {
-            // A byte order is only allowed for whole-byte lengths, so padding
-            // and little-endian never have to be reconciled.
-            debug_assert!(!is_little_endian);
-            let mut bv = BV::repeat(signed && self.as_bitslice()[0], pad);
-            bv.extend_from_bitslice(self.as_bitslice());
-            bv.into_vec()
-        };
+        let bytes = self.to_padded_byte_data();
         let args = (PyBytes::new(py, &bytes), byte_order_name(is_little_endian));
         let int_type = py.get_type::<PyInt>();
         // `signed` is keyword-only and defaults to False, so the unsigned case
         // can skip building a kwargs dict.
-        if signed {
+        let value = if signed {
             let kwargs = PyDict::new(py);
             kwargs.set_item(intern!(py, "signed"), true)?;
             int_type.call_method(intern!(py, "from_bytes"), args, Some(&kwargs))
         } else {
             int_type.call_method1(intern!(py, "from_bytes"), args)
+        }?;
+        if pad == 0 {
+            Ok(value)
+        } else {
+            // `to_padded_byte_data` leaves its dead tail bits at the low end.
+            // An arithmetic shift removes them and sign-extends a signed value.
+            debug_assert!(!is_little_endian);
+            value.call_method1(intern!(py, "__rshift__"), (pad,))
         }
     }
 
