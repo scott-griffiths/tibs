@@ -8,7 +8,18 @@ import sys
 
 sys.path.insert(0, "..")
 import pytest
-from tibs import BitOrder, ByteOrder, Codec, Dtype, DtypeKind, MutableView, Tibs, Mutibs, View
+from tibs import (
+    BitOrder,
+    ByteOrder,
+    Codec,
+    Dtype,
+    DtypeKind,
+    DtypeSingle,
+    MutableView,
+    Mutibs,
+    Tibs,
+    View,
+)
 
 
 class TestTibsCreation:
@@ -878,17 +889,17 @@ class TestDtypeViewMutableViewEdgeCoverage:
     def test_dtype_spec_is_normalized_and_usable(self):
         d = Dtype("  U16_LE  ")
 
-        assert repr(d) == "Dtype('u16_le')"
+        assert repr(d) == "DtypeSingle('u16_le')"
         assert d.kind is DtypeKind.Uint
         assert d.length == 16
         assert d.byte_order is ByteOrder.Little
         assert d.pack(0x1234) == Tibs("0x3412")
         assert d.unpack("0x3412") == 0x1234
 
-    def test_dtype_from_params_accepts_none_byte_order_and_properties_are_read_only(self):
-        d = Dtype.from_params(DtypeKind.Int, 8, None)
+    def test_dtype_single_from_params_accepts_none_byte_order_and_properties_are_read_only(self):
+        d = DtypeSingle.from_params(DtypeKind.Int, 8, None)
 
-        assert repr(d) == "Dtype('i8')"
+        assert repr(d) == "DtypeSingle('i8')"
         assert d.byte_order is ByteOrder.Unspecified
 
         for name in ("kind", "length", "byte_order"):
@@ -947,14 +958,14 @@ class TestDtypeViewMutableViewEdgeCoverage:
             with pytest.raises(ValueError):
                 Dtype(f"f{length}")
             with pytest.raises(ValueError):
-                Dtype.from_params(DtypeKind.Float, length)
+                DtypeSingle.from_params(DtypeKind.Float, length)
 
     def test_dtype_bytes_specs_reject_non_byte_widths_at_construction(self):
         for length in (1, 7, 9):
             with pytest.raises(ValueError):
                 Dtype(f"bytes{length}")
             with pytest.raises(ValueError):
-                Dtype.from_params(DtypeKind.Bytes, length)
+                DtypeSingle.from_params(DtypeKind.Bytes, length)
 
     def test_dtype_text_specs_reject_non_digit_aligned_widths_at_construction(self):
         cases = [
@@ -966,7 +977,7 @@ class TestDtypeViewMutableViewEdgeCoverage:
             with pytest.raises(ValueError):
                 Dtype(f"{prefix}{length}")
             with pytest.raises(ValueError):
-                Dtype.from_params(kind, length)
+                DtypeSingle.from_params(kind, length)
 
     def test_view_from_indices_empty_selection_is_empty_and_unusable_as_number(self):
         v = View.from_indices(Tibs("0xff"), [])

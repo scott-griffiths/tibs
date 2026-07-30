@@ -131,16 +131,16 @@ that happens.
 container is edited, so a borrowed view of it could not be kept valid.
 
 
-Repeated fixed-width values
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fixed-width and structured values
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When every item uses the same fixed-width encoding, :class:`Dtype` strings make
-the intent explicit and avoid writing a construction loop yourself. The most
-common dtype forms are unsigned integers such as ``"u8"`` or ``"u12"``, signed
-integers such as ``"i16"``, floats such as ``"f32"``, and string or byte
-representations such as ``"hex16"`` and ``"bytes32"``. Use ``"bool"`` for a
-single Python boolean bit, or ``"bitsN"`` when each value is itself a fixed-size
-bit sequence decoded as :class:`Tibs`.
+When every item uses the same fixed-width encoding, scalar :class:`Dtype`
+strings make the intent explicit and avoid writing a construction loop
+yourself. The most common forms are unsigned integers such as ``"u8"`` or
+``"u12"``, signed integers such as ``"i16"``, floats such as ``"f32"``, and
+string or byte representations such as ``"hex16"`` and ``"bytes32"``. Use
+``"bool"`` for a single Python boolean bit, or ``"bitsN"`` when each value is
+itself a fixed-size bit sequence decoded as :class:`Tibs`.
 
 Use :meth:`Tibs.from_value` for one value, or :meth:`Tibs.from_values` for an
 iterable of values::
@@ -159,6 +159,34 @@ The matching interpretation methods decode values back from a bit sequence::
 See :doc:`example_sensor_samples` for packing and unpacking a stream of samples,
 and :doc:`example_construct` for driving a whole header from a table of dtypes.
 
+An array dtype describes a fixed number of values with the same dtype, while a
+tuple dtype combines fields with different dtypes::
+
+    >>> flags = Tibs.from_value("[bool; 4]", [True, False, True, True])
+    >>> flags.bin
+    '1011'
+    >>> header = Tibs.from_value("(u8, u16_le)", (1, 0x0203))
+    >>> header.hex
+    '010302'
+    >>> header.to_value("(u8, u16_le)")
+    (1, 515)
+
+Arrays and tuples can be nested. Their decoded values are Python tuples, so the
+shape of the dtype remains visible in the result::
+
+    >>> dtype = Dtype("[(u4, bool); 2]")
+    >>> value = ((10, True), (3, False))
+    >>> dtype.unpack(dtype.pack(value))
+    ((10, True), (3, False))
+
+The singular methods operate on one complete structured value. The plural
+methods repeat the complete dtype::
+
+    >>> records = [(1, 0x0203), (4, 0x0506)]
+    >>> packed = Tibs.from_values("(u8, u16_le)", records)
+    >>> packed.to_values("(u8, u16_le)")
+    [(1, 515), (4, 1286)]
+
 For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
 when byte order matters. These suffixes mean little-endian and big-endian byte
 order respectively::
@@ -166,7 +194,8 @@ order respectively::
     >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
     '3412cdab'
 
-See :doc:`dtype` for the full dtype grammar.
+See :doc:`dtype` for the full dtype grammar, hierarchy and programmatic
+constructors.
 
 
 Writing typed values

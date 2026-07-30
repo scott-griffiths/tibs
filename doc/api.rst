@@ -10,8 +10,8 @@ The public API is grouped into:
 
 * :doc:`tibs` — An immutable sequence of bits.
 * :doc:`mutibs` — A mutable sequence of bits.
-* :doc:`dtype` — Fixed-width data type descriptions used for packing and
-  unpacking values.
+* :doc:`dtype` — Fixed-width scalar, array and tuple data type descriptions
+  used for packing and unpacking values.
 * :doc:`view` — Wrappers for byte order, bit order and labelled fields.
 * :doc:`other` — Enum classes for byte order, bit order, dtypes and codecs.
 

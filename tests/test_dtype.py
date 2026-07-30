@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 import pytest
-from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind
+from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind, DtypeSingle
 
 def test_creation():
     d = Dtype("u8")
+    assert type(d) is DtypeSingle
     assert d.kind is DtypeKind.Uint
     assert d.length == 8
 
@@ -45,38 +46,38 @@ def test_dtype_kind_specs(spec, kind):
     assert d.byte_order is ByteOrder.Unspecified
 
 
-def test_from_params():
-    d = Dtype.from_params(DtypeKind.Uint, 16, ByteOrder.Little)
+def test_dtype_single_from_params():
+    d = DtypeSingle.from_params(DtypeKind.Uint, 16, ByteOrder.Little)
     assert d.kind is DtypeKind.Uint
     assert d.length == 16
     assert d.byte_order is ByteOrder.Little
 
 
-def test_bool_from_params_requires_length_one():
-    d = Dtype.from_params(DtypeKind.Bool, 1)
+def test_dtype_single_bool_from_params_requires_length_one():
+    d = DtypeSingle.from_params(DtypeKind.Bool, 1)
     assert d.kind is DtypeKind.Bool
     assert d.length == 1
 
     with pytest.raises(ValueError, match="length 1"):
-        Dtype.from_params(DtypeKind.Bool, 2)
+        DtypeSingle.from_params(DtypeKind.Bool, 2)
 
 
-def test_bits_from_params():
-    d = Dtype.from_params(DtypeKind.Bits, 3)
+def test_dtype_single_bits_from_params():
+    d = DtypeSingle.from_params(DtypeKind.Bits, 3)
     assert d.kind is DtypeKind.Bits
     assert d.length == 3
-    assert repr(d) == "Dtype('bits3')"
+    assert repr(d) == "DtypeSingle('bits3')"
 
 
 def test_repr_is_parseable():
     d = Dtype("u16_le")
-    assert repr(d) == "Dtype('u16_le')"
+    assert repr(d) == "DtypeSingle('u16_le')"
     assert Dtype("u16_le").kind is DtypeKind.Uint
 
 
 @pytest.mark.parametrize("spec", ["bool", "bits7"])
 def test_new_dtype_repr_is_parseable(spec):
-    assert repr(Dtype(spec)) == f"Dtype('{spec}')"
+    assert repr(Dtype(spec)) == f"DtypeSingle('{spec}')"
 
 
 def test_dtype_equality_and_hashing_are_by_value():
@@ -124,7 +125,7 @@ def test_invalid_specs(spec):
 )
 def test_byte_order_rejected_for_non_numeric_kinds(kind, length):
     with pytest.raises(ValueError, match="byte order"):
-        Dtype.from_params(kind, length, ByteOrder.Little)
+        DtypeSingle.from_params(kind, length, ByteOrder.Little)
 
 
 def test_from_value_float():

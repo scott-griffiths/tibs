@@ -45,8 +45,10 @@ extraction, see :doc:`byte_and_bit_order` and :doc:`views`.
    :member-order: groupwise
    :undoc-members:
 
-Each :class:`Dtype` instance has a 'kind' which controls how to create and interpret values.
-For example ``DtypeKind.Float`` is used for floating-point data types.
+Each :class:`DtypeSingle` instance has a ``kind`` which controls how to create
+and interpret its scalar value. For example, ``DtypeKind.Float`` is used for
+floating-point data types. Array and tuple dtypes instead describe their
+children through :attr:`DtypeArray.dtype` and :attr:`DtypeTuple.dtypes`.
 
 Unless you are creating or dealing with data types programmatically, you probably won't need to
 use this enum directly.
