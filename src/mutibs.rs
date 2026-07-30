@@ -7,7 +7,7 @@ use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
     bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, fill_bits, find_bitvec,
+    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
     find_bitvec_aligned, head_bit_offset, logical_op_assign_bytes, move_bits,
     padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv, validate_index,
     validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
@@ -781,10 +781,19 @@ impl Mutibs {
                 value.len()
             )));
         }
-        deposit_masked(
-            self.as_mut_bitvec_ref(),
-            value.as_bitslice(),
-            mask.as_bitslice(),
+        let (value_bytes, value_offset, _) = value.raw_data_ref();
+        let (mask_bytes, mask_offset, _) = mask.raw_data_ref();
+        let bits_offset = self.storage_head_offset();
+        let bits_len = self.len();
+        deposit_masked_bytes(
+            self.data.as_raw_mut_slice(),
+            bits_offset,
+            value_bytes,
+            value_offset,
+            value.len(),
+            mask_bytes,
+            mask_offset,
+            bits_len,
         );
         Ok(())
     }

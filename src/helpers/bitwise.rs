@@ -681,6 +681,36 @@ fn compress_bits(mut x: u64, mut m: u64) -> u64 {
     x
 }
 
+/// Move the low bits of `x` up into the positions picked out by `m`, keeping
+/// their order and clearing every position outside the mask.
+///
+/// This is Hacker's Delight's "expand right", the inverse of
+/// [`compress_bits`]. The first pass records how compression would move each
+/// group of mask bits down; the second applies those moves in reverse.
+#[inline]
+fn expand_bits(mut x: u64, mut m: u64) -> u64 {
+    let original_mask = m;
+    let mut moves = [0u64; 6];
+    let mut mk = !m << 1;
+    for (i, movement) in moves.iter_mut().enumerate() {
+        let mut mp = mk ^ (mk << 1);
+        mp ^= mp << 2;
+        mp ^= mp << 4;
+        mp ^= mp << 8;
+        mp ^= mp << 16;
+        mp ^= mp << 32;
+        let mv = mp & m;
+        *movement = mv;
+        m = (m ^ mv) | (mv >> (1 << i));
+        mk &= !mp;
+    }
+    for (i, &mv) in moves.iter().enumerate().rev() {
+        let moved = x << (1 << i);
+        x = (x & !mv) | (moved & mv);
+    }
+    x & original_mask
+}
+
 /// Above this many set bits in a word, [`compress_bits`] costs less than
 /// picking the bits out one at a time.
 ///
@@ -706,6 +736,83 @@ fn pick_bits(s: u64, m: u64, selected: usize) -> u64 {
         rest &= !(1u64 << (63 - from_top));
     }
     value
+}
+
+/// The inverse of [`pick_bits`]: scatter `selected` low bits of `value` into
+/// the set positions of `mask`. Walking the positions is cheaper than
+/// [`expand_bits`] for a sparse mask.
+#[inline]
+fn place_bits(value: u64, mask: u64, selected: usize) -> u64 {
+    debug_assert_eq!(mask.count_ones() as usize, selected);
+    let mut rest = mask;
+    let mut source_bit = selected;
+    let mut placed = 0u64;
+    while rest != 0 {
+        source_bit -= 1;
+        let from_top = rest.leading_zeros();
+        placed |= ((value >> source_bit) & 1) << (63 - from_top);
+        rest &= !(1u64 << (63 - from_top));
+    }
+    placed
+}
+
+#[inline]
+fn low_mask(bits: usize) -> u64 {
+    debug_assert!(bits <= 64);
+    if bits == 64 {
+        u64::MAX
+    } else {
+        (1u64 << bits) - 1
+    }
+}
+
+/// Read at most one word from an arbitrary bit offset, with the first bit at
+/// the high end of the returned run and the whole run right-aligned.
+#[inline]
+fn read_bit_run(bytes: &[u8], bit_offset: usize, len_bits: usize) -> u64 {
+    debug_assert!((1..=64).contains(&len_bits));
+    debug_assert!(bytes.len() * 8 >= bit_offset + len_bits);
+    let byte_start = bit_offset / 8;
+    let head = bit_offset % 8;
+    if head == 0 && len_bits == 64 {
+        return read_be_u64(bytes, byte_start);
+    }
+
+    let byte_count = (head + len_bits).div_ceil(8);
+    let mut value = 0u128;
+    for &byte in &bytes[byte_start..byte_start + byte_count] {
+        value = (value << 8) | u128::from(byte);
+    }
+    let trailing = byte_count * 8 - head - len_bits;
+    ((value >> trailing) as u64) & low_mask(len_bits)
+}
+
+/// Replace at most one word at an arbitrary bit offset, preserving the bits
+/// before and after the run in its edge bytes.
+#[inline]
+fn write_bit_run(bytes: &mut [u8], bit_offset: usize, len_bits: usize, value: u64) {
+    debug_assert!((1..=64).contains(&len_bits));
+    debug_assert!(bytes.len() * 8 >= bit_offset + len_bits);
+    let byte_start = bit_offset / 8;
+    let head = bit_offset % 8;
+    if head == 0 && len_bits == 64 {
+        bytes[byte_start..byte_start + 8].copy_from_slice(&value.to_be_bytes());
+        return;
+    }
+
+    let byte_count = (head + len_bits).div_ceil(8);
+    let run = &mut bytes[byte_start..byte_start + byte_count];
+    let mut stored = 0u128;
+    for &byte in run.iter() {
+        stored = (stored << 8) | u128::from(byte);
+    }
+    let trailing = byte_count * 8 - head - len_bits;
+    let field_mask = ((1u128 << len_bits) - 1) << trailing;
+    stored = (stored & !field_mask) | ((u128::from(value) << trailing) & field_mask);
+    for byte in run.iter_mut().rev() {
+        *byte = stored as u8;
+        stored >>= 8;
+    }
 }
 
 /// Gather the bits of `src` at the positions set in `mask`, packed together
@@ -769,15 +876,62 @@ pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, one
 }
 
 /// Scatter `value`'s bits into the positions of `bits` where `mask` is set,
-/// leaving the other bits untouched (the PDEP operation). `bits` and `mask` must
-/// be the same length and `value` must be `mask.count_ones()` bits long; both
-/// are the caller's responsibility to check.
-pub(crate) fn deposit_masked(bits: &mut BS, value: &BS, mask: &BS) {
-    debug_assert_eq!(bits.len(), mask.len());
-    debug_assert_eq!(value.len(), mask.count_ones());
-    for (value_index, pos) in mask.iter_ones().enumerate() {
-        bits.set(pos, value[value_index]);
+/// leaving the other bits untouched (the PDEP operation).
+///
+/// Each input is a bit run at an arbitrary offset in its byte storage. The
+/// caller must ensure that the destination and mask are `len_bits` long and
+/// that `value_len` equals the mask's population count.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn deposit_masked_bytes(
+    bits: &mut [u8],
+    bits_offset: usize,
+    value: &[u8],
+    value_offset: usize,
+    value_len: usize,
+    mask: &[u8],
+    mask_offset: usize,
+    len_bits: usize,
+) {
+    debug_assert!(bits.len() * 8 >= bits_offset + len_bits);
+    debug_assert!(value.len() * 8 >= value_offset + value_len);
+    debug_assert!(mask.len() * 8 >= mask_offset + len_bits);
+
+    if value_len == 0 {
+        return;
     }
+    if value_len == len_bits {
+        copy_bits(bits, bits_offset, value, value_offset, len_bits);
+        return;
+    }
+
+    let mut done = 0;
+    let mut consumed = 0;
+    while done < len_bits {
+        let run_len = (len_bits - done).min(64);
+        let selector = read_bit_run(mask, mask_offset + done, run_len);
+        let selected = selector.count_ones() as usize;
+        if selected != 0 {
+            let packed = read_bit_run(value, value_offset + consumed, selected);
+            let placed = if selected == run_len {
+                packed
+            } else if selected <= SPARSE_WORD_BITS {
+                // `read_bit_run` right-aligns a short run, while `place_bits`
+                // expects word positions. Shift both into the same frame.
+                place_bits(packed, selector << (64 - run_len), selected) >> (64 - run_len)
+            } else {
+                expand_bits(packed, selector)
+            };
+            let updated = if selected == run_len {
+                placed
+            } else {
+                (read_bit_run(bits, bits_offset + done, run_len) & !selector) | placed
+            };
+            write_bit_run(bits, bits_offset + done, run_len, updated);
+            consumed += selected;
+        }
+        done += run_len;
+    }
+    debug_assert_eq!(consumed, value_len);
 }
 
 /// The number of set bits in a run of whole bytes.

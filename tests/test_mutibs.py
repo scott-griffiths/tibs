@@ -1907,6 +1907,24 @@ def test_deposit_self_value():
     assert m == Tibs('0b1010')
 
 
+def test_deposit_across_word_and_storage_boundaries():
+    # Give the destination, mask, and value independent non-byte-aligned
+    # storage. The 63/64/65 boundaries exercise both full and partial words.
+    for length in (1, 7, 8, 9, 63, 64, 65, 127, 128, 129):
+        destination = Mutibs.from_random(length + 3, seed=b'destination')[3:]
+        mask = Tibs.from_random(length + 5, seed=b'mask')[5:]
+        selected = mask.count()
+        value = Tibs.from_random(selected + 7, seed=b'value')[7:]
+
+        value_bits = iter(value)
+        expected = Tibs.from_bools(
+            next(value_bits) if selected_here else original
+            for original, selected_here in zip(Tibs(destination), mask)
+        )
+        destination.deposit(value, mask)
+        assert destination == expected
+
+
 def test_extract_deposit_mutibs_errors():
     m = Mutibs('0b1011')
     with pytest.raises(ValueError):
