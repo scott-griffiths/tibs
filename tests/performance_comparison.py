@@ -159,6 +159,17 @@ def relative_cell(text, cell_colour, colour):
     return colourise(text.rjust(SPEEDUP_WIDTH), cell_colour if text else "", colour)
 
 
+TIME_UNITS = ((1.0, "s"), (1e-3, "ms"), (1e-6, "µs"), (1e-9, "ns"))
+
+
+def format_time(seconds):
+    """Use a readable unit even for scalar cases that take under a microsecond."""
+    for scale, suffix in TIME_UNITS:
+        if seconds >= scale:
+            return f"{seconds / scale:.3g} {suffix}"
+    return f"{seconds / 1e-9:.3g} ns"
+
+
 def result_summary(result):
     bit_types = (Tibs, Mutibs) if bitarray is None else (bitarray, Tibs, Mutibs)
     if isinstance(result, bit_types):
@@ -268,6 +279,18 @@ def build_bitarray_cases(byte_count, value_count):
             result = combined[10:end] & other_tibs[9: end - 1]
         return result
 
+    # Start from a fresh mutable copy on each call, so repeated samples do the
+    # same work instead of repeatedly ANDing an already-filtered result.
+    def ba_inplace_and():
+        out = search_bits.copy()
+        out &= other_bits
+        return out
+
+    def tibs_inplace_and():
+        out = search_tibs.to_mutibs()
+        out &= other_tibs
+        return out
+
     def ba_count():
         return sum(search_bits.count(1) for _ in range(10))
 
@@ -291,6 +314,23 @@ def build_bitarray_cases(byte_count, value_count):
     def tibs_extend_bool_list():
         out = Mutibs()
         out.extend(bit_list)
+        return out
+
+    def ba_append_bits():
+        out = bitarray(endian="big")
+        append = out.append
+        for bit in bit_list:
+            append(bit)
+        return out
+
+    def tibs_append_bits():
+        out = Mutibs()
+        # Tibs documents reserve as the way to avoid growth reallocations when
+        # constructing incrementally, so give it the known final size.
+        out.reserve(len(bit_list))
+        append = out.append
+        for bit in bit_list:
+            append(bit)
         return out
 
     def ba_bulk_index_set():
@@ -366,12 +406,19 @@ def build_bitarray_cases(byte_count, value_count):
         return search_tibs << 13
 
     def ba_index_reads():
-        # Kept as a per-index loop to match the tibs side. bitarray can also
-        # gather in bulk with `search_bits[read_positions].count(1)`, which is
-        # ~2.3x faster here; tibs has no equivalent fancy-indexing read.
+        # This row isolates scalar indexing on both sides. The separate
+        # gather-and-count row below lets bitarray use its bulk indexing API.
         return sum(search_bits[pos] for pos in read_positions)
 
     def tibs_index_reads():
+        return sum(search_tibs[pos] for pos in read_positions)
+
+    def ba_gather_count():
+        return search_bits[read_positions].count(1)
+
+    def tibs_gather_count():
+        # Tibs has no fancy-indexing read, so scalar indexing is its idiomatic
+        # route for gathering arbitrary positions.
         return sum(search_tibs[pos] for pos in read_positions)
 
     def ba_to_bool_list():
@@ -516,6 +563,9 @@ def build_bitarray_cases(byte_count, value_count):
             "reverse find_all iter", ba_reverse_find_all, tibs_reverse_find_all
         ),
         ComparisonCase("bit ops sliced", ba_bitops, tibs_bitops, same_bits),
+        ComparisonCase(
+            "copy + in-place and", ba_inplace_and, tibs_inplace_and, same_bits
+        ),
         ComparisonCase("count ones", ba_count, tibs_count),
         ComparisonCase(
             "join small pieces", ba_join_small_pieces, tibs_join_small_pieces, same_bits
@@ -523,6 +573,7 @@ def build_bitarray_cases(byte_count, value_count):
         ComparisonCase(
             "extend bool list", ba_extend_bool_list, tibs_extend_bool_list, same_bits
         ),
+        ComparisonCase("append bits", ba_append_bits, tibs_append_bits, same_bits),
         ComparisonCase("bulk index set", ba_bulk_index_set, tibs_bulk_index_set, same_bits),
         ComparisonCase(
             "bool construction", ba_bool_construction, tibs_bool_construction, same_bits
@@ -535,6 +586,7 @@ def build_bitarray_cases(byte_count, value_count):
         ComparisonCase("reverse in place", ba_reverse, tibs_reverse, same_bits),
         ComparisonCase("shift left", ba_shift_left, tibs_shift_left, same_bits),
         ComparisonCase("random index reads", ba_index_reads, tibs_index_reads),
+        ComparisonCase("gather + count", ba_gather_count, tibs_gather_count),
         ComparisonCase("to bool list", ba_to_bool_list, tibs_to_bool_list),
         ComparisonCase(
             "copy + slice set", ba_copy_slice_set, tibs_copy_slice_set, same_bits
@@ -595,6 +647,20 @@ def build_stdlib_cases(byte_count, value_count):
     record_struct = struct.Struct(">hhl")
     record_bytes = b"".join(record_struct.pack(*record) for record in records)
     record_dtype = Dtype("(i16, i16, i32)")
+    scalar_record = records[0]
+    scalar_record_bytes = record_struct.pack(*scalar_record)
+    scalar_record_tibs = Tibs.from_bytes(scalar_record_bytes)
+
+    # bytes.join and Tibs.from_joined both accept prepared pieces. Five bytes is
+    # small enough for per-piece overhead to matter but is still a plausible
+    # fixed-width field or short protocol fragment.
+    byte_pieces = [
+        search_bytes[index: index + 5] for index in range(0, byte_count, 5)
+    ]
+    tibs_byte_pieces = [Tibs.from_bytes(piece) for piece in byte_pieces]
+
+    u64_value = 0x123456789ABCDEF0
+    u64_bytes = u64_value.to_bytes(8, "big")
 
     hex_string = search_bytes.hex()
     prefixed_hex = "0x" + hex_string
@@ -629,6 +695,21 @@ def build_stdlib_cases(byte_count, value_count):
         # DtypeTuple.unpack_values (via Tibs.to_values) mirrors iter_unpack:
         # one call decodes every record instead of slicing each field by hand.
         return Tibs.from_bytes(record_bytes).to_values(record_dtype)
+
+    def struct_pack_scalar_record():
+        # The bulk row above is appropriate when all records are known at once.
+        # This row covers independently arriving records, with both the Struct
+        # and Dtype compiled and reused outside the timed region.
+        return record_struct.pack(*scalar_record)
+
+    def tibs_pack_scalar_record():
+        return record_dtype.pack(scalar_record).to_bytes()
+
+    def struct_unpack_scalar_record():
+        return record_struct.unpack(scalar_record_bytes)
+
+    def tibs_unpack_scalar_record():
+        return record_dtype.unpack(scalar_record_tibs)
 
     def struct_pack_u16():
         # struct docs: a format character may be preceded by a repeat count,
@@ -703,6 +784,26 @@ def build_stdlib_cases(byte_count, value_count):
     def tibs_from_bytes_to_u():
         return Tibs.from_bytes(search_bytes).to_u()
 
+    def int_u64_to_bytes():
+        # This is deliberately small: fixed-width integer fields in headers and
+        # protocol records do not amortize conversion overhead over a large buffer.
+        return u64_value.to_bytes(8, "big")
+
+    def tibs_u64_to_bytes():
+        return Tibs.from_u(u64_value, 64).to_bytes()
+
+    def int_bytes_to_u64():
+        return int.from_bytes(u64_bytes, "big")
+
+    def tibs_bytes_to_u64():
+        return Tibs.from_bytes(u64_bytes).to_u()
+
+    def bytes_join_pieces():
+        return b"".join(byte_pieces)
+
+    def tibs_join_byte_pieces():
+        return Tibs.from_joined(tibs_byte_pieces).to_bytes()
+
     def bytes_to_hex():
         # bytes docs: b'\xf0\xf1\xf2'.hex()
         return search_bytes.hex()
@@ -747,6 +848,14 @@ def build_stdlib_cases(byte_count, value_count):
     return [
         ComparisonCase("struct: pack hhl", struct_pack_records, tibs_pack_records),
         ComparisonCase("struct: iter_unpack hhl", struct_unpack_records, tibs_unpack_records),
+        ComparisonCase(
+            "struct: pack one hhl", struct_pack_scalar_record, tibs_pack_scalar_record
+        ),
+        ComparisonCase(
+            "struct: unpack one hhl",
+            struct_unpack_scalar_record,
+            tibs_unpack_scalar_record,
+        ),
         ComparisonCase("struct: pack u16", struct_pack_u16, tibs_pack_u16),
         ComparisonCase("struct: unpack u16", struct_unpack_u16, tibs_unpack_u16),
         ComparisonCase("struct: pack f32", struct_pack_f32, tibs_pack_f32),
@@ -757,6 +866,11 @@ def build_stdlib_cases(byte_count, value_count):
         ComparisonCase("int: bitwise and", int_and, tibs_and, same_value),
         ComparisonCase("int: shift left", int_shift_left, tibs_shift_left, same_value),
         ComparisonCase("int: from bytes", int_from_bytes, tibs_from_bytes_to_u),
+        ComparisonCase("int: u64 to bytes", int_u64_to_bytes, tibs_u64_to_bytes),
+        ComparisonCase("int: 8 bytes to u64", int_bytes_to_u64, tibs_bytes_to_u64),
+        ComparisonCase(
+            "bytes: join 5-byte pieces", bytes_join_pieces, tibs_join_byte_pieces
+        ),
         ComparisonCase("bytes: to hex", bytes_to_hex, tibs_to_hex),
         ComparisonCase("bytes: from hex", bytes_from_hex, tibs_from_hex),
         ComparisonCase("bytes: to binary str", bytes_to_binary, tibs_to_binary),
@@ -848,9 +962,9 @@ def run_table(title, baseline_label, cases, repeats, colour):
         print(
             (
                 f"{name:<{NAME_WIDTH}}"
-                f"{f'{baseline_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+                f"{format_time(baseline_time):>{TIME_WIDTH}}"
                 f"{relative_cell(baseline_relative, cell_colour, colour)}"
-                f"{f'{tibs_time * 1e3:.3f} ms':>{TIME_WIDTH}}"
+                f"{format_time(tibs_time):>{TIME_WIDTH}}"
                 f"{relative_cell(tibs_relative, cell_colour, colour)}"
             ).rstrip()
         )
