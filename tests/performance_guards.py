@@ -41,9 +41,9 @@ or as assertions::
     .venv/bin/python -m pytest tests/performance_guards.py
 
 These began as the worklist for the audit of 2026-07-27, when all of them
-failed. All but one now pass, so they have turned into what they were always
-meant to become: a guard against the same mistakes coming back. Each one names
-the call site it is about.
+failed. Fixed rows remain here as regression guards, and newly discovered rows
+are added while they still fail so the report also serves as the current
+optimization worklist. Each one names the call site it is about.
 """
 
 from __future__ import annotations
@@ -77,6 +77,48 @@ HALF_T_UNALIGNED = Tibs.from_random(HALF + 3, seed=b"tibs-guards-odd")
 
 ALL_ONES = Tibs.from_ones(BITS)
 ALL_ZEROS = Tibs.from_zeros(BITS)
+
+# Large integer conversion is the only current public path known to create a
+# BitVec whose live data starts part way through its first storage byte. Keep a
+# byte-realigned copy of exactly the same value to expose operations that fall
+# back to bitvec only because of that storage shape.
+ODD_BITS = BITS - 3
+ODD_VALUE = int.from_bytes(BIG_T.to_bytes(), "big") >> 3
+ODD_OTHER_VALUE = int.from_bytes(OTHER_T.to_bytes(), "big") >> 3
+ODD_NUMERIC_T = Tibs.from_u(ODD_VALUE, ODD_BITS)
+ODD_NUMERIC_OTHER = Tibs.from_u(ODD_OTHER_VALUE, ODD_BITS)
+ODD_REALIGNED_T = Tibs(Mutibs(ODD_NUMERIC_T))
+ODD_REALIGNED_OTHER = Tibs(Mutibs(ODD_NUMERIC_OTHER))
+assert ODD_NUMERIC_T == ODD_REALIGNED_T
+assert ODD_NUMERIC_OTHER == ODD_REALIGNED_OTHER
+
+BIG_BYTES = BIG_T.to_bytes()
+OTHER_BYTES = OTHER_T.to_bytes()
+BIG_U = int.from_bytes(BIG_BYTES, "big")
+RAW_ENCODED = BIG_T.encode(Codec.Raw)
+
+# Reusable mutation targets. Both sides of each pair repeatedly write the same
+# result, so every timed call performs the same work without measuring setup.
+DEPOSIT_SLOW_TARGET = Mutibs(BIG_T)
+DEPOSIT_FAST_TARGET = Mutibs(BIG_T)
+VIEW_WRITE_SLOW_TARGET = Mutibs(BIG_T)
+VIEW_WRITE_FAST_TARGET = Mutibs(BIG_T)
+WHOLE_MUTABLE_VIEW = VIEW_WRITE_SLOW_TARGET.view()
+WRITE_U_TARGET = Mutibs.from_zeros(BITS)
+
+REPLACE_OLD_BYTES = b"\x00"
+REPLACE_NEW_BYTES = b"\xff"
+REPLACE_OLD = Tibs.from_bytes(REPLACE_OLD_BYTES)
+REPLACE_NEW = Tibs.from_bytes(REPLACE_NEW_BYTES)
+
+# One megabit either way. The multi-token spelling exercises the parser's
+# repeated BitVec extension without changing the amount of text or bit data.
+PARSE_HEX_PIECE = "ab" * 1_250
+PARSE_MULTI = ",".join(["0x" + PARSE_HEX_PIECE] * 100)
+PARSE_SINGLE = "0x" + PARSE_HEX_PIECE * 100
+
+ONE_ZERO = Tibs("0b0")
+ONE_ONE = Tibs("0b1")
 
 # A one-bit needle, and a container holding few enough of them that collecting
 # their positions is a measurement of the scan rather than of list building.
@@ -192,6 +234,31 @@ def _and_in_place() -> Mutibs:
     result = Mutibs(BIG_T)
     result &= OTHER_T
     return result
+
+
+def _deposit_all() -> Mutibs:
+    DEPOSIT_SLOW_TARGET.deposit(OTHER_T, ALL_ONES)
+    return DEPOSIT_SLOW_TARGET
+
+
+def _write_all_bytes() -> Mutibs:
+    DEPOSIT_FAST_TARGET.write_bytes(OTHER_BYTES)
+    return DEPOSIT_FAST_TARGET
+
+
+def _write_through_whole_view() -> Mutibs:
+    WHOLE_MUTABLE_VIEW.write_bytes(OTHER_BYTES)
+    return VIEW_WRITE_SLOW_TARGET
+
+
+def _write_directly() -> Mutibs:
+    VIEW_WRITE_FAST_TARGET.write_bytes(OTHER_BYTES)
+    return VIEW_WRITE_FAST_TARGET
+
+
+def _write_u() -> Mutibs:
+    WRITE_U_TARGET.write_u(BIG_U)
+    return WRITE_U_TARGET
 
 
 GUARDS: list[Guard] = [
@@ -431,6 +498,108 @@ GUARDS: list[Guard] = [
         fast=lambda: SPARSE_T.count(),
         limit=4.0,
         same_result=False,
+    ),
+    # ---- 17. non-canonical large-integer storage -----------------------
+    # The two operands in each pair contain exactly the same bits. Only the
+    # construction differs: from_u currently retains the leading pad as a
+    # BitVec head offset, while the Mutibs round-trip realigns the bytes.
+    Guard(
+        name="unaligned from_u & vs realigned &",
+        site="numeric.rs bv_from_big_int -> bits[pad..].to_bitvec",
+        slow=lambda: ODD_NUMERIC_T & ODD_NUMERIC_OTHER,
+        fast=lambda: ODD_REALIGNED_T & ODD_REALIGNED_OTHER,
+        limit=6.0,
+    ),
+    Guard(
+        name="unaligned from_u bytes vs realigned bytes",
+        site="core.rs to_padded_byte_data -> extend_from_bitslice fallback",
+        slow=lambda: ODD_NUMERIC_T.to_padded_bytes(),
+        fast=lambda: ODD_REALIGNED_T.to_padded_bytes(),
+        limit=4.0,
+    ),
+    # Both sides create the same Python int. The reference uses the padded
+    # bytes that Tibs already exposes, then applies the three-bit alignment
+    # shift directly instead of rebuilding a padded BitVec.
+    Guard(
+        name="unaligned to_u vs from_bytes + shift",
+        site="core.rs to_big_int -> extend_from_bitslice",
+        slow=lambda: ODD_REALIGNED_T.to_u(),
+        fast=lambda: int.from_bytes(ODD_REALIGNED_T.to_padded_bytes(), "big") >> 3,
+        limit=2.0,
+    ),
+    # ---- 18. deposit ----------------------------------------------------
+    # An all-ones mask makes deposit exactly a whole-value assignment. Both
+    # sides repeatedly overwrite a mutable megabit target with OTHER_T.
+    Guard(
+        name="deposit(all ones) vs write_bytes()",
+        site="bitwise.rs deposit_masked -> iter_ones + set",
+        slow=_deposit_all,
+        fast=_write_all_bytes,
+        limit=20.0,
+    ),
+    # ---- 19. whole mutable-view writes ---------------------------------
+    Guard(
+        name="view.write_bytes vs Mutibs.write_bytes",
+        site="view.rs assign_from_view_bits -> copy_from_bitslice",
+        slow=_write_through_whole_view,
+        fast=_write_directly,
+        limit=10.0,
+    ),
+    # ---- 20. write_u ----------------------------------------------------
+    # Both sides run the same large-int conversion. write_u additionally
+    # copies the resulting BitVec bit by bit into storage it already owns.
+    Guard(
+        name="write_u vs from_u",
+        site="mutibs.rs assign_from_bv -> copy_from_bitslice",
+        slow=_write_u,
+        fast=lambda: Mutibs.from_u(BIG_U, BITS),
+        limit=2.0,
+    ),
+    # ---- 21. raw codec decode ------------------------------------------
+    Guard(
+        name="decode(Raw) vs from_bytes()",
+        site="codec.rs decode_raw_payload -> to_bitvec",
+        slow=lambda: Tibs.decode(RAW_ENCODED),
+        fast=lambda: Tibs.from_bytes(BIG_BYTES),
+        limit=4.0,
+    ),
+    # ---- 22. replacement rebuild ---------------------------------------
+    # A one-byte needle cannot overlap itself, so bytes.replace and
+    # replaced(..., byte_aligned=True) have identical replacement semantics.
+    Guard(
+        name="aligned replace vs bytes.replace",
+        site="mutibs.rs apply_replace_bits -> extend_from_bitslice",
+        slow=lambda: BIG_T.replaced(REPLACE_OLD, REPLACE_NEW, byte_aligned=True),
+        fast=lambda: Tibs.from_bytes(
+            BIG_BYTES.replace(REPLACE_OLD_BYTES, REPLACE_NEW_BYTES)
+        ),
+        limit=6.0,
+    ),
+    # ---- 23. multi-token parsing ---------------------------------------
+    Guard(
+        name="parse 100 tokens vs one token",
+        site="parse.rs str_to_bv -> extend_from_bitslice",
+        slow=lambda: Tibs.from_string(PARSE_MULTI),
+        fast=lambda: Tibs.from_string(PARSE_SINGLE),
+        limit=2.0,
+    ),
+    # ---- 24. all/any early exit ----------------------------------------
+    # The first bit decides each result. Running the same predicate on a
+    # one-bit object preserves Python-call overhead while exposing a scan that
+    # unnecessarily depends on the million-bit input length.
+    Guard(
+        name="all immediate exit vs one bit",
+        site="mutibs.rs/tibs_.rs all -> bitvec count_zeros",
+        slow=lambda: ALL_ZEROS.all(),
+        fast=lambda: ONE_ZERO.all(),
+        limit=4.0,
+    ),
+    Guard(
+        name="any immediate exit vs one bit",
+        site="mutibs.rs/tibs_.rs any -> bitvec count_ones",
+        slow=lambda: ALL_ONES.any(),
+        fast=lambda: ONE_ONE.any(),
+        limit=4.0,
     ),
 ]
 

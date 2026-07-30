@@ -189,6 +189,17 @@ def build_bitarray_cases(byte_count, value_count):
     bit_count = len(search_bits)
     bit_list = list(search_tibs[: min(byte_count * 8, 80_000)])
 
+    all_zero_bits = zeros(bit_count, endian="big")
+    all_one_bits = ones(bit_count, endian="big")
+    all_zero_tibs = Tibs.from_zeros(bit_count)
+    all_one_tibs = Tibs.from_ones(bit_count)
+
+    deposit_mask_bits = other_bits
+    deposit_mask_tibs = other_tibs
+    deposit_value_length = deposit_mask_bits.count(1)
+    deposit_value_bits = search_bits[:deposit_value_length]
+    deposit_value_tibs = search_tibs[:deposit_value_length]
+
     search_pattern_bits = bitarray("101010111100", endian="big")
     search_pattern_tibs = Tibs("0xabc")
 
@@ -290,6 +301,53 @@ def build_bitarray_cases(byte_count, value_count):
         out = search_tibs.to_mutibs()
         out &= other_tibs
         return out
+
+    def ba_deposit():
+        out = search_bits.copy()
+        out[deposit_mask_bits] = deposit_value_bits
+        return out
+
+    def tibs_deposit():
+        out = search_tibs.to_mutibs()
+        out.deposit(deposit_value_tibs, deposit_mask_tibs)
+        return out
+
+    def ba_whole_view_write():
+        out = search_bits.copy()
+        out[:] = other_bits
+        return out
+
+    def tibs_whole_view_write():
+        out = search_tibs.to_mutibs()
+        out.view().write_bytes(other_bytes)
+        return out
+
+    # bitarray short-circuits these predicates. The immediate-exit rows put
+    # the deciding bit first; the full-scan rows make every bit agree so that
+    # both implementations have to inspect the whole input.
+    def ba_all_immediate():
+        return all_zero_bits.all()
+
+    def tibs_all_immediate():
+        return all_zero_tibs.all()
+
+    def ba_any_immediate():
+        return all_one_bits.any()
+
+    def tibs_any_immediate():
+        return all_one_tibs.any()
+
+    def ba_all_full_scan():
+        return all_one_bits.all()
+
+    def tibs_all_full_scan():
+        return all_one_tibs.all()
+
+    def ba_any_full_scan():
+        return all_zero_bits.any()
+
+    def tibs_any_full_scan():
+        return all_zero_tibs.any()
 
     def ba_count():
         return sum(search_bits.count(1) for _ in range(10))
@@ -566,6 +624,17 @@ def build_bitarray_cases(byte_count, value_count):
         ComparisonCase(
             "copy + in-place and", ba_inplace_and, tibs_inplace_and, same_bits
         ),
+        ComparisonCase("masked bit deposit", ba_deposit, tibs_deposit, same_bits),
+        ComparisonCase(
+            "copy + whole view write",
+            ba_whole_view_write,
+            tibs_whole_view_write,
+            same_bits,
+        ),
+        ComparisonCase("all immediate exit", ba_all_immediate, tibs_all_immediate),
+        ComparisonCase("any immediate exit", ba_any_immediate, tibs_any_immediate),
+        ComparisonCase("all full scan", ba_all_full_scan, tibs_all_full_scan),
+        ComparisonCase("any full scan", ba_any_full_scan, tibs_any_full_scan),
         ComparisonCase("count ones", ba_count, tibs_count),
         ComparisonCase(
             "join small pieces", ba_join_small_pieces, tibs_join_small_pieces, same_bits
@@ -621,6 +690,13 @@ def build_stdlib_cases(byte_count, value_count):
     other_int = int.from_bytes(other_bytes, "big")
     bit_count = byte_count * 8
     width_mask = (1 << bit_count) - 1
+    unaligned_bit_count = bit_count - 3
+    unaligned_search_int = search_int >> 3
+    unaligned_other_int = other_int >> 3
+    # This construction currently leaves the backing BitVec starting part way
+    # through a byte, which reactivates several bit-at-a-time fallbacks.
+    unaligned_search_tibs = Tibs.from_u(unaligned_search_int, unaligned_bit_count)
+    unaligned_other_tibs = Tibs.from_u(unaligned_other_int, unaligned_bit_count)
 
     rng = random.Random("comparison-values")
     value_words = [rng.randrange(1 << 16) for _ in range(value_count)]
@@ -658,9 +734,16 @@ def build_stdlib_cases(byte_count, value_count):
         search_bytes[index: index + 5] for index in range(0, byte_count, 5)
     ]
     tibs_byte_pieces = [Tibs.from_bytes(piece) for piece in byte_pieces]
+    spaced_hex_pieces = " ".join(piece.hex() for piece in byte_pieces)
+    tibs_hex_pieces = ",".join(f"0x{piece.hex()}" for piece in byte_pieces)
 
     u64_value = 0x123456789ABCDEF0
     u64_bytes = u64_value.to_bytes(8, "big")
+
+    replace_old = search_bytes[byte_count // 2: byte_count // 2 + 1]
+    replace_new = bytes([replace_old[0] ^ 0xFF])
+    replace_old_tibs = Tibs.from_bytes(replace_old)
+    replace_new_tibs = Tibs.from_bytes(replace_new)
 
     hex_string = search_bytes.hex()
     prefixed_hex = "0x" + hex_string
@@ -768,6 +851,12 @@ def build_stdlib_cases(byte_count, value_count):
     def tibs_and():
         return search_tibs & other_tibs
 
+    def int_unaligned_and():
+        return unaligned_search_int & unaligned_other_int
+
+    def tibs_unaligned_and():
+        return unaligned_search_tibs & unaligned_other_tibs
+
     def int_shift_left():
         # An int has no length, so it grows on a left shift where tibs drops the
         # bits shifted off the top. Masking back to width is the work a user has
@@ -783,6 +872,12 @@ def build_stdlib_cases(byte_count, value_count):
 
     def tibs_from_bytes_to_u():
         return Tibs.from_bytes(search_bytes).to_u()
+
+    def int_unaligned_to_u():
+        return int.from_bytes(search_bytes, "big") >> 3
+
+    def tibs_unaligned_to_u():
+        return search_tibs[:-3].to_u()
 
     def int_u64_to_bytes():
         # This is deliberately small: fixed-width integer fields in headers and
@@ -803,6 +898,21 @@ def build_stdlib_cases(byte_count, value_count):
 
     def tibs_join_byte_pieces():
         return Tibs.from_joined(tibs_byte_pieces).to_bytes()
+
+    def bytes_parse_hex_pieces():
+        # bytes.fromhex accepts ASCII whitespace between byte groups.
+        return bytes.fromhex(spaced_hex_pieces)
+
+    def tibs_parse_hex_pieces():
+        return Tibs.from_string(tibs_hex_pieces).to_bytes()
+
+    def bytes_replace_aligned():
+        return search_bytes.replace(replace_old, replace_new)
+
+    def tibs_replace_aligned():
+        return search_tibs.replaced(
+            replace_old_tibs, replace_new_tibs, byte_aligned=True
+        )
 
     def bytes_to_hex():
         # bytes docs: b'\xf0\xf1\xf2'.hex()
@@ -864,12 +974,27 @@ def build_stdlib_cases(byte_count, value_count):
         ComparisonCase("array: bytes to u16", array_from_bytes, tibs_unpack_u16),
         ComparisonCase("int: popcount", int_popcount, tibs_popcount),
         ComparisonCase("int: bitwise and", int_and, tibs_and, same_value),
+        ComparisonCase(
+            "int: unaligned and", int_unaligned_and, tibs_unaligned_and, same_value
+        ),
         ComparisonCase("int: shift left", int_shift_left, tibs_shift_left, same_value),
         ComparisonCase("int: from bytes", int_from_bytes, tibs_from_bytes_to_u),
+        ComparisonCase(
+            "int: unaligned to int", int_unaligned_to_u, tibs_unaligned_to_u
+        ),
         ComparisonCase("int: u64 to bytes", int_u64_to_bytes, tibs_u64_to_bytes),
         ComparisonCase("int: 8 bytes to u64", int_bytes_to_u64, tibs_bytes_to_u64),
         ComparisonCase(
             "bytes: join 5-byte pieces", bytes_join_pieces, tibs_join_byte_pieces
+        ),
+        ComparisonCase(
+            "bytes: parse hex pieces", bytes_parse_hex_pieces, tibs_parse_hex_pieces
+        ),
+        ComparisonCase(
+            "bytes: aligned replace",
+            bytes_replace_aligned,
+            tibs_replace_aligned,
+            same_bytes,
         ),
         ComparisonCase("bytes: to hex", bytes_to_hex, tibs_to_hex),
         ComparisonCase("bytes: from hex", bytes_from_hex, tibs_from_hex),
