@@ -302,3 +302,96 @@ def test_mutibs_compound_value_methods_match_tibs():
     assert mutable.to_value(dtype, 0, dtype.length) == values[0]
     assert mutable.to_values(dtype) == values
     assert not hasattr(mutable, "to_values_iter")
+
+
+# The fast flat-record path (a DtypeTuple of scalar fields, or a DtypeArray of
+# one scalar field, all byte-aligned) added to close the `struct: pack hhl`
+# gap in performance_comparison.py. These exercise it directly rather than
+# through whichever dtype the other tests above happen to use.
+
+
+@pytest.mark.parametrize("count", [0, 1, 5, 50])
+def test_flat_record_pack_values_and_unpack_values_handle_various_counts(count):
+    tuple_dtype = Dtype("(i16, i16, i32)")
+    array_dtype = Dtype("[u8; 3]")
+    tuple_records = [(1, -2, 3) for _ in range(count)]
+    array_records = [(1, 2, 3) for _ in range(count)]
+
+    tuple_packed = Tibs.from_values(tuple_dtype, tuple_records)
+    array_packed = Tibs.from_values(array_dtype, array_records)
+
+    assert len(tuple_packed) == count * tuple_dtype.length
+    assert len(array_packed) == count * array_dtype.length
+    assert tuple_packed.to_values(tuple_dtype) == tuple_records
+    assert array_packed.to_values(array_dtype) == array_records
+
+
+def test_single_field_tuple_record_round_trips():
+    dtype = Dtype("(u8,)")
+    values = [(1,), (2,), (255,)]
+
+    packed = Tibs.from_values(dtype, values)
+
+    assert packed.hex == "0102ff"
+    assert packed.to_values(dtype) == values
+
+
+def test_mixed_byte_order_and_signed_record_matches_struct():
+    dtype = Dtype("(u16_le, u16_be, i32_le)")
+    values = [(0x1234, 0x1234, -1), (0xFFFF, 0x0001, -1_000_000)]
+
+    packed = Tibs.from_values(dtype, values)
+
+    expected = b"".join(
+        struct.pack("<H", a) + struct.pack(">H", b) + struct.pack("<i", c)
+        for a, b, c in values
+    )
+    assert packed.bytes == expected
+    assert packed.to_values(dtype) == values
+
+
+def test_array_and_tuple_of_the_same_scalar_byte_match():
+    array_dtype = Dtype("[i16; 3]")
+    tuple_dtype = Dtype("(i16, i16, i16)")
+    values = (100, -200, 300)
+
+    array_packed = array_dtype.pack(values)
+    tuple_packed = tuple_dtype.pack(values)
+
+    assert array_packed == tuple_packed
+    assert array_dtype.unpack(array_packed) == tuple_dtype.unpack(tuple_packed)
+
+
+def test_record_with_a_non_numeric_field_still_packs_and_unpacks_correctly():
+    # A `bits4` field has no fast packer/unpacker, so this forces the record
+    # back onto the pre-existing generic path field by field.
+    dtype = Dtype("(u8, bits4, u8)")
+    values = [(1, Tibs("0b1010"), 2), (3, Tibs("0b0101"), 4)]
+
+    packed = Tibs.from_values(dtype, values)
+
+    assert packed.to_values(dtype) == values
+
+
+def test_nested_compound_dtypes_pack_values_and_unpack_values_correctly():
+    # Nesting one level deeper than a flat record (array-of-tuple, tuple-of-
+    # tuple) is out of scope for the fast path and must keep using the
+    # generic path, unchanged, for the bulk pack_values/to_values methods.
+    array_of_tuple = Dtype("[(u8, bool); 2]")
+    tuple_of_tuple = Dtype("((u8, u8), u16)")
+
+    array_values = [((1, True), (2, False)), ((3, False), (4, True))]
+    tuple_values = [((1, 2), 3), ((4, 5), 6)]
+
+    assert Tibs.from_values(array_of_tuple, array_values).to_values(array_of_tuple) == array_values
+    assert Tibs.from_values(tuple_of_tuple, tuple_values).to_values(tuple_of_tuple) == tuple_values
+
+
+def test_flat_record_dtype_equality_and_hash_are_unaffected_by_the_cached_layout():
+    a = Dtype("(i16, i16, i32)")
+    b = Dtype("(i16, i16, i32)")
+
+    assert a == b
+    assert hash(a) == hash(b)
+    assert {a, b} == {a}
+    assert {a: "x"}[b] == "x"

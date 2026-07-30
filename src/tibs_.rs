@@ -1,6 +1,6 @@
 use crate::codec as tibs_codec;
 use crate::core::{BitCollection, concatenate_bitcollections};
-use crate::dtype::{Dtype, DtypeRepr, SingleDtype, extract_dtype};
+use crate::dtype::{Dtype, DtypeRepr, RecordField, RecordLayout, SingleDtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
@@ -402,6 +402,11 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
     if let Some(single) = dtype.single() {
         return bv_from_single_value(single, value);
     }
+    if let Some(layout) = &dtype.record_layout {
+        if let Some(bv) = bv_from_value_record(layout, value)? {
+            return Ok(bv);
+        }
+    }
     let mut out = BV::with_capacity(dtype.length);
     append_dtype_value(value.py(), &dtype.repr, value, &mut out, "")?;
     Ok(out)
@@ -412,6 +417,7 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
 /// Only numeric dtypes that are a whole number of bytes long qualify, so the
 /// byte order and the sign are settled once for the whole sequence rather than
 /// per value.
+#[derive(Clone, Copy)]
 enum BytewisePacker {
     Int {
         byte_length: usize,
@@ -428,16 +434,15 @@ impl BytewisePacker {
     /// Decide whether `dtype` qualifies, without touching the values. This has
     /// to be settled up front, because returning `None` after consuming part
     /// of a one-shot iterable would lose those items.
-    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
-        if dtype.length == 0 || !dtype.length.is_multiple_of(8) {
+    fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> PyResult<Option<Self>> {
+        if length == 0 || !length.is_multiple_of(8) {
             return Ok(None);
         }
-        let byte_length = dtype.length / 8;
-        let kind = dtype.kind;
+        let byte_length = length / 8;
         if !matches!(kind, DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float) {
             return Ok(None);
         }
-        let is_little_endian = ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+        let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), length)?;
         Ok(Some(match kind {
             DtypeKind::Float => BytewisePacker::Float {
                 byte_length,
@@ -449,6 +454,10 @@ impl BytewisePacker {
                 signed: kind == DtypeKind::Int,
             },
         }))
+    }
+
+    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
+        Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
     fn byte_length(&self) -> usize {
@@ -481,6 +490,174 @@ impl BytewisePacker {
             } => {
                 helpers::push_f64_bytes(out, value.extract::<f64>()?, byte_length, is_little_endian)
             }
+        }
+    }
+}
+
+/// Classify every field of a flat tuple record, or bail with `None` on the
+/// first field that isn't a whole-byte-length numeric/float dtype (e.g. a
+/// sub-byte int, `bool`, or a `bits`/`bytes`/`hex`/`oct`/`bin` field). Settled
+/// up front, once per call, the same as [`BytewisePacker::for_dtype`].
+fn classify_tuple_packers(fields: &[RecordField]) -> PyResult<Option<Vec<BytewisePacker>>> {
+    let mut packers = Vec::with_capacity(fields.len());
+    for field in fields {
+        match BytewisePacker::for_parts(field.kind, field.length, field.byte_order)? {
+            Some(packer) => packers.push(packer),
+            None => return Ok(None),
+        }
+    }
+    Ok(Some(packers))
+}
+
+/// Pack one record's fields, in order, straight into `bytes` — no `BV`
+/// allocated per field, unlike the generic `append_dtype_value`/
+/// `append_dtype_items` path this replaces for [`RecordLayout::Tuple`].
+fn push_tuple_record_fields(
+    py: Python<'_>,
+    packers: &[BytewisePacker],
+    record: &Bound<'_, PyAny>,
+    path: &str,
+    bytes: &mut Vec<u8>,
+) -> PyResult<()> {
+    let mut items = record
+        .try_iter()
+        .map_err(|error| add_value_path(py, error, path))?;
+    for (field_index, packer) in packers.iter().enumerate() {
+        let item = items.next().ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "At value{path}: expected {} items, but received {field_index}.",
+                packers.len()
+            ))
+        })??;
+        packer
+            .push(bytes, &item)
+            .map_err(|error| add_value_path(py, error, &format!("{path}[{field_index}]")))?;
+    }
+    if let Some(item) = items.next() {
+        item?;
+        return Err(PyValueError::new_err(format!(
+            "At value{path}: expected exactly {} items.",
+            packers.len()
+        )));
+    }
+    Ok(())
+}
+
+/// The [`RecordLayout::Array`] counterpart of [`push_tuple_record_fields`]:
+/// the same `packer` applies to every one of `count` elements, rather than a
+/// distinct packer per field.
+fn push_array_record_fields(
+    py: Python<'_>,
+    packer: BytewisePacker,
+    count: usize,
+    record: &Bound<'_, PyAny>,
+    path: &str,
+    bytes: &mut Vec<u8>,
+) -> PyResult<()> {
+    let mut items = record
+        .try_iter()
+        .map_err(|error| add_value_path(py, error, path))?;
+    for element_index in 0..count {
+        let item = items.next().ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "At value{path}: expected {count} items, but received {element_index}."
+            ))
+        })??;
+        packer
+            .push(bytes, &item)
+            .map_err(|error| add_value_path(py, error, &format!("{path}[{element_index}]")))?;
+    }
+    if let Some(item) = items.next() {
+        item?;
+        return Err(PyValueError::new_err(format!(
+            "At value{path}: expected exactly {count} items."
+        )));
+    }
+    Ok(())
+}
+
+/// Fast path for [`bv_from_value`] when `dtype` has a [`RecordLayout`] and
+/// every field qualifies for [`BytewisePacker`]. Returns `None` when some
+/// field doesn't (a sub-byte length, or a `bits`/`bytes`/`hex`/`oct`/`bin`
+/// kind), so the caller can fall back to `append_dtype_value` unchanged.
+fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
+    let py = value.py();
+    match layout {
+        RecordLayout::Tuple(fields) => {
+            let Some(packers) = classify_tuple_packers(fields)? else {
+                return Ok(None);
+            };
+            let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
+            let mut bytes = Vec::with_capacity(record_byte_length);
+            push_tuple_record_fields(py, &packers, value, "", &mut bytes)?;
+            Ok(Some(BV::from_vec(bytes)))
+        }
+        RecordLayout::Array { element, count } => {
+            let Some(packer) =
+                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)?
+            else {
+                return Ok(None);
+            };
+            let mut bytes = Vec::with_capacity(packer.byte_length() * count);
+            push_array_record_fields(py, packer, *count, value, "", &mut bytes)?;
+            Ok(Some(BV::from_vec(bytes)))
+        }
+    }
+}
+
+/// Fast path for [`bv_from_values_iter`] when `dtype` has a [`RecordLayout`]
+/// and every field qualifies for [`BytewisePacker`] — the `struct`-`">hhl"`-
+/// style shape. Every record is written straight into one growing `Vec<u8>`,
+/// with no `BitAccumulator` and no per-field `BV` involved, mirroring what
+/// `BytewisePacker` already does for a homogeneous single-dtype sequence.
+/// Returns `None` when some field doesn't qualify, so the caller falls back
+/// to the existing generic per-record path unchanged.
+fn bv_from_values_iter_record(
+    py: Python<'_>,
+    layout: &RecordLayout,
+    iterable: &Bound<'_, PyAny>,
+    hint: Option<usize>,
+) -> PyResult<Option<BV>> {
+    match layout {
+        RecordLayout::Tuple(fields) => {
+            let Some(packers) = classify_tuple_packers(fields)? else {
+                return Ok(None);
+            };
+            let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
+            let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
+            let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+            let mut record_index = 0usize;
+            // `plain` is deliberately a pointer no real object's type can
+            // equal, so `for_each_value` always takes its owned (incref'd)
+            // branch here: unlike a bare scalar value, extracting a record's
+            // *fields* can run arbitrary Python code (e.g. `__index__` on a
+            // non-exact-int field), which could otherwise invalidate a
+            // borrowed reference to the record itself mid-visit.
+            for_each_value(py, iterable, ptr::null_mut(), |record| {
+                let path = format!("[{record_index}]");
+                push_tuple_record_fields(py, &packers, record, &path, &mut bytes)?;
+                record_index += 1;
+                Ok(())
+            })?;
+            Ok(Some(BV::from_vec(bytes)))
+        }
+        RecordLayout::Array { element, count } => {
+            let Some(packer) =
+                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)?
+            else {
+                return Ok(None);
+            };
+            let record_byte_length = packer.byte_length() * count;
+            let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
+            let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+            let mut record_index = 0usize;
+            for_each_value(py, iterable, ptr::null_mut(), |record| {
+                let path = format!("[{record_index}]");
+                push_array_record_fields(py, packer, *count, record, &path, &mut bytes)?;
+                record_index += 1;
+                Ok(())
+            })?;
+            Ok(Some(BV::from_vec(bytes)))
         }
     }
 }
@@ -630,6 +807,13 @@ pub(crate) fn bv_from_values_iter(
     iterable: &Bound<'_, PyAny>,
 ) -> PyResult<BV> {
     let hint = iterable.len().ok();
+
+    if let Some(layout) = &dtype.record_layout {
+        if let Some(bv) = bv_from_values_iter_record(py, layout, iterable, hint)? {
+            return Ok(bv);
+        }
+    }
+
     let Some(single) = dtype.single() else {
         let capacity = hint.and_then(|len| len.checked_mul(dtype.length));
         let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
@@ -741,14 +925,13 @@ impl BytewiseUnpacker {
         Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
-    /// The raw bits of the value at `index`, right-aligned in a `u64`.
-    ///
-    /// `bytes` holds the values end to end, the first of them starting `shift`
-    /// bits into `bytes[0]`. Every value is a whole number of bytes long, so
-    /// that shift is the same for all of them.
+    /// The raw bits at absolute byte offset `start`, right-aligned in a
+    /// `u64`. [`Self::load`] is the homogeneous-repeated-value spelling of
+    /// this (`start = index * self.byte_length`); a [`RecordLayout`] field
+    /// needs an arbitrary offset instead, since a heterogeneous record's
+    /// fields don't share one stride.
     #[inline]
-    fn load(&self, bytes: &[u8], shift: u32, index: usize) -> u64 {
-        let start = index * self.byte_length;
+    fn load_at(&self, bytes: &[u8], shift: u32, start: usize) -> u64 {
         let mut buf = [0u8; 8];
         // A big-endian value goes at the top of the buffer and a little-endian
         // one at the bottom, so that either `from_*_bytes` reads the untouched
@@ -776,16 +959,18 @@ impl BytewiseUnpacker {
         }
     }
 
-    /// The value at `index` as a Python object.
+    /// The raw bits of the value at `index`, right-aligned in a `u64`.
+    ///
+    /// `bytes` holds the values end to end, the first of them starting `shift`
+    /// bits into `bytes[0]`. Every value is a whole number of bytes long, so
+    /// that shift is the same for all of them.
     #[inline]
-    fn value<'py>(
-        &self,
-        py: Python<'py>,
-        bytes: &[u8],
-        shift: u32,
-        index: usize,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let raw = self.load(bytes, shift, index);
+    fn load(&self, bytes: &[u8], shift: u32, index: usize) -> u64 {
+        self.load_at(bytes, shift, index * self.byte_length)
+    }
+
+    #[inline]
+    fn value_from_raw<'py>(&self, py: Python<'py>, raw: u64) -> PyResult<Bound<'py, PyAny>> {
         match self.reading {
             // Anything narrower than 64 bits fits an `i64`, and that is the
             // cheaper of the two integer objects to build.
@@ -801,6 +986,31 @@ impl BytewiseUnpacker {
                 _ => f16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
             },
         }
+    }
+
+    /// The value at `index` as a Python object.
+    #[inline]
+    fn value<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        shift: u32,
+        index: usize,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.value_from_raw(py, self.load(bytes, shift, index))
+    }
+
+    /// The value at absolute byte offset `start` as a Python object — the
+    /// [`RecordLayout`] field counterpart of [`Self::value`].
+    #[inline]
+    fn value_at<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        shift: u32,
+        start: usize,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.value_from_raw(py, self.load_at(bytes, shift, start))
     }
 }
 
@@ -935,6 +1145,15 @@ pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyRe
             dtype.length
         )));
     }
+    if let Some(layout) = &dtype.record_layout {
+        if let Some((bytes, shift, _)) = value.raw_data_ref() {
+            if let Some(mut values) =
+                py_values_from_range_record(py, layout, bytes, shift as u32, 1)?
+            {
+                return Ok(values.pop().expect("count = 1 produces exactly one value"));
+            }
+        }
+    }
     py_from_dtype_repr(py, &dtype.repr, value, 0)
 }
 
@@ -974,6 +1193,85 @@ fn py_from_dtype_repr(
     }
 }
 
+/// Fast path for [`py_values_from_range`] (and, with `count = 1`,
+/// [`py_from_value`]) when `dtype` has a [`RecordLayout`] and every field
+/// qualifies for [`BytewiseUnpacker`]. `bytes`/`shift` are the raw backing
+/// store and its bit offset, fetched once by the caller via `raw_data_ref`.
+/// Returns `None` when some field doesn't qualify (a sub-byte length, or a
+/// `bits`/`bytes`/`hex`/`oct`/`bin` kind), so the caller falls back to the
+/// existing `py_from_dtype_repr` recursive walk unchanged.
+fn py_values_from_range_record(
+    py: Python<'_>,
+    layout: &RecordLayout,
+    bytes: &[u8],
+    shift: u32,
+    count: usize,
+) -> PyResult<Option<Vec<Py<PyAny>>>> {
+    match layout {
+        RecordLayout::Tuple(fields) => {
+            let mut unpackers = Vec::with_capacity(fields.len());
+            for field in fields {
+                let Some(unpacker) =
+                    BytewiseUnpacker::for_parts(field.kind, field.length, field.byte_order)?
+                else {
+                    return Ok(None);
+                };
+                // Every field here is a whole number of bytes (a precondition
+                // of `BytewiseUnpacker` classification), so a prefix sum of
+                // them is too: `bit_offset` divides evenly by 8.
+                unpackers.push((unpacker, field.bit_offset / 8));
+            }
+            let record_byte_length: usize = unpackers.iter().map(|(u, _)| u.byte_length).sum();
+            let mut values = Vec::with_capacity(count);
+            let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+            for index in 0..count {
+                if index >= check_at {
+                    py.check_signals()?;
+                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+                }
+                let record_start = index * record_byte_length;
+                let mut fields_out = Vec::with_capacity(unpackers.len());
+                for (unpacker, field_byte_offset) in &unpackers {
+                    fields_out.push(
+                        unpacker
+                            .value_at(py, bytes, shift, record_start + field_byte_offset)?
+                            .unbind(),
+                    );
+                }
+                values.push(PyTuple::new(py, fields_out)?.into_any().unbind());
+            }
+            Ok(Some(values))
+        }
+        RecordLayout::Array {
+            element,
+            count: element_count,
+        } => {
+            let Some(unpacker) =
+                BytewiseUnpacker::for_parts(element.kind, element.length, element.byte_order)?
+            else {
+                return Ok(None);
+            };
+            let record_byte_length = unpacker.byte_length * element_count;
+            let mut values = Vec::with_capacity(count);
+            let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+            for index in 0..count {
+                if index >= check_at {
+                    py.check_signals()?;
+                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+                }
+                let record_start = index * record_byte_length;
+                let mut fields_out = Vec::with_capacity(*element_count);
+                for element_index in 0..*element_count {
+                    let field_start = record_start + element_index * unpacker.byte_length;
+                    fields_out.push(unpacker.value_at(py, bytes, shift, field_start)?.unbind());
+                }
+                values.push(PyTuple::new(py, fields_out)?.into_any().unbind());
+            }
+            Ok(Some(values))
+        }
+    }
+}
+
 pub(crate) fn py_values_from_range(
     py: Python<'_>,
     bits: &Tibs,
@@ -994,6 +1292,18 @@ pub(crate) fn py_values_from_range(
     if count == 0 {
         return Ok(Vec::new());
     }
+
+    if let Some(layout) = &dtype.record_layout {
+        let window = bits.get_slice_unchecked(start, selected_len);
+        if let Some((bytes, shift, _)) = window.raw_data_ref() {
+            if let Some(values) =
+                py_values_from_range_record(py, layout, bytes, shift as u32, count)?
+            {
+                return Ok(values);
+            }
+        }
+    }
+
     let mut values = Vec::with_capacity(count);
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
 

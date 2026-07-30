@@ -614,11 +614,11 @@ def build_stdlib_cases(byte_count, value_count):
 
     def tibs_pack_records():
         # DtypeTuple.pack_values (via Tibs.from_values) packs every field of
-        # every record in one call rather than one call per field, at about
-        # the same speed as the old hand-rolled per-field version it replaced.
-        # A compound dtype has no fast bytewise path the way a single numeric
-        # dtype does (see BytewisePacker in tibs_.rs), so it is still the
-        # widest gap against struct in this file: worth optimizing.
+        # every record in one call rather than one call per field. Dtype
+        # caches a flat per-field byte-offset layout (RecordLayout, in
+        # dtype.rs) for a tuple/array of scalar fields that are all whole
+        # bytes wide, so this writes straight into one Vec<u8> - no BV
+        # allocated per field the way the pre-2.0 hand-rolled version needed.
         return Tibs.from_values(record_dtype, records).to_bytes()
 
     def struct_unpack_records():

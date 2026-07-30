@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAnyMethods, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SingleDtype {
@@ -188,6 +189,74 @@ impl DtypeRepr {
     }
 }
 
+/// One field of a precomputed flat record layout: its kind/length/byte_order
+/// plus its bit offset within one record. See [`RecordLayout`].
+#[derive(Clone, Copy)]
+pub(crate) struct RecordField {
+    pub(crate) kind: DtypeKind,
+    pub(crate) length: usize,
+    pub(crate) byte_order: ByteOrder,
+    pub(crate) bit_offset: usize,
+}
+
+/// A precomputed flat layout for a [`DtypeRepr::Tuple`] whose fields are all
+/// [`DtypeRepr::Single`], or a [`DtypeRepr::Array`] whose element is
+/// [`DtypeRepr::Single`] — the "record of scalar fields" shape (e.g.
+/// `struct`'s `">hhl"`, or an MPEG-header-style fixed table). It lets pack and
+/// unpack address each field directly instead of re-walking `DtypeRepr` and
+/// recomputing offsets via `DtypeRepr::length()` on every single record.
+///
+/// Deeper nesting (tuple-of-tuple, array-of-tuple, ...) is never represented
+/// here: `Dtype::record_layout` is `None` for those, and pack/unpack keep
+/// walking `DtypeRepr` recursively exactly as before.
+///
+/// `Array` stores one element descriptor plus `count`, not `count` cloned
+/// entries, so a large array stays cheap to represent: `Dtype("[u8; 1_000_000]")`
+/// is as cheap to build as `Dtype("[u8; 4]")`. `Tuple` does flatten its fields
+/// literally, which is safe because that count is bounded by the dtype spec's
+/// own field arity, not by data volume.
+pub(crate) enum RecordLayout {
+    Tuple(Vec<RecordField>),
+    Array { element: RecordField, count: usize },
+}
+
+fn build_record_layout(repr: &DtypeRepr) -> Option<RecordLayout> {
+    match repr {
+        DtypeRepr::Tuple(dtypes) => {
+            let mut fields = Vec::with_capacity(dtypes.len());
+            let mut bit_offset = 0;
+            for dtype in dtypes {
+                let DtypeRepr::Single(single) = dtype else {
+                    return None;
+                };
+                fields.push(RecordField {
+                    kind: single.kind,
+                    length: single.length,
+                    byte_order: single.byte_order,
+                    bit_offset,
+                });
+                bit_offset += single.length;
+            }
+            Some(RecordLayout::Tuple(fields))
+        }
+        DtypeRepr::Array { dtype, count } => {
+            let DtypeRepr::Single(single) = dtype.as_ref() else {
+                return None;
+            };
+            Some(RecordLayout::Array {
+                element: RecordField {
+                    kind: single.kind,
+                    length: single.length,
+                    byte_order: single.byte_order,
+                    bit_offset: 0,
+                },
+                count: *count,
+            })
+        }
+        DtypeRepr::Single(_) => None,
+    }
+}
+
 struct DtypeParser<'a> {
     spec: &'a str,
     bytes: &'a [u8],
@@ -347,16 +416,41 @@ impl<'a> DtypeParser<'a> {
 ///         DtypeArray('[(u8, bool); 2]')
 ///
 #[pyclass(module = "tibs", frozen, subclass, skip_from_py_object)]
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone)]
 pub struct Dtype {
     pub(crate) repr: DtypeRepr,
     pub(crate) length: usize,
+    pub(crate) record_layout: Option<Arc<RecordLayout>>,
+}
+
+// `length` and `record_layout` are both pure functions of `repr`, so equality
+// and hashing are defined over `repr` alone rather than derived over every
+// field — deriving would need `RecordLayout` to carry its own `PartialEq`/
+// `Hash` for no semantic benefit, since two dtypes with equal `repr` always
+// have equal `length`/`record_layout` already.
+impl PartialEq for Dtype {
+    fn eq(&self, other: &Self) -> bool {
+        self.repr == other.repr
+    }
+}
+
+impl Eq for Dtype {}
+
+impl Hash for Dtype {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.repr.hash(state);
+    }
 }
 
 impl Dtype {
     fn from_repr(repr: DtypeRepr) -> PyResult<Self> {
         let length = repr.length()?;
-        Ok(Self { repr, length })
+        let record_layout = build_record_layout(&repr).map(Arc::new);
+        Ok(Self {
+            repr,
+            length,
+            record_layout,
+        })
     }
 
     fn parse_spec(spec: &str) -> PyResult<Self> {
