@@ -166,23 +166,13 @@ impl Mutibs {
 
     /// Append every bit of `bits` in place.
     pub(crate) fn append_collection(&mut self, bits: &impl BitCollection) {
-        match bits.raw_data_ref() {
-            Some((bytes, offset, _)) => self.append_run(bytes, offset, bits.len()),
-            None => {
-                let bytes = bits.padded_byte_data_cow().into_owned();
-                self.append_run(&bytes, 0, bits.len())
-            }
-        }
+        let (bytes, offset, _) = bits.raw_data_ref();
+        self.append_run(bytes, offset, bits.len());
     }
 
     #[inline]
     pub(crate) fn as_mut_bitvec_ref(&mut self) -> &mut BV {
         &mut self.data
-    }
-
-    #[inline]
-    pub(crate) fn raw_bytes(&self) -> Vec<u8> {
-        self.data.as_raw_slice().to_vec()
     }
 
     pub(crate) fn joined_bv_from_iterable(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
@@ -361,7 +351,7 @@ impl Mutibs {
     pub(crate) fn set_slice(&mut self, start: usize, end: usize, value: &Tibs) {
         // A slice that runs backwards is an insertion at `start` in Python.
         let end = end.max(start);
-        let (value_bytes, value_offset) = value.raw_data_with_offset();
+        let (value_bytes, value_offset, _) = value.raw_data_ref();
         if end - start == value.len() {
             // An overwrite moves no data, so write straight over the bytes.
             let storage_start = self.storage_head_offset() + start;
@@ -409,17 +399,10 @@ impl Mutibs {
     }
 
     #[inline]
-    fn assign_from_bv(&mut self, value: BV) {
-        debug_assert_eq!(self.len(), value.len());
-        self.as_mut_bitvec_ref()
-            .copy_from_bitslice(value.as_bitslice());
-    }
-
-    #[inline]
     fn assign_u(&mut self, u: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
         let value = bv_from_uint(u, length, false)?;
-        self.assign_from_bv(value);
+        self.replace_with_bv(value);
         Ok(())
     }
 
@@ -427,7 +410,7 @@ impl Mutibs {
     fn assign_i(&mut self, i: &Bound<'_, PyAny>) -> PyResult<()> {
         let length = self.len();
         let value = bv_from_int(i, length, false)?;
-        self.assign_from_bv(value);
+        self.replace_with_bv(value);
         Ok(())
     }
 
@@ -435,7 +418,7 @@ impl Mutibs {
     fn assign_f(&mut self, f: f64) -> PyResult<()> {
         let length = self.len();
         let value = bv_from_f64(f, length, false)?;
-        self.assign_from_bv(value);
+        self.replace_with_bv(value);
         Ok(())
     }
 
@@ -450,19 +433,16 @@ impl Mutibs {
         if len == 0 {
             return Ok(());
         }
-        if let Some((rhs, rhs_offset, _)) = other.raw_data_ref() {
-            let lhs_offset = self.storage_head_offset();
-            logical_op_assign_bytes(
-                self.as_mut_bitvec_ref().as_raw_mut_slice(),
-                lhs_offset,
-                rhs,
-                rhs_offset,
-                len,
-                op,
-            );
-        } else {
-            op.bitslice(self.as_mut_bitvec_ref(), other.as_bitslice());
-        }
+        let (rhs, rhs_offset, _) = other.raw_data_ref();
+        let lhs_offset = self.storage_head_offset();
+        logical_op_assign_bytes(
+            self.as_mut_bitvec_ref().as_raw_mut_slice(),
+            lhs_offset,
+            rhs,
+            rhs_offset,
+            len,
+            op,
+        );
         Ok(())
     }
 
@@ -822,7 +802,7 @@ impl Mutibs {
             pos = self.len() as isize;
         }
         let insert_pos = pos as usize;
-        let (bytes, offset) = bs.raw_data_with_offset();
+        let (bytes, offset, _) = bs.raw_data_ref();
         self.splice_raw(insert_pos, insert_pos, bytes, offset, bs.len());
         Ok(())
     }
@@ -3355,7 +3335,6 @@ impl Mutibs {
         Mutibs::from_bv(self.to_bitvec())
     }
 
-
     /// Return the callable and arguments that recreate the Mutibs.
     ///
     /// Used by :mod:`pickle` and by :func:`copy.deepcopy`. The Mutibs that comes
@@ -3378,7 +3357,7 @@ impl Mutibs {
         Ok((decode.unbind(), (encoded.unbind(),)))
     }
 
-        /// Create and return a Tibs instance from a copy of the Mutibs data.
+    /// Create and return a Tibs instance from a copy of the Mutibs data.
     ///
     /// This copies the underlying binary data, giving a new independent Tibs object.
     /// If you no longer need the Mutibs, consider using :meth:`as_tibs` instead to avoid the copy.

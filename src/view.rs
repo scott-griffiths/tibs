@@ -44,6 +44,9 @@ fn physical_bits_from_view_bits(
 ) -> PyResult<BV> {
     let len = viewed.len();
     let byte_order = byte_order_for_field_len(byte_order, len);
+    if bit_order == BitOrder::Msb0 && byte_order != ByteOrder::Little {
+        return Ok(viewed);
+    }
     let selected = if byte_order == ByteOrder::Little {
         BitCollection::byte_swap_copy(&Tibs::from_bv(viewed), None)?.to_bitvec()
     } else {
@@ -435,9 +438,7 @@ impl MutableView {
 
         match &self.selection {
             MutableSelection::Whole => {
-                source
-                    .as_mut_bitvec_ref()
-                    .copy_from_bitslice(physical.as_bitslice());
+                *source.as_mut_bitvec_ref() = physical;
             }
             MutableSelection::Field { indices } => {
                 debug_assert_eq!(indices.len(), physical.len());

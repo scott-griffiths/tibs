@@ -1,16 +1,12 @@
 //! Low-level bit and byte machinery shared by the `BitCollection` operations.
 //!
-//! Everything here works on raw `&[u8]` storage plus a bit offset, or on a
-//! `BitSlice` when the storage does not start on a byte boundary. Nothing in
+//! Bulk operations work on raw `&[u8]` storage plus a bit offset. Nothing in
 //! this module knows about `Tibs`, `Mutibs` or Python; the collection-level
 //! logic that drives it lives in `core.rs`.
 
 use super::bits::{BS, BV, BitAccumulator, head_bit_offset};
-use super::raw_bytes::{
-    bitslice_storage, copy_shifted_bytes, mask_padding_bits, reverse_padded_bits,
-};
+use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
 use super::splice::{copy_bits, move_bits};
-use bitvec::prelude::*;
 
 #[inline]
 fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
@@ -223,18 +219,6 @@ impl LogicalOp {
             LogicalOp::And => lhs & rhs,
             LogicalOp::Xor => lhs ^ rhs,
             LogicalOp::AndNot => lhs & !rhs,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn bitslice(self, result: &mut BV, rhs: &BS) {
-        match self {
-            LogicalOp::Or => *result |= rhs,
-            LogicalOp::And => *result &= rhs,
-            LogicalOp::Xor => *result ^= rhs,
-            // Never reached from `logical_op`, which is only called with the
-            // three operators that have a Python spelling.
-            LogicalOp::AndNot => *result &= (!rhs.to_bitvec()).as_bitslice(),
         }
     }
 }
@@ -666,53 +650,6 @@ where
         .iter()
         .zip(right_chunks.remainder())
         .any(|(&left_byte, &right_byte)| byte_op(left_byte, right_byte) != 0)
-}
-
-/// Fallback for operands whose underlying storage does not start on a byte
-/// boundary, so `raw_data_ref` gives nothing to work with. `load_be` zero-fills
-/// a partial chunk, and both operands are the same length, so the padding
-/// contributes nothing to any of the four operations and needs no masking.
-pub(crate) fn for_each_pair_word_bitslice<F>(lhs: &BS, rhs: &BS, op: LogicalOp, mut on_word: F)
-where
-    F: FnMut(u64) -> bool,
-{
-    debug_assert_eq!(lhs.len(), rhs.len());
-    for (left, right) in lhs.chunks(64).zip(rhs.chunks(64)) {
-        if !on_word(op.word(left.load_be::<u64>(), right.load_be::<u64>())) {
-            return;
-        }
-    }
-}
-
-/// Whether two runs of bits hold the same value.
-///
-/// Two runs are equal exactly when nothing differs, and "does anything differ"
-/// is `any_pair_bits` with `Xor` — the same word-at-a-time walk over the raw
-/// storage that `intersects` uses, stopping at the first difference. That
-/// beats `BitSlice`'s own `PartialEq`, which assembles a word from each side
-/// per 64 bits (`chunks(64)` then `load_be`), but only once the storage is in
-/// hand: resolving a run that starts or ends mid byte copies all of it up
-/// front, allocating for a short one and giving up the early exit for any.
-/// The candidate checks in `search.rs` fail inside their first word nearly
-/// every time, and measured slower over the bytes, so they keep `PartialEq`.
-pub(crate) fn bitslices_equal(left: &BS, right: &BS) -> bool {
-    let len = left.len();
-    if len != right.len() {
-        return false;
-    }
-    if len == 0 {
-        return true;
-    }
-    let (left_bytes, left_offset) = bitslice_storage(left);
-    let (right_bytes, right_offset) = bitslice_storage(right);
-    !any_pair_bits(
-        &left_bytes,
-        left_offset,
-        &right_bytes,
-        right_offset,
-        len,
-        LogicalOp::Xor,
-    )
 }
 
 /// Move the bits of `x` picked out by `m` down to the low end, keeping their

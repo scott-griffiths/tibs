@@ -115,14 +115,8 @@ impl Tibs {
         self.as_bitslice()
     }
 
-    /// The storage bytes covering the bits, with the bit offset of the first
-    /// bit within them.
-    ///
-    /// Unlike [`raw_data_ref`](Self::raw_data_ref) this always succeeds, by
-    /// folding a backing store that itself starts part way into a byte into
-    /// the returned offset.
     #[inline]
-    pub(crate) fn raw_data_with_offset(&self) -> (&[u8], usize) {
+    pub(crate) fn raw_data_ref(&self) -> (&[u8], usize, usize) {
         let physical_start = helpers::head_bit_offset(self.data.as_bitslice()) + self.offset;
         let byte_start = physical_start / 8;
         let bit_offset = physical_start % 8;
@@ -130,46 +124,8 @@ impl Tibs {
         (
             &self.data.as_raw_slice()[byte_start..byte_start + byte_len],
             bit_offset,
-        )
-    }
-
-    #[inline]
-    pub(crate) fn raw_bytes(&self) -> Vec<u8> {
-        let bit_offset = match self.as_bitslice().domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
-        let physical_start = self.offset;
-        let byte_start = physical_start / 8;
-        let byte_len = (bit_offset + self.length).div_ceil(8);
-        self.data.as_raw_slice()[byte_start..byte_start + byte_len].to_vec()
-    }
-
-    #[inline]
-    pub(crate) fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
-        let data_head_offset = match self.data.as_bitslice().domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
-        if data_head_offset != 0 {
-            return None;
-        }
-
-        let physical_start = self.offset;
-        let byte_start = physical_start / 8;
-        let bit_offset = physical_start % 8;
-        let byte_len = (bit_offset + self.length).div_ceil(8);
-        Some((
-            &self.data.as_raw_slice()[byte_start..byte_start + byte_len],
-            bit_offset,
             self.length,
-        ))
+        )
     }
 
     pub(crate) fn find_impl(
@@ -1099,14 +1055,12 @@ pub(crate) fn py_from_value_parts(
     }
 
     if let Some(unpacker) = BytewiseUnpacker::for_parts(dtype_kind, dtype_length, byte_order)? {
-        if let Some((bytes, shift, _)) = value.raw_data_ref() {
-            return Ok(unpacker.value(py, bytes, shift as u32, 0)?.unbind());
-        }
+        let (bytes, shift, _) = value.raw_data_ref();
+        return Ok(unpacker.value(py, bytes, shift as u32, 0)?.unbind());
     }
     if let Some(unpacker) = SubByteUnpacker::for_parts(dtype_kind, dtype_length, byte_order) {
-        if let Some((bytes, shift, _)) = value.raw_data_ref() {
-            return Ok(unpacker.value(py, bytes, shift, 0)?.unbind());
-        }
+        let (bytes, shift, _) = value.raw_data_ref();
+        return Ok(unpacker.value(py, bytes, shift, 0)?.unbind());
     }
 
     match dtype_kind {
@@ -1146,12 +1100,9 @@ pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyRe
         )));
     }
     if let Some(layout) = &dtype.record_layout {
-        if let Some((bytes, shift, _)) = value.raw_data_ref() {
-            if let Some(mut values) =
-                py_values_from_range_record(py, layout, bytes, shift as u32, 1)?
-            {
-                return Ok(values.pop().expect("count = 1 produces exactly one value"));
-            }
+        let (bytes, shift, _) = value.raw_data_ref();
+        if let Some(mut values) = py_values_from_range_record(py, layout, bytes, shift as u32, 1)? {
+            return Ok(values.pop().expect("count = 1 produces exactly one value"));
         }
     }
     py_from_dtype_repr(py, &dtype.repr, value, 0)
@@ -1295,12 +1246,9 @@ pub(crate) fn py_values_from_range(
 
     if let Some(layout) = &dtype.record_layout {
         let window = bits.get_slice_unchecked(start, selected_len);
-        if let Some((bytes, shift, _)) = window.raw_data_ref() {
-            if let Some(values) =
-                py_values_from_range_record(py, layout, bytes, shift as u32, count)?
-            {
-                return Ok(values);
-            }
+        let (bytes, shift, _) = window.raw_data_ref();
+        if let Some(values) = py_values_from_range_record(py, layout, bytes, shift as u32, count)? {
+            return Ok(values);
         }
     }
 
@@ -1317,33 +1265,31 @@ pub(crate) fn py_values_from_range(
         .flatten()
     {
         let window = bits.get_slice_unchecked(start, selected_len);
-        if let Some((bytes, shift, _)) = window.raw_data_ref() {
-            let shift = shift as u32;
-            for index in 0..count {
-                if index >= check_at {
-                    py.check_signals()?;
-                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-                }
-                values.push(unpacker.value(py, bytes, shift, index)?.unbind());
+        let (bytes, shift, _) = window.raw_data_ref();
+        let shift = shift as u32;
+        for index in 0..count {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
             }
-            return Ok(values);
+            values.push(unpacker.value(py, bytes, shift, index)?.unbind());
         }
+        return Ok(values);
     }
 
     // Integer dtypes narrower than a byte read out of the same backing store,
     // one shift and mask each.
     if let Some(unpacker) = dtype.single().and_then(SubByteUnpacker::for_dtype) {
         let window = bits.get_slice_unchecked(start, selected_len);
-        if let Some((bytes, shift, _)) = window.raw_data_ref() {
-            for index in 0..count {
-                if index >= check_at {
-                    py.check_signals()?;
-                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-                }
-                values.push(unpacker.value(py, bytes, shift, index)?.unbind());
+        let (bytes, shift, _) = window.raw_data_ref();
+        for index in 0..count {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
             }
-            return Ok(values);
+            values.push(unpacker.value(py, bytes, shift, index)?.unbind());
         }
+        return Ok(values);
     }
 
     // One window is reused for the whole sequence, with only its offset moving
@@ -2673,7 +2619,6 @@ impl Tibs {
         slf.into()
     }
 
-
     /// Return the callable and arguments that recreate the Tibs.
     ///
     /// Used by :mod:`pickle` and by :func:`copy.deepcopy`.
@@ -2695,7 +2640,7 @@ impl Tibs {
         Ok((decode.unbind(), (encoded.unbind(),)))
     }
 
-        /// Find last occurrence of a bit sequence.
+    /// Find last occurrence of a bit sequence.
     ///
     /// Returns the bit position if found, or None if not found.
     ///

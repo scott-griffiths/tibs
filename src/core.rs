@@ -1,10 +1,10 @@
 use crate::helpers::{
     BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
-    bitslices_equal, bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice,
-    count_pair_bits, extract_masked_bytes, for_each_pair_word_bitslice, head_bit_offset,
-    hex_from_padded_bytes, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
-    mask_padding_bits, normalize_split_position, oct_from_padded_bytes, reverse_byte_groups,
-    reverse_padded_bits, validate_index, validate_slice,
+    bv_from_zeros, byte_order_name, copy_unaligned_padded_bytes, count_bitslice, count_pair_bits,
+    extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
+    logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
+    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, validate_index,
+    validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -24,28 +24,21 @@ pub(crate) trait BitCollection: Sized + Clone {
     fn as_bitslice(&self) -> &BS;
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self;
 
-    fn get_raw_bytes(&self) -> Vec<u8>;
-
-    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)>;
+    /// Borrow the storage bytes covering every live bit, together with the
+    /// first live bit's offset in the first byte and the bit length.
+    fn raw_data_ref(&self) -> (&[u8], usize, usize);
 
     fn raw_data(&self) -> (Vec<u8>, usize, usize) {
-        let raw_bytes = self.get_raw_bytes();
-        let offset = head_bit_offset(self.as_bitslice());
-        (raw_bytes, offset, self.len())
+        let (bytes, offset, length) = self.raw_data_ref();
+        (bytes.to_vec(), offset, length)
     }
 
     #[inline]
     fn logical_op(&self, other: &impl BitCollection, op: LogicalOp) -> Self {
         debug_assert!(self.len() == other.len());
 
-        let (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) =
-            (self.raw_data_ref(), other.raw_data_ref())
-        else {
-            let mut result = self.to_bitvec();
-            op.bitslice(&mut result, other.as_bitslice());
-            return Self::from_bv(result);
-        };
-
+        let (lhs, lhs_offset, _) = self.raw_data_ref();
+        let (rhs, rhs_offset, _) = other.raw_data_ref();
         let data = if lhs_offset == rhs_offset {
             logical_op_with_matching_bytes(lhs, rhs, op)
         } else {
@@ -57,48 +50,24 @@ pub(crate) trait BitCollection: Sized + Clone {
     /// The number of set bits in `op(self, other)`, without building it.
     fn pairwise_count(&self, other: &impl BitCollection, op: LogicalOp) -> usize {
         debug_assert!(self.len() == other.len());
-        match (self.raw_data_ref(), other.raw_data_ref()) {
-            (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) => {
-                count_pair_bits(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
-            }
-            _ => {
-                let mut count = 0;
-                for_each_pair_word_bitslice(self.as_bitslice(), other.as_bitslice(), op, |word| {
-                    count += word.count_ones() as usize;
-                    true
-                });
-                count
-            }
-        }
+        let (lhs, lhs_offset, _) = self.raw_data_ref();
+        let (rhs, rhs_offset, _) = other.raw_data_ref();
+        count_pair_bits(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
     }
 
     /// Whether `op(self, other)` has any set bit, stopping early once one is
     /// found.
     fn pairwise_any(&self, other: &impl BitCollection, op: LogicalOp) -> bool {
         debug_assert!(self.len() == other.len());
-        match (self.raw_data_ref(), other.raw_data_ref()) {
-            (Some((lhs, lhs_offset, _)), Some((rhs, rhs_offset, _))) => {
-                any_pair_bits(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
-            }
-            _ => {
-                let mut found = false;
-                for_each_pair_word_bitslice(self.as_bitslice(), other.as_bitslice(), op, |word| {
-                    found = word != 0;
-                    !found
-                });
-                found
-            }
-        }
+        let (lhs, lhs_offset, _) = self.raw_data_ref();
+        let (rhs, rhs_offset, _) = other.raw_data_ref();
+        any_pair_bits(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
     }
 
     /// Whether `self` and `other` hold the same bits.
     ///
     /// Goes through the raw storage, so a length that is not a whole number of
-    /// bytes costs the same as one that is. `bitslices_equal` has to reach for
-    /// `bitslice_storage`, which can only borrow when the bits exactly fill
-    /// their bytes and otherwise copies the partial head or tail element into
-    /// an owned buffer first. For a short run those two allocations are the
-    /// entire cost of the comparison.
+    /// bytes costs the same as one that is.
     #[inline]
     fn bits_equal(&self, other: &impl BitCollection) -> bool {
         let len = self.len();
@@ -192,27 +161,23 @@ pub(crate) trait BitCollection: Sized + Clone {
         if n == 0 {
             return true;
         }
-        match (self.raw_data_ref(), edge.raw_data_ref()) {
-            (Some((bytes, offset, _)), Some((edge_bytes, edge_offset, _))) => {
-                // `any_pair_bits` takes the byte span of the comparison from
-                // the length of its first slice, so this has to be trimmed to
-                // exactly the bytes holding the `n` bits, not left running to
-                // the end of `self`.
-                let start = offset + skip;
-                let head = start / 8;
-                let head_offset = start % 8;
-                let byte_len = (head_offset + n).div_ceil(8);
-                !any_pair_bits(
-                    &bytes[head..head + byte_len],
-                    head_offset,
-                    edge_bytes,
-                    edge_offset,
-                    n,
-                    LogicalOp::Xor,
-                )
-            }
-            _ => bitslices_equal(edge.as_bitslice(), &self.as_bitslice()[skip..skip + n]),
-        }
+        let (bytes, offset, _) = self.raw_data_ref();
+        let (edge_bytes, edge_offset, _) = edge.raw_data_ref();
+        // `any_pair_bits` takes the byte span of the comparison from the
+        // length of its first slice, so this has to be trimmed to exactly the
+        // bytes holding the `n` bits, not left running to the end of `self`.
+        let start = offset + skip;
+        let head = start / 8;
+        let head_offset = start % 8;
+        let byte_len = (head_offset + n).div_ceil(8);
+        !any_pair_bits(
+            &bytes[head..head + byte_len],
+            head_offset,
+            edge_bytes,
+            edge_offset,
+            n,
+            LogicalOp::Xor,
+        )
     }
 
     fn starts_with(&self, prefix: impl BitCollection) -> bool {
@@ -563,19 +528,11 @@ pub(crate) trait BitCollection: Sized + Clone {
             mask_padding_bits(&mut out, len_bits);
             return out;
         }
-        if let Some((bytes, bit_offset, _)) = self.raw_data_ref()
-            && bit_offset != 0
-        {
-            let mut out = vec![0u8; len_bits.div_ceil(8)];
-            copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, &mut out);
-            return out;
-        }
-
-        let new_len = (len_bits + 7) & !7;
-        let mut bv = BV::with_capacity(new_len);
-        bv.extend_from_bitslice(self.as_bitslice());
-        bv.resize(new_len, false);
-        bv.into_vec()
+        let (bytes, bit_offset, _) = self.raw_data_ref();
+        debug_assert_ne!(bit_offset, 0);
+        let mut out = vec![0u8; len_bits.div_ceil(8)];
+        copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, &mut out);
+        out
     }
 
     fn padded_byte_data_cow(&self) -> Cow<'_, [u8]> {
@@ -616,23 +573,18 @@ pub(crate) trait BitCollection: Sized + Clone {
             })
             .map(|bytes| bytes.unbind());
         }
-        if let Some((bytes, bit_offset, _)) = self.raw_data_ref()
-            && bit_offset != 0
-        {
-            return PyBytes::new_with(py, len_bits.div_ceil(8), |out| {
-                copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
-                Ok(())
-            })
-            .map(|bytes| bytes.unbind());
-        }
-
-        let bytes = self.to_padded_byte_data();
-        Ok(PyBytes::new(py, &bytes).unbind())
+        let (bytes, bit_offset, _) = self.raw_data_ref();
+        debug_assert_ne!(bit_offset, 0);
+        PyBytes::new_with(py, len_bits.div_ceil(8), |out| {
+            copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
+            Ok(())
+        })
+        .map(|bytes| bytes.unbind())
     }
 
     #[inline]
     fn byte_aligned_raw_data(&self) -> Option<&[u8]> {
-        let (bytes, bit_offset, len_bits) = self.raw_data_ref()?;
+        let (bytes, bit_offset, len_bits) = self.raw_data_ref();
         if bit_offset == 0 {
             Some(&bytes[..len_bits.div_ceil(8)])
         } else {
@@ -785,29 +737,17 @@ pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> B
         return BV::new();
     }
     let mut out = BitConcat::with_bit_capacity(len * count);
-    match bits.raw_data_ref() {
-        Some((bytes, offset, _)) => {
-            for _ in 0..count {
-                out.push_run(bytes, offset, len);
-            }
-        }
-        None => {
-            let bytes = bits.padded_byte_data_cow();
-            for _ in 0..count {
-                out.push_run(&bytes, 0, len);
-            }
-        }
+    let (bytes, offset, _) = bits.raw_data_ref();
+    for _ in 0..count {
+        out.push_run(bytes, offset, len);
     }
     out.into_bitvec()
 }
 
-/// Append every bit of `bits` to `out`, borrowing its storage where the layout
-/// allows and realigning into an owned copy only when it does not.
+/// Append every bit of `bits` to `out`, borrowing its raw storage.
 pub(crate) fn push_collection_run(out: &mut BitConcat, bits: &impl BitCollection) {
-    match bits.raw_data_ref() {
-        Some((bytes, offset, _)) => out.push_run(bytes, offset, bits.len()),
-        None => out.push_run(&bits.padded_byte_data_cow(), 0, bits.len()),
-    }
+    let (bytes, offset, _) = bits.raw_data_ref();
+    out.push_run(bytes, offset, bits.len());
 }
 
 pub(crate) fn concatenate_bitcollections(
@@ -841,12 +781,7 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
-    fn get_raw_bytes(&self) -> Vec<u8> {
-        Tibs::raw_bytes(self)
-    }
-
-    #[inline]
-    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+    fn raw_data_ref(&self) -> (&[u8], usize, usize) {
         Tibs::raw_data_ref(self)
     }
 }
@@ -872,12 +807,7 @@ impl BitCollection for Mutibs {
     }
 
     #[inline]
-    fn get_raw_bytes(&self) -> Vec<u8> {
-        Mutibs::raw_bytes(self)
-    }
-
-    #[inline]
-    fn raw_data_ref(&self) -> Option<(&[u8], usize, usize)> {
+    fn raw_data_ref(&self) -> (&[u8], usize, usize) {
         let slice = self.as_bitslice();
         let offset = match slice.domain() {
             bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
@@ -886,11 +816,7 @@ impl BitCollection for Mutibs {
             } => elem.head().into_inner() as usize,
             _ => 0,
         };
-        if offset == 0 {
-            Some((self.data.as_raw_slice(), offset, slice.len()))
-        } else {
-            None
-        }
+        (self.data.as_raw_slice(), offset, slice.len())
     }
 }
 

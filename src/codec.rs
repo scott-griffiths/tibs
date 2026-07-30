@@ -337,8 +337,9 @@ fn decode_zstd_payload<C: BitCollection>(
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
     }
     let out_end = data_bits - bit_padding;
-    let decompressed = BV::from_vec(decompressed);
-    Ok(C::from_bv(decompressed[..out_end].to_bitvec()))
+    let mut decompressed = BV::from_vec(decompressed);
+    decompressed.truncate(out_end);
+    Ok(C::from_bv(decompressed))
 }
 
 /// A varint as whole bytes: seven bits of payload each, most significant group
