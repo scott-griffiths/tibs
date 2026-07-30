@@ -210,7 +210,7 @@ fn encode_as_rice<C: BitCollection>(bits: &C, sparse_bit: bool) -> BV {
 }
 
 fn decode_raw_payload<C: BitCollection>(
-    bv: &BS,
+    bv: BV,
     bit_padding: usize,
     data_start: usize,
     data_bits: usize,
@@ -232,8 +232,7 @@ fn decode_raw_payload<C: BitCollection>(
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
     }
 
-    let out_end = data_end - bit_padding;
-    Ok(C::from_bv(bv[data_start..out_end].to_bitvec()))
+    Ok(C::from_bv(bv).get_slice_unchecked(data_start, data_bits - bit_padding))
 }
 
 fn decode_rice_payload<C: BitCollection>(
@@ -453,7 +452,7 @@ pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
         .checked_mul(8)
         .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
     match codec {
-        0b000 => decode_raw_payload(&bv, bit_padding, data_start, data_bits),
+        0b000 => decode_raw_payload(bv, bit_padding, data_start, data_bits),
         0b001 => decode_rice_payload(&bv, bit_padding, data_start, data_bits),
         0b010 => decode_zstd_payload(&bv, bit_padding, data_start, data_bits),
         _ => Err(PyValueError::new_err("The codec value is reserved.")),
