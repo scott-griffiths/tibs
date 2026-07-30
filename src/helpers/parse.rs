@@ -1,4 +1,5 @@
-use super::bits::BV;
+use super::bits::{BV, BitAccumulator};
+use super::bitwise::BitConcat;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -29,81 +30,24 @@ const HEX_VALUES: [u8; 256] = {
     table
 };
 
-/// A partly filled byte being built up from digits.
-///
-/// Digits arrive with fewer bits than a byte and do not have to divide into
-/// one, so bits are accumulated at the bottom of a word and pushed out a
-/// whole byte at a time.
-struct BitAccumulator {
-    bytes: Vec<u8>,
-    bits: u32,
-    held: u32,
-    len_bits: usize,
-}
-
-impl BitAccumulator {
-    fn with_capacity(bytes: usize) -> Self {
-        BitAccumulator {
-            bytes: Vec::with_capacity(bytes),
-            bits: 0,
-            held: 0,
-            len_bits: 0,
-        }
+/// Add the whole bytes spelled out by each leading group of `DIGITS` digits
+/// that `decode` accepts, stopping at the first group it rejects. Returns how
+/// many digits were consumed.
+fn extend_groups<const DIGITS: usize, const BYTES: usize>(
+    out: &mut BitAccumulator,
+    source: &[u8],
+    decode: impl Fn(&[u8; DIGITS]) -> Option<[u8; BYTES]>,
+) -> usize {
+    debug_assert!(out.is_byte_aligned());
+    let mut groups = 0;
+    for group in source.chunks_exact(DIGITS) {
+        let Some(bytes) = decode(group.try_into().unwrap()) else {
+            break;
+        };
+        out.push_aligned_bytes(&bytes);
+        groups += 1;
     }
-
-    /// Whether the next digit would start on a byte boundary, which is what
-    /// the whole word fast paths need.
-    #[inline]
-    fn is_aligned(&self) -> bool {
-        self.held == 0
-    }
-
-    /// Add `count` bits, given as the low bits of `digit`.
-    #[inline]
-    fn push_digit(&mut self, digit: u8, count: u32) {
-        self.bits = (self.bits << count) | u32::from(digit);
-        self.held += count;
-        self.len_bits += count as usize;
-        while self.held >= 8 {
-            self.held -= 8;
-            self.bytes.push((self.bits >> self.held) as u8);
-        }
-    }
-
-    /// Add the whole bytes spelled out by each leading group of `DIGITS`
-    /// digits that `decode` accepts, stopping at the first group it rejects.
-    /// Returns how many digits were consumed.
-    ///
-    /// This is where the work is done for any input that is all digits, so
-    /// the loop is kept to the decode and the store. It is only valid while
-    /// aligned, which is what makes whole bytes come out of it.
-    fn extend_groups<const DIGITS: usize, const BYTES: usize>(
-        &mut self,
-        source: &[u8],
-        decode: impl Fn(&[u8; DIGITS]) -> Option<[u8; BYTES]>,
-    ) -> usize {
-        debug_assert!(self.is_aligned());
-        let mut groups = 0;
-        for group in source.chunks_exact(DIGITS) {
-            let Some(bytes) = decode(group.try_into().unwrap()) else {
-                break;
-            };
-            self.bytes.extend_from_slice(&bytes);
-            groups += 1;
-        }
-        self.len_bits += groups * BYTES * 8;
-        groups * DIGITS
-    }
-
-    fn into_bv(mut self) -> BV {
-        if self.held != 0 {
-            // The final digits are left aligned in a last, part used byte.
-            self.bytes.push((self.bits << (8 - self.held)) as u8);
-        }
-        let mut bv = BV::from_vec(self.bytes);
-        bv.truncate(self.len_bits);
-        bv
-    }
+    groups * DIGITS
 }
 
 /// How many bytes to skip over a character that is not a digit, or the
@@ -180,13 +124,13 @@ pub(crate) fn bv_from_bin(binary_string: &str) -> PyResult<BV> {
         .or_else(|| binary_string.strip_prefix("0B"))
         .unwrap_or(binary_string);
     let source = s.as_bytes();
-    let mut out = BitAccumulator::with_capacity(source.len().div_ceil(8));
+    let mut out = BitAccumulator::with_bit_capacity(Some(source.len()));
     let mut index = 0;
     while index < source.len() {
         // Eight digits are a whole byte, so runs of them go straight out.
         // Barring separators, that is the whole string in one pass.
-        if out.is_aligned() {
-            index += out.extend_groups(&source[index..], decode_bin_group);
+        if out.is_byte_aligned() {
+            index += extend_groups(&mut out, &source[index..], decode_bin_group);
             if index == source.len() {
                 break;
             }
@@ -197,10 +141,10 @@ pub(crate) fn bv_from_bin(binary_string: &str) -> PyResult<BV> {
                 skip_non_digit(s, index).map_err(|c| invalid_character("bin", binary_string, c))?;
             continue;
         }
-        out.push_digit(digit, 1);
+        out.push(u64::from(digit), 1);
         index += 1;
     }
-    Ok(out.into_bv())
+    Ok(out.into_bitvec())
 }
 
 pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
@@ -210,13 +154,13 @@ pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
         .or_else(|| octal_string.strip_prefix("0O"))
         .unwrap_or(octal_string);
     let source = s.as_bytes();
-    let mut out = BitAccumulator::with_capacity((source.len() * 3).div_ceil(8));
+    let mut out = BitAccumulator::with_bit_capacity(Some(source.len() * 3));
     let mut index = 0;
     while index < source.len() {
         // Eight digits are three whole bytes, so runs of them go straight
         // out. Barring separators, that is the whole string in one pass.
-        if out.is_aligned() {
-            index += out.extend_groups(&source[index..], decode_oct_group);
+        if out.is_byte_aligned() {
+            index += extend_groups(&mut out, &source[index..], decode_oct_group);
             if index == source.len() {
                 break;
             }
@@ -227,10 +171,10 @@ pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
                 skip_non_digit(s, index).map_err(|c| invalid_character("oct", octal_string, c))?;
             continue;
         }
-        out.push_digit(digit, 3);
+        out.push(u64::from(digit), 3);
         index += 1;
     }
-    Ok(out.into_bv())
+    Ok(out.into_bitvec())
 }
 
 pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
@@ -240,13 +184,13 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
         .or_else(|| hex.strip_prefix("0X"))
         .unwrap_or(hex);
     let source = s.as_bytes();
-    let mut out = BitAccumulator::with_capacity(source.len().div_ceil(2));
+    let mut out = BitAccumulator::with_bit_capacity(Some(source.len() * 4));
     let mut index = 0;
     while index < source.len() {
         // A pair of digits is a whole byte, so runs of them go straight out.
         // Barring separators, that is the whole string in one pass.
-        if out.is_aligned() {
-            index += out.extend_groups(&source[index..], decode_hex_group);
+        if out.is_byte_aligned() {
+            index += extend_groups(&mut out, &source[index..], decode_hex_group);
             if index == source.len() {
                 break;
             }
@@ -256,10 +200,10 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
             index += skip_non_digit(s, index).map_err(|c| invalid_character("hex", hex, c))?;
             continue;
         }
-        out.push_digit(digit, 4);
+        out.push(u64::from(digit), 4);
         index += 1;
     }
-    Ok(out.into_bv())
+    Ok(out.into_bitvec())
 }
 
 /// Whether every byte is a printable non-space ASCII character.
@@ -300,9 +244,17 @@ pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
     let Some(first) = tokens.next() else {
         return Ok(BV::new());
     };
-    let mut result = string_literal_to_bv(first)?;
+    let first = string_literal_to_bv(first)?;
+    let Some(second) = tokens.next() else {
+        return Ok(first);
+    };
+    let mut result = BitConcat::with_bit_capacity(first.len());
+    result.push_run(first.as_raw_slice(), 0, first.len());
+    let second = string_literal_to_bv(second)?;
+    result.push_run(second.as_raw_slice(), 0, second.len());
     for token in tokens {
-        result.extend_from_bitslice(&string_literal_to_bv(token)?);
+        let bits = string_literal_to_bv(token)?;
+        result.push_run(bits.as_raw_slice(), 0, bits.len());
     }
-    Ok(result)
+    Ok(result.into_bitvec())
 }

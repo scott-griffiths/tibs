@@ -38,10 +38,7 @@ pub(crate) fn prepare_mask(mask: Option<Tibs>, needle_len: usize) -> PyResult<Op
             mask.len()
         )));
     }
-    Ok(match mask.as_bitslice().all() {
-        true => None,
-        false => Some(mask),
-    })
+    Ok(if mask.all() { None } else { Some(mask) })
 }
 
 impl Hash for Tibs {

@@ -209,25 +209,30 @@ fn encode_as_rice<C: BitCollection>(bits: &C, sparse_bit: bool) -> BV {
     encoded
 }
 
+fn exact_payload_end(total: usize, start: usize, len: usize) -> PyResult<usize> {
+    let end = start
+        .checked_add(len)
+        .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
+    if total < end {
+        return Err(PyValueError::new_err(
+            "The encoded sequence ended unexpectedly.",
+        ));
+    }
+    if total > end {
+        return Err(PyValueError::new_err(
+            "The encoded sequence has unexpected trailing bytes.",
+        ));
+    }
+    Ok(end)
+}
+
 fn decode_raw_payload<C: BitCollection>(
     bv: BV,
     bit_padding: usize,
     data_start: usize,
     data_bits: usize,
 ) -> PyResult<C> {
-    let data_end = data_start
-        .checked_add(data_bits)
-        .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-    if bv.len() < data_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence ended unexpectedly.",
-        ));
-    }
-    if bv.len() != data_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence has unexpected trailing bytes.",
-        ));
-    }
+    exact_payload_end(bv.len(), data_start, data_bits)?;
     if bit_padding > data_bits {
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
     }
@@ -244,26 +249,8 @@ fn decode_rice_payload<C: BitCollection>(
     let config_end = data_start
         .checked_add(8)
         .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-    if bv.len() < config_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence ended unexpectedly.",
-        ));
-    }
-
     let payload_start = config_end;
-    let payload_end = payload_start
-        .checked_add(payload_bits)
-        .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-    if bv.len() < payload_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence ended unexpectedly.",
-        ));
-    }
-    if bv.len() != payload_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence has unexpected trailing bytes.",
-        ));
-    }
+    let payload_end = exact_payload_end(bv.len(), payload_start, payload_bits)?;
     if bit_padding > payload_bits {
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
     }
@@ -300,34 +287,23 @@ fn decode_rice_payload<C: BitCollection>(
 }
 
 fn decode_zstd_payload<C: BitCollection>(
-    bv: &BS,
+    bv: &BV,
     bit_padding: usize,
     data_start: usize,
     payload_bits: usize,
 ) -> PyResult<C> {
-    let payload_end = data_start
-        .checked_add(payload_bits)
-        .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
-    if bv.len() < payload_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence ended unexpectedly.",
-        ));
-    }
-    if bv.len() != payload_end {
-        return Err(PyValueError::new_err(
-            "The encoded sequence has unexpected trailing bytes.",
-        ));
-    }
-
-    let compressed = bv[data_start..payload_end].to_bitvec().into_vec();
-    let decompressed_size = zstd::zstd_safe::get_frame_content_size(&compressed)
+    let payload_end = exact_payload_end(bv.len(), data_start, payload_bits)?;
+    debug_assert!(data_start.is_multiple_of(8));
+    debug_assert!(payload_end.is_multiple_of(8));
+    let compressed = &bv.as_raw_slice()[data_start / 8..payload_end / 8];
+    let decompressed_size = zstd::zstd_safe::get_frame_content_size(compressed)
         .map_err(|e| PyValueError::new_err(format!("The zstd payload could not be decoded: {e}")))?
         .ok_or_else(|| {
             PyValueError::new_err("The zstd payload did not include its decompressed size.")
         })?;
 
     let decompressed =
-        zstd::bulk::decompress(&compressed, decompressed_size as usize).map_err(|e| {
+        zstd::bulk::decompress(compressed, decompressed_size as usize).map_err(|e| {
             PyValueError::new_err(format!("The zstd payload could not be decoded: {e}"))
         })?;
 
@@ -409,14 +385,10 @@ pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
     let bv = BV::from_vec(b);
     let single_byte_flag = bv[0];
     if single_byte_flag {
-        if bv.len() != 8 {
-            return Err(PyValueError::new_err(
-                "The encoded sequence has unexpected trailing bytes.",
-            ));
-        }
+        exact_payload_end(bv.len(), 0, 8)?;
         for bit_pos in 1..8 {
             if bv[bit_pos] {
-                return Ok(C::from_bv(bv[bit_pos + 1..].to_bitvec()));
+                return Ok(C::from_bv(bv).get_slice_unchecked(bit_pos + 1, 7 - bit_pos));
             }
         }
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
@@ -430,17 +402,8 @@ pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
         if bit_length <= 6 {
             return Err(PyValueError::new_err("The encoded sequence is reserved."));
         }
-        if bv.len() < data_bits + 8 {
-            return Err(PyValueError::new_err(
-                "The encoded sequence ended unexpectedly.",
-            ));
-        }
-        if bv.len() != data_bits + 8 {
-            return Err(PyValueError::new_err(
-                "The encoded sequence has unexpected trailing bytes.",
-            ));
-        }
-        return Ok(C::from_bv(bv[8..8 + bit_length].to_bitvec()));
+        exact_payload_end(bv.len(), 8, data_bits)?;
+        return Ok(C::from_bv(bv).get_slice_unchecked(8, bit_length));
     }
 
     let codec = bv[2..5].load_be::<u8>();

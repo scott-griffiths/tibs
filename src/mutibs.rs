@@ -273,13 +273,7 @@ impl Mutibs {
     /// storage begins mid-byte.
     #[inline]
     pub(crate) fn storage_head_offset(&self) -> usize {
-        match self.data.as_bitslice().domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        }
+        head_bit_offset(self.data.as_bitslice())
     }
 
     /// Write already-validated bit indices directly into the underlying bytes.
@@ -1517,14 +1511,7 @@ impl Mutibs {
     ///     assert t == []
     ///
     pub fn as_raw_data(&mut self) -> (Vec<u8>, usize, usize) {
-        let slice = self.as_bitvec_ref().as_bitslice();
-        let offset = match slice.domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
+        let offset = self.storage_head_offset();
         let len = self.len();
         let bv = std::mem::take(&mut *self.as_mut_bitvec_ref());
         let raw_bytes = bv.into_vec();

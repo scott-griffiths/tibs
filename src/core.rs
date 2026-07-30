@@ -819,15 +819,11 @@ impl BitCollection for Mutibs {
 
     #[inline]
     fn raw_data_ref(&self) -> (&[u8], usize, usize) {
-        let slice = self.as_bitslice();
-        let offset = match slice.domain() {
-            bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-            bitvec::domain::Domain::Region {
-                head: Some(elem), ..
-            } => elem.head().into_inner() as usize,
-            _ => 0,
-        };
-        (self.data.as_raw_slice(), offset, slice.len())
+        (
+            self.data.as_raw_slice(),
+            self.storage_head_offset(),
+            self.len(),
+        )
     }
 }
 
