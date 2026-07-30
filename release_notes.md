@@ -1,8 +1,19 @@
 # Release Notes
 
-### Unreleased: version 1.2
+### Unreleased: version 2.0 rc1
 
 Backwardly incompatible changes
+
+* `Dtype` is now a base class and parsing factory rather than a concrete class,
+  because a dtype can now describe a structured, multi-field value as well as
+  a single one. `Dtype("u8")` returns a `DtypeSingle` instance instead of an
+  object whose exact type is `Dtype`, so `repr(Dtype("u8"))` is now
+  `DtypeSingle('u8')` rather than `Dtype('u8')`, and `Dtype.from_params` has
+  moved to `DtypeSingle.from_params`. This is why the release is a new major
+  version rather than 1.2 — see `DtypeArray` and `DtypeTuple` below. Code that
+  constructs dtypes with `from_params`, checks their exact type, or relies on
+  the old `repr` will need updating; dtype strings for single values such as
+  `Dtype("u32")` are unchanged.
 
 * Minimum Python version now 3.11 instead of 3.10. Python 3.10 reaches its end
   of life in October 2026, and dropping it lets a single abi3 wheel cover every
@@ -11,6 +22,21 @@ Backwardly incompatible changes
   version-pinned wheel for it.
 
 Added
+
+* Added `DtypeArray` and `DtypeTuple`, alongside the existing scalar dtype
+  (now `DtypeSingle`), so a single `Dtype` can describe a structured,
+  multi-field value: `Dtype("[u8; 4]")` for four repeated `u8` fields, and
+  `Dtype("(u8, u16_le, bool)")` for a fixed sequence of differently-typed
+  fields. Both nest to any depth, so an array can contain tuples and vice
+  versa. All three classes support `pack`, `unpack`, `pack_values`,
+  `unpack_values` and `unpack_values_iter`, and a `DtypeTuple` can express the
+  same explicit-width, no-padding layouts as the standard-size forms of
+  `struct` — `"(i16_le, i32_le, i32_le)"` matches `"<hll"`.
+
+  ```python
+  >>> Dtype("(u8, [bool; 3])").pack((5, [True, False, True]))
+  Tibs('0b00000101101')
+  ```
 
 * Eight methods for comparing two containers without building an intermediate
   object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
@@ -166,17 +192,17 @@ Changed
 
 Performance improvements
 
-* The `bin`, `oct` and `hex` properties and the `to_bin`, `to_oct` and `to_hex`
-  methods now build their string from whole bytes at a time instead of looking
-  at each bit or digit in turn.
-* Binary, octal and hex strings are parsed several digits at a time straight
-  into bytes, which speeds up construction from a string. This made the cache of
-  recently parsed strings redundant, so it has been removed, and with it the
-  `hex`, `lru` and `once_cell` dependencies.
-* `from_values` and `Dtype.pack_values` pack whole bytes at a time for numeric
-  dtypes whose length is a multiple of 8 bits.
-* `Mutibs.reverse` now takes the same byte-level fast path that `reversed`
-  already used, rather than reversing a bit at a time.
+* Compound dtype packing and unpacking now build a cached flat record layout
+  and take a bytewise fast path, bringing `DtypeTuple` operations equivalent to
+  a `struct` call (such as `"(i16_be, i16_be, i32_be)"` against `">hhl"`) to
+  around 1.5-1.8x the time of the handwritten `struct` code, down from roughly
+  10x slower when compound dtypes were first implemented.
+* A number of other operations — string/hex/oct/bin conversion, `from_values`,
+  `Mutibs.reverse` and others — moved from bit-at-a-time to byte-at-a-time or
+  whole-buffer implementations. Across the local comparison suite (see
+  `tests/performance_comparison.py`), tibs is now a geometric-mean 3.2x faster
+  than bitarray (1.4x at the median) and 1.9x faster than equivalent standard
+  library code (1.5x at the median).
 
 ### July 18th 2026: version 1.1
 
