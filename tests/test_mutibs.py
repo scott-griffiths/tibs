@@ -1230,6 +1230,41 @@ def test_bit_operations_with_bits():
     assert a == Tibs('0b0110')
 
 
+def test_inplace_bit_operations_across_storage_alignments():
+    lengths = (0, 1, 2, 7, 8, 9, 15, 16, 17, 63, 64, 65, 129)
+    for left_head in (0, 1, 3, 7, 8):
+        for right_head in (0, 1, 5, 7, 8):
+            for length in lengths:
+                left_values = [
+                    (index * 5 + 3) % 11 < 5
+                    for index in range(left_head + length)
+                ]
+                right_values = [
+                    (index * 7 + 1) % 13 < 6
+                    for index in range(right_head + length)
+                ]
+                right = Tibs.from_bools(right_values)[right_head:]
+
+                for operation in ('and', 'or', 'xor'):
+                    left = Mutibs.from_bools(left_values)[left_head:]
+                    original = Tibs(left)
+                    if operation == 'and':
+                        expected = original & right
+                        left &= right
+                    elif operation == 'or':
+                        expected = original | right
+                        left |= right
+                    else:
+                        expected = original ^ right
+                        left ^= right
+                    assert left == expected, (
+                        operation,
+                        left_head,
+                        right_head,
+                        length,
+                    )
+
+
 def test_equality_with_bits():
     # Test equality comparison with Tibs
     a = Mutibs('0b1010')

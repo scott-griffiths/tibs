@@ -8,9 +8,9 @@ use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
     bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked, fill_bits, find_bitvec,
-    find_bitvec_aligned, head_bit_offset, move_bits, padded_bytes_from_offset, promote_to_bv,
-    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    find_bitvec_aligned, head_bit_offset, logical_op_assign_bytes, move_bits,
+    padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv, validate_index,
+    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
 };
 use crate::tibs_::{
     Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
@@ -444,22 +444,38 @@ impl Mutibs {
         self.data = value;
     }
 
-    pub(crate) fn ixor(&mut self, other: &BS) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        *self.as_mut_bitvec_ref() ^= other;
+    fn apply_logical_op(&mut self, other: &Tibs, op: LogicalOp) -> PyResult<()> {
+        let len = self.len();
+        validate_logical_op_lengths(len, other.len())?;
+        if len == 0 {
+            return Ok(());
+        }
+        if let Some((rhs, rhs_offset, _)) = other.raw_data_ref() {
+            let lhs_offset = self.storage_head_offset();
+            logical_op_assign_bytes(
+                self.as_mut_bitvec_ref().as_raw_mut_slice(),
+                lhs_offset,
+                rhs,
+                rhs_offset,
+                len,
+                op,
+            );
+        } else {
+            op.bitslice(self.as_mut_bitvec_ref(), other.as_bitslice());
+        }
         Ok(())
     }
 
-    pub(crate) fn ior(&mut self, other: &BS) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        *self.as_mut_bitvec_ref() |= other;
-        Ok(())
+    pub(crate) fn ixor(&mut self, other: &Tibs) -> PyResult<()> {
+        self.apply_logical_op(other, LogicalOp::Xor)
     }
 
-    pub(crate) fn iand(&mut self, other: &BS) -> PyResult<()> {
-        validate_logical_op_lengths(self.len(), other.len())?;
-        *self.as_mut_bitvec_ref() &= other;
-        Ok(())
+    pub(crate) fn ior(&mut self, other: &Tibs) -> PyResult<()> {
+        self.apply_logical_op(other, LogicalOp::Or)
+    }
+
+    pub(crate) fn iand(&mut self, other: &Tibs) -> PyResult<()> {
+        self.apply_logical_op(other, LogicalOp::And)
     }
 
     pub(crate) fn set_from_sequence(
@@ -3866,7 +3882,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __iand__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
-        slf.iand(other.as_bitslice())
+        slf.iand(&other)
     }
 
     /// In-place bit-wise 'or'.
@@ -3876,7 +3892,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __ior__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
-        slf.ior(other.as_bitslice())
+        slf.ior(&other)
     }
 
     /// In-place bit-wise 'xor'.
@@ -3886,7 +3902,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __ixor__(mut slf: PyRefMut<'_, Self>, other: Tibs) -> PyResult<()> {
-        slf.ixor(other.as_bitslice())
+        slf.ixor(&other)
     }
 
     /// In-place multiplication by a non-negative integer.

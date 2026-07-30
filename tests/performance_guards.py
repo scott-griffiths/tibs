@@ -188,6 +188,12 @@ def _shift_in_place() -> Mutibs:
     return BIG_M_SHIFT
 
 
+def _and_in_place() -> Mutibs:
+    result = Mutibs(BIG_T)
+    result &= OTHER_T
+    return result
+
+
 GUARDS: list[Guard] = [
     # ---- 1. rotate ------------------------------------------------------
     # Not the same result as a shift, but exactly the same bits moved: both
@@ -290,6 +296,17 @@ GUARDS: list[Guard] = [
         fast=lambda: BIG_T >> 7,
         limit=4.0,
         same_result=False,
+    ),
+    # ---- 7b. in-place logical operations -------------------------------
+    # Building the mutable copy is included, so this does more memory traffic
+    # than the immutable reference. It should still stay within a small factor;
+    # bit-at-a-time assignment makes it roughly fifty times slower.
+    Guard(
+        name="Mutibs(a) &= b vs a & b",
+        site="mutibs.rs apply_logical_op -> logical_op_assign_bytes",
+        slow=_and_in_place,
+        fast=lambda: BIG_T & OTHER_T,
+        limit=4.0,
     ),
     # ---- 8. search off a byte boundary ----------------------------------
     # Both miss, so both scan everything and return None. The byte-aligned side

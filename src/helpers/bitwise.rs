@@ -301,6 +301,84 @@ pub(crate) fn logical_op_with_aligned_bytes(
     out
 }
 
+/// Apply a logical operation to the `len` live bits of `lhs` in place.
+///
+/// Each slice begins with the byte containing its first live bit. The offsets
+/// say where that bit sits in the byte, and may differ. Bits outside the live
+/// range in the first and last `lhs` bytes are preserved.
+#[inline]
+pub(crate) fn logical_op_assign_bytes(
+    lhs: &mut [u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    op: LogicalOp,
+) {
+    macro_rules! applied {
+        ($byte_op:expr) => {
+            logical_op_assign_bytes_with(lhs, lhs_offset, rhs, rhs_offset, len, $byte_op)
+        };
+    }
+    match op {
+        LogicalOp::Or => applied!(|a, b| a | b),
+        LogicalOp::And => applied!(|a, b| a & b),
+        LogicalOp::Xor => applied!(|a, b| a ^ b),
+        LogicalOp::AndNot => applied!(|a, b| a & !b),
+    }
+}
+
+fn logical_op_assign_bytes_with<F>(
+    lhs: &mut [u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    byte_op: F,
+) where
+    F: Fn(u8, u8) -> u8,
+{
+    debug_assert!(lhs_offset < 8);
+    debug_assert!(rhs_offset < 8);
+    if len == 0 {
+        return;
+    }
+    debug_assert_eq!(lhs.len(), (lhs_offset + len).div_ceil(8));
+    debug_assert_eq!(rhs.len(), (rhs_offset + len).div_ceil(8));
+
+    let last = lhs.len() - 1;
+    let rhs_shift = rhs_offset as isize - lhs_offset as isize;
+    let (head_mask, tail_mask) = edge_masks(lhs_offset, len);
+
+    let old = lhs[0];
+    let mask = if last == 0 {
+        head_mask & tail_mask
+    } else {
+        head_mask
+    };
+    let updated = byte_op(old, align_byte(rhs, 0, rhs_shift));
+    lhs[0] = (old & !mask) | (updated & mask);
+    if last == 0 {
+        return;
+    }
+
+    if rhs_shift == 0 {
+        debug_assert_eq!(lhs.len(), rhs.len());
+        for (left, &right) in lhs[1..last].iter_mut().zip(&rhs[1..last]) {
+            *left = byte_op(*left, right);
+        }
+    } else {
+        for (index, left) in lhs[1..last].iter_mut().enumerate() {
+            let index = index + 1;
+            *left = byte_op(*left, align_byte(rhs, index, rhs_shift));
+        }
+    }
+
+    let old = lhs[last];
+    let updated = byte_op(old, align_byte(rhs, last, rhs_shift));
+    lhs[last] = (old & !tail_mask) | (updated & tail_mask);
+}
+
 /// The 64 bits of `rhs` starting at byte `index`, shifted so they line up with
 /// `lhs`'s bit offset. Requires `index + 8 <= rhs.len()`.
 #[inline]
