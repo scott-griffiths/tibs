@@ -7,7 +7,8 @@ __author__: str
 _BitPattern = list[bool | int] | tuple[bool | int, ...]
 _TibsLike = Union["Tibs", "Mutibs", str, bytes, bytearray, memoryview, _BitPattern]
 _DtypeLike = Union["Dtype", str]
-_DtypeValue = Union[int, float, str, bytes, bool, "Tibs"]
+_DtypeScalarValue = Union[int, float, str, bytes, bool, "Tibs"]
+_DtypeValue = Union[_DtypeScalarValue, tuple["_DtypeValue", ...]]
 
 
 class ByteOrder:
@@ -43,22 +44,8 @@ class DtypeKind:
 class Dtype:
     def __init__(self, spec: str, /) -> None: ...
 
-    @classmethod
-    def from_params(
-            cls,
-            kind: DtypeKind,
-            length: int,
-            byte_order: ByteOrder = ByteOrder.Unspecified
-    ) -> Dtype: ...
-
-    @property
-    def kind(self) -> DtypeKind: ...
-
     @property
     def length(self) -> int: ...
-
-    @property
-    def byte_order(self) -> ByteOrder: ...
 
     def pack(self, value: Any, /) -> Tibs: ...
 
@@ -76,6 +63,51 @@ class Dtype:
     def __eq__(self, other: Any) -> bool: ...
 
     def __hash__(self) -> int: ...
+
+    def __str__(self) -> str: ...
+
+    def __repr__(self) -> str: ...
+
+
+class DtypeSingle(Dtype):
+    def __init__(self, spec: str, /) -> None: ...
+
+    @classmethod
+    def from_params(
+            cls,
+            kind: DtypeKind,
+            length: int,
+            byte_order: ByteOrder | None = ByteOrder.Unspecified
+    ) -> DtypeSingle: ...
+
+    @property
+    def kind(self) -> DtypeKind: ...
+
+    @property
+    def byte_order(self) -> ByteOrder: ...
+
+
+class DtypeArray(Dtype):
+    def __init__(self, spec: str, /) -> None: ...
+
+    @classmethod
+    def from_params(cls, dtype: _DtypeLike, count: int, /) -> DtypeArray: ...
+
+    @property
+    def dtype(self) -> Dtype: ...
+
+    @property
+    def count(self) -> int: ...
+
+
+class DtypeTuple(Dtype):
+    def __init__(self, spec: str, /) -> None: ...
+
+    @classmethod
+    def from_params(cls, dtypes: Iterable[_DtypeLike], /) -> DtypeTuple: ...
+
+    @property
+    def dtypes(self) -> tuple[Dtype, ...]: ...
 
 
 class View:

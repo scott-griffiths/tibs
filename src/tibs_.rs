@@ -1,6 +1,6 @@
 use crate::codec as tibs_codec;
 use crate::core::{BitCollection, concatenate_bitcollections};
-use crate::dtype::{Dtype, extract_dtype};
+use crate::dtype::{Dtype, DtypeRepr, SingleDtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
@@ -275,7 +275,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
     }
 }
 
-pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
+fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
     match dtype.kind {
         DtypeKind::Float => {
             let is_little_endian =
@@ -319,7 +319,7 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
     }
 }
 
-fn validate_dtype_value_length(dtype: &Dtype, bv: BV) -> PyResult<BV> {
+fn validate_dtype_value_length(dtype: &SingleDtype, bv: BV) -> PyResult<BV> {
     let value_length = bv.len();
     if value_length != dtype.length {
         return Err(PyValueError::new_err(format!(
@@ -330,6 +330,81 @@ fn validate_dtype_value_length(dtype: &Dtype, bv: BV) -> PyResult<BV> {
         )));
     }
     Ok(bv)
+}
+
+fn add_value_path(py: Python<'_>, error: PyErr, path: &str) -> PyErr {
+    PyErr::from_type(error.get_type(py), (format!("At value{path}: {error}"),))
+}
+
+fn append_dtype_value(
+    py: Python<'_>,
+    repr: &DtypeRepr,
+    value: &Bound<'_, PyAny>,
+    out: &mut BV,
+    path: &str,
+) -> PyResult<()> {
+    match repr {
+        DtypeRepr::Single(dtype) => {
+            out.extend(
+                bv_from_single_value(dtype, value)
+                    .map_err(|error| add_value_path(py, error, path))?,
+            );
+            Ok(())
+        }
+        DtypeRepr::Array { dtype, count } => append_dtype_items(
+            py,
+            std::slice::from_ref(dtype.as_ref()),
+            Some(*count),
+            value,
+            out,
+            path,
+        ),
+        DtypeRepr::Tuple(dtypes) => append_dtype_items(py, dtypes, None, value, out, path),
+    }
+}
+
+fn append_dtype_items(
+    py: Python<'_>,
+    dtypes: &[DtypeRepr],
+    repeat: Option<usize>,
+    value: &Bound<'_, PyAny>,
+    out: &mut BV,
+    path: &str,
+) -> PyResult<()> {
+    let expected = repeat.unwrap_or(dtypes.len());
+    let mut items = value
+        .try_iter()
+        .map_err(|error| add_value_path(py, error, path))?;
+    for index in 0..expected {
+        let item = items.next().ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "At value{path}: expected {expected} items, but received {index}."
+            ))
+        })??;
+        let dtype = if repeat.is_some() {
+            &dtypes[0]
+        } else {
+            &dtypes[index]
+        };
+        let item_path = format!("{path}[{index}]");
+        append_dtype_value(py, dtype, &item, out, &item_path)?;
+    }
+    if let Some(item) = items.next() {
+        item?;
+        return Err(PyValueError::new_err(format!(
+            "At value{path}: expected exactly {expected} items."
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
+    if let Some(single) = dtype.single() {
+        return bv_from_single_value(single, value);
+    }
+    let mut out = BV::with_capacity(dtype.length);
+    append_dtype_value(value.py(), &dtype.repr, value, &mut out, "")?;
+    Ok(out)
 }
 
 /// How the byte-wise path in [`bv_from_values_iter`] packs one value.
@@ -353,7 +428,7 @@ impl BytewisePacker {
     /// Decide whether `dtype` qualifies, without touching the values. This has
     /// to be settled up front, because returning `None` after consuming part
     /// of a one-shot iterable would lose those items.
-    fn for_dtype(dtype: &Dtype) -> PyResult<Option<Self>> {
+    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
         if dtype.length == 0 || !dtype.length.is_multiple_of(8) {
             return Ok(None);
         }
@@ -427,7 +502,7 @@ impl BitwisePacker {
     /// Unlike that one this needs no byte order: a length that isn't a whole
     /// number of bytes cannot carry an explicit byte order, because `Dtype`
     /// rejects the combination when it is built, so these are all big-endian.
-    fn for_dtype(dtype: &Dtype) -> Option<Self> {
+    fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
         // A bool dtype is one bit long, likewise by construction.
         if dtype.kind == DtypeKind::Bool {
             return Some(BitwisePacker::Bool);
@@ -555,11 +630,25 @@ pub(crate) fn bv_from_values_iter(
     iterable: &Bound<'_, PyAny>,
 ) -> PyResult<BV> {
     let hint = iterable.len().ok();
+    let Some(single) = dtype.single() else {
+        let capacity = hint.and_then(|len| len.checked_mul(dtype.length));
+        let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
+        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+        for (index, item) in iterable.try_iter()?.enumerate() {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+            }
+            let item = item?;
+            append_dtype_value(py, &dtype.repr, &item, &mut bv, &format!("[{index}]"))?;
+        }
+        return Ok(bv);
+    };
     // A dtype that packs into whole bytes can be built as a byte buffer and
     // converted once at the end. The general path below allocates a `BitVec`
     // per value and appends it a bit at a time, which costs far more than the
     // conversion itself for a long sequence.
-    if let Some(packer) = BytewisePacker::for_dtype(dtype)? {
+    if let Some(packer) = BytewisePacker::for_dtype(single)? {
         let byte_length = packer.byte_length();
         let capacity = hint.and_then(|len| len.checked_mul(byte_length));
         let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
@@ -572,7 +661,7 @@ pub(crate) fn bv_from_values_iter(
     // The same trick for a dtype that straddles byte boundaries: the values go
     // through a bit accumulator that writes out whole bytes, so this too ends
     // in a single conversion rather than a per-value allocate-and-append.
-    if let Some(packer) = BitwisePacker::for_dtype(dtype) {
+    if let Some(packer) = BitwisePacker::for_dtype(single) {
         let capacity = hint.and_then(|len| len.checked_mul(packer.length()));
         let mut out = helpers::BitAccumulator::with_bit_capacity(capacity);
         for_each_value(py, iterable, packer.plain_type(), |item| {
@@ -589,7 +678,7 @@ pub(crate) fn bv_from_values_iter(
             py.check_signals()?;
             check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
-        bv.extend(bv_from_value(dtype, &item?)?);
+        bv.extend(bv_from_single_value(single, &item?)?);
     }
     Ok(bv)
 }
@@ -648,7 +737,7 @@ impl BytewiseUnpacker {
         }))
     }
 
-    fn for_dtype(dtype: &Dtype) -> PyResult<Option<Self>> {
+    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
         Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
@@ -752,7 +841,7 @@ impl SubByteUnpacker {
         })
     }
 
-    fn for_dtype(dtype: &Dtype) -> Option<Self> {
+    fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
         Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
@@ -836,7 +925,53 @@ pub(crate) fn py_from_value_parts(
 }
 
 pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyResult<Py<PyAny>> {
-    py_from_value_parts(py, dtype.kind, dtype.length, dtype.byte_order, value)
+    if let Some(dtype) = dtype.single() {
+        return py_from_value_parts(py, dtype.kind, dtype.length, dtype.byte_order, value);
+    }
+    if value.len() != dtype.length {
+        return Err(PyValueError::new_err(format!(
+            "Cannot convert {} bits using a dtype with length {} bits.",
+            value.len(),
+            dtype.length
+        )));
+    }
+    py_from_dtype_repr(py, &dtype.repr, value, 0)
+}
+
+fn py_from_dtype_repr(
+    py: Python<'_>,
+    repr: &DtypeRepr,
+    value: &Tibs,
+    start: usize,
+) -> PyResult<Py<PyAny>> {
+    match repr {
+        DtypeRepr::Single(dtype) => {
+            let bits = value.get_slice_unchecked(start, dtype.length);
+            py_from_value_parts(py, dtype.kind, dtype.length, dtype.byte_order, &bits)
+        }
+        DtypeRepr::Array { dtype, count } => {
+            let item_length = dtype.length()?;
+            let mut values = Vec::with_capacity(*count);
+            for index in 0..*count {
+                values.push(py_from_dtype_repr(
+                    py,
+                    dtype,
+                    value,
+                    start + index * item_length,
+                )?);
+            }
+            Ok(PyTuple::new(py, values)?.into_any().unbind())
+        }
+        DtypeRepr::Tuple(dtypes) => {
+            let mut values = Vec::with_capacity(dtypes.len());
+            let mut position = start;
+            for dtype in dtypes {
+                values.push(py_from_dtype_repr(py, dtype, value, position)?);
+                position += dtype.length()?;
+            }
+            Ok(PyTuple::new(py, values)?.into_any().unbind())
+        }
+    }
 }
 
 pub(crate) fn py_values_from_range(
@@ -865,7 +1000,12 @@ pub(crate) fn py_values_from_range(
     // A dtype that reads out of whole bytes takes them from the backing store
     // directly, with the byte order and the sign settled once for the whole
     // sequence. See `BytewiseUnpacker`.
-    if let Some(unpacker) = BytewiseUnpacker::for_dtype(dtype)? {
+    if let Some(unpacker) = dtype
+        .single()
+        .map(BytewiseUnpacker::for_dtype)
+        .transpose()?
+        .flatten()
+    {
         let window = bits.get_slice_unchecked(start, selected_len);
         if let Some((bytes, shift, _)) = window.raw_data_ref() {
             let shift = shift as u32;
@@ -882,7 +1022,7 @@ pub(crate) fn py_values_from_range(
 
     // Integer dtypes narrower than a byte read out of the same backing store,
     // one shift and mask each.
-    if let Some(unpacker) = SubByteUnpacker::for_dtype(dtype) {
+    if let Some(unpacker) = dtype.single().and_then(SubByteUnpacker::for_dtype) {
         let window = bits.get_slice_unchecked(start, selected_len);
         if let Some((bytes, shift, _)) = window.raw_data_ref() {
             for index in 0..count {
@@ -1613,28 +1753,8 @@ impl Tibs {
     ) -> PyResult<Py<ValuesIterator>> {
         let dtype = extract_dtype(dtype)?;
         let (start, end) = validate_slice(slf.len(), start, end)?;
-        let selected_len = end - start;
-        let chunk_size = dtype.length;
-        if !selected_len.is_multiple_of(chunk_size) {
-            return Err(PyValueError::new_err(format!(
-                "Cannot create values iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
-                dtype.length
-            )));
-        }
-
         let py = slf.py();
-        Py::new(
-            py,
-            ValuesIterator {
-                bits_object: slf.into(),
-                dtype_kind: dtype.kind,
-                dtype_length: dtype.length,
-                byte_order: dtype.byte_order,
-                chunk_size,
-                current_pos: start,
-                end_pos: end,
-            },
-        )
+        ValuesIterator::new(py, slf.into(), dtype, start, end)
     }
 
     /// Return a list of values decoded with a dtype.

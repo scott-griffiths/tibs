@@ -1,8 +1,8 @@
 use crate::core::BitCollection;
-use crate::enums::{ByteOrder, DtypeKind};
+use crate::dtype::Dtype;
 use crate::helpers;
 use crate::helpers::MaskedMatcher;
-use crate::tibs_::{Tibs, prepare_mask, py_from_value_parts};
+use crate::tibs_::{Tibs, prepare_mask, py_from_value};
 use memchr::memmem;
 use pyo3::prelude::*;
 
@@ -329,12 +329,39 @@ impl ChunksIterator {
 #[pyclass]
 pub struct ValuesIterator {
     pub(crate) bits_object: Py<Tibs>,
-    pub(crate) dtype_kind: DtypeKind,
-    pub(crate) dtype_length: usize,
-    pub(crate) byte_order: ByteOrder,
+    pub(crate) dtype: Dtype,
     pub(crate) chunk_size: usize,
     pub(crate) current_pos: usize,
     pub(crate) end_pos: usize,
+}
+
+impl ValuesIterator {
+    pub(crate) fn new(
+        py: Python<'_>,
+        bits_object: Py<Tibs>,
+        dtype: Dtype,
+        start: usize,
+        end: usize,
+    ) -> PyResult<Py<Self>> {
+        let selected_len = end - start;
+        let chunk_size = dtype.length;
+        if !selected_len.is_multiple_of(chunk_size) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Cannot create values iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
+                dtype.length
+            )));
+        }
+        Py::new(
+            py,
+            Self {
+                bits_object,
+                dtype,
+                chunk_size,
+                current_pos: start,
+                end_pos: end,
+            },
+        )
+    }
 }
 
 #[pymethods]
@@ -354,6 +381,6 @@ impl ValuesIterator {
         };
         slf.current_pos += slf.chunk_size;
 
-        py_from_value_parts(py, slf.dtype_kind, slf.dtype_length, slf.byte_order, &value).map(Some)
+        py_from_value(py, &slf.dtype, &value).map(Some)
     }
 }
