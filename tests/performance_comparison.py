@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import math
 import operator
 import os
+import pickle
 import random
 import statistics
 import struct
@@ -249,6 +250,32 @@ def build_bitarray_cases(byte_count, value_count):
     tibs_piece = Tibs("0b10101")
     ba_pieces = [ba_piece] * 50_000
     tibs_pieces = [tibs_piece] * 50_000
+    repeat_pattern_bits = bitarray("1011001011", endian="big")
+    repeat_pattern_tibs = Tibs("0b1011001011")
+    repeat_count = bit_count // len(repeat_pattern_bits)
+    small_and_widths = (1, 7, 13, 31, 47, 63, 64)
+    small_and_values = [
+        (
+            0x123456789ABCDEF0 & ((1 << width) - 1),
+            0xFEDCBA9876543210 & ((1 << width) - 1),
+        )
+        for width in small_and_widths
+    ]
+    small_and_bits = [
+        (
+            int2ba(left, length=width, endian="big"),
+            int2ba(right, length=width, endian="big"),
+        )
+        for width, (left, right) in zip(
+            small_and_widths, small_and_values, strict=True
+        )
+    ]
+    small_and_tibs = [
+        (Tibs.from_u(left, width), Tibs.from_u(right, width))
+        for width, (left, right) in zip(
+            small_and_widths, small_and_values, strict=True
+        )
+    ]
     chunk_target_bits = bitarray("11111", endian="big")
     chunk_target_tibs = Tibs("0b11111")
 
@@ -289,6 +316,20 @@ def build_bitarray_cases(byte_count, value_count):
             combined = search_tibs | other_tibs
             result = combined[10:end] & other_tibs[9: end - 1]
         return result
+
+    def ba_small_ands():
+        return [left & right for left, right in small_and_bits]
+
+    def tibs_small_ands():
+        return [left & right for left, right in small_and_tibs]
+
+    def same_small_bits(bitarray_results, tibs_results):
+        return len(bitarray_results) == len(tibs_results) and all(
+            same_bits(bitarray_result, tibs_result)
+            for bitarray_result, tibs_result in zip(
+                bitarray_results, tibs_results, strict=True
+            )
+        )
 
     # Start from a fresh mutable copy on each call, so repeated samples do the
     # same work instead of repeatedly ANDing an already-filtered result.
@@ -436,6 +477,12 @@ def build_bitarray_cases(byte_count, value_count):
 
     def tibs_concat():
         return search_tibs + other_tibs
+
+    def ba_repeat_pattern():
+        return repeat_pattern_bits * repeat_count
+
+    def tibs_repeat_pattern():
+        return repeat_pattern_tibs * repeat_count
 
     def ba_invert():
         return ~search_bits
@@ -622,6 +669,12 @@ def build_bitarray_cases(byte_count, value_count):
         ),
         ComparisonCase("bit ops sliced", ba_bitops, tibs_bitops, same_bits),
         ComparisonCase(
+            "1-64-bit and",
+            ba_small_ands,
+            tibs_small_ands,
+            same_small_bits,
+        ),
+        ComparisonCase(
             "copy + in-place and", ba_inplace_and, tibs_inplace_and, same_bits
         ),
         ComparisonCase("masked bit deposit", ba_deposit, tibs_deposit, same_bits),
@@ -651,6 +704,12 @@ def build_bitarray_cases(byte_count, value_count):
         ComparisonCase("to bytes", ba_to_bytes, tibs_to_bytes),
         ComparisonCase("unaligned slices x100", ba_slice, tibs_slice, same_bits),
         ComparisonCase("concatenate", ba_concat, tibs_concat, same_bits),
+        ComparisonCase(
+            "repeat 10-bit pattern",
+            ba_repeat_pattern,
+            tibs_repeat_pattern,
+            same_bits,
+        ),
         ComparisonCase("invert", ba_invert, tibs_invert, same_bits),
         ComparisonCase("reverse in place", ba_reverse, tibs_reverse, same_bits),
         ComparisonCase("shift left", ba_shift_left, tibs_shift_left, same_bits),
@@ -738,7 +797,22 @@ def build_stdlib_cases(byte_count, value_count):
     tibs_hex_pieces = ",".join(f"0x{piece.hex()}" for piece in byte_pieces)
 
     u64_value = 0x123456789ABCDEF0
+    u64_other_value = 0xFEDCBA9876543210
     u64_bytes = u64_value.to_bytes(8, "big")
+    small_and_widths = (1, 7, 13, 31, 47, 63, 64)
+    small_and_values = [
+        (
+            u64_value & ((1 << width) - 1),
+            u64_other_value & ((1 << width) - 1),
+        )
+        for width in small_and_widths
+    ]
+    small_and_tibs = [
+        (Tibs.from_u(left, width), Tibs.from_u(right, width))
+        for width, (left, right) in zip(
+            small_and_widths, small_and_values, strict=True
+        )
+    ]
 
     replace_old = search_bytes[byte_count // 2: byte_count // 2 + 1]
     replace_new = bytes([replace_old[0] ^ 0xFF])
@@ -851,6 +925,15 @@ def build_stdlib_cases(byte_count, value_count):
     def tibs_and():
         return search_tibs & other_tibs
 
+    def int_small_ands():
+        return [left & right for left, right in small_and_values]
+
+    def tibs_small_ands():
+        return [left & right for left, right in small_and_tibs]
+
+    def same_small_values(int_results, tibs_results):
+        return int_results == [result.to_u() for result in tibs_results]
+
     def int_unaligned_and():
         return unaligned_search_int & unaligned_other_int
 
@@ -892,6 +975,12 @@ def build_stdlib_cases(byte_count, value_count):
 
     def tibs_bytes_to_u64():
         return Tibs.from_bytes(u64_bytes).to_u()
+
+    def bytes_pickle_round_trip():
+        return pickle.loads(pickle.dumps(search_bytes, protocol=5))
+
+    def tibs_pickle_round_trip():
+        return pickle.loads(pickle.dumps(search_tibs, protocol=5))
 
     def bytes_join_pieces():
         return b"".join(byte_pieces)
@@ -975,6 +1064,12 @@ def build_stdlib_cases(byte_count, value_count):
         ComparisonCase("int: popcount", int_popcount, tibs_popcount),
         ComparisonCase("int: bitwise and", int_and, tibs_and, same_value),
         ComparisonCase(
+            "int: 1-64-bit and",
+            int_small_ands,
+            tibs_small_ands,
+            same_small_values,
+        ),
+        ComparisonCase(
             "int: unaligned and", int_unaligned_and, tibs_unaligned_and, same_value
         ),
         ComparisonCase("int: shift left", int_shift_left, tibs_shift_left, same_value),
@@ -984,6 +1079,12 @@ def build_stdlib_cases(byte_count, value_count):
         ),
         ComparisonCase("int: u64 to bytes", int_u64_to_bytes, tibs_u64_to_bytes),
         ComparisonCase("int: 8 bytes to u64", int_bytes_to_u64, tibs_bytes_to_u64),
+        ComparisonCase(
+            "pickle: round trip",
+            bytes_pickle_round_trip,
+            tibs_pickle_round_trip,
+            same_bytes,
+        ),
         ComparisonCase(
             "bytes: join 5-byte pieces", bytes_join_pieces, tibs_join_byte_pieces
         ),
