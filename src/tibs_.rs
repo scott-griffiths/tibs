@@ -41,6 +41,169 @@ pub(crate) fn prepare_mask(mask: Option<Tibs>, needle_len: usize) -> PyResult<Op
     Ok(if mask.all() { None } else { Some(mask) })
 }
 
+pub(crate) struct SearchParams {
+    pub(crate) start: Option<isize>,
+    pub(crate) end: Option<isize>,
+    pub(crate) byte_aligned: bool,
+    pub(crate) mask: Option<Tibs>,
+}
+
+pub(crate) fn find_in_bits(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &Tibs,
+    params: SearchParams,
+    reverse: bool,
+) -> PyResult<Option<usize>> {
+    if needle.is_empty() {
+        return Err(PyValueError::new_err("No bits were provided to find."));
+    }
+    let mask = prepare_mask(params.mask, needle.len())?;
+    let (start, end) = validate_slice(haystack.len(), params.start, params.end)?;
+    let alignment_mod8 = if params.byte_aligned { Some(0) } else { None };
+
+    match (&mask, reverse) {
+        (Some(mask), _) => helpers::find_bitvec_masked_aligned(
+            py,
+            haystack,
+            needle.as_bitslice(),
+            mask.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+            reverse,
+        ),
+        (None, false) => find_bitvec_aligned(
+            py,
+            haystack,
+            needle.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+        ),
+        (None, true) => rfind_bitvec_aligned(
+            py,
+            haystack,
+            needle.as_bitslice(),
+            start,
+            end,
+            alignment_mod8,
+        ),
+    }
+}
+
+pub(crate) fn find_all_in_bits(
+    py: Python<'_>,
+    haystack: &BS,
+    needle: &Tibs,
+    params: SearchParams,
+) -> PyResult<Vec<u64>> {
+    if needle.is_empty() {
+        return Err(PyValueError::new_err("No bits were provided to find."));
+    }
+    let mask = prepare_mask(params.mask, needle.len())?;
+    let (start, end) = validate_slice(haystack.len(), params.start, params.end)?;
+
+    match mask {
+        Some(mask) => helpers::collect_find_all_positions_masked(
+            py,
+            haystack,
+            needle.as_bitslice(),
+            mask.as_bitslice(),
+            start,
+            end,
+            params.byte_aligned,
+        ),
+        None => helpers::collect_find_all_positions(
+            py,
+            haystack,
+            needle.as_bitslice(),
+            start,
+            end,
+            params.byte_aligned,
+        ),
+    }
+}
+
+pub(crate) fn count_in_bits(
+    py: Python<'_>,
+    haystack: &BS,
+    value: Option<&Bound<'_, PyAny>>,
+    params: SearchParams,
+) -> PyResult<usize> {
+    let (start, end) = validate_slice(haystack.len(), params.start, params.end)?;
+
+    let Some(value) = value else {
+        return match prepare_mask(params.mask, 1)? {
+            Some(_) => Ok(helpers::count_candidate_positions(
+                start,
+                end,
+                params.byte_aligned,
+            )),
+            None => Ok(helpers::count_single_bit(
+                haystack,
+                true,
+                start,
+                end,
+                params.byte_aligned,
+            )),
+        };
+    };
+
+    if let Some(bit) = helpers::convert_to_bool(value) {
+        return match prepare_mask(params.mask, 1)? {
+            Some(_) => Ok(helpers::count_candidate_positions(
+                start,
+                end,
+                params.byte_aligned,
+            )),
+            None => Ok(helpers::count_single_bit(
+                haystack,
+                bit,
+                start,
+                end,
+                params.byte_aligned,
+            )),
+        };
+    }
+
+    match Tibs::extract(value.as_borrowed()) {
+        Ok(value) => {
+            let mask = prepare_mask(params.mask, value.len())?;
+            match mask {
+                Some(mask) => helpers::count_bitvec_masked(
+                    py,
+                    haystack,
+                    value.as_bitslice(),
+                    mask.as_bitslice(),
+                    start,
+                    end,
+                    params.byte_aligned,
+                ),
+                None => helpers::count_bitvec(
+                    py,
+                    haystack,
+                    value.as_bitslice(),
+                    start,
+                    end,
+                    params.byte_aligned,
+                ),
+            }
+        }
+        Err(error) => {
+            if error.is_instance_of::<PyTypeError>(py)
+                && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
+            {
+                Err(error)
+            } else {
+                Err(PyValueError::new_err(
+                    "Cannot convert value to 0, 1 or a Tibs",
+                ))
+            }
+        }
+    }
+}
+
 impl Hash for Tibs {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
@@ -241,8 +404,7 @@ impl Tibs {
         if self.shares_view_with(other) {
             return Ok(match op {
                 LogicalOp::And | LogicalOp::Or => self.clone(),
-                LogicalOp::Xor => Self::from_bv(bv_from_zeros(self.len())),
-                LogicalOp::AndNot => unreachable!("and-not is not a Python operator"),
+                LogicalOp::Xor | LogicalOp::AndNot => Self::from_bv(bv_from_zeros(self.len())),
             });
         }
         validate_logical_op_lengths(self.len(), other.len())?;
@@ -284,11 +446,6 @@ impl Tibs {
     }
 
     #[inline]
-    pub(crate) fn to_bitslice(&self) -> &BS {
-        self.as_bitslice()
-    }
-
-    #[inline]
     pub(crate) fn raw_data_ref(&self) -> (&[u8], usize, usize) {
         match &self.data {
             TibsData::Shared(data) => {
@@ -313,54 +470,6 @@ impl Tibs {
                 )
             }
         }
-    }
-
-    pub(crate) fn find_impl(
-        &self,
-        py: Python<'_>,
-        needle: Tibs,
-        start: Option<isize>,
-        end: Option<isize>,
-        byte_aligned: bool,
-        mask: Option<Tibs>,
-        reverse: bool,
-    ) -> PyResult<Option<usize>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let mask = prepare_mask(mask, needle.len())?;
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-
-        let found = match (&mask, reverse) {
-            (Some(mask), _) => helpers::find_bitvec_masked_aligned(
-                py,
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                mask.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-                reverse,
-            )?,
-            (None, false) => find_bitvec_aligned(
-                py,
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-            )?,
-            (None, true) => rfind_bitvec_aligned(
-                py,
-                self.to_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-            )?,
-        };
-        Ok(found)
     }
 
     fn copy_with_mutation(&self, f: impl FnOnce(&mut Mutibs) -> PyResult<()>) -> PyResult<Self> {
@@ -430,18 +539,15 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
 fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
     match dtype.kind {
         DtypeKind::Float => {
-            let is_little_endian =
-                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            let is_little_endian = dtype.byte_order == ByteOrder::Little;
             bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)
         }
         DtypeKind::Uint => {
-            let is_little_endian =
-                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            let is_little_endian = dtype.byte_order == ByteOrder::Little;
             bv_from_uint(value, dtype.length, is_little_endian)
         }
         DtypeKind::Int => {
-            let is_little_endian =
-                ByteOrder::is_little_endian(Some(dtype.byte_order), dtype.length)?;
+            let is_little_endian = dtype.byte_order == ByteOrder::Little;
             bv_from_int(value, dtype.length, is_little_endian)
         }
         DtypeKind::Bool => match helpers::convert_to_bool(value) {
@@ -586,16 +692,17 @@ impl BytewisePacker {
     /// Decide whether `dtype` qualifies, without touching the values. This has
     /// to be settled up front, because returning `None` after consuming part
     /// of a one-shot iterable would lose those items.
-    fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> PyResult<Option<Self>> {
-        if length == 0 || !length.is_multiple_of(8) {
-            return Ok(None);
+    fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> Option<Self> {
+        debug_assert!(length > 0);
+        if !length.is_multiple_of(8) {
+            return None;
         }
         let byte_length = length / 8;
         if !matches!(kind, DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float) {
-            return Ok(None);
+            return None;
         }
-        let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), length)?;
-        Ok(Some(match kind {
+        let is_little_endian = byte_order == ByteOrder::Little;
+        Some(match kind {
             DtypeKind::Float => BytewisePacker::Float {
                 byte_length,
                 is_little_endian,
@@ -605,10 +712,10 @@ impl BytewisePacker {
                 is_little_endian,
                 signed: kind == DtypeKind::Int,
             },
-        }))
+        })
     }
 
-    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
+    fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
         Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
@@ -640,7 +747,13 @@ impl BytewisePacker {
                 byte_length,
                 is_little_endian,
             } => {
-                helpers::push_f64_bytes(out, value.extract::<f64>()?, byte_length, is_little_endian)
+                helpers::push_f64_bytes(
+                    out,
+                    value.extract::<f64>()?,
+                    byte_length,
+                    is_little_endian,
+                );
+                Ok(())
             }
         }
     }
@@ -650,35 +763,35 @@ impl BytewisePacker {
 /// first field that isn't a whole-byte-length numeric/float dtype (e.g. a
 /// sub-byte int, `bool`, or a `bits`/`bytes`/`hex`/`oct`/`bin` field). Settled
 /// up front, once per call, the same as [`BytewisePacker::for_dtype`].
-fn classify_tuple_packers(fields: &[RecordField]) -> PyResult<Option<Vec<BytewisePacker>>> {
+fn classify_tuple_packers(fields: &[RecordField]) -> Option<Vec<BytewisePacker>> {
     let mut packers = Vec::with_capacity(fields.len());
     for field in fields {
-        match BytewisePacker::for_parts(field.kind, field.length, field.byte_order)? {
+        match BytewisePacker::for_parts(field.kind, field.length, field.byte_order) {
             Some(packer) => packers.push(packer),
-            None => return Ok(None),
+            None => return None,
         }
     }
-    Ok(Some(packers))
+    Some(packers)
 }
 
 /// Pack one record's fields, in order, straight into `bytes` — no `BV`
 /// allocated per field, unlike the generic `append_dtype_value`/
 /// `append_dtype_items` path this replaces for [`RecordLayout::Tuple`].
-fn push_tuple_record_fields(
+fn push_record_fields(
     py: Python<'_>,
-    packers: &[BytewisePacker],
+    packers: impl ExactSizeIterator<Item = BytewisePacker>,
     record: &Bound<'_, PyAny>,
     path: &str,
     bytes: &mut Vec<u8>,
 ) -> PyResult<()> {
+    let expected = packers.len();
     let mut items = record
         .try_iter()
         .map_err(|error| add_value_path(py, error, path))?;
-    for (field_index, packer) in packers.iter().enumerate() {
+    for (field_index, packer) in packers.enumerate() {
         let item = items.next().ok_or_else(|| {
             PyValueError::new_err(format!(
-                "At value{path}: expected {} items, but received {field_index}.",
-                packers.len()
+                "At value{path}: expected {expected} items, but received {field_index}."
             ))
         })??;
         packer
@@ -688,41 +801,7 @@ fn push_tuple_record_fields(
     if let Some(item) = items.next() {
         item?;
         return Err(PyValueError::new_err(format!(
-            "At value{path}: expected exactly {} items.",
-            packers.len()
-        )));
-    }
-    Ok(())
-}
-
-/// The [`RecordLayout::Array`] counterpart of [`push_tuple_record_fields`]:
-/// the same `packer` applies to every one of `count` elements, rather than a
-/// distinct packer per field.
-fn push_array_record_fields(
-    py: Python<'_>,
-    packer: BytewisePacker,
-    count: usize,
-    record: &Bound<'_, PyAny>,
-    path: &str,
-    bytes: &mut Vec<u8>,
-) -> PyResult<()> {
-    let mut items = record
-        .try_iter()
-        .map_err(|error| add_value_path(py, error, path))?;
-    for element_index in 0..count {
-        let item = items.next().ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "At value{path}: expected {count} items, but received {element_index}."
-            ))
-        })??;
-        packer
-            .push(bytes, &item)
-            .map_err(|error| add_value_path(py, error, &format!("{path}[{element_index}]")))?;
-    }
-    if let Some(item) = items.next() {
-        item?;
-        return Err(PyValueError::new_err(format!(
-            "At value{path}: expected exactly {count} items."
+            "At value{path}: expected exactly {expected} items."
         )));
     }
     Ok(())
@@ -736,22 +815,28 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
     let py = value.py();
     match layout {
         RecordLayout::Tuple(fields) => {
-            let Some(packers) = classify_tuple_packers(fields)? else {
+            let Some(packers) = classify_tuple_packers(fields) else {
                 return Ok(None);
             };
             let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
             let mut bytes = Vec::with_capacity(record_byte_length);
-            push_tuple_record_fields(py, &packers, value, "", &mut bytes)?;
+            push_record_fields(py, packers.into_iter(), value, "", &mut bytes)?;
             Ok(Some(BV::from_vec(bytes)))
         }
         RecordLayout::Array { element, count } => {
             let Some(packer) =
-                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)?
+                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)
             else {
                 return Ok(None);
             };
             let mut bytes = Vec::with_capacity(packer.byte_length() * count);
-            push_array_record_fields(py, packer, *count, value, "", &mut bytes)?;
+            push_record_fields(
+                py,
+                std::iter::repeat_n(packer, *count),
+                value,
+                "",
+                &mut bytes,
+            )?;
             Ok(Some(BV::from_vec(bytes)))
         }
     }
@@ -772,7 +857,7 @@ fn bv_from_values_iter_record(
 ) -> PyResult<Option<BV>> {
     match layout {
         RecordLayout::Tuple(fields) => {
-            let Some(packers) = classify_tuple_packers(fields)? else {
+            let Some(packers) = classify_tuple_packers(fields) else {
                 return Ok(None);
             };
             let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
@@ -787,7 +872,7 @@ fn bv_from_values_iter_record(
             // borrowed reference to the record itself mid-visit.
             for_each_value(py, iterable, ptr::null_mut(), |record| {
                 let path = format!("[{record_index}]");
-                push_tuple_record_fields(py, &packers, record, &path, &mut bytes)?;
+                push_record_fields(py, packers.iter().copied(), record, &path, &mut bytes)?;
                 record_index += 1;
                 Ok(())
             })?;
@@ -795,7 +880,7 @@ fn bv_from_values_iter_record(
         }
         RecordLayout::Array { element, count } => {
             let Some(packer) =
-                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)?
+                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)
             else {
                 return Ok(None);
             };
@@ -805,7 +890,13 @@ fn bv_from_values_iter_record(
             let mut record_index = 0usize;
             for_each_value(py, iterable, ptr::null_mut(), |record| {
                 let path = format!("[{record_index}]");
-                push_array_record_fields(py, packer, *count, record, &path, &mut bytes)?;
+                push_record_fields(
+                    py,
+                    std::iter::repeat_n(packer, *count),
+                    record,
+                    &path,
+                    &mut bytes,
+                )?;
                 record_index += 1;
                 Ok(())
             })?;
@@ -836,7 +927,8 @@ impl BitwisePacker {
         if dtype.kind == DtypeKind::Bool {
             return Some(BitwisePacker::Bool);
         }
-        if dtype.length == 0 || dtype.length.is_multiple_of(8) {
+        debug_assert!(dtype.length > 0);
+        if dtype.length.is_multiple_of(8) {
             return None;
         }
         match dtype.kind {
@@ -984,7 +1076,7 @@ pub(crate) fn bv_from_values_iter(
     // converted once at the end. The general path below allocates a `BitVec`
     // per value and appends it a bit at a time, which costs far more than the
     // conversion itself for a long sequence.
-    if let Some(packer) = BytewisePacker::for_dtype(single)? {
+    if let Some(packer) = BytewisePacker::for_dtype(single) {
         let byte_length = packer.byte_length();
         let capacity = hint.and_then(|len| len.checked_mul(byte_length));
         let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
@@ -1049,31 +1141,30 @@ impl BytewiseUnpacker {
         dtype_kind: DtypeKind,
         dtype_length: usize,
         byte_order: ByteOrder,
-    ) -> PyResult<Option<Self>> {
-        if dtype_length == 0
-            || dtype_length > helpers::FAST_INT_BITS
-            || !dtype_length.is_multiple_of(8)
-        {
-            return Ok(None);
+    ) -> Option<Self> {
+        debug_assert!(dtype_length > 0);
+        if dtype_length > helpers::FAST_INT_BITS || !dtype_length.is_multiple_of(8) {
+            return None;
         }
         let byte_length = dtype_length / 8;
         let reading = match dtype_kind {
             DtypeKind::Uint => NumericReading::Uint,
             DtypeKind::Int => NumericReading::Int,
-            // Only the three float widths there are. Any other length drops
-            // through to the general path, which raises for it.
-            DtypeKind::Float if matches!(byte_length, 2 | 4 | 8) => NumericReading::Float,
-            _ => return Ok(None),
+            DtypeKind::Float => {
+                debug_assert!(matches!(byte_length, 2 | 4 | 8));
+                NumericReading::Float
+            }
+            _ => return None,
         };
-        let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
-        Ok(Some(Self {
+        let is_little_endian = byte_order == ByteOrder::Little;
+        Some(Self {
             reading,
             byte_length,
             is_little_endian,
-        }))
+        })
     }
 
-    fn for_dtype(dtype: &SingleDtype) -> PyResult<Option<Self>> {
+    fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
         Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
     }
 
@@ -1179,17 +1270,9 @@ struct SubByteUnpacker {
 }
 
 impl SubByteUnpacker {
-    fn for_parts(
-        dtype_kind: DtypeKind,
-        dtype_length: usize,
-        byte_order: ByteOrder,
-    ) -> Option<Self> {
-        if dtype_length == 0 || dtype_length >= 8 {
-            return None;
-        }
-        // A byte order has no meaning inside a single byte, and asking for one
-        // is an error the general path already reports.
-        if byte_order != ByteOrder::Unspecified {
+    fn for_parts(dtype_kind: DtypeKind, dtype_length: usize) -> Option<Self> {
+        debug_assert!(dtype_length > 0);
+        if dtype_length >= 8 {
             return None;
         }
         let signed = match dtype_kind {
@@ -1204,7 +1287,7 @@ impl SubByteUnpacker {
     }
 
     fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
-        Self::for_parts(dtype.kind, dtype.length, dtype.byte_order)
+        Self::for_parts(dtype.kind, dtype.length)
     }
 
     /// The value at `index` as a Python object.
@@ -1250,26 +1333,23 @@ pub(crate) fn py_from_value_parts(
         )));
     }
 
-    if let Some(unpacker) = BytewiseUnpacker::for_parts(dtype_kind, dtype_length, byte_order)? {
+    if let Some(unpacker) = BytewiseUnpacker::for_parts(dtype_kind, dtype_length, byte_order) {
         let (bytes, shift, _) = value.raw_data_ref();
         return Ok(unpacker.value(py, bytes, shift as u32, 0)?.unbind());
     }
-    if let Some(unpacker) = SubByteUnpacker::for_parts(dtype_kind, dtype_length, byte_order) {
+    if let Some(unpacker) = SubByteUnpacker::for_parts(dtype_kind, dtype_length) {
         let (bytes, shift, _) = value.raw_data_ref();
         return Ok(unpacker.value(py, bytes, shift, 0)?.unbind());
     }
 
     match dtype_kind {
-        DtypeKind::Float => {
-            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
-            BitCollection::to_f64(value, is_little_endian)?.into_py_any(py)
-        }
+        DtypeKind::Float => unreachable!("validated float dtypes unpack bytewise"),
         DtypeKind::Uint => {
-            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
+            let is_little_endian = byte_order == ByteOrder::Little;
             Ok(BitCollection::to_uint(value, py, is_little_endian)?.unbind())
         }
         DtypeKind::Int => {
-            let is_little_endian = ByteOrder::is_little_endian(Some(byte_order), dtype_length)?;
+            let is_little_endian = byte_order == ByteOrder::Little;
             Ok(BitCollection::to_int(value, py, is_little_endian)?.unbind())
         }
         DtypeKind::Bool => value.as_bitslice()[0].into_py_any(py),
@@ -1359,7 +1439,7 @@ fn py_values_from_range_record(
             let mut unpackers = Vec::with_capacity(fields.len());
             for field in fields {
                 let Some(unpacker) =
-                    BytewiseUnpacker::for_parts(field.kind, field.length, field.byte_order)?
+                    BytewiseUnpacker::for_parts(field.kind, field.length, field.byte_order)
                 else {
                     return Ok(None);
                 };
@@ -1394,7 +1474,7 @@ fn py_values_from_range_record(
             count: element_count,
         } => {
             let Some(unpacker) =
-                BytewiseUnpacker::for_parts(element.kind, element.length, element.byte_order)?
+                BytewiseUnpacker::for_parts(element.kind, element.length, element.byte_order)
             else {
                 return Ok(None);
             };
@@ -1454,12 +1534,7 @@ pub(crate) fn py_values_from_range(
     // A dtype that reads out of whole bytes takes them from the backing store
     // directly, with the byte order and the sign settled once for the whole
     // sequence. See `BytewiseUnpacker`.
-    if let Some(unpacker) = dtype
-        .single()
-        .map(BytewiseUnpacker::for_dtype)
-        .transpose()?
-        .flatten()
-    {
+    if let Some(unpacker) = dtype.single().and_then(BytewiseUnpacker::for_dtype) {
         let window = bits.get_slice_unchecked(start, selected_len);
         let (bytes, shift, _) = window.raw_data_ref();
         let shift = shift as u32;
@@ -1773,12 +1848,8 @@ impl Tibs {
     /// Equivalent to ``view(bit_order=BitOrder.Msb0)``.
     ///
     #[getter]
-    pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<View> {
-        Ok(View::from_tibs(
-            slf.clone(),
-            ByteOrder::Unspecified,
-            BitOrder::Msb0,
-        ))
+    pub fn msb0(slf: PyRef<'_, Self>) -> View {
+        View::from_tibs(slf.clone(), ByteOrder::Unspecified, BitOrder::Msb0)
     }
 
     /// Extract a field using inclusive MSB0 bit labels.
@@ -1963,17 +2034,17 @@ impl Tibs {
     /// >>> Tibs('0b1110') == Tibs('0xe')
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
         // Python exception when the other side is the class not tried first.
         if let Ok(other) = other.cast::<Tibs>() {
-            return Ok(self.bits_equal(other.get()));
+            return self.bits_equal(other.get());
         }
         if let Ok(other) = other.cast::<Mutibs>() {
             let other = other.borrow();
-            return Ok(self.bits_equal(&*other));
+            return self.bits_equal(&*other);
         }
-        Ok(false)
+        false
     }
 
     /// Return a hash of the logical bit sequence.
@@ -2008,7 +2079,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(
-        slf: PyRef<'_, Self>,
+        &self,
         py: Python<'_>,
         needle: Tibs,
         start: Option<isize>,
@@ -2016,33 +2087,17 @@ impl Tibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Vec<u64>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let mask = prepare_mask(mask, needle.len())?;
-
-        let haystack_len = slf.len();
-        let (start, end) = validate_slice(haystack_len, start, end)?;
-
-        match mask {
-            Some(mask) => helpers::collect_find_all_positions_masked(
-                py,
-                slf.as_bitslice(),
-                needle.as_bitslice(),
-                mask.as_bitslice(),
+        find_all_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
                 start,
                 end,
                 byte_aligned,
-            ),
-            None => helpers::collect_find_all_positions(
-                py,
-                slf.as_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            ),
-        }
+                mask,
+            },
+        )
     }
 
     /// Find all occurrences of a bit sequence, returning an iterator of bit positions.
@@ -2801,7 +2856,18 @@ impl Tibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, mask, false)
+        find_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+            false,
+        )
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -2867,7 +2933,18 @@ impl Tibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, mask, true)
+        find_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+            true,
+        )
     }
 
     /// Return whether the current Tibs starts with prefix.
@@ -2882,8 +2959,8 @@ impl Tibs {
     ///     >>> Tibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: Tibs) -> PyResult<bool> {
-        Ok(<Tibs as BitCollection>::starts_with(self, prefix))
+    pub fn starts_with(&self, prefix: Tibs) -> bool {
+        <Tibs as BitCollection>::starts_with(self, prefix)
     }
 
     /// Return whether the current Tibs ends with suffix.
@@ -2898,8 +2975,8 @@ impl Tibs {
     ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: Tibs) -> PyResult<bool> {
-        Ok(<Tibs as BitCollection>::ends_with(self, suffix))
+    pub fn ends_with(&self, suffix: Tibs) -> bool {
+        <Tibs as BitCollection>::ends_with(self, suffix)
     }
 
     /// Counts the total number of occurrences of a bit pattern.
@@ -2935,72 +3012,17 @@ impl Tibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<usize> {
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        let haystack = self.as_bitslice();
-
-        let Some(value) = value else {
-            // No value given, so count the set bits.
-            return match prepare_mask(mask, 1)? {
-                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(
-                    haystack,
-                    true,
-                    start,
-                    end,
-                    byte_aligned,
-                )),
-            };
-        };
-
-        if let Some(b) = helpers::convert_to_bool(value) {
-            return match prepare_mask(mask, 1)? {
-                // The only unset single-bit mask matches every bit.
-                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(
-                    haystack,
-                    b,
-                    start,
-                    end,
-                    byte_aligned,
-                )),
-            };
-        }
-
-        match Tibs::extract(value.as_borrowed()) {
-            Ok(v) => {
-                let mask = prepare_mask(mask, v.len())?;
-                match mask {
-                    Some(mask) => helpers::count_bitvec_masked(
-                        py,
-                        haystack,
-                        v.as_bitslice(),
-                        mask.as_bitslice(),
-                        start,
-                        end,
-                        byte_aligned,
-                    ),
-                    None => helpers::count_bitvec(
-                        py,
-                        haystack,
-                        v.as_bitslice(),
-                        start,
-                        end,
-                        byte_aligned,
-                    ),
-                }
-            }
-            Err(err) => {
-                if err.is_instance_of::<PyTypeError>(py)
-                    && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
-                {
-                    Err(err)
-                } else {
-                    Err(PyValueError::new_err(
-                        "Cannot convert value to 0, 1 or a Tibs",
-                    ))
-                }
-            }
-        }
+        count_in_bits(
+            py,
+            self.as_bitslice(),
+            value,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+        )
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.
@@ -3107,7 +3129,10 @@ impl Tibs {
     #[pyo3(signature = (pos, bs, /), text_signature = "($self, pos, bs, /)")]
     pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
-        self.copy_with_mutation(|out| out.apply_insert_bits(pos, &bs))
+        self.copy_with_mutation(|out| {
+            out.apply_insert_bits(pos, &bs);
+            Ok(())
+        })
     }
 
     /// Search and replace and return a new Tibs.
@@ -3678,8 +3703,8 @@ impl Tibs {
     ///     >>> ~Tibs('0b10110')
     ///     Tibs('0b01001')
     ///
-    pub fn __invert__(&self) -> PyResult<Self> {
-        Ok(self.inverted_copy())
+    pub fn __invert__(&self) -> Self {
+        self.inverted_copy()
     }
 
     /// Return the Tibs as a bytes object.

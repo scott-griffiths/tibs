@@ -247,7 +247,7 @@ impl View {
         }
 
         Ok(Tibs::from_bv(view_bits_from_physical_bits(
-            self.source.to_bitslice(),
+            self.source.as_bitslice(),
             self.byte_order,
             self.bit_order,
         )?))
@@ -870,22 +870,22 @@ impl MutableView {
     }
 
     /// Return True if two MutableViews have the same source value and layout.
-    pub fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> bool {
         let Ok(other) = other.extract::<PyRef<'_, MutableView>>() else {
-            return Ok(false);
+            return false;
         };
 
         if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
-            return Ok(false);
+            return false;
         }
 
         let source = self.source.borrow(py);
         let other_source = other.source.borrow(py);
-        Ok(source.as_bitvec_ref() == other_source.as_bitvec_ref()
+        source.as_bitvec_ref() == other_source.as_bitvec_ref()
             && self.selection.comparable_source_indices(source.len())
                 == other
                     .selection
-                    .comparable_source_indices(other_source.len()))
+                    .comparable_source_indices(other_source.len())
     }
 }
 
@@ -967,7 +967,7 @@ impl View {
 
         if let Ok(tibs) = source.extract::<PyRef<'_, Tibs>>() {
             let indices = extract_source_indices(indices)?;
-            return View::from_indices_bits(tibs.to_bitslice(), indices, byte_order, bit_order);
+            return View::from_indices_bits(tibs.as_bitslice(), indices, byte_order, bit_order);
         }
 
         if let Ok(mutibs) = source.extract::<PyRef<'_, Mutibs>>() {
@@ -1264,7 +1264,7 @@ impl View {
             ByteOrder::Unspecified
         };
 
-        let source = self.source.to_bitslice();
+        let source = self.source.as_bitslice();
         let mut field = BV::with_capacity(field_len);
         for index in field_source_indices(self.bit_order, byte_order, low, field_len) {
             field.push(source[index]);
@@ -1310,13 +1310,13 @@ impl View {
     }
 
     /// Return True if two Views have the same source value and layout.
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         let Ok(other) = other.extract::<PyRef<'_, View>>() else {
-            return Ok(false);
+            return false;
         };
 
-        Ok(self.source == other.source
+        self.source == other.source
             && self.byte_order == other.byte_order
-            && self.bit_order == other.bit_order)
+            && self.bit_order == other.bit_order
     }
 }

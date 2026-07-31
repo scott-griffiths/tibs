@@ -8,12 +8,13 @@ use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
     bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
-    find_bitvec_aligned, head_bit_offset, logical_op_assign_bytes, move_bits,
-    padded_bytes_from_offset, promote_to_bv, rotate_bits_left, str_to_bv, validate_index,
-    validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
+    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
+    validate_shift, validate_slice,
 };
 use crate::tibs_::{
-    Tibs, bv_from_value, bv_from_values_iter, prepare_mask, py_from_value, py_values_from_range,
+    SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
+    find_in_bits, prepare_mask, py_from_value, py_values_from_range,
 };
 use crate::view::{MutableView, View};
 
@@ -190,7 +191,7 @@ impl Mutibs {
         for item in iter {
             Self::push_joined_part(&mut parts, &mut total_len, item?)?;
         }
-        Self::join_parts(parts, total_len)
+        Ok(Self::join_parts(parts, total_len))
     }
 
     fn joined_bv_from_repeated_list(list: &Bound<'_, PyList>) -> Option<BV> {
@@ -236,7 +237,7 @@ impl Mutibs {
         Ok(())
     }
 
-    fn join_parts(parts: Vec<JoinedPart<'_>>, total_len: usize) -> PyResult<BV> {
+    fn join_parts(parts: Vec<JoinedPart<'_>>, total_len: usize) -> BV {
         // Copy into storage sized once, over bytes. `copy_from_bitslice` moves
         // a bit at a time even when both sides are byte aligned.
         let mut out = BitConcat::with_bit_capacity(total_len);
@@ -251,7 +252,7 @@ impl Mutibs {
                 ),
             }
         }
-        Ok(out.into_bitvec())
+        out.into_bitvec()
     }
 
     #[inline]
@@ -855,9 +856,9 @@ impl Mutibs {
         Ok(())
     }
 
-    pub(crate) fn apply_insert_bits(&mut self, mut pos: isize, bs: &Tibs) -> PyResult<()> {
+    pub(crate) fn apply_insert_bits(&mut self, mut pos: isize, bs: &Tibs) {
         if bs.is_empty() {
-            return Ok(());
+            return;
         }
         if pos < 0 {
             pos += self.len() as isize;
@@ -870,55 +871,6 @@ impl Mutibs {
         let insert_pos = pos as usize;
         let (bytes, offset, _) = bs.raw_data_ref();
         self.splice_raw(insert_pos, insert_pos, bytes, offset, bs.len());
-        Ok(())
-    }
-
-    pub(crate) fn find_impl(
-        &self,
-        py: Python<'_>,
-        needle: Tibs,
-        start: Option<isize>,
-        end: Option<isize>,
-        byte_aligned: bool,
-        mask: Option<Tibs>,
-        reverse: bool,
-    ) -> PyResult<Option<usize>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let mask = prepare_mask(mask, needle.len())?;
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        let alignment_mod8 = if byte_aligned { Some(0) } else { None };
-
-        let found = match (&mask, reverse) {
-            (Some(mask), _) => helpers::find_bitvec_masked_aligned(
-                py,
-                self.as_bitvec_ref(),
-                needle.as_bitslice(),
-                mask.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-                reverse,
-            )?,
-            (None, false) => find_bitvec_aligned(
-                py,
-                self.as_bitvec_ref(),
-                needle.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-            )?,
-            (None, true) => helpers::rfind_bitvec_aligned(
-                py,
-                self.as_bitvec_ref(),
-                needle.as_bitslice(),
-                start,
-                end,
-                alignment_mod8,
-            )?,
-        };
-        Ok(found)
     }
 
     pub(crate) fn set_from_slice(
@@ -1027,17 +979,17 @@ impl Mutibs {
     /// >>> Mutibs('0xf2') == Tibs('0b11110010')
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
         // Python exception when the other side is the class not tried first.
         if let Ok(other) = other.cast::<Tibs>() {
-            return Ok(self.bits_equal(other.get()));
+            return self.bits_equal(other.get());
         }
         if let Ok(other) = other.cast::<Mutibs>() {
             let other = other.borrow();
-            return Ok(self.bits_equal(&*other));
+            return self.bits_equal(&*other);
         }
-        Ok(false)
+        false
     }
 
     #[classattr]
@@ -1179,12 +1131,8 @@ impl Mutibs {
     /// Equivalent to ``view(bit_order=BitOrder.Msb0)``.
     ///
     #[getter]
-    pub fn msb0(slf: PyRef<'_, Self>) -> PyResult<MutableView> {
-        Ok(MutableView::from_mutibs(
-            slf.into(),
-            ByteOrder::Unspecified,
-            BitOrder::Msb0,
-        ))
+    pub fn msb0(slf: PyRef<'_, Self>) -> MutableView {
+        MutableView::from_mutibs(slf.into(), ByteOrder::Unspecified, BitOrder::Msb0)
     }
 
     /// Extract a mutable field using inclusive MSB0 bit labels.
@@ -2359,8 +2307,8 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').starts_with('0b100')
     ///     False
     ///
-    pub fn starts_with(&self, prefix: Tibs) -> PyResult<bool> {
-        Ok(<Mutibs as BitCollection>::starts_with(self, prefix))
+    pub fn starts_with(&self, prefix: Tibs) -> bool {
+        <Mutibs as BitCollection>::starts_with(self, prefix)
     }
 
     /// Return True if b is a sub-sequence of self.
@@ -2381,8 +2329,8 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
     ///
-    pub fn ends_with(&self, suffix: Tibs) -> PyResult<bool> {
-        Ok(<Mutibs as BitCollection>::ends_with(self, suffix))
+    pub fn ends_with(&self, suffix: Tibs) -> bool {
+        <Mutibs as BitCollection>::ends_with(self, suffix)
     }
 
     /// Find first occurrence of a bit sequence.
@@ -2415,7 +2363,18 @@ impl Mutibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, mask, false)
+        find_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+            false,
+        )
     }
 
     /// Find all occurrences of a bit sequence.
@@ -2446,33 +2405,17 @@ impl Mutibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Vec<u64>> {
-        if needle.is_empty() {
-            return Err(PyValueError::new_err("No bits were provided to find."));
-        }
-        let mask = prepare_mask(mask, needle.len())?;
-
-        let haystack_len = self.len();
-        let (start, end) = validate_slice(haystack_len, start, end)?;
-
-        match mask {
-            Some(mask) => helpers::collect_find_all_positions_masked(
-                py,
-                self.as_bitslice(),
-                needle.as_bitslice(),
-                mask.as_bitslice(),
+        find_all_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
                 start,
                 end,
                 byte_aligned,
-            ),
-            None => helpers::collect_find_all_positions(
-                py,
-                self.as_bitslice(),
-                needle.as_bitslice(),
-                start,
-                end,
-                byte_aligned,
-            ),
-        }
+                mask,
+            },
+        )
     }
 
     /// Return a list of Mutibs by cutting into chunks.
@@ -2766,7 +2709,7 @@ impl Mutibs {
     pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, &other))
+        Ok(self.logical_op(&other, LogicalOp::And))
     }
 
     /// Bit-wise 'or' between two Mutibs. Returns new Mutibs.
@@ -2778,7 +2721,7 @@ impl Mutibs {
     pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, &other))
+        Ok(self.logical_op(&other, LogicalOp::Or))
     }
 
     /// Bit-wise 'xor' between two Mutibs. Returns new Mutibs.
@@ -2790,7 +2733,7 @@ impl Mutibs {
     pub fn __xor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
         validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, &other))
+        Ok(self.logical_op(&other, LogicalOp::Xor))
     }
 
     /// Reverse bit-wise 'and' between two Mutibs. Returns new Mutibs.
@@ -3078,72 +3021,17 @@ impl Mutibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<usize> {
-        let (start, end) = validate_slice(self.len(), start, end)?;
-        let haystack = self.as_bitslice();
-
-        let Some(value) = value else {
-            // No value given, so count the set bits.
-            return match prepare_mask(mask, 1)? {
-                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(
-                    haystack,
-                    true,
-                    start,
-                    end,
-                    byte_aligned,
-                )),
-            };
-        };
-
-        if let Some(b) = helpers::convert_to_bool(value) {
-            return match prepare_mask(mask, 1)? {
-                // The only unset single-bit mask matches every bit.
-                Some(_) => Ok(helpers::count_candidate_positions(start, end, byte_aligned)),
-                None => Ok(helpers::count_single_bit(
-                    haystack,
-                    b,
-                    start,
-                    end,
-                    byte_aligned,
-                )),
-            };
-        }
-
-        match Tibs::extract(value.as_borrowed()) {
-            Ok(v) => {
-                let mask = prepare_mask(mask, v.len())?;
-                match mask {
-                    Some(mask) => helpers::count_bitvec_masked(
-                        py,
-                        haystack,
-                        v.as_bitslice(),
-                        mask.as_bitslice(),
-                        start,
-                        end,
-                        byte_aligned,
-                    ),
-                    None => helpers::count_bitvec(
-                        py,
-                        haystack,
-                        v.as_bitslice(),
-                        start,
-                        end,
-                        byte_aligned,
-                    ),
-                }
-            }
-            Err(err) => {
-                if err.is_instance_of::<PyTypeError>(py)
-                    && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
-                {
-                    Err(err)
-                } else {
-                    Err(PyValueError::new_err(
-                        "Cannot convert value to 0, 1 or a Tibs",
-                    ))
-                }
-            }
-        }
+        count_in_bits(
+            py,
+            self.as_bitslice(),
+            value,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+        )
     }
 
     /// Return True if all bits are equal to 1, otherwise return False.
@@ -3206,7 +3094,18 @@ impl Mutibs {
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Option<usize>> {
-        self.find_impl(py, needle, start, end, byte_aligned, mask, true)
+        find_in_bits(
+            py,
+            self.as_bitslice(),
+            &needle,
+            SearchParams {
+                start,
+                end,
+                byte_aligned,
+                mask,
+            },
+            true,
+        )
     }
 
     /// Invert one or many bits in place.
@@ -3353,8 +3252,8 @@ impl Mutibs {
     ///     >>> ~Mutibs('0b10110')
     ///     Mutibs('0b01001')
     ///
-    pub fn __invert__(&self) -> PyResult<Self> {
-        Ok(BitCollection::invert_copy(self))
+    pub fn __invert__(&self) -> Self {
+        BitCollection::invert_copy(self)
     }
 
     /// Return new Mutibs shifted by n to the left.
@@ -3805,7 +3704,8 @@ impl Mutibs {
         } else {
             Tibs::extract(bs.as_borrowed())?
         };
-        slf.apply_insert_bits(pos, &bs)
+        slf.apply_insert_bits(pos, &bs);
+        Ok(())
     }
 
     /// Insert bits at position pos and return a new Mutibs.
@@ -3825,7 +3725,7 @@ impl Mutibs {
     pub fn inserted(&self, pos: isize, bs: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bs = Tibs::extract(bs.as_borrowed())?;
         let mut out = self.clone();
-        out.apply_insert_bits(pos, &bs)?;
+        out.apply_insert_bits(pos, &bs);
         Ok(out)
     }
 

@@ -114,21 +114,6 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn logical_or(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, LogicalOp::Or)
-    }
-
-    #[inline]
-    fn logical_and(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, LogicalOp::And)
-    }
-
-    #[inline]
-    fn logical_xor(&self, other: &impl BitCollection) -> Self {
-        self.logical_op(other, LogicalOp::Xor)
-    }
-
-    #[inline]
     fn map_slice<R>(
         &self,
         start: Option<isize>,

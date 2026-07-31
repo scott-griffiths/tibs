@@ -498,7 +498,7 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                 } else {
                     (bits.len() - ones_count) as f64 / bits.len() as f64
                 };
-                if bit_length > 24 && (bit_length <= 128 || sparseness < 0.25) {
+                if bit_length <= 128 || sparseness < 0.25 {
                     let rice_bit_length = rice_encoded_bit_length(bits, sparse_bit);
                     if rice_bit_length < best_bit_length {
                         best_codec = Codec::Rice;

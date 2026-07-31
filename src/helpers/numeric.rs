@@ -318,14 +318,14 @@ pub(crate) fn push_int_bits(
     Ok(())
 }
 
-/// Append `value` to `out` as the `byte_length` bytes of a float dtype. The
-/// byte-wise counterpart of [`bv_from_f64`], and it rejects the same lengths.
+/// Append `value` to `out` as the `byte_length` bytes of a validated float
+/// dtype. The byte-wise counterpart of [`bv_from_f64`].
 pub(crate) fn push_f64_bytes(
     out: &mut Vec<u8>,
     value: f64,
     byte_length: usize,
     is_little_endian: bool,
-) -> PyResult<()> {
+) {
     macro_rules! push {
         ($bits:expr) => {{
             let bits = $bits;
@@ -340,9 +340,8 @@ pub(crate) fn push_f64_bytes(
         8 => push!(value.to_bits()),
         4 => push!((value as f32).to_bits()),
         2 => push!(f16::from_f64(value).to_bits()),
-        _ => return Err(unsupported_float_length(byte_length * 8)),
+        _ => unreachable!("validated float dtypes are 2, 4 or 8 bytes"),
     }
-    Ok(())
 }
 
 fn unsupported_float_length(length: usize) -> PyErr {

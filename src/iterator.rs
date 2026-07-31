@@ -286,17 +286,17 @@ impl ChunksIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Tibs>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Tibs> {
         if slf.chunks_generated >= slf.max_chunks {
-            return Ok(None);
+            return None;
         }
 
         if slf.is_reverse {
             if slf.current_pos == 0 {
-                return Ok(None);
+                return None;
             }
         } else if slf.current_pos >= slf.bits_len {
-            return Ok(None);
+            return None;
         }
 
         let take = if slf.is_reverse {
@@ -322,7 +322,7 @@ impl ChunksIterator {
         }
         slf.chunks_generated += 1;
 
-        Ok(Some(chunk_bits))
+        Some(chunk_bits)
     }
 }
 

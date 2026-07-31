@@ -620,11 +620,11 @@ impl Dtype {
         format!("{}('{}')", self.class_name(), self.repr.spec())
     }
 
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         let Ok(other) = other.extract::<PyRef<'_, Dtype>>() else {
-            return Ok(false);
+            return false;
         };
-        Ok(self == &*other)
+        self == &*other
     }
 
     fn __hash__(&self) -> isize {
