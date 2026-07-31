@@ -184,6 +184,38 @@ impl BitConcat {
         self.length += len;
     }
 
+    /// Append `count` copies of the same bit run.
+    ///
+    /// After writing the first copy, repeatedly duplicate the completed
+    /// prefix. This keeps the number of moves logarithmic in `count` while
+    /// moving each result byte only once overall.
+    pub(crate) fn push_repeated_run(
+        &mut self,
+        src: &[u8],
+        offset: usize,
+        len: usize,
+        count: usize,
+    ) {
+        if count == 0 || len == 0 {
+            return;
+        }
+
+        let start = self.length;
+        let total = len * count;
+        self.push_run(src, offset, len);
+        self.bytes.resize((start + total).div_ceil(8), 0);
+
+        let mut completed = len;
+        while completed <= total / 2 {
+            move_bits(&mut self.bytes, start, start + completed, completed);
+            completed *= 2;
+        }
+        if completed < total {
+            move_bits(&mut self.bytes, start, start + completed, total - completed);
+        }
+        self.length = start + total;
+    }
+
     pub(crate) fn into_bitvec(self) -> BV {
         let mut bv = BV::from_vec(self.bytes);
         bv.truncate(self.length);

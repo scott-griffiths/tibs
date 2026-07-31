@@ -745,9 +745,9 @@ pub(crate) trait BitCollection: Sized + Clone {
 
 /// `count` copies of `bits`, laid end to end.
 ///
-/// One byte-wide pass per copy, so the cost is the size of the result.
-/// `BitSlice::repeat` and the doubling this replaces both moved the same bits
-/// a bit at a time.
+/// The first copy comes from the collection; subsequent copies grow by
+/// duplicating the completed prefix, so small patterns do not pay per-copy
+/// dispatch.
 pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> BV {
     let len = bits.len();
     if count == 0 || len == 0 {
@@ -755,9 +755,7 @@ pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> B
     }
     let mut out = BitConcat::with_bit_capacity(len * count);
     let (bytes, offset, _) = bits.raw_data_ref();
-    for _ in 0..count {
-        out.push_run(bytes, offset, len);
-    }
+    out.push_repeated_run(bytes, offset, len, count);
     out.into_bitvec()
 }
 

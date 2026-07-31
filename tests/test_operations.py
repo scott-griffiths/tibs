@@ -686,6 +686,20 @@ class TestMultiplication:
         q *= 0
         assert not q
 
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    @pytest.mark.parametrize("pattern", ["1", "1011001", "1011001011", "1011001011011"])
+    @pytest.mark.parametrize("count", [1, 2, 3, 17, 1000])
+    def test_multiplication_repeats_unaligned_pattern(self, cls, pattern, count):
+        value = cls.from_bin("0" + pattern + "1")[1:-1]
+        assert (value * count).bin == pattern * count
+
+    @pytest.mark.parametrize("pattern", ["1", "1011001", "1011001011", "1011001011011"])
+    @pytest.mark.parametrize("count", [2, 3, 17, 1000])
+    def test_inplace_multiplication_repeats_unaligned_pattern(self, pattern, count):
+        value = Mutibs.from_bin("0" + pattern + "1")[1:-1]
+        value *= count
+        assert value.bin == pattern * count
+
     def test_multiplication_errors(self):
         a = Tibs("0b1")
         b = Tibs("0b0")

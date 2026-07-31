@@ -75,6 +75,9 @@ HALF_T = Tibs.from_random(HALF, seed=b"tibs-guards-half")
 # length is a whole number of bytes; this one deliberately is not.
 HALF_T_UNALIGNED = Tibs.from_random(HALF + 3, seed=b"tibs-guards-odd")
 
+REPEAT_SMALL_PATTERN = Tibs("0b1011001011")
+REPEAT_LARGE_PATTERN = REPEAT_SMALL_PATTERN * 100
+
 ALL_ONES = Tibs.from_ones(BITS)
 ALL_ZEROS = Tibs.from_zeros(BITS)
 
@@ -331,9 +334,18 @@ GUARDS: list[Guard] = [
     ),
     Guard(
         name="a * 2 vs a + a",
-        site="core.rs:255 multiply -> extend_from_bitslice",
+        site="core.rs repeat_bitcollection -> BitConcat.push_repeated_run",
         slow=lambda: HALF_T * 2,
         fast=lambda: HALF_T + HALF_T,
+        limit=5.0,
+    ),
+    # These produce the same one-megabit result. Runtime should be determined
+    # by the result size, not by whether it contains 100,000 or 1,000 copies.
+    Guard(
+        name="10-bit repeat vs 1000-bit repeat",
+        site="helpers/bitwise.rs BitConcat.push_repeated_run",
+        slow=lambda: REPEAT_SMALL_PATTERN * 100_000,
+        fast=lambda: REPEAT_LARGE_PATTERN * 1_000,
         limit=5.0,
     ),
     Guard(

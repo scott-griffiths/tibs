@@ -3930,14 +3930,8 @@ impl Mutibs {
             }
             1 => Ok(()),
             i => {
-                let n = i as usize;
-                // One byte-wide pass per copy, so the total is the size of the
-                // result. Doubling moved the same bits but a bit at a time.
-                let original = slf.to_bitvec();
-                let len = original.len();
-                for _ in 1..n {
-                    slf.append_run(original.as_raw_slice(), 0, len);
-                }
+                let repeated = repeat_bitcollection(&*slf, i as usize);
+                slf.data = repeated;
                 Ok(())
             }
         }
