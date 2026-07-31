@@ -226,6 +226,31 @@ fn string_literal_to_bv(s: &str) -> PyResult<BV> {
     }
 }
 
+/// Decode comma-separated hex literals without allocating per token.
+///
+/// Removing the prefixes and commas leaves exactly the same hexadecimal bit
+/// stream, including when a token contains an odd number of digits. Invalid
+/// input returns `None` so the general path can reproduce its usual error.
+fn try_bv_from_hex_tokens(s: &str) -> Option<BV> {
+    for (prefix, separator) in [("0x", ",0x"), ("0X", ",0X")] {
+        if let Some(digits) = s.strip_prefix(prefix) {
+            let joined = digits.replace(separator, "");
+            if !joined.as_bytes().contains(&b',') {
+                return bv_from_hex(&joined).ok();
+            }
+        }
+    }
+
+    let mut joined = String::with_capacity(s.len());
+    for token in s.split(',').filter(|token| !token.is_empty()) {
+        let digits = token
+            .strip_prefix("0x")
+            .or_else(|| token.strip_prefix("0X"))?;
+        joined.push_str(digits);
+    }
+    bv_from_hex(&joined).ok()
+}
+
 pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
     // Whitespace has to come out before the string is split into tokens, but
     // removing it means building a new string. Nearly every input is already
@@ -238,6 +263,11 @@ pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
         stripped = s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
         &stripped
     };
+    if s.as_bytes().contains(&b',')
+        && let Some(result) = try_bv_from_hex_tokens(s)
+    {
+        return Ok(result);
+    }
     // Nearly every string is a single token, so the first one is parsed into
     // the result and any others are appended to it.
     let mut tokens = s.split(',').filter(|token| !token.is_empty());

@@ -23,6 +23,12 @@ class TestCreation:
         s = Tibs.from_hex("0xA0ff")
         assert (len(s), s.hex) == (16, "a0ff")
 
+    def test_creation_from_byte_aligned_hex_tokens(self):
+        assert Tibs.from_string("0xab_cd,,0x,0x0123,0X45").hex == "abcd012345"
+
+    def test_creation_from_odd_width_hex_tokens(self):
+        assert Tibs.from_string("0xa,0xb,0xc,0xd").hex == "abcd"
+
 
 class TestInitialisation:
     def test_empty_init(self):

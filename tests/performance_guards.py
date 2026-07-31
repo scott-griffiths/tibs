@@ -119,6 +119,9 @@ REPLACE_NEW = Tibs.from_bytes(REPLACE_NEW_BYTES)
 PARSE_HEX_PIECE = "ab" * 1_250
 PARSE_MULTI = ",".join(["0x" + PARSE_HEX_PIECE] * 100)
 PARSE_SINGLE = "0x" + PARSE_HEX_PIECE * 100
+PARSE_TINY_HEX_PIECE = "ab" * 5
+PARSE_TINY_MULTI = ",".join(["0x" + PARSE_TINY_HEX_PIECE] * 25_000)
+PARSE_TINY_SINGLE = "0x" + PARSE_TINY_HEX_PIECE * 25_000
 
 ONE_ZERO = Tibs("0b0")
 ONE_ONE = Tibs("0b1")
@@ -590,10 +593,17 @@ GUARDS: list[Guard] = [
     # ---- 23. multi-token parsing ---------------------------------------
     Guard(
         name="parse 100 tokens vs one token",
-        site="parse.rs str_to_bv -> extend_from_bitslice",
+        site="helpers/parse.rs try_bv_from_hex_tokens",
         slow=lambda: Tibs.from_string(PARSE_MULTI),
         fast=lambda: Tibs.from_string(PARSE_SINGLE),
         limit=2.0,
+    ),
+    Guard(
+        name="parse 25000 hex tokens vs one token",
+        site="helpers/parse.rs try_bv_from_hex_tokens",
+        slow=lambda: Tibs.from_string(PARSE_TINY_MULTI),
+        fast=lambda: Tibs.from_string(PARSE_TINY_SINGLE),
+        limit=3.0,
     ),
     # ---- 24. all/any early exit ----------------------------------------
     # The first bit decides each result. Running the same predicate on a
