@@ -694,6 +694,15 @@ def test_replace_byte_aligned():
     a.replace('0b1010', '0b1111', byte_aligned=True)
     assert a == Tibs('0b11111010')
 
+    # Whole-byte replacement honours bit-granular bounds and count, including
+    # patterns whose own backing storage starts part way through a byte.
+    old = Tibs("0x0112")[4:12]
+    new = Tibs("0x0aa3")[4:12]
+    a = Mutibs("0x1122112211")
+    assert a.replace(old, new, start=1, end=40, count=1, byte_aligned=True) == 1
+    assert a == Tibs("0x1122aa2211")
+    assert a.replace("0x11", "0xff", start=1, end=7, byte_aligned=True) == 0
+
 
 def test_replace_returns_count():
     a = Mutibs('0b10101010')

@@ -583,12 +583,12 @@ GUARDS: list[Guard] = [
     # replaced(..., byte_aligned=True) have identical replacement semantics.
     Guard(
         name="aligned replace vs bytes.replace",
-        site="mutibs.rs apply_replace_bits -> extend_from_bitslice",
+        site="mutibs.rs apply_replace_bits -> memchr_iter",
         slow=lambda: BIG_T.replaced(REPLACE_OLD, REPLACE_NEW, byte_aligned=True),
         fast=lambda: Tibs.from_bytes(
             BIG_BYTES.replace(REPLACE_OLD_BYTES, REPLACE_NEW_BYTES)
         ),
-        limit=6.0,
+        limit=2.0,
     ),
     # ---- 23. multi-token parsing ---------------------------------------
     Guard(

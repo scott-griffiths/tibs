@@ -711,6 +711,43 @@ impl Mutibs {
             )));
         }
 
+        if byte_aligned
+            && mask.is_none()
+            && old.len() == 8
+            && new.len() == 8
+            && self.storage_head_offset() == 0
+        {
+            let byte_value = |bits: &Tibs| {
+                let (bytes, offset, _) = bits.raw_data_ref();
+                if offset == 0 {
+                    bytes[0]
+                } else {
+                    (bytes[0] << offset) | (bytes[1] >> (8 - offset))
+                }
+            };
+            let old_byte = byte_value(&old);
+            let new_byte = byte_value(&new);
+            let start_byte = search_start.div_ceil(8);
+            let end_byte = search_end / 8;
+            if start_byte >= end_byte {
+                return Ok(0);
+            }
+            let limit = usize::try_from(countdown).unwrap_or(usize::MAX);
+            let target = &mut self.data.as_raw_mut_slice()[start_byte..end_byte];
+            let mut replacements = 0;
+            let mut current = 0;
+            while replacements < limit {
+                let Some(found) = memchr::memchr(old_byte, &target[current..]) else {
+                    break;
+                };
+                let position = current + found;
+                target[position] = new_byte;
+                replacements += 1;
+                current = position + 1;
+            }
+            return Ok(replacements);
+        }
+
         let alignment_mod8 = if byte_aligned { Some(0) } else { None };
         let matcher = mask
             .as_ref()
