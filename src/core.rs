@@ -56,7 +56,13 @@ pub(crate) trait BitCollection: Sized + Clone {
         } else {
             logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, op)
         };
-        Self::from_bv(BV::from_vec(data)).get_slice_unchecked(lhs_offset, self.len())
+        let mut result = BV::from_vec(data);
+        if lhs_offset == 0 {
+            result.truncate(self.len());
+            Self::from_bv(result)
+        } else {
+            Self::from_bv(result).get_slice_unchecked(lhs_offset, self.len())
+        }
     }
 
     /// The number of set bits in `op(self, other)`, without building it.
@@ -772,6 +778,7 @@ pub(crate) fn concatenate_bitcollections(
 }
 
 impl BitCollection for Tibs {
+    #[inline]
     fn from_bv(bv: BV) -> Self {
         Tibs::from_bv(bv)
     }

@@ -213,7 +213,7 @@ impl LogicalOp {
     }
 
     #[inline]
-    fn word(self, lhs: u64, rhs: u64) -> u64 {
+    pub(crate) fn word(self, lhs: u64, rhs: u64) -> u64 {
         match self {
             LogicalOp::Or => lhs | rhs,
             LogicalOp::And => lhs & rhs,

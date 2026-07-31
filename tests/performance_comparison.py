@@ -323,6 +323,42 @@ def build_bitarray_cases(byte_count, value_count):
     def tibs_small_ands():
         return [left & right for left, right in small_and_tibs]
 
+    def ba_small_invert():
+        return [~left for left, _ in small_and_bits]
+
+    def tibs_small_invert():
+        return [~left for left, _ in small_and_tibs]
+
+    def ba_small_shift_left():
+        return [left << 3 for left, _ in small_and_bits]
+
+    def tibs_small_shift_left():
+        return [left << 3 for left, _ in small_and_tibs]
+
+    def ba_small_concatenate():
+        return [left + right for left, right in small_and_bits[:4]]
+
+    def tibs_small_concatenate():
+        return [left + right for left, right in small_and_tibs[:4]]
+
+    small_repeat_counts = (64, 9, 4, 2)
+
+    def ba_small_repeat():
+        return [
+            left * count
+            for (left, _), count in zip(
+                small_and_bits[:4], small_repeat_counts, strict=True
+            )
+        ]
+
+    def tibs_small_repeat():
+        return [
+            left * count
+            for (left, _), count in zip(
+                small_and_tibs[:4], small_repeat_counts, strict=True
+            )
+        ]
+
     def same_small_bits(bitarray_results, tibs_results):
         return len(bitarray_results) == len(tibs_results) and all(
             same_bits(bitarray_result, tibs_result)
@@ -672,6 +708,30 @@ def build_bitarray_cases(byte_count, value_count):
             "1-64-bit and",
             ba_small_ands,
             tibs_small_ands,
+            same_small_bits,
+        ),
+        ComparisonCase(
+            "1-64-bit invert",
+            ba_small_invert,
+            tibs_small_invert,
+            same_small_bits,
+        ),
+        ComparisonCase(
+            "1-64-bit shift left",
+            ba_small_shift_left,
+            tibs_small_shift_left,
+            same_small_bits,
+        ),
+        ComparisonCase(
+            "small concatenate",
+            ba_small_concatenate,
+            tibs_small_concatenate,
+            same_small_bits,
+        ),
+        ComparisonCase(
+            "small repeat",
+            ba_small_repeat,
+            tibs_small_repeat,
             same_small_bits,
         ),
         ComparisonCase(

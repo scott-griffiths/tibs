@@ -57,33 +57,209 @@ impl Hash for Tibs {
 // ---- Tibs private helper methods. Not part of the Python interface. ----
 
 impl Tibs {
+    #[inline]
     pub(crate) fn from_bv(bv: BV) -> Self {
         let length = bv.len();
+        if length <= helpers::FAST_INT_BITS {
+            let offset = helpers::head_bit_offset(bv.as_bitslice());
+            let mut bytes = [0u8; helpers::FAST_INT_BITS / 8];
+            let byte_length = length.div_ceil(8);
+            if offset == 0 {
+                bytes[..byte_length].copy_from_slice(&bv.as_raw_slice()[..byte_length]);
+                helpers::mask_padding_bits(&mut bytes[..byte_length], length);
+            } else {
+                helpers::copy_unaligned_padded_bytes(
+                    bv.as_raw_slice(),
+                    offset,
+                    length,
+                    &mut bytes[..byte_length],
+                );
+            }
+            return Self::from_inline_bytes(bytes, length);
+        }
         Tibs {
-            data: Arc::new(bv),
+            data: TibsData::Shared(Arc::new(bv)),
             offset: 0,
             length,
         }
     }
 
-    pub(crate) fn get_slice_unchecked(&self, offset: usize, length: usize) -> Self {
+    #[inline]
+    pub(crate) fn from_inline_bytes(
+        bytes: [u8; helpers::FAST_INT_BITS / 8],
+        length: usize,
+    ) -> Self {
+        debug_assert!(length <= helpers::FAST_INT_BITS);
         Tibs {
-            data: self.data.clone(),
-            offset: self.offset + offset,
+            data: TibsData::Inline(bytes),
+            offset: 0,
             length,
         }
     }
 
     #[inline]
+    fn small_mask(length: usize) -> u64 {
+        if length == 0 {
+            0
+        } else {
+            u64::MAX << (helpers::FAST_INT_BITS - length)
+        }
+    }
+
+    #[inline]
+    fn from_padded_word(word: u64, length: usize) -> Self {
+        debug_assert!(length <= helpers::FAST_INT_BITS);
+        Self::from_inline_bytes((word & Self::small_mask(length)).to_be_bytes(), length)
+    }
+
+    /// Return a short run left-aligned in a word, with padding cleared.
+    fn padded_word(&self) -> Option<u64> {
+        if self.len() > helpers::FAST_INT_BITS {
+            return None;
+        }
+        if self.offset == 0
+            && let TibsData::Inline(bytes) = &self.data
+        {
+            return Some(u64::from_be_bytes(*bytes) & Self::small_mask(self.len()));
+        }
+        let (bytes, offset, _) = self.raw_data_ref();
+        let mut padded = [0u8; helpers::FAST_INT_BITS / 8];
+        let byte_length = self.len().div_ceil(8);
+        if offset == 0 {
+            padded[..byte_length].copy_from_slice(bytes);
+            helpers::mask_padding_bits(&mut padded[..byte_length], self.len());
+        } else {
+            helpers::copy_unaligned_padded_bytes(
+                bytes,
+                offset,
+                self.len(),
+                &mut padded[..byte_length],
+            );
+        }
+        Some(u64::from_be_bytes(padded))
+    }
+
+    fn shifted_copy(&self, shift: usize, left: bool) -> Self {
+        let Some(word) = self.padded_word() else {
+            return if left {
+                self.lshift(shift)
+            } else {
+                self.rshift(shift)
+            };
+        };
+        if shift == 0 {
+            return self.clone();
+        }
+        let shifted = if shift >= self.len() {
+            0
+        } else if left {
+            word << shift
+        } else {
+            word >> shift
+        };
+        Self::from_padded_word(shifted, self.len())
+    }
+
+    fn inverted_copy(&self) -> Self {
+        match self.padded_word() {
+            Some(word) => Self::from_padded_word(!word, self.len()),
+            None => BitCollection::invert_copy(self),
+        }
+    }
+
+    fn concatenated(&self, other: &Self) -> Self {
+        let length = self.len() + other.len();
+        if length <= helpers::FAST_INT_BITS {
+            let left = self.padded_word().expect("length bounds both operands");
+            let right = other.padded_word().expect("length bounds both operands");
+            return Self::from_padded_word(left | (right >> self.len()), length);
+        }
+        Self::from_bv(concatenate_bitcollections(self, other))
+    }
+
+    fn repeated(&self, count: usize) -> Self {
+        let length = self.len();
+        if length == 0 || count == 0 {
+            return Self::from_inline_bytes([0; helpers::FAST_INT_BITS / 8], 0);
+        }
+        if count <= helpers::FAST_INT_BITS / length {
+            let word = self
+                .padded_word()
+                .expect("result length is at most 64 bits");
+            let mut repeated = 0;
+            for index in 0..count {
+                repeated |= word >> (index * length);
+            }
+            return Self::from_padded_word(repeated, length * count);
+        }
+        self.multiply(count)
+    }
+
+    pub(crate) fn get_slice_unchecked(&self, offset: usize, length: usize) -> Self {
+        match &self.data {
+            TibsData::Shared(data) => Tibs {
+                data: TibsData::Shared(data.clone()),
+                offset: self.offset + offset,
+                length,
+            },
+            TibsData::Inline(bytes) => Tibs {
+                data: TibsData::Inline(*bytes),
+                offset: self.offset + offset,
+                length,
+            },
+        }
+    }
+
+    #[inline]
     fn shares_view_with(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.data, &other.data)
-            && self.offset == other.offset
-            && self.length == other.length
+        ptr::eq(self, other)
+            || matches!(
+                (&self.data, &other.data),
+                (TibsData::Shared(left), TibsData::Shared(right))
+                    if Arc::ptr_eq(left, right)
+                        && self.offset == other.offset
+                        && self.length == other.length
+            )
+    }
+
+    #[inline]
+    fn logical_op_from_python(&self, other: &Bound<'_, PyAny>, op: LogicalOp) -> PyResult<Self> {
+        if let Ok(other) = other.cast::<Tibs>() {
+            return self.logical_op_with_tibs(other.get(), op);
+        }
+        if let Ok(other) = other.cast::<Mutibs>() {
+            let other = other.borrow();
+            validate_logical_op_lengths(self.len(), other.len())?;
+            return Ok(self.logical_op(&*other, op));
+        }
+        let other = Tibs::extract(other.as_borrowed())?;
+        self.logical_op_with_tibs(&other, op)
+    }
+
+    #[inline]
+    fn logical_op_with_tibs(&self, other: &Self, op: LogicalOp) -> PyResult<Self> {
+        if self.shares_view_with(other) {
+            return Ok(match op {
+                LogicalOp::And | LogicalOp::Or => self.clone(),
+                LogicalOp::Xor => Self::from_bv(bv_from_zeros(self.len())),
+                LogicalOp::AndNot => unreachable!("and-not is not a Python operator"),
+            });
+        }
+        validate_logical_op_lengths(self.len(), other.len())?;
+        if let (Some(left), Some(right)) = (self.padded_word(), other.padded_word()) {
+            return Ok(Self::from_padded_word(op.word(left, right), self.len()));
+        }
+        Ok(self.logical_op(other, op))
     }
 
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
-        &self.data[self.offset..self.offset + self.length]
+        match &self.data {
+            TibsData::Shared(data) => &data[self.offset..self.offset + self.length],
+            TibsData::Inline(bytes) => {
+                &BS::from_slice(bytes)[self.offset..self.offset + self.length]
+            }
+        }
     }
 
     /// Fast single-bit read that bypasses bitvec's per-access pointer decoding.
@@ -93,9 +269,9 @@ impl Tibs {
     pub(crate) unsafe fn bit_at_unchecked(&self, index: usize) -> bool {
         // The backing BitVec's storage may not start at bit 0 of its first
         // byte (see raw_data_ref), so include its head offset.
-        let head = self.data.as_bitslice().as_bitptr().bit().into_inner() as usize;
-        let abs = head + self.offset + index;
-        let byte = unsafe { *self.data.as_raw_slice().get_unchecked(abs >> 3) };
+        let (bytes, offset, _) = self.raw_data_ref();
+        let abs = offset + index;
+        let byte = unsafe { *bytes.get_unchecked(abs >> 3) };
         // Msb0 ordering: semantic bit i within a byte is physical bit (7 - i).
         (byte >> (7 - (abs & 7))) & 1 != 0
     }
@@ -114,15 +290,29 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn raw_data_ref(&self) -> (&[u8], usize, usize) {
-        let physical_start = helpers::head_bit_offset(self.data.as_bitslice()) + self.offset;
-        let byte_start = physical_start / 8;
-        let bit_offset = physical_start % 8;
-        let byte_len = (bit_offset + self.length).div_ceil(8);
-        (
-            &self.data.as_raw_slice()[byte_start..byte_start + byte_len],
-            bit_offset,
-            self.length,
-        )
+        match &self.data {
+            TibsData::Shared(data) => {
+                let physical_start = helpers::head_bit_offset(data.as_bitslice()) + self.offset;
+                let byte_start = physical_start / 8;
+                let bit_offset = physical_start % 8;
+                let byte_len = (bit_offset + self.length).div_ceil(8);
+                (
+                    &data.as_raw_slice()[byte_start..byte_start + byte_len],
+                    bit_offset,
+                    self.length,
+                )
+            }
+            TibsData::Inline(bytes) => {
+                let byte_start = self.offset / 8;
+                let bit_offset = self.offset % 8;
+                let byte_len = (bit_offset + self.length).div_ceil(8);
+                (
+                    &bytes[byte_start..byte_start + byte_len],
+                    bit_offset,
+                    self.length,
+                )
+            }
+        }
     }
 
     pub(crate) fn find_impl(
@@ -205,10 +395,19 @@ impl Tibs {
 ///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///
+/// Small values live in the Python object itself, avoiding the separate
+/// `Arc` and `Vec` allocations that otherwise dominate scalar operations.
+/// Larger values retain shared storage so slicing them remains constant-time.
+#[derive(Clone)]
+enum TibsData {
+    Shared(Arc<BV>),
+    Inline([u8; helpers::FAST_INT_BITS / 8]),
+}
+
 #[derive(Clone)]
 #[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
 pub struct Tibs {
-    data: Arc<BV>,
+    data: TibsData,
     offset: usize,
     length: usize,
 }
@@ -2886,6 +3085,9 @@ impl Tibs {
     ///
     #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        if pos.is_none() {
+            return Ok(self.inverted_copy());
+        }
         self.copy_with_mutation(|out| out.apply_invert_positions(pos))
     }
 
@@ -3064,7 +3266,7 @@ impl Tibs {
     ///
     pub fn __lshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
-        Ok(self.lshift(shift))
+        Ok(self.shifted_copy(shift, true))
     }
 
     /// Return new Tibs shifted by n to the right.
@@ -3080,7 +3282,7 @@ impl Tibs {
     ///
     pub fn __rshift__(&self, n: i64) -> PyResult<Self> {
         let shift = validate_shift(self, n)?;
-        Ok(self.rshift(shift))
+        Ok(self.shifted_copy(shift, false))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -3095,7 +3297,7 @@ impl Tibs {
     ///
     pub fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        Ok(Tibs::from_bv(concatenate_bitcollections(self, &other)))
+        Ok(self.concatenated(&other))
     }
 
     /// Concatenates two Tibs and return a newly constructed Tibs.
@@ -3105,7 +3307,7 @@ impl Tibs {
     ///
     pub fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         let other = Tibs::extract(other.as_borrowed())?;
-        Ok(Tibs::from_bv(concatenate_bitcollections(&other, self)))
+        Ok(other.concatenated(self))
     }
 
     /// Count the bits set in both this Tibs and another.
@@ -3321,12 +3523,7 @@ impl Tibs {
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __and__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = Tibs::extract(other.as_borrowed())?;
-        if self.shares_view_with(&other) {
-            return Ok(self.clone());
-        }
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_and(self, &other))
+        self.logical_op_from_python(other, LogicalOp::And)
     }
 
     /// Bit-wise 'or' between two Tibs. Returns new Tibs.
@@ -3336,12 +3533,7 @@ impl Tibs {
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = Tibs::extract(other.as_borrowed())?;
-        if self.shares_view_with(&other) {
-            return Ok(self.clone());
-        }
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_or(self, &other))
+        self.logical_op_from_python(other, LogicalOp::Or)
     }
 
     /// Bit-wise 'xor' between two Tibs. Returns new Tibs.
@@ -3351,10 +3543,7 @@ impl Tibs {
     /// :raises ValueError: if the two Tibs have differing lengths.
     ///
     pub fn __xor__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let other = Tibs::extract(other.as_borrowed())?;
-
-        validate_logical_op_lengths(self.len(), other.len())?;
-        Ok(BitCollection::logical_xor(self, &other))
+        self.logical_op_from_python(other, LogicalOp::Xor)
     }
 
     /// Reverse bit-wise 'and' between two Tibs. Returns new Tibs.
@@ -3490,7 +3679,7 @@ impl Tibs {
     ///     Tibs('0b01001')
     ///
     pub fn __invert__(&self) -> PyResult<Self> {
-        Ok(BitCollection::invert_copy(self))
+        Ok(self.inverted_copy())
     }
 
     /// Return the Tibs as a bytes object.
@@ -3520,7 +3709,7 @@ impl Tibs {
                 "Cannot multiply by a negative integer.",
             ));
         }
-        Ok(self.multiply(n as usize))
+        Ok(self.repeated(n as usize))
     }
 
     /// Return Tibs consisting of n concatenations of self.
