@@ -20,8 +20,8 @@
 
 ----
 
-``tibs`` is a Python library for binary data that does not assume
-everything fits neatly into bytes. It's 100% written in Rust and has excellent performance.
+``tibs`` is a Python library for binary data.
+It's 100% written in Rust and has excellent performance.
 
 Use it for packets, registers, instruction
 formats, bitsets, compressed data and streams where fields can have many different
@@ -201,8 +201,8 @@ on most, though several use more than one.
 
 ## Project status
 
-Tibs has passed the 1.0 stable API milestone. Documented public behavior will
-remain compatible across future 1.x releases. It is already used to power the `bitstring` 
+Tibs is considered 'stable' and has reached version 2. Documented public behavior will
+remain compatible across future 2.x releases. It is already used to power the `bitstring` 
 library and gets several million downloads per month.
 
 There are thousands of unit tests, including Hypothesis tests and performance
