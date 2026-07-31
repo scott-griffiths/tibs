@@ -12,6 +12,56 @@ material; reading typed values out of them is covered in :doc:`typed_fields`.
 The examples use ``Tibs``, but the constructors and non-mutating methods apply
 equally to ``Mutibs``.
 
+Constructors at a glance
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Both classes offer a wide range of ``from_`` constructors. The ones below that
+build from raw bit material are covered in this chapter; those that encode
+typed values are covered in :doc:`typed_fields`.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Raw bit material
+     - Typed values
+   * - :meth:`~Tibs.from_zeros`, :meth:`~Tibs.from_ones`, :meth:`~Tibs.from_random`
+     - :meth:`~Tibs.from_u`, :meth:`~Tibs.from_i`, :meth:`~Tibs.from_f`
+   * - :meth:`~Tibs.from_bin`, :meth:`~Tibs.from_oct`, :meth:`~Tibs.from_hex`, :meth:`~Tibs.from_string`
+     - :meth:`~Tibs.from_value`, :meth:`~Tibs.from_values`
+   * - :meth:`~Tibs.from_bytes`, :meth:`~Tibs.from_bools`, :meth:`~Tibs.from_joined`
+     -
+
+
+.. _promotion:
+
+Automatic promotion
+^^^^^^^^^^^^^^^^^^^^
+
+Rather than calling a constructor explicitly, you can call ``Tibs`` (or ``Mutibs``)
+directly and let it work out what you gave it. It delegates to
+:meth:`Tibs.from_string` or :meth:`Tibs.from_bytes` for strings and bytes-like
+types, and accepts strict list/tuple bit patterns directly::
+
+    s = Tibs('0xabc')     # Same as Tibs.from_string('0xabc')
+    t = Tibs([1, 0, 1])   # Strict list/tuple bit-pattern shorthand
+    u = Tibs(b'hello')    # Same as Tibs.from_bytes(b'hello')
+
+This promotion is pervasive: most methods that take a bit sequence will also
+accept any of these types and promote it for you. So instead of ::
+
+    t = Tibs.from_random(1_000_000)
+    c = t.count(Tibs.from_bools([1, 0, 1]))
+
+it's more natural to write::
+
+    c = t.count([1, 0, 1])
+
+Using promotion is generally recommended for conciseness and clarity. The one
+exception is performance-critical code, where avoiding the small overhead of
+examining and dispatching on the type can matter — there an explicit ``from_``
+method is preferred. See :ref:`construction` for the exact promotion rules.
+
+
 .. _construction:
 
 Building from raw bits

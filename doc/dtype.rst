@@ -119,6 +119,9 @@ takes the same two pieces::
     >>> DtypeArray.from_params(Dtype("(u8, bool)"), 3)
     DtypeArray('[(u8, bool); 3]')
 
+An array's own :attr:`~Dtype.length` is the total encoded length of all its
+elements, not of one element - for that, use ``array.dtype.length``.
+
 Counts must be greater than zero. An array unpacks to an immutable Python
 tuple, including when its input was a list or another iterable.
 
@@ -190,20 +193,6 @@ Every dtype is immutable, compares structurally and can be used as a dictionary
 key or set member. Dtypes do not compare equal to their string specifications.
 Arrays and tuples have no scalar ``kind`` or ``byte_order``; those properties
 belong only to :class:`DtypeSingle`.
-
-Tibs 2.0 migration
-^^^^^^^^^^^^^^^^^^
-
-In Tibs 2.0, ``Dtype`` becomes the base class and parsing factory:
-
-* ``Dtype("u8")`` returns a :class:`DtypeSingle`, rather than an object whose
-  concrete type is exactly ``Dtype``.
-* ``repr(Dtype("u8"))`` becomes ``DtypeSingle('u8')``.
-* ``Dtype.from_params(kind, length, byte_order)`` moves to
-  :meth:`DtypeSingle.from_params`.
-* The common ``length`` property is retained. For an array or tuple it is the
-  total encoded length of one structured value; an array element's length is
-  available as ``array.dtype.length``.
 
 .. autoclass:: tibs.Dtype
    :members:

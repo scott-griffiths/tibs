@@ -16,7 +16,7 @@ control words, and test vectors. For a complete container or protocol parser,
 use a higher-level parser for the structure and keep ``Tibs`` for the fields
 that need bit-accurate construction or interpretation.
 
-In Tibs 2.0, a :class:`DtypeTuple` can represent the unnamed fixed layout
-directly when a separate table of field names is not needed. Packing one tuple
-value constructs the complete header, while packing multiple values repeats the
+A :class:`DtypeTuple` can represent the unnamed fixed layout directly when a
+separate table of field names is not needed. Packing one tuple value
+constructs the complete header, while packing multiple values repeats the
 complete layout. See :doc:`dtype` for compound dtype syntax and nesting.

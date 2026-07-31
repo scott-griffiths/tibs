@@ -171,6 +171,20 @@ tuple dtype combines fields with different dtypes::
     >>> header.to_value("(u8, u16_le)")
     (1, 515)
 
+Under the hood, a dtype string is parsed into one of three concrete, immutable
+classes: :class:`DtypeSingle` for a scalar value, :class:`DtypeArray` for a
+fixed-size repeat of another dtype, and :class:`DtypeTuple` for a fixed
+sequence of possibly different dtypes. The string forms above are usually all
+you need, but the classes are there directly when you want to build or inspect
+a dtype programmatically::
+
+    >>> Dtype("u8")
+    DtypeSingle('u8')
+    >>> Dtype("[u8; 4]")
+    DtypeArray('[u8; 4]')
+    >>> Dtype("(u8, bool)")
+    DtypeTuple('(u8, bool)')
+
 Arrays and tuples can be nested. Their decoded values are Python tuples, so the
 shape of the dtype remains visible in the result::
 

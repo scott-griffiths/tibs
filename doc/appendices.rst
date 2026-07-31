@@ -10,3 +10,4 @@ A place for miscellaneous information that could be helpful, but isn't essential
 
     byte_and_bit_order
     byte_format
+    formatting
