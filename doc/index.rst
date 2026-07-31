@@ -5,8 +5,8 @@
     :hidden:
 
     manual
-    examples
     api
+    examples
     appendices
 
 .. raw:: html

@@ -147,8 +147,8 @@ There are pre-built wheels for most configurations - if there are issues then pl
 Tibs works with Python 3.11 and later.
 
 
-How the manual is organised
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Chapters
+^^^^^^^^
 
 The chapters follow the bits and the two ways of reading them.
 
