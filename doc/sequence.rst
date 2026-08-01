@@ -232,7 +232,15 @@ front::
     5
 
 There is also :meth:`Tibs.rfind_all_iter`, which yields matches from right to
-left. Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
+left. When you want every match in reverse, reverse the list instead::
+
+    >>> t.find_all('0b101')[::-1]
+    [5, 0]
+
+Reversing the whole list can be quicker if you need more than just the first few
+results.
+
+Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
 use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
 to move the data if you no longer need the mutable object.
 

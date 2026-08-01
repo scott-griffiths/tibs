@@ -652,7 +652,7 @@ def test_special_method_creation_fails():
         _ = m ^ 'percy'
 
 
-def test_rfind_all():
+def test_rfind_all_iter():
     t = Mutibs.from_zeros(100)
     t.set([4, 8, 14, 99])
     a = t.to_tibs().rfind_all_iter([1])
