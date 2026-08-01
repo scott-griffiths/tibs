@@ -3,14 +3,10 @@ import pytest
 from tibs import BitOrder, ByteOrder, Mutibs, MutableView, Tibs, View
 
 
-def test_view_constructor_accepts_tibs_and_mutibs():
+def test_view_constructor_accepts_tibs():
     t = Tibs("0x1234")
-    m = Mutibs("0x1234")
 
     assert repr(View(t)) == (
-        "View(Tibs('0x1234'), ByteOrder.Unspecified, BitOrder.Msb0)"
-    )
-    assert repr(View(m)) == (
         "View(Tibs('0x1234'), ByteOrder.Unspecified, BitOrder.Msb0)"
     )
     assert repr(View(t, byte_order=ByteOrder.Little)) == (
@@ -49,12 +45,15 @@ def test_view_from_indices_accepts_ranges_and_iterables():
     assert View.from_indices(t, (i for i in [1, 3, 5])).bin == "100"
 
 
-def test_view_from_indices_snapshots_mutibs_source():
+def test_view_from_indices_rejects_mutibs_source():
     m = Mutibs("0b01101001")
-    v = View.from_indices(m, range(0, 8, 2))
 
+    with pytest.raises(TypeError, match="must be a Tibs"):
+        View.from_indices(m, range(0, 8, 2))
+
+    # The explicit copy is accepted, and does not track the Mutibs.
+    v = View.from_indices(m.to_tibs(), range(0, 8, 2))
     assert v.bin == "0110"
-
     m[2] = False
     assert v.bin == "0110"
 
@@ -73,7 +72,7 @@ def test_view_equality_uses_type_source_and_layout():
     t = Tibs("0x12")
     m = Mutibs("0x12")
 
-    assert View(t) == View(m)
+    assert View(t) == View(m.to_tibs())
     assert View.from_indices(Tibs("0xf0"), range(0, 4)) == View(Tibs("0xf"))
 
     assert View(t) != t
@@ -192,7 +191,7 @@ def test_mutable_view_equality_uses_type_source_layout_and_source_indices():
     assert MutableView(m1) == MutableView(m2)
     assert MutableView(m1) == MutableView.from_indices(m1, range(len(m1)))
 
-    assert MutableView(m1) != View(m1)
+    assert MutableView(m1) != View(m1.to_tibs())
     assert MutableView(m1) != m1
     assert MutableView(m1) != MutableView(Mutibs("0x00"))
     assert MutableView(m1) != MutableView(m1, byte_order=ByteOrder.Big)
@@ -354,10 +353,14 @@ def test_mutable_view_reflects_current_source_value():
     assert v.to_bin() == "10010010"
 
 
-def test_explicit_view_constructor_snapshots_mutibs_source():
+def test_explicit_view_constructor_rejects_mutibs_source():
     m = Mutibs("0x12")
-    v = View(m, bit_order=BitOrder.Lsb0)
 
+    with pytest.raises(TypeError, match="must be a Tibs"):
+        View(m, bit_order=BitOrder.Lsb0)
+
+    # The explicit copy is accepted, and does not track the Mutibs.
+    v = View(m.to_tibs(), bit_order=BitOrder.Lsb0)
     assert v.to_hex() == "12"
 
     m[0] = True
@@ -706,10 +709,16 @@ def test_view_field_rejects_empty_view():
 
 def test_mutibs_views():
     m = Mutibs('0x1234')
-    v = View(m, ByteOrder.Little)
+    with pytest.raises(TypeError, match="must be a Tibs"):
+        View(m, ByteOrder.Little)
+
+    v = View(m.to_tibs(), ByteOrder.Little)
     assert v.hex == '3412'
     m += '0x5'
     assert v.hex == '3412'
+
+    # The live view of the same Mutibs does track it.
+    assert len(m.view()) == 20
 
 
 def test_bin_views():

@@ -341,11 +341,11 @@ Scattered fields
 contiguous — an instruction immediate split across the word, flags interleaved
 with data — and for those a mask picks out the bits that belong to the field.
 
-:meth:`Tibs.extract` reads the bits selected by a mask and packs them together.
+:meth:`Tibs.extracted` reads the bits selected by a mask and packs them together.
 It's the bit-level version of the PEXT instruction::
 
     >>> word = Tibs('0b11010110')
-    >>> word.extract('0b10110000')   # the bits at positions 0, 2 and 3
+    >>> word.extracted('0b10110000')   # the bits at positions 0, 2 and 3
     Tibs('0b101')
 
 The mask must be the same length as the container, and the result has one bit for

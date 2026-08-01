@@ -15,6 +15,9 @@ Backwardly incompatible changes
   the old `repr` will need updating; dtype strings for single values such as
   `Dtype("u32")` are unchanged.
 
+* The `View` constructor and `View.from_indices` no longer accept a `Mutibs`.
+  Use `Mutibs.view()` for a live`MutableView`, or `Mutibs.to_tibs()` for an immutable copy to view.
+
 * Minimum Python version now 3.11 instead of 3.10. Python 3.10 reaches its end
   of life in October 2026, and dropping it lets a single abi3 wheel cover every
   supported version — the buffer protocol added below is only part of Python's
@@ -79,15 +82,15 @@ Added
   2
   ```
 
-* Added `extract` and `deposit` for reading and writing bit fields whose bits are
-  scattered through a container by a mask, rather than being contiguous like the
-  ones `field` handles. `extract` reads the masked bits, packed together;
+* Added `extracted` and `deposit` for reading and writing bit fields whose bits
+  are scattered through a container by a mask, rather than being contiguous like
+  the ones `field` handles. `extracted` reads the masked bits, packed together;
   `deposit` (in place, on `Mutibs`) and `deposited` (returning a new container)
   write them back, leaving the unmasked bits untouched. These are the bit-level
   equivalents of the x86 PEXT and PDEP instructions.
 
   ```python
-  >>> Tibs('0b11010110').extract('0b10110000')
+  >>> Tibs('0b11010110').extracted('0b10110000')
   Tibs('0b101')
   >>> Tibs('0b11010110').deposited('0b111', '0b10110000').bin
   '11110110'

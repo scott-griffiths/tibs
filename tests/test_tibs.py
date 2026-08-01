@@ -1223,7 +1223,7 @@ def _ref_deposit(word, value, mask):
 
 def test_extract_deposit_worked_example():
     word, mask = Tibs('0b11010110'), Tibs('0b10110000')
-    assert word.extract(mask) == Tibs('0b101')
+    assert word.extracted(mask) == Tibs('0b101')
     assert word.deposited('0b111', mask) == Tibs('0b11110110')
     # extract reads, deposit writes; the original is untouched by deposited.
     assert word == Tibs('0b11010110')
@@ -1232,26 +1232,26 @@ def test_extract_deposit_worked_example():
 def test_extract_deposit_edge_cases():
     t = Tibs('0b1011')
     # All-zeros mask: nothing selected.
-    assert t.extract('0b0000') == Tibs()
+    assert t.extracted('0b0000') == Tibs()
     assert t.deposited('', '0b0000') == t
     # All-ones mask: extract is a copy, deposit overwrites wholly.
-    assert t.extract('0b1111') == t
+    assert t.extracted('0b1111') == t
     assert t.deposited('0b0000', '0b1111') == Tibs('0b0000')
     # Empty container.
-    assert Tibs('').extract('') == Tibs()
+    assert Tibs('').extracted('') == Tibs()
     assert Tibs('').deposited('', '') == Tibs()
 
 
 def test_extract_deposit_promotes_arguments():
     assert Tibs.from_zeros(8).deposited(b'\xff', Tibs.from_ones(8)) == Tibs('0xff')
-    assert Tibs('0xff').extract(Mutibs('0x0f')) == Tibs('0b1111')
+    assert Tibs('0xff').extracted(Mutibs('0x0f')) == Tibs('0b1111')
     assert Tibs('0b0000').deposited([1, 1], [True, False, True, False]) == Tibs('0b1010')
 
 
 def test_extract_deposit_errors():
     t = Tibs('0b1011')
     with pytest.raises(ValueError):
-        t.extract('0b101')                 # mask length != self length
+        t.extracted('0b101')                 # mask length != self length
     with pytest.raises(ValueError):
         t.deposited('0b1', '0b101')        # mask length != self length
     with pytest.raises(ValueError):
@@ -1268,7 +1268,7 @@ def test_extract_deposit_unaligned():
             for offset in range(8):
                 for length in [1, 8, 9, 65, 130]:
                     word, mask = pw[offset:offset + length], pm[offset:offset + length]
-                    got = word.extract(mask)
+                    got = word.extracted(mask)
                     assert got == _ref_extract(word, mask)
                     value = Tibs.from_ones(mask.count())
                     assert word.deposited(value, mask) == _ref_deposit(word, value, mask)
@@ -1281,8 +1281,8 @@ def test_extract_deposit_roundtrip_and_reference():
         word = Tibs.from_bools(random.getrandbits(1) for _ in range(n))
         mask = Tibs.from_bools(random.random() < 0.5 for _ in range(n))
         value = Tibs.from_bools(random.getrandbits(1) for _ in range(mask.count()))
-        assert word.extract(mask) == _ref_extract(word, mask)
+        assert word.extracted(mask) == _ref_extract(word, mask)
         assert word.deposited(value, mask) == _ref_deposit(word, value, mask)
         # extract and deposit are inverses.
-        assert word.deposited(word.extract(mask), mask) == word
-        assert word.deposited(value, mask).extract(mask) == value
+        assert word.deposited(word.extracted(mask), mask) == word
+        assert word.deposited(value, mask).extracted(mask) == value

@@ -426,7 +426,7 @@ GUARDS: list[Guard] = [
     Guard(
         name="extract(all-ones) vs to_mutibs()",
         site="core.rs:97 extract_masked - push per set bit",
-        slow=lambda: BIG_T.extract(ALL_ONES),
+        slow=lambda: BIG_T.extracted(ALL_ONES),
         fast=lambda: BIG_T.to_mutibs(),
         limit=20.0,
     ),

@@ -964,7 +964,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Mutibs {
 #[pymethods]
 impl Mutibs {
     #[new]
-    #[pyo3(signature = (auto = None), text_signature = "(auto=None)")]
+    #[pyo3(signature = (auto = None, /), text_signature = "(auto=None, /)")]
     pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
@@ -1145,7 +1145,7 @@ impl Mutibs {
     /// :param int b: The other non-negative inclusive field endpoint.
     /// :return: A new :class:`MutableView`.
     ///
-    #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
+    #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
     pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<MutableView> {
         let py = slf.py();
         MutableView::from_mutibs(slf.into(), ByteOrder::Unspecified, BitOrder::Msb0).field(py, a, b)
@@ -1975,7 +1975,7 @@ impl Mutibs {
     ///     >>> Mutibs('0x010203').to_values("u8")
     ///     [1, 2, 3]
     ///
-    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
     pub fn to_values(
         &self,
         py: Python<'_>,
@@ -2002,7 +2002,7 @@ impl Mutibs {
     ///     >>> Mutibs('0x0f').to_value("u8")
     ///     15
     ///
-    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
     pub fn to_value(
         &self,
         py: Python<'_>,
@@ -2307,6 +2307,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').starts_with('0b100')
     ///     False
     ///
+    #[pyo3(signature = (prefix, /), text_signature = "($self, prefix, /)")]
     pub fn starts_with(&self, prefix: Tibs) -> bool {
         <Mutibs as BitCollection>::starts_with(self, prefix)
     }
@@ -2329,6 +2330,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b101100').ends_with('0b101')
     ///     False
     ///
+    #[pyo3(signature = (suffix, /), text_signature = "($self, suffix, /)")]
     pub fn ends_with(&self, suffix: Tibs) -> bool {
         <Mutibs as BitCollection>::ends_with(self, suffix)
     }
@@ -2353,7 +2355,7 @@ impl Mutibs {
     ///      >>> Mutibs('0x3a5f').find('0x0f', mask='0x0f', byte_aligned=True)
     ///      8
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find(
         &self,
         py: Python<'_>,
@@ -2395,7 +2397,7 @@ impl Mutibs {
     ///      >>> Mutibs('0xc3e').find_all('0b1111')
     ///      [6]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(
         &self,
         py: Python<'_>,
@@ -2429,7 +2431,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b110011').chunks(2)
     ///     [Mutibs('0b11'), Mutibs('0b00'), Mutibs('0b11')]
     ///
-    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    #[pyo3(signature = (chunk_size, /, count = None), text_signature = "($self, chunk_size, /, count=None)")]
     pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
         BitCollection::collect_chunks(self, chunk_size, count)
     }
@@ -2474,6 +2476,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').count_and('0b1010')
     ///     1
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_and(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::And))
@@ -2493,6 +2496,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').count_or('0b1010')
     ///     3
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_or(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::Or))
@@ -2512,6 +2516,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').count_xor('0b1010')
     ///     2
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_xor(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::Xor))
@@ -2530,6 +2535,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').count_andnot('0b1010')
     ///     1
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_andnot(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::AndNot))
@@ -2551,6 +2557,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').intersects('0b0011')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn intersects(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_any(&other, LogicalOp::And))
@@ -2573,6 +2580,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').is_disjoint('0b1010')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_disjoint(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::And))
@@ -2594,6 +2602,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1100').is_subset_of('0b1010')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_subset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
@@ -2615,6 +2624,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b1010').is_superset_of('0b1100')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_superset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         // `and not` with the operands the other way round: the first bit
@@ -2634,12 +2644,12 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs('0b11010110').extract('0b10110000')
+    ///     >>> Mutibs('0b11010110').extracted('0b10110000')
     ///     Mutibs('0b101')
     ///
     // Named `extract_field` because `Mutibs::extract` is the FromPyObject
     // promotion method used throughout the crate.
-    #[pyo3(name = "extract")]
+    #[pyo3(name = "extracted", signature = (mask, /), text_signature = "($self, mask, /)")]
     pub fn extract_field(&self, mask: Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), mask.len())?;
         Ok(Self::from_bv(self.extract_masked(&mask)))
@@ -2647,7 +2657,7 @@ impl Mutibs {
 
     /// Write a scattered bit field into the Mutibs in place.
     ///
-    /// This is the inverse of :meth:`extract`, and writes a scattered field the
+    /// This is the inverse of :meth:`extracted`, and writes a scattered field the
     /// way slice assignment writes a contiguous one: the bits of ``value`` are
     /// written into the positions set in ``mask``, and the other bits are left
     /// unchanged.
@@ -2664,6 +2674,7 @@ impl Mutibs {
     ///     >>> m.bin
     ///     '11110110'
     ///
+    #[pyo3(signature = (value, mask, /), text_signature = "($self, value, mask, /)")]
     pub fn deposit(
         mut slf: PyRefMut<'_, Self>,
         value: &Bound<'_, PyAny>,
@@ -2693,6 +2704,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b11010110').deposited('0b111', '0b10110000').bin
     ///     '11110110'
     ///
+    #[pyo3(signature = (value, mask, /), text_signature = "($self, value, mask, /)")]
     pub fn deposited(&self, value: &Bound<'_, PyAny>, mask: Tibs) -> PyResult<Self> {
         let value = Tibs::extract(value.as_borrowed())?;
         let mut out = self.clone();
@@ -2782,7 +2794,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b11010')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotate_left(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
@@ -2808,7 +2820,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b01011')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotate_right(
         mut slf: PyRefMut<'_, Self>,
         n: i64,
@@ -2833,7 +2845,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b10110').rotated_left(2)
     ///     Mutibs('0b11010')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_rotation(n, start, end, true)?;
@@ -2855,7 +2867,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b10110').rotated_right(1)
     ///     Mutibs('0b01011')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotated_right(
         &self,
         n: i64,
@@ -2924,6 +2936,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b0000010011')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn set<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
         slf.apply_set_positions(true, pos)
     }
@@ -2946,6 +2959,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b1111101100')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn unset<'a>(mut slf: PyRefMut<'a, Self>, pos: &Bound<'_, PyAny>) -> PyResult<()> {
         slf.apply_set_positions(false, pos)
     }
@@ -2963,6 +2977,7 @@ impl Mutibs {
     ///     >>> Mutibs.from_zeros(5).set_at([1, 3])
     ///     Mutibs('0b01010')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_set_positions(true, pos)?;
@@ -2982,6 +2997,7 @@ impl Mutibs {
     ///     >>> Mutibs.from_ones(5).unset_at([1, 3])
     ///     Mutibs('0b10101')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_set_positions(false, pos)?;
@@ -3011,7 +3027,7 @@ impl Mutibs {
     ///     >>> Mutibs('0xff00ff').count([1, 1, 1])
     ///     12
     ///
-    #[pyo3(signature = (value=None, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (value=None, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
@@ -3084,7 +3100,7 @@ impl Mutibs {
     ///      >>> Mutibs('0b10111011').rfind('0b00', mask='0b10')
     ///      5
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind(
         &self,
         py: Python<'_>,
@@ -3128,7 +3144,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b10100')
     ///
-    #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
+    #[pyo3(signature = (pos = None, /), text_signature = "($self, pos=None, /)")]
     pub fn invert<'a>(mut slf: PyRefMut<'a, Self>, pos: Option<&Bound<'a, PyAny>>) -> PyResult<()> {
         slf.apply_invert_positions(pos)
     }
@@ -3147,7 +3163,7 @@ impl Mutibs {
     ///     >>> Mutibs('0b10110').inverted([0, 2])
     ///     Mutibs('0b00010')
     ///
-    #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
+    #[pyo3(signature = (pos = None, /), text_signature = "($self, pos=None, /)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let mut out = self.clone();
         out.apply_invert_positions(pos)?;
@@ -3411,6 +3427,7 @@ impl Mutibs {
     ///     m = Mutibs()
     ///     m.reserve(1000)
     ///
+    #[pyo3(signature = (additional, /), text_signature = "($self, additional, /)")]
     pub fn reserve(&mut self, additional: usize) {
         self.as_mut_bitvec_ref().reserve(additional);
     }
@@ -3472,6 +3489,7 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b1')
     ///
+    #[pyo3(signature = (bit, /), text_signature = "($self, bit, /)")]
     pub fn append<'a>(mut slf: PyRefMut<'a, Self>, bit: &Bound<'_, PyAny>) -> PyResult<()> {
         match helpers::convert_to_bool(bit) {
             Some(b) => {
@@ -3607,7 +3625,7 @@ impl Mutibs {
     ///     >>> m
     ///     Mutibs('0b0011101110')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (old, new, /, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, /, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replace<'a>(
         mut slf: PyRefMut<'a, Self>,
         py: Python<'_>,
@@ -3658,7 +3676,7 @@ impl Mutibs {
     ///     >>> Mutibs('0x1f2e3f').replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True)
     ///     Mutibs('0x002e00')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (old, new, /, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, /, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replaced(
         &self,
         py: Python<'_>,

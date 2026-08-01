@@ -1583,7 +1583,7 @@ pub(crate) fn py_values_from_range(
 #[pymethods]
 impl Tibs {
     #[new]
-    #[pyo3(signature = (auto = None), text_signature = "(auto=None)")]
+    #[pyo3(signature = (auto = None, /), text_signature = "(auto=None, /)")]
     pub fn py_new(auto: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let Some(auto) = auto else {
             return Ok(BitCollection::empty());
@@ -1862,7 +1862,7 @@ impl Tibs {
     /// :param int b: The other non-negative inclusive field endpoint.
     /// :return: A new :class:`View`.
     ///
-    #[pyo3(signature = (a, b), text_signature = "($self, a, b)")]
+    #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
     pub fn field(slf: PyRef<'_, Self>, a: i64, b: i64) -> PyResult<View> {
         View::from_tibs(slf.clone(), ByteOrder::Unspecified, BitOrder::Msb0).field(a, b)
     }
@@ -1900,7 +1900,7 @@ impl Tibs {
     ///     >>> Tibs('0b110011').chunks(2)
     ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
     ///
-    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    #[pyo3(signature = (chunk_size, /, count = None), text_signature = "($self, chunk_size, /, count=None)")]
     pub fn chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
         BitCollection::collect_chunks(self, chunk_size, count)
     }
@@ -1942,7 +1942,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b110011').chunks_iter(2))
     ///     [Tibs('0b11'), Tibs('0b00'), Tibs('0b11')]
     ///
-    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    #[pyo3(signature = (chunk_size, /, count = None), text_signature = "($self, chunk_size, /, count=None)")]
     pub fn chunks_iter(
         slf: PyRef<'_, Self>,
         chunk_size: i64,
@@ -1990,7 +1990,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b1100111').rchunks_iter(3))
     ///     [Tibs('0b111'), Tibs('0b100'), Tibs('0b11')]
     ///
-    #[pyo3(signature = (chunk_size, count = None), text_signature = "($self, chunk_size, count=None)")]
+    #[pyo3(signature = (chunk_size, /, count = None), text_signature = "($self, chunk_size, /, count=None)")]
     pub fn rchunks_iter(
         slf: PyRef<'_, Self>,
         chunk_size: i64,
@@ -2077,7 +2077,7 @@ impl Tibs {
     ///     >>> Tibs('0x1f2f3a').find_all('0x0f', mask='0x0f', byte_aligned=True)
     ///     [0, 8]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(
         &self,
         py: Python<'_>,
@@ -2123,7 +2123,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').find_all_iter('0b11'))
     ///     [2, 3, 6]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
@@ -2158,7 +2158,7 @@ impl Tibs {
     ///     >>> list(Tibs('0b10111011').rfind_all_iter('0b11'))
     ///     [6, 3, 2]
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind_all_iter(
         slf: PyRef<'_, Self>,
         needle: Tibs,
@@ -2251,7 +2251,7 @@ impl Tibs {
     ///     >>> list(Tibs('0x010203').to_values_iter("u8"))
     ///     [1, 2, 3]
     ///
-    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
     pub fn to_values_iter(
         slf: PyRef<'_, Self>,
         dtype: &Bound<'_, PyAny>,
@@ -2278,7 +2278,7 @@ impl Tibs {
     ///     >>> Tibs('0x010203').to_values("u8")
     ///     [1, 2, 3]
     ///
-    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
     pub fn to_values(
         &self,
         py: Python<'_>,
@@ -2304,7 +2304,7 @@ impl Tibs {
     ///     >>> Tibs('0x0f').to_value("u8")
     ///     15
     ///
-    #[pyo3(signature = (dtype, start = None, end = None), text_signature = "($self, dtype, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
     pub fn to_value(
         &self,
         py: Python<'_>,
@@ -2846,7 +2846,7 @@ impl Tibs {
     ///      >>> Tibs('0x3a5f').find('0x0f', mask='0x0f', byte_aligned=True)
     ///      8
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find(
         &self,
         py: Python<'_>,
@@ -2923,7 +2923,7 @@ impl Tibs {
     ///      >>> Tibs('0b10111011').rfind('0b00', mask='0b10')
     ///      5
     ///
-    #[pyo3(signature = (needle, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn rfind(
         &self,
         py: Python<'_>,
@@ -2959,6 +2959,7 @@ impl Tibs {
     ///     >>> Tibs('0b101100').starts_with('0b100')
     ///     False
     ///
+    #[pyo3(signature = (prefix, /), text_signature = "($self, prefix, /)")]
     pub fn starts_with(&self, prefix: Tibs) -> bool {
         <Tibs as BitCollection>::starts_with(self, prefix)
     }
@@ -2975,6 +2976,7 @@ impl Tibs {
     ///     >>> Tibs('0b101100').ends_with('0b101')
     ///     False
     ///
+    #[pyo3(signature = (suffix, /), text_signature = "($self, suffix, /)")]
     pub fn ends_with(&self, suffix: Tibs) -> bool {
         <Tibs as BitCollection>::ends_with(self, suffix)
     }
@@ -3002,7 +3004,7 @@ impl Tibs {
     ///     >>> Tibs.from_bin('0011010101100').count('0b01')
     ///     4
     ///
-    #[pyo3(signature = (value=None, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, start=None, end=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (value=None, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, value=None, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn count(
         &self,
         py: Python<'_>,
@@ -3070,6 +3072,7 @@ impl Tibs {
     ///     >>> Tibs.from_zeros(5).set_at([1, 3])
     ///     Tibs('0b01010')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.copy_with_mutation(|out| out.apply_set_positions(true, pos))
     }
@@ -3087,6 +3090,7 @@ impl Tibs {
     ///     >>> Tibs.from_ones(5).unset_at([1, 3])
     ///     Tibs('0b10101')
     ///
+    #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.copy_with_mutation(|out| out.apply_set_positions(false, pos))
     }
@@ -3105,7 +3109,7 @@ impl Tibs {
     ///     >>> Tibs('0b10110').inverted([0, 2])
     ///     Tibs('0b00010')
     ///
-    #[pyo3(signature = (pos = None), text_signature = "($self, pos=None)")]
+    #[pyo3(signature = (pos = None, /), text_signature = "($self, pos=None, /)")]
     pub fn inverted(&self, pos: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         if pos.is_none() {
             return Ok(self.inverted_copy());
@@ -3160,7 +3164,7 @@ impl Tibs {
     ///     >>> Tibs('0x1f2e3f').replaced('0x0f', '0x00', mask='0x0f', byte_aligned=True)
     ///     Tibs('0x002e00')
     ///
-    #[pyo3(signature = (old, new, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
+    #[pyo3(signature = (old, new, /, start=None, end=None, count=None, byte_aligned=false, mask=None), text_signature = "($self, old, new, /, start=None, end=None, count=None, byte_aligned=False, mask=None)")]
     pub fn replaced(
         &self,
         py: Python<'_>,
@@ -3349,6 +3353,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').count_and('0b1010')
     ///     1
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_and(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::And))
@@ -3368,6 +3373,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').count_or('0b1010')
     ///     3
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_or(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::Or))
@@ -3387,6 +3393,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').count_xor('0b1010')
     ///     2
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_xor(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::Xor))
@@ -3405,6 +3412,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').count_andnot('0b1010')
     ///     1
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn count_andnot(&self, other: Tibs) -> PyResult<usize> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_count(&other, LogicalOp::AndNot))
@@ -3426,6 +3434,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').intersects('0b0011')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn intersects(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(self.pairwise_any(&other, LogicalOp::And))
@@ -3448,6 +3457,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').is_disjoint('0b1010')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_disjoint(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::And))
@@ -3469,6 +3479,7 @@ impl Tibs {
     ///     >>> Tibs('0b1100').is_subset_of('0b1010')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_subset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         Ok(!self.pairwise_any(&other, LogicalOp::AndNot))
@@ -3490,6 +3501,7 @@ impl Tibs {
     ///     >>> Tibs('0b1010').is_superset_of('0b1100')
     ///     False
     ///
+    #[pyo3(signature = (other, /), text_signature = "($self, other, /)")]
     pub fn is_superset_of(&self, other: Tibs) -> PyResult<bool> {
         validate_logical_op_lengths(self.len(), other.len())?;
         // `and not` with the operands the other way round: the first bit
@@ -3509,12 +3521,12 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs('0b11010110').extract('0b10110000')
+    ///     >>> Tibs('0b11010110').extracted('0b10110000')
     ///     Tibs('0b101')
     ///
     // Named `extract_field` because `Tibs::extract` is the FromPyObject
     // promotion method used throughout the crate.
-    #[pyo3(name = "extract")]
+    #[pyo3(name = "extracted", signature = (mask, /), text_signature = "($self, mask, /)")]
     pub fn extract_field(&self, mask: Tibs) -> PyResult<Self> {
         validate_logical_op_lengths(self.len(), mask.len())?;
         Ok(Self::from_bv(self.extract_masked(&mask)))
@@ -3523,7 +3535,7 @@ impl Tibs {
     /// Return a new Tibs with a scattered bit field written into it.
     ///
     /// This is the immutable equivalent of :meth:`Mutibs.deposit`, and the
-    /// inverse of :meth:`extract`: the bits of ``value`` are written into the
+    /// inverse of :meth:`extracted`: the bits of ``value`` are written into the
     /// positions set in ``mask``, and the other bits are copied unchanged.
     ///
     /// :param object value: The bits to deposit. This can be anything promotable to ``Tibs``, and must be ``mask.count()`` bits long.
@@ -3536,6 +3548,7 @@ impl Tibs {
     ///     >>> Tibs('0b11010110').deposited('0b111', '0b10110000').bin
     ///     '11110110'
     ///
+    #[pyo3(signature = (value, mask, /), text_signature = "($self, value, mask, /)")]
     pub fn deposited(&self, value: &Bound<'_, PyAny>, mask: Tibs) -> PyResult<Self> {
         let value = Tibs::extract(value.as_borrowed())?;
         self.copy_with_mutation(|out| out.apply_deposit(&value, &mask))
@@ -3616,7 +3629,7 @@ impl Tibs {
     ///     >>> Tibs('0b10110').rotated_left(2)
     ///     Tibs('0b11010')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotated_left(&self, n: i64, start: Option<isize>, end: Option<isize>) -> PyResult<Self> {
         self.copy_with_mutation(|out| out.apply_rotation(n, start, end, true))
     }
@@ -3636,7 +3649,7 @@ impl Tibs {
     ///     >>> Tibs('0b10110').rotated_right(1)
     ///     Tibs('0b01011')
     ///
-    #[pyo3(signature = (n, start=None, end=None), text_signature = "($self, n, start=None, end=None)")]
+    #[pyo3(signature = (n, /, start=None, end=None), text_signature = "($self, n, /, start=None, end=None)")]
     pub fn rotated_right(
         &self,
         n: i64,

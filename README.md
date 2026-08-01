@@ -60,9 +60,9 @@ you two broad views of the binary data.
 
 Pull integers, floats, strings, hex or binary of any
 bit length straight out of the bits, without hand-rolling shifts and masks. Little-endian ordering and LSB0 field labels are handled elegantly so you don't reshuffle data
-yourself, and `extract` / `deposit` reach fields that are scattered across a word.
+yourself, and `extracted` / `deposit` reach fields that are scattered across a word.
 
-`from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extract` / `deposit` · f-string formatting
+`from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extracted` / `deposit` · f-string formatting
 
 ### 3. As a set of bits
 
@@ -189,7 +189,7 @@ on most, though several use more than one.
 | [`sensor_samples.py`](examples/sensor_samples.py) | Pack and unpack 12-bit ADC samples. |
 | [`little_endian_registers.py`](examples/little_endian_registers.py) | Decode and rebuild little-endian register dumps with `u16_le`. |
 | [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode LSB0, little-endian instruction fields. |
-| [`scattered_field.py`](examples/scattered_field.py) | Read and write a register field split around status bits with `extract`/`deposit`. |
+| [`scattered_field.py`](examples/scattered_field.py) | Read and write a register field split around status bits with `extracted`/`deposit`. |
 
 **Sets of bits** — bitwise algebra and comparison.
 

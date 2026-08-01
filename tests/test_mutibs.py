@@ -1918,7 +1918,7 @@ def test_invert_empty_special_method():
 
 def test_extract_deposit_mutibs():
     m = Mutibs('0b11010110')
-    assert m.extract('0b10110000') == Mutibs('0b101')
+    assert m.extracted('0b10110000') == Mutibs('0b101')
     # deposit mutates in place and returns None
     ret = m.deposit('0b111', '0b10110000')
     assert ret is None
@@ -1957,7 +1957,7 @@ def test_deposit_across_word_and_storage_boundaries():
 def test_extract_deposit_mutibs_errors():
     m = Mutibs('0b1011')
     with pytest.raises(ValueError):
-        m.extract('0b101')
+        m.extracted('0b101')
     with pytest.raises(ValueError):
         m.deposit('0b1', '0b101')
     with pytest.raises(ValueError):

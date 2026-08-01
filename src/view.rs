@@ -70,6 +70,21 @@ fn physical_index_for_label(bit_order: BitOrder, label: usize) -> usize {
     }
 }
 
+/// The error for a bad `View` source, with the `Mutibs` case called out.
+///
+/// A `Mutibs` is refused rather than snapshotted: the copy would be silent and
+/// O(n), and a view that stops tracking its source is not what `View` means
+/// elsewhere in Python (a read-only `memoryview` of a `bytearray` still sees
+/// writes). `MutableView` already refuses a `Tibs` for the mirror-image reason.
+fn mutibs_source_error(source: &Bound<'_, PyAny>, view_name: &str) -> PyErr {
+    if source.extract::<PyRef<'_, Mutibs>>().is_ok() {
+        return PyTypeError::new_err(format!(
+            "{view_name} source must be a Tibs, but a Mutibs was given. Use 'Mutibs.view()' for a live MutableView, or 'Mutibs.to_tibs()' for an immutable copy to view."
+        ));
+    }
+    PyTypeError::new_err(format!("{view_name} source must be a Tibs instance."))
+}
+
 fn validate_field_labels(len: usize, a: i64, b: i64) -> PyResult<(usize, usize)> {
     if len == 0 {
         return Err(PyValueError::new_err(
@@ -175,9 +190,11 @@ fn selected_source_bits(source: &BS, indices: &[usize], view_name: &str) -> PyRe
 ///     :attr:`~Tibs.le`, :attr:`~Tibs.be`, :attr:`~Tibs.lsb0`, :attr:`~Tibs.msb0`
 ///     or :meth:`~Tibs.view` helpers.
 ///
-///     Passing a :class:`Mutibs` to the direct ``View`` constructor stores a
-///     :class:`Tibs` snapshot. Later changes to the original :class:`Mutibs` are
-///     not reflected in the view. Use :class:`MutableView` for a live mutable view.
+///     The source must be a :class:`Tibs`, which a view borrows without copying.
+///     A :class:`Mutibs` is not accepted, because its bits can change underneath
+///     a view that cannot see the change: use :meth:`Mutibs.view` for a live
+///     :class:`MutableView`, or :meth:`Mutibs.to_tibs` for an immutable copy to
+///     view instead.
 ///
 ///     .. code-block:: pycon
 ///
@@ -506,7 +523,7 @@ impl MutableView {
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
     #[new]
-    #[pyo3(signature = (source, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=None, bit_order=None)")]
+    #[pyo3(signature = (source, /, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, /, byte_order=None, bit_order=None)")]
     pub fn py_new(
         source: PyRef<'_, Mutibs>,
         byte_order: Option<ByteOrder>,
@@ -541,7 +558,7 @@ impl MutableView {
     ///     '10101010'
     ///
     #[classmethod]
-    #[pyo3(signature = (source, indices, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=None, bit_order=None)")]
+    #[pyo3(signature = (source, indices, /, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, /, byte_order=None, bit_order=None)")]
     pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: PyRef<'_, Mutibs>,
@@ -726,6 +743,7 @@ impl MutableView {
     /// ``a`` and ``b`` must be zero or positive bit labels. The two endpoints
     /// are inclusive and may be provided in either order. The returned
     /// ``MutableView`` is a live view onto the selected source bits.
+    #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
     pub fn field(&self, py: Python<'_>, a: i64, b: i64) -> PyResult<Self> {
         let source = self.source.borrow(py);
         let current_len = self.validate_current_layout(source.len())?;
@@ -891,11 +909,12 @@ impl MutableView {
 
 #[pymethods]
 impl View {
-    /// Create a new view from a :class:`Tibs` or :class:`Mutibs`.
+    /// Create a new view of a :class:`Tibs`.
     ///
-    /// The ``source`` must be a :class:`Tibs` or :class:`Mutibs` instance. A
-    /// :class:`Tibs` source is cloned cheaply, while a :class:`Mutibs` source is
-    /// copied into an immutable snapshot.
+    /// The ``source`` must be a :class:`Tibs`, which is borrowed without copying
+    /// its bits. A :class:`Mutibs` is not accepted - use :meth:`Mutibs.view` for
+    /// a live :class:`MutableView`, or :meth:`Mutibs.to_tibs` for an immutable
+    /// copy to view instead.
     ///
     /// ``byte_order`` controls byte-wise interpretation for whole-byte values.
     /// ``bit_order`` controls how bit labels are interpreted within each byte.
@@ -903,9 +922,10 @@ impl View {
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
     ///
-    /// :param source: The :class:`Tibs` or :class:`Mutibs` to view.
+    /// :param Tibs source: The :class:`Tibs` to view.
     /// :param ByteOrder byte_order: The byte order used when interpreting whole-byte values. Defaults to ``ByteOrder.Unspecified``.
     /// :param BitOrder bit_order: The bit numbering order used for field labels. Defaults to ``BitOrder.Msb0``.
+    /// :raises TypeError: if ``source`` is not a :class:`Tibs`.
     ///
     /// .. code-block:: pycon
     ///
@@ -913,7 +933,7 @@ impl View {
     ///     '3412'
     ///
     #[new]
-    #[pyo3(signature = (source, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, byte_order=None, bit_order=None)")]
+    #[pyo3(signature = (source, /, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(source, /, byte_order=None, bit_order=None)")]
     pub fn py_new(
         source: &Bound<'_, PyAny>,
         byte_order: Option<ByteOrder>,
@@ -927,24 +947,19 @@ impl View {
             return Ok(View::from_tibs(tibs.clone(), byte_order, bit_order));
         }
 
-        if let Ok(mutibs) = source.extract::<PyRef<'_, Mutibs>>() {
-            Self::validate_layout(mutibs.len(), byte_order, bit_order)?;
-            return Ok(View::from_tibs(mutibs.to_tibs(), byte_order, bit_order));
-        }
-
-        Err(PyTypeError::new_err(
-            "View source must be a Tibs or Mutibs instance.",
-        ))
+        Err(mutibs_source_error(source, "View"))
     }
 
     /// Create a view by materializing selected source bit positions.
     ///
     /// ``indices`` may be a ``range`` or any iterable of integers. It maps
-    /// each viewed bit to a physical bit position in the source. Passing a
-    /// :class:`Mutibs` source stores an immutable snapshot.
+    /// each viewed bit to a physical bit position in the source, which must be
+    /// a :class:`Tibs`.
     ///
     /// This is a low-level reconstruction API. Use :meth:`~field` for normal
     /// specification-labelled fields.
+    ///
+    /// :raises TypeError: if ``source`` is not a :class:`Tibs`.
     ///
     /// .. code-block:: pycon
     ///
@@ -954,7 +969,7 @@ impl View {
     ///     '0000'
     ///
     #[classmethod]
-    #[pyo3(signature = (source, indices, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, byte_order=None, bit_order=None)")]
+    #[pyo3(signature = (source, indices, /, byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "(cls, source, indices, /, byte_order=None, bit_order=None)")]
     pub fn from_indices(
         _cls: &Bound<'_, PyType>,
         source: &Bound<'_, PyAny>,
@@ -970,14 +985,7 @@ impl View {
             return View::from_indices_bits(tibs.as_bitslice(), indices, byte_order, bit_order);
         }
 
-        if let Ok(mutibs) = source.extract::<PyRef<'_, Mutibs>>() {
-            let indices = extract_source_indices(indices)?;
-            return View::from_indices_bits(mutibs.as_bitslice(), indices, byte_order, bit_order);
-        }
-
-        Err(PyTypeError::new_err(
-            "View source must be a Tibs or Mutibs instance.",
-        ))
+        Err(mutibs_source_error(source, "View.from_indices"))
     }
 
     /// Return a view with updated interpretation settings.
@@ -1255,6 +1263,7 @@ impl View {
     ///     >>> t.lsb0.field(31, 26).u
     ///     4
     ///
+    #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
     pub fn field(&self, a: i64, b: i64) -> PyResult<Self> {
         let len = self.source.len();
         let (low, field_len) = validate_field_labels(len, a, b)?;
