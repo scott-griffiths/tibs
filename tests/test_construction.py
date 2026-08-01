@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import array
 import io
+import sys
 
 import pytest
 from hypothesis import given
@@ -358,3 +359,92 @@ def test_reversed_with_storage_starting_mid_byte(offset):
     for cls in (Tibs, Mutibs):
         a = cls('0b' + source)[offset:]
         assert a.reversed().bin == source[offset:][::-1]
+
+
+class TestCapacityLimit:
+    """A length past what the platform can hold must raise, not panic.
+
+    bitvec addresses a bit with a ``usize`` and spends three of those bits on
+    the position within an element, so a container holds at most 2**61 - 1 bits
+    on a 64-bit build but only 2**29 - 1 (about 64 MB) on a 32-bit one - which
+    the x86 wheels are. Before this was guarded, exceeding it panicked inside
+    bitvec, and pyo3 turns a panic into ``PanicException``, which derives from
+    ``BaseException`` so that it tears down the interpreter rather than being
+    caught by ordinary error handling.
+
+    Nothing here allocates: every length used is past what any build accepts,
+    so the check has to reject it before reaching the allocator.
+    """
+
+    # 2**61 - 1 on a 64-bit build, 2**29 - 1 on a 32-bit one.
+    CAP = 2 ** ((sys.maxsize.bit_length() + 1) - 3) - 1
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    @pytest.mark.parametrize(
+        "name, args",
+        [
+            ("from_zeros", ()),
+            ("from_ones", ()),
+            ("from_random", ()),
+        ],
+    )
+    def test_length_constructors_raise(self, cls, name, args):
+        with pytest.raises(MemoryError, match="supports at most"):
+            getattr(cls, name)(self.CAP + 1, *args)
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    @pytest.mark.parametrize("name, value", [("from_u", 1), ("from_i", 1), ("from_f", 1.0)])
+    def test_numeric_constructors_raise(self, cls, name, value):
+        with pytest.raises(MemoryError, match="supports at most"):
+            getattr(cls, name)(value, self.CAP + 1)
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_the_error_is_catchable_as_exception(self, cls):
+        # The whole point: PanicException derives from BaseException, so this
+        # would not have caught it.
+        try:
+            cls.from_zeros(self.CAP + 1)
+        except Exception as e:
+            assert isinstance(e, MemoryError)
+        else:
+            pytest.fail("expected the capacity limit to be reported")
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_a_length_wider_than_usize_is_not_truncated(self, cls):
+        # Only a 32-bit build can truncate, where usize is narrower than the
+        # i64 arriving from Python: 'length as usize' would turn 2**32 + 100
+        # into a silently-wrong 100-bit container. The check runs before the
+        # cast, so the length is rejected instead. On a 64-bit build the same
+        # length is merely large and legal, so only the over-cap value applies.
+        lengths = [2**63 - 1]
+        if self.CAP < 2**32:
+            lengths.append(2**32 + 100)
+        for length in lengths:
+            with pytest.raises(MemoryError):
+                cls.from_zeros(length)
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_negative_lengths_still_report_as_value_errors(self, cls):
+        # The capacity check must not have swallowed the existing negative case.
+        with pytest.raises(ValueError, match="Negative bit length"):
+            cls.from_zeros(-1)
+        with pytest.raises(ValueError, match="Negative bit length"):
+            cls.from_random(-1)
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_the_limit_itself_is_not_rejected(self, cls):
+        # Guards an off-by-one that would cap the container one bit short. The
+        # only way to observe the boundary is to allocate it, so this runs only
+        # where that is 64 MB rather than an impossible 2**58 bytes.
+        if self.CAP > 2**32:
+            pytest.skip("allocating 2**61 bits is not a test")
+        try:
+            container = cls.from_zeros(self.CAP)
+        except MemoryError as e:
+            # Distinguish our own refusal, which is the bug being tested for,
+            # from the machine genuinely not having 64 MB to spare - otherwise
+            # this would be a flaky failure on a small 32-bit runner.
+            if "supports at most" in str(e):
+                pytest.fail(f"the capacity limit itself was rejected: {e}")
+            pytest.skip("not enough memory to allocate the limit")
+        assert len(container) == self.CAP

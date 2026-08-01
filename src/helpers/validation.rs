@@ -1,15 +1,40 @@
 use crate::core::BitCollection;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use crate::helpers::BS;
+use pyo3::exceptions::{PyIndexError, PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
+/// Check a caller-supplied bit length and narrow it to a `usize`.
+///
+/// The upper bound is what a container can actually hold: bitvec addresses a
+/// bit with a `usize` and spends three of those bits on the position within an
+/// element, so `BS::MAX_BITS` is 2^61 - 1 on a 64-bit build but only
+/// 2^29 - 1 (about 64 MB) on a 32-bit one, which the x86 wheels are.
+///
+/// Both halves of this matter, and neither is theoretical:
+///
+/// * Without the check bitvec panics, and a panic crossing the FFI boundary
+///   becomes pyo3's `PanicException`, which derives from `BaseException`
+///   specifically so that it tears down the interpreter. An ordinary
+///   `except Exception` does not catch it.
+/// * The comparison has to happen before the cast. On a 32-bit build `usize`
+///   is narrower than the `i64` that comes in from Python, so casting first
+///   would silently truncate: a length of 2^32 + 100 would become 100 and
+///   quietly succeed with the wrong size.
 pub(crate) fn validate_length(length: i64) -> PyResult<usize> {
     if length < 0 {
-        Err(PyValueError::new_err(format!(
+        return Err(PyValueError::new_err(format!(
             "Negative bit length given: {length}."
-        )))
-    } else {
-        Ok(length as usize)
+        )));
     }
+    if length as u64 > BS::MAX_BITS as u64 {
+        return Err(PyMemoryError::new_err(format!(
+            "Cannot create {length} bits: this build of tibs supports at most {} bits \
+             ({} bytes) in one container.",
+            BS::MAX_BITS,
+            BS::MAX_BITS / 8
+        )));
+    }
+    Ok(length as usize)
 }
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {

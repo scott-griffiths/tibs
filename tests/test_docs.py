@@ -24,6 +24,7 @@ than each file carrying an import line.
 import doctest
 import os
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,20 @@ DOC_DIR = Path(__file__).resolve().parent.parent / "doc"
 # gigabyte and takes ~30 seconds, which is more than the rest of the test suite
 # put together. Run it with TIBS_DOC_SLOW=1, and in particular before a release.
 SLOW_FILES = {"byte_format.rst"}
+
+# bitvec addresses a bit with a usize and spends 3 of those bits on the
+# position within an element, so a container tops out at 2**(pointer - 3) - 1
+# bits: 2**61 - 1 on a 64-bit build, but only 536,870,911 (about 64 MB) on a
+# 32-bit one, which the x86 wheels are. Two examples are deliberately larger
+# than that, because the point of both is what tibs does with enormous sparse
+# containers. Shrinking them to suit the smallest platform we ship would lose
+# the example, so they are skipped where they cannot fit.
+POINTER_BITS = sys.maxsize.bit_length() + 1
+BIT_CAPACITY = 2 ** (POINTER_BITS - 3) - 1
+LARGE_ALLOCATION_FILES = {
+    "byte_format.rst": 10_000_000_000,
+    "serialization.rst": 1_000_000_000,
+}
 
 # Examples whose output is genuinely unpredictable, keyed by the source line.
 # These are run but not checked. Keep this list tiny: an entry here is an
@@ -113,6 +128,13 @@ def test_doc_examples(filename):
     if filename in SLOW_FILES and not os.environ.get("TIBS_DOC_SLOW"):
         pytest.skip(f"{filename} allocates over a gigabyte; set TIBS_DOC_SLOW=1 to run it")
 
+    needed = LARGE_ALLOCATION_FILES.get(filename)
+    if needed is not None and needed > BIT_CAPACITY:
+        pytest.skip(
+            f"{filename} needs {needed:,} bits, more than the {BIT_CAPACITY:,} a "
+            f"{POINTER_BITS}-bit build can hold"
+        )
+
     failures, tries = _run(filename)
     assert failures == 0, (
         f"{failures} of {tries} examples in doc/{filename} failed "
@@ -126,3 +148,25 @@ def test_exception_lists_do_not_go_stale():
     # UNCHECKABLE's per-example staleness is checked in _run.
     assert SLOW_FILES <= set(DOC_FILES), sorted(SLOW_FILES - set(DOC_FILES))
     assert set(UNCHECKABLE) <= set(DOC_FILES), sorted(set(UNCHECKABLE) - set(DOC_FILES))
+    assert set(LARGE_ALLOCATION_FILES) <= set(DOC_FILES), sorted(
+        set(LARGE_ALLOCATION_FILES) - set(DOC_FILES)
+    )
+
+
+def test_large_allocation_sizes_are_accurate():
+    # The recorded size must be at least the largest literal in the file, or a
+    # 32-bit runner would try to run an example that cannot fit.
+    literal = re.compile(r"[\d_]{7,}")
+    for filename, recorded in LARGE_ALLOCATION_FILES.items():
+        text = (DOC_DIR / filename).read_text()
+        largest = 0
+        for example in doctest.DocTestParser().get_examples(text):
+            for match in literal.finditer(example.source):
+                try:
+                    largest = max(largest, int(match.group().replace("_", "")))
+                except ValueError:
+                    pass
+        assert recorded >= largest, (
+            f"doc/{filename} now uses {largest:,} bits, more than the "
+            f"{recorded:,} recorded in LARGE_ALLOCATION_FILES"
+        )

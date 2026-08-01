@@ -1,4 +1,5 @@
 use super::bits::BV;
+use super::validation::validate_length;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{StdRng, SysRng};
@@ -24,18 +25,12 @@ fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
 }
 
 pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
-    if length < 0 {
-        return Err(PyValueError::new_err(format!(
-            "Negative bit length given: {}.",
-            length
-        )));
-    }
+    let length = validate_length(length)?;
     if secure && seed.is_some() {
         return Err(PyValueError::new_err(
             "A seed cannot be used when generating secure random data.",
         ));
     }
-    let length = length as usize;
     if length == 0 {
         return Ok(BV::new());
     }
