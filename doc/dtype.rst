@@ -99,7 +99,7 @@ containing exactly ``count`` values of its element dtype::
     >>> flags.length
     4
     >>> flags.pack([True, True, False, True])
-    Tibs('0b1101')
+    Tibs('0xd')
     >>> flags.unpack("0b1101")
     (True, True, False, True)
 

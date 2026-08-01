@@ -668,7 +668,7 @@ impl DtypeSingle {
     /// :param ByteOrder | None byte_order: The byte order. Defaults to unspecified.
     /// :return: A scalar dtype.
     #[classmethod]
-    #[pyo3(signature = (kind, length, /, byte_order = ByteOrder::Unspecified), text_signature = "(cls, kind, length, /, byte_order=ByteOrder.Unspecified)")]
+    #[pyo3(signature = (kind, length, /, byte_order = ByteOrder::Unspecified), text_signature = "(cls, kind, length, /, byte_order=None)")]
     fn from_params(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
