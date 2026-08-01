@@ -121,6 +121,12 @@ representation is intended.
 
     ``Tibs`` can be arbitrary sizes, so lengths are always given in bits and not bytes.
 
+    If you are using 32-bit Python this can be an issue - containers will be limited to
+    64 MiB and asking for more will raise a :exc:`MemoryError`.
+
+    For 64-bit Python, which is almost always the case these days, the limit is about 256 PiB
+    which should be enough for a while.
+
 
 Indexing and slicing
 ^^^^^^^^^^^^^^^^^^^^

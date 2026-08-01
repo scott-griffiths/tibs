@@ -376,8 +376,12 @@ class TestCapacityLimit:
     so the check has to reject it before reaching the allocator.
     """
 
-    # 2**61 - 1 on a 64-bit build, 2**29 - 1 on a 32-bit one.
-    CAP = 2 ** ((sys.maxsize.bit_length() + 1) - 3) - 1
+    # bitvec's REGION_MAX_BITS, which is `usize::MAX >> 3`: an eighth of the
+    # usize range, not the whole of it. 2**61 - 1 on a 64-bit build, and
+    # 2**29 - 1 = 536,870,911 (64 MiB of data) on a 32-bit one.
+    POINTER_BITS = sys.maxsize.bit_length() + 1
+    CAP = 2 ** (POINTER_BITS - 3) - 1
+    IS_32_BIT = POINTER_BITS == 32
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     @pytest.mark.parametrize(
@@ -417,8 +421,8 @@ class TestCapacityLimit:
         # cast, so the length is rejected instead. On a 64-bit build the same
         # length is merely large and legal, so only the over-cap value applies.
         lengths = [2**63 - 1]
-        if self.CAP < 2**32:
-            lengths.append(2**32 + 100)
+        if self.IS_32_BIT:
+            lengths.append(2**self.POINTER_BITS + 100)
         for length in lengths:
             with pytest.raises(MemoryError):
                 cls.from_zeros(length)
@@ -435,8 +439,8 @@ class TestCapacityLimit:
     def test_the_limit_itself_is_not_rejected(self, cls):
         # Guards an off-by-one that would cap the container one bit short. The
         # only way to observe the boundary is to allocate it, so this runs only
-        # where that is 64 MB rather than an impossible 2**58 bytes.
-        if self.CAP > 2**32:
+        # on a 32-bit build, where the limit is 64 MiB rather than 256 PiB.
+        if not self.IS_32_BIT:
             pytest.skip("allocating 2**61 bits is not a test")
         try:
             container = cls.from_zeros(self.CAP)
