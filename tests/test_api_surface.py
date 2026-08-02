@@ -85,6 +85,10 @@ POSITIONAL_ONLY_CALLS = [
      lambda: View.from_indices(source=Tibs("0xff"), indices=[0])),
     ("MutableView.from_indices(source=, indices=)",
      lambda: MutableView.from_indices(source=Mutibs("0xff"), indices=[0])),
+    ("View.to_value(dtype=)", lambda: Tibs("0xff").view().to_value(dtype="u8")),
+    ("MutableView.to_value(dtype=)", lambda: Mutibs("0xff").view().to_value(dtype="u8")),
+    ("MutableView.write_value(dtype=, value=)",
+     lambda: Mutibs("0xff").view().write_value(dtype="u8", value=1)),
     ("DtypeSingle.from_params(kind=, length=)",
      lambda: DtypeSingle.from_params(kind=DtypeKind.Uint, length=8)),
     ("DtypeArray.from_params(dtype=, count=)",
@@ -116,6 +120,7 @@ def test_optional_modifiers_stay_keyword_reachable():
     assert Tibs.from_bytes(b"\xff", offset=4, length=4).bin == "1111"
     assert len(Tibs.from_random(8, secure=True)) == 8
     assert t.view(byte_order=ByteOrder.Unspecified, bit_order=BitOrder.Lsb0) is not None
+    assert t.le.to_value("u8", start=0, end=8) == 0x3F
     assert t.encode(codec=Codec.Raw) is not None
     assert t.byte_swapped(byte_length=1, start=0, end=24) is not None
     assert str(DtypeSingle.from_params(DtypeKind.Uint, 16, byte_order=ByteOrder.Little)) == "u16_le"

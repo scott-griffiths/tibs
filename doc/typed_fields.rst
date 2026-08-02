@@ -248,4 +248,12 @@ For little-endian or LSB0 interpretations, assign through a mutable view instead
     >>> m.le.u
     45
 
+A view isn't limited to those interpretations either. :meth:`View.to_value` and
+:meth:`MutableView.write_value` take any dtype and apply the byte order and bit
+order of the view to it::
+
+    >>> m.le.write_value("(u8, u8)", (1, 2))
+    >>> m
+    Mutibs('0x0201')
+
 Views are covered next, in :doc:`views`.

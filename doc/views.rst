@@ -366,6 +366,53 @@ The value must be exactly ``mask.count()`` bits long. The non-mutating
 :meth:`Tibs.deposited` returns a new container instead of writing in place. See
 :doc:`example_scattered_field` for a worked register example.
 
+Typed values through a view
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``u``, ``i``, ``f``, ``bin``, ``oct``, ``hex`` and ``bytes`` interpretations
+cover the common cases, but they are only nine of the dtypes described in
+:doc:`typed_fields`. :meth:`View.to_value` takes any dtype, so array and tuple
+dtypes and explicit widths are reachable through a view too::
+
+    >>> t = Tibs('0x0000803f')
+    >>> t.le.to_value("f32")
+    1.0
+    >>> t.le.to_value("(u8, u24)")
+    (63, 8388608)
+
+The view is applied first and the dtype then decodes the value it denotes, which
+is the same rule ``bin`` and ``hex`` follow. So ``view.to_value(dtype)`` is
+always ``view.to_tibs().to_value(dtype)``, and ``start`` and ``end`` are
+positions within the viewed value rather than in the source::
+
+    >>> t.le.to_value("u8", start=0, end=8)
+    63
+
+Because the view is applied first, a dtype byte order suffix combines with the
+byte order of the view rather than replacing it. Two little-endian steps cancel
+out, so put the byte order in one place or the other, not both::
+
+    >>> Tibs('0x0100').to_value("u16_le")
+    1
+    >>> Tibs('0x0100').le.to_value("u16")
+    1
+    >>> Tibs('0x0100').le.to_value("u16_le")   # swapped twice
+    256
+
+On a :class:`MutableView`, :meth:`MutableView.write_value` is the write
+direction. The value is encoded with the dtype and the result is written through
+the view, so a field can be filled in place from a typed value::
+
+    >>> m = Mutibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11"))
+    >>> m.lsb0.le.field(63, 32).to_value("u32")
+    287454020
+    >>> m.lsb0.le.field(63, 32).write_value("u32", 0xdeadbeef)
+    >>> m.hex
+    '07010000efbeadde'
+
+As with the other write methods, the dtype length must match the view length
+exactly - a view never changes the length of its source.
+
 Materializing a view
 ^^^^^^^^^^^^^^^^^^^^
 

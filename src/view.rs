@@ -1,11 +1,12 @@
 use crate::core::BitCollection;
+use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
-    bv_from_uint, bytes_like_to_vec, format_bit_collection,
+    bv_from_uint, bytes_like_to_vec, format_bit_collection, validate_slice,
 };
 use crate::mutibs::Mutibs;
-use crate::tibs_::Tibs;
+use crate::tibs_::{Tibs, bv_from_value, py_from_value};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyType};
@@ -728,6 +729,69 @@ impl MutableView {
         self.assign_fixed_width_view_bits(py, viewed)
     }
 
+    /// Return one value decoded from the viewed bits with a dtype.
+    ///
+    /// The byte order and bit order of the view are applied first, so the dtype
+    /// decodes the value denoted by the view rather than the source bits in
+    /// storage. See :meth:`View.to_value`.
+    ///
+    /// :param Dtype | str dtype: The value encoding to use.
+    /// :param int | None start: Start bit position within the view. Defaults to 0.
+    /// :param int | None end: End bit position within the view. Defaults to len(self).
+    /// :return: The decoded Python value.
+    /// :raises ValueError: if the selected range is not exactly the dtype length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Mutibs('0x0000803f').le.to_value("f32")
+    ///     1.0
+    ///
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
+    pub fn to_value(
+        &self,
+        py: Python<'_>,
+        dtype: &Bound<'_, PyAny>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyAny>> {
+        let dtype = extract_dtype(dtype)?;
+        let viewed = self.to_tibs_view(py)?;
+        let (start, end) = validate_slice(viewed.len(), start, end)?;
+        py_from_value(py, &dtype, &viewed.get_slice_unchecked(start, end - start))
+    }
+
+    /// Write the viewed bits from one value encoded with a dtype.
+    ///
+    /// The value is encoded first and the result is then written through the
+    /// view, so the byte order and bit order of the view are applied to the
+    /// encoded bits. This is the write direction of :meth:`~to_value`.
+    ///
+    /// The dtype length must match the view length, as a ``MutableView`` never
+    /// changes the length of its source.
+    ///
+    /// :param Dtype | str dtype: The value encoding to use.
+    /// :param object value: The value to encode.
+    /// :raises ValueError: if the dtype length is not the view length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> m = Mutibs.from_zeros(32)
+    ///     >>> m.le.write_value("f32", 1.0)
+    ///     >>> m.hex
+    ///     '0000803f'
+    ///
+    #[pyo3(signature = (dtype, value, /), text_signature = "($self, dtype, value, /)")]
+    pub fn write_value(
+        &self,
+        py: Python<'_>,
+        dtype: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let dtype = extract_dtype(dtype)?;
+        let viewed = bv_from_value(&dtype, value)?;
+        self.assign_fixed_width_view_bits(py, viewed)
+    }
+
     /// Materialize the current view as a new :class:`Tibs`.
     pub fn to_tibs(&self, py: Python<'_>) -> PyResult<Tibs> {
         self.to_tibs_view(py)
@@ -1156,6 +1220,46 @@ impl View {
     /// Return the viewed bits as bytes.
     pub fn __bytes__(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
         self.to_bytes(py)
+    }
+
+    /// Return one value decoded from the viewed bits with a dtype.
+    ///
+    /// The byte order and bit order of the view are applied first, so the dtype
+    /// decodes the value denoted by the view rather than the source bits in
+    /// storage. This is the same rule the other conversions follow, which makes
+    /// this equivalent to ``view.to_tibs().to_value(dtype, start, end)``.
+    ///
+    /// ``start`` and ``end`` are therefore positions within the viewed bits, and
+    /// a dtype that carries its own byte order, such as ``"u16_le"``, combines
+    /// with the byte order of the view rather than replacing it.
+    ///
+    /// The selected range must have exactly the dtype length.
+    ///
+    /// :param Dtype | str dtype: The value encoding to use.
+    /// :param int | None start: Start bit position within the view. Defaults to 0.
+    /// :param int | None end: End bit position within the view. Defaults to len(self).
+    /// :return: The decoded Python value.
+    /// :raises ValueError: if the selected range is not exactly the dtype length.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Tibs('0x0000803f').le.to_value("f32")
+    ///     1.0
+    ///     >>> Tibs('0x23a11234').lsb0.le.field(31, 16).to_value("u16")
+    ///     13330
+    ///
+    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
+    pub fn to_value(
+        &self,
+        py: Python<'_>,
+        dtype: &Bound<'_, PyAny>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Py<PyAny>> {
+        let dtype = extract_dtype(dtype)?;
+        let viewed = self.to_tibs_view()?;
+        let (start, end) = validate_slice(viewed.len(), start, end)?;
+        py_from_value(py, &dtype, &viewed.get_slice_unchecked(start, end - start))
     }
 
     /// Materialize the view as a new :class:`Tibs`.

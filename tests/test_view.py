@@ -1,6 +1,6 @@
 import pytest
 
-from tibs import BitOrder, ByteOrder, Mutibs, MutableView, Tibs, View
+from tibs import BitOrder, ByteOrder, Dtype, Mutibs, MutableView, Tibs, View
 
 
 def test_view_constructor_accepts_tibs():
@@ -301,6 +301,56 @@ def test_view_to_methods_use_lsb0_value_order():
     assert Tibs("0x123456").lsb0.oct == Tibs("0x563412").oct
 
 
+def test_view_to_value_reaches_dtypes_the_privileged_kinds_do_not():
+    # The point of to_value on a view: any dtype, not just the nine
+    # interpretations that happen to have their own view method.
+    t = Tibs("0x0000803f")
+
+    assert t.le.to_value("f32") == 1.0
+    assert t.le.to_value(Dtype("f32")) == 1.0
+    assert t.le.to_value("[u8; 4]") == (0x3F, 0x80, 0x00, 0x00)
+    assert t.le.to_value("(u8, u24)") == (0x3F, 0x800000)
+    assert t.lsb0.to_value("bits32") == Tibs("0x3f800000")
+    assert Tibs("0b1").view().to_value("bool") is True
+
+
+@pytest.mark.parametrize("spec", ["0x0100", "0x23a11234", "0xdeadbeefcafe"])
+@pytest.mark.parametrize("byte_order", [ByteOrder.Unspecified, ByteOrder.Little, ByteOrder.Big])
+@pytest.mark.parametrize("bit_order", [BitOrder.Msb0, BitOrder.Lsb0])
+def test_view_to_value_matches_materializing_the_view_first(spec, byte_order, bit_order):
+    # The governing rule for every view conversion: the layout is applied
+    # first, and start/end are positions in the value the view denotes.
+    view = Tibs(spec).view(byte_order, bit_order)
+    materialized = view.to_tibs()
+
+    for dtype in ("u16", "i16", "hex4", "bits8", "bool"):
+        length = Dtype(dtype).length
+        for start in range(0, len(view) - length + 1, 4):
+            assert view.to_value(dtype, start, start + length) == materialized.to_value(
+                dtype, start, start + length
+            )
+
+
+def test_view_to_value_composes_dtype_byte_order_with_view_byte_order():
+    # A dtype byte order does not replace the view's, so a '_le' dtype in an
+    # 'le' view swaps twice and lands back on the big-endian reading.
+    t = Tibs("0x0100")
+
+    assert t.to_value("u16") == 256
+    assert t.to_value("u16_le") == 1
+    assert t.le.to_value("u16") == 1
+    assert t.le.to_value("u16_le") == 256
+
+
+def test_view_to_value_rejects_a_range_that_is_not_the_dtype_length():
+    with pytest.raises(ValueError, match="dtype with length"):
+        Tibs("0xff").le.to_value("u4")
+    with pytest.raises(ValueError, match="Invalid slice positions"):
+        Tibs("0xff").le.to_value("u4", 0, 99)
+    with pytest.raises(TypeError, match="must be a Dtype instance or dtype string"):
+        Tibs("0xff").view().to_value(8)
+
+
 def test_view_whole_value_matches_full_width_field():
     t = Tibs("0x0100")
     views = [t.view(), t.le, t.lsb0, t.lsb0.le]
@@ -458,6 +508,53 @@ def test_mutable_view_representation_setters_reject_width_changes():
 
     with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
         m.lsb0.bytes = b"\x00"
+
+    assert m == original
+
+
+def test_mutable_view_value_methods_round_trip_through_the_view_layout():
+    m = Mutibs.from_zeros(32)
+
+    assert m.le.write_value("f32", 1.0) is None
+    assert m.hex == "0000803f"
+    assert m.le.to_value("f32") == 1.0
+    assert m.le.to_value("[u8; 4]") == (0x3F, 0x80, 0x00, 0x00)
+    assert m.to_value("f32") != 1.0
+
+    m.lsb0.le.write_value("(u16, u16)", (0x1122, 0x3344))
+    assert m.hex == "44332211"
+    assert m.lsb0.le.to_value("(u16, u16)") == (0x1122, 0x3344)
+
+
+def test_mutable_view_write_value_writes_a_field_in_place():
+    m = Mutibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11"))
+    field = m.lsb0.le.field(63, 32)
+
+    assert field.to_value("u32") == 0x11223344
+
+    field.write_value("u32", 0xDEADBEEF)
+
+    assert len(m) == 64
+    assert m.hex == "07010000efbeadde"
+    assert m.lsb0.le.field(63, 32).to_value("u32") == 0xDEADBEEF
+
+
+def test_mutable_view_write_value_is_fixed_width_and_leaves_the_source_alone():
+    m = Mutibs("0xffff")
+    original = m.to_tibs()
+
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        m.le.write_value("u8", 1)
+
+    assert m == original
+
+    with pytest.raises(OverflowError):
+        m.le.write_value("u16", 1 << 16)
+
+    assert m == original
+
+    with pytest.raises(TypeError, match="must be a Dtype instance or dtype string"):
+        m.le.write_value(16, 1)
 
     assert m == original
 

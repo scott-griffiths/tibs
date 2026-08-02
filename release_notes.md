@@ -123,6 +123,24 @@ Added
   >>> Tibs.from_u(2 ** 200 - 1, 200).u == 2 ** 200 - 1
   True
   ```
+* Added `View.to_value`, `MutableView.to_value` and `MutableView.write_value`,
+  so any dtype is reachable through a view rather than only the nine
+  interpretations that have their own view property. The view's byte order and
+  bit order are applied first and the dtype then decodes the value the view
+  denotes, so `view.to_value(dtype, start, end)` is always
+  `view.to_tibs().to_value(dtype, start, end)`, and a dtype byte order suffix
+  combines with the view's rather than replacing it. `write_value` is the write
+  direction, and like the other view write methods it can't change the length of
+  its source.
+
+  ```python
+  >>> m = Mutibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11"))
+  >>> m.lsb0.le.field(63, 32).to_value("u32")
+  287454020
+  >>> m.lsb0.le.field(63, 32).write_value("u32", 0xdeadbeef)
+  >>> m.hex
+  '07010000efbeadde'
+  ```
 * Added `__format__` to `Tibs`, `Mutibs`, `View` and `MutableView`, so they can be
   used directly in f-strings and with `str.format()`. The type codes are `b`, `o`,
   `x` and `X` for the bit representations (equivalent to the `bin`, `oct` and `hex`
