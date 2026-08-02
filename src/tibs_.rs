@@ -12,7 +12,7 @@ use crate::helpers::{
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
-use half::f16;
+use half::{bf16, f16};
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::ffi;
@@ -542,6 +542,13 @@ fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResu
             let is_little_endian = dtype.byte_order == ByteOrder::Little;
             bv_from_f64(value.extract::<f64>()?, dtype.length, is_little_endian)
         }
+        DtypeKind::BFloat => {
+            let is_little_endian = dtype.byte_order == ByteOrder::Little;
+            Ok(helpers::bv_from_bf16(
+                value.extract::<f64>()?,
+                is_little_endian,
+            ))
+        }
         DtypeKind::Uint => {
             let is_little_endian = dtype.byte_order == ByteOrder::Little;
             bv_from_uint(value, dtype.length, is_little_endian)
@@ -686,6 +693,10 @@ enum BytewisePacker {
         byte_length: usize,
         is_little_endian: bool,
     },
+    /// bfloat16, which is always two bytes and so carries no byte length.
+    /// Kept apart from `Float` because that variant picks its conversion by
+    /// byte length, and two bytes does not distinguish `f16` from `bf16`.
+    BFloat { is_little_endian: bool },
 }
 
 impl BytewisePacker {
@@ -698,7 +709,10 @@ impl BytewisePacker {
             return None;
         }
         let byte_length = length / 8;
-        if !matches!(kind, DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float) {
+        if !matches!(
+            kind,
+            DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float | DtypeKind::BFloat
+        ) {
             return None;
         }
         let is_little_endian = byte_order == ByteOrder::Little;
@@ -707,6 +721,7 @@ impl BytewisePacker {
                 byte_length,
                 is_little_endian,
             },
+            DtypeKind::BFloat => BytewisePacker::BFloat { is_little_endian },
             _ => BytewisePacker::Int {
                 byte_length,
                 is_little_endian,
@@ -724,6 +739,7 @@ impl BytewisePacker {
             BytewisePacker::Int { byte_length, .. } | BytewisePacker::Float { byte_length, .. } => {
                 byte_length
             }
+            BytewisePacker::BFloat { .. } => 2,
         }
     }
 
@@ -732,7 +748,9 @@ impl BytewisePacker {
     fn plain_type(&self) -> *mut ffi::PyTypeObject {
         match *self {
             BytewisePacker::Int { .. } => &raw mut ffi::PyLong_Type,
-            BytewisePacker::Float { .. } => &raw mut ffi::PyFloat_Type,
+            BytewisePacker::Float { .. } | BytewisePacker::BFloat { .. } => {
+                &raw mut ffi::PyFloat_Type
+            }
         }
     }
 
@@ -753,6 +771,10 @@ impl BytewisePacker {
                     byte_length,
                     is_little_endian,
                 );
+                Ok(())
+            }
+            BytewisePacker::BFloat { is_little_endian } => {
+                helpers::push_bf16_bytes(out, value.extract::<f64>()?, is_little_endian);
                 Ok(())
             }
         }
@@ -1117,6 +1139,10 @@ enum NumericReading {
     Uint,
     Int,
     Float,
+    /// bfloat16. `Float` picks its conversion from the byte length, which
+    /// cannot tell a two-byte `bf16` from a two-byte `f16`, so the two
+    /// readings have to be distinct here rather than share a decoder.
+    BFloat,
 }
 
 /// How the byte-wise path in [`py_from_value_parts`] decodes one value.
@@ -1153,6 +1179,10 @@ impl BytewiseUnpacker {
             DtypeKind::Float => {
                 debug_assert!(matches!(byte_length, 2 | 4 | 8));
                 NumericReading::Float
+            }
+            DtypeKind::BFloat => {
+                debug_assert_eq!(byte_length, 2);
+                NumericReading::BFloat
             }
             _ => return None,
         };
@@ -1228,6 +1258,7 @@ impl BytewiseUnpacker {
                 4 => (f32::from_bits(raw as u32) as f64).into_bound_py_any(py),
                 _ => f16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
             },
+            NumericReading::BFloat => bf16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
         }
     }
 
@@ -1344,6 +1375,7 @@ pub(crate) fn py_from_value_parts(
 
     match dtype_kind {
         DtypeKind::Float => unreachable!("validated float dtypes unpack bytewise"),
+        DtypeKind::BFloat => unreachable!("bf16 is two bytes and unpacks bytewise"),
         DtypeKind::Uint => {
             let is_little_endian = byte_order == ByteOrder::Little;
             Ok(BitCollection::to_uint(value, py, is_little_endian)?.unbind())

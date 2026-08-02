@@ -1,6 +1,6 @@
 use super::bits::{BS, BV, BitAccumulator};
 use bitvec::prelude::*;
-use half::f16;
+use half::{bf16, f16};
 use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyInt};
@@ -342,6 +342,35 @@ pub(crate) fn push_f64_bytes(
         2 => push!(f16::from_f64(value).to_bits()),
         _ => unreachable!("validated float dtypes are 2, 4 or 8 bytes"),
     }
+}
+
+/// Append `value` to `out` as the two bytes of a `bf16` dtype.
+///
+/// The bfloat16 counterpart of [`push_f64_bytes`], kept separate rather than
+/// added as a fourth arm there: that function dispatches on a byte length,
+/// which cannot tell `f16` from `bf16`, and its match sits in the hot pack
+/// loop for every float dtype.
+pub(crate) fn push_bf16_bytes(out: &mut Vec<u8>, value: f64, is_little_endian: bool) {
+    let bits = bf16::from_f64(value).to_bits();
+    if is_little_endian {
+        out.extend_from_slice(&bits.to_le_bytes());
+    } else {
+        out.extend_from_slice(&bits.to_be_bytes());
+    }
+}
+
+/// The bfloat16 counterpart of [`bv_from_f64`], separate for the same reason
+/// as [`push_bf16_bytes`]. The length is always 16, since `Dtype` rejects any
+/// other length for the kind when it is built.
+pub(crate) fn bv_from_bf16(value: f64, is_little_endian: bool) -> BV {
+    let bits = bf16::from_f64(value).to_bits();
+    let mut bv = BV::repeat(false, 16);
+    if is_little_endian {
+        bv.store_le(bits);
+    } else {
+        bv.store_be(bits);
+    }
+    bv
 }
 
 fn unsupported_float_length(length: usize) -> PyErr {

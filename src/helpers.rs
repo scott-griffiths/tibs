@@ -21,8 +21,8 @@ pub(crate) use bitwise::{
 pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_padded_bytes};
 pub(crate) use format::format_bit_collection;
 pub(crate) use numeric::{
-    FAST_INT_BITS, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name, push_f64_bytes,
-    push_int_bits, push_int_bytes,
+    FAST_INT_BITS, bv_from_bf16, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name,
+    push_bf16_bytes, push_f64_bytes, push_int_bits, push_int_bytes,
 };
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{

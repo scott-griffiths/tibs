@@ -38,6 +38,14 @@ impl SingleDtype {
                     kind.repr_name()
                 )));
             }
+            // bfloat16 is one format, not a family of widths, so unlike Float
+            // there is nothing to choose between here.
+            DtypeKind::BFloat if length != 16 => {
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of kind {} must have length 16 bits. Received {length}.",
+                    kind.repr_name()
+                )));
+            }
             DtypeKind::Bytes if !length.is_multiple_of(8) => {
                 return Err(PyValueError::new_err(format!(
                     "A Dtype of kind {} must have a length that is a multiple of 8 bits. Received {length}.",
@@ -60,7 +68,7 @@ impl SingleDtype {
         }
         if byte_order != ByteOrder::Unspecified {
             match kind {
-                DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float => {
+                DtypeKind::Uint | DtypeKind::Int | DtypeKind::Float | DtypeKind::BFloat => {
                     if !length.is_multiple_of(8) {
                         return Err(PyValueError::new_err(format!(
                             "If a Dtype byte_order is given, the length must be a multiple of 8 (length = {length})."
@@ -96,10 +104,23 @@ impl SingleDtype {
             return Self::from_parts(DtypeKind::Bool, 1, byte_order);
         }
 
+        // 'bf16' is the only spelling accepted, but the format is usually
+        // written out in full elsewhere, so send that spelling somewhere
+        // rather than letting it fail as an unparseable length.
+        if base == "bfloat" || base == "bfloat16" {
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': did you mean 'bf16'?"
+            )));
+        }
+
+        // No other kind starts with 'bf', so this one has no ordering
+        // constraint against the 'b' kinds below it.
         let (kind, length_text) = if let Some(length) = base.strip_prefix("bytes") {
             (DtypeKind::Bytes, length)
         } else if let Some(length) = base.strip_prefix("bits") {
             (DtypeKind::Bits, length)
+        } else if let Some(length) = base.strip_prefix("bf") {
+            (DtypeKind::BFloat, length)
         } else if let Some(length) = base.strip_prefix("bin") {
             (DtypeKind::Bin, length)
         } else if let Some(length) = base.strip_prefix("oct") {
@@ -141,6 +162,7 @@ impl SingleDtype {
             DtypeKind::Uint => format!("u{}{byte_order}", self.length),
             DtypeKind::Int => format!("i{}{byte_order}", self.length),
             DtypeKind::Float => format!("f{}{byte_order}", self.length),
+            DtypeKind::BFloat => format!("bf{}{byte_order}", self.length),
             DtypeKind::Bool => "bool".to_string(),
             DtypeKind::Bits => format!("bits{}", self.length),
             DtypeKind::Bin => format!("bin{}", self.length),

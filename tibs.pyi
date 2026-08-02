@@ -33,6 +33,7 @@ class DtypeKind:
     Uint: ClassVar[DtypeKind]
     Int: ClassVar[DtypeKind]
     Float: ClassVar[DtypeKind]
+    BFloat: ClassVar[DtypeKind]
     Bool: ClassVar[DtypeKind]
     Bits: ClassVar[DtypeKind]
     Bytes: ClassVar[DtypeKind]
