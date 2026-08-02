@@ -174,6 +174,18 @@ impl DtypeRepr {
         }
     }
 
+    /// Whether any part of this dtype names a byte order, at any nesting depth.
+    ///
+    /// A byte order is a property of each scalar field rather than of the whole
+    /// value, so `"(u8, u16_le)"` counts even though only one field carries it.
+    fn has_explicit_byte_order(&self) -> bool {
+        match self {
+            Self::Single(dtype) => dtype.byte_order != ByteOrder::Unspecified,
+            Self::Array { dtype, .. } => dtype.has_explicit_byte_order(),
+            Self::Tuple(dtypes) => dtypes.iter().any(Self::has_explicit_byte_order),
+        }
+    }
+
     fn spec(&self) -> String {
         match self {
             Self::Single(dtype) => dtype.spec(),
@@ -484,6 +496,14 @@ impl Dtype {
         }
     }
 
+    pub(crate) fn spec(&self) -> String {
+        self.repr.spec()
+    }
+
+    pub(crate) fn has_explicit_byte_order(&self) -> bool {
+        self.repr.has_explicit_byte_order()
+    }
+
     fn class_name(&self) -> &'static str {
         match self.repr {
             DtypeRepr::Single(_) => "DtypeSingle",
@@ -613,11 +633,11 @@ impl Dtype {
     }
 
     fn __str__(&self) -> String {
-        self.repr.spec()
+        self.spec()
     }
 
     fn __repr__(&self) -> String {
-        format!("{}('{}')", self.class_name(), self.repr.spec())
+        format!("{}('{}')", self.class_name(), self.spec())
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {

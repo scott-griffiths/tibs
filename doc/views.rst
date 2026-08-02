@@ -388,16 +388,43 @@ positions within the viewed value rather than in the source::
     >>> t.le.to_value("u8", start=0, end=8)
     63
 
-Because the view is applied first, a dtype byte order suffix combines with the
-byte order of the view rather than replacing it. Two little-endian steps cancel
-out, so put the byte order in one place or the other, not both::
+Byte order is stated in one place
+"""""""""""""""""""""""""""""""""
 
-    >>> Tibs('0x0100').to_value("u16_le")
+A dtype can name a byte order with an ``_le`` or ``_be`` suffix, and so can a
+view. Both are useful, but only one of them at a time: the view is applied
+first, so a suffixed dtype inside an ``le``, ``be`` or ``lsb0`` view would be a
+*second* byte order rather than the only one, and two little-endian steps cancel
+out. Rather than quietly swapping twice, that combination is an error::
+
+    >>> Tibs('0x0100').to_value("u16_le")      # byte order on the dtype
     1
-    >>> Tibs('0x0100').le.to_value("u16")
+    >>> Tibs('0x0100').le.to_value("u16")      # byte order on the view
     1
-    >>> Tibs('0x0100').le.to_value("u16_le")   # swapped twice
-    256
+    >>> Tibs('0x0100').le.to_value("u16_le")   # both
+    Traceback (most recent call last):
+    ...
+    ValueError: Cannot use the dtype 'u16_le' through a view that specifies its own byte order or bit order. ...
+
+This applies at any nesting depth, so a single suffixed field is enough to make
+a whole record dtype unusable through such a view. The plain ``view()`` makes no
+claim about byte order, so it passes any dtype straight through::
+
+    >>> Tibs('0x0100').view().to_value("u16_le")
+    1
+
+Choosing between the two is mostly decided for you. A view applies its byte
+order to the whole view at once, so it can't describe a record whose fields
+differ, or a run of little-endian values - for those the byte order has to live
+on the dtype, and the source ``Tibs`` or ``Mutibs`` is where you read it::
+
+    >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
+    '3412cdab'
+    >>> Tibs.from_value("(u8, u16_le)", (1, 0x0203)).hex
+    '010302'
+
+Where a whole view really does share one byte order, either place works, and the
+view form composes with ``field()`` and the other view conversions.
 
 On a :class:`MutableView`, :meth:`MutableView.write_value` is the write
 direction. The value is encoded with the dtype and the result is written through

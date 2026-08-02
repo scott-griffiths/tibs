@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from tibs import BitOrder, ByteOrder, Dtype, Mutibs, MutableView, Tibs, View
@@ -331,15 +333,59 @@ def test_view_to_value_matches_materializing_the_view_first(spec, byte_order, bi
             )
 
 
-def test_view_to_value_composes_dtype_byte_order_with_view_byte_order():
-    # A dtype byte order does not replace the view's, so a '_le' dtype in an
-    # 'le' view swaps twice and lands back on the big-endian reading.
+def test_view_to_value_takes_byte_order_from_one_place_only():
+    # The view's layout is applied first, so a '_le' dtype inside an 'le' view
+    # would be a second byte order and would swap twice. Say it once.
     t = Tibs("0x0100")
 
     assert t.to_value("u16") == 256
     assert t.to_value("u16_le") == 1
     assert t.le.to_value("u16") == 1
-    assert t.le.to_value("u16_le") == 256
+
+    with pytest.raises(ValueError, match="through a view that specifies its own byte order"):
+        t.le.to_value("u16_le")
+
+
+@pytest.mark.parametrize("dtype", ["u16_le", "u16_be", "(u8, u8_le)", "[u16_le; 1]"])
+@pytest.mark.parametrize("view_name", ["le", "be", "lsb0"])
+def test_byte_ordered_view_refuses_a_byte_ordered_dtype_at_any_nesting_depth(view_name, dtype):
+    view = getattr(Tibs("0x0100"), view_name)
+    mutable = getattr(Mutibs("0x0100"), view_name)
+
+    with pytest.raises(ValueError, match=f"Cannot use the dtype '{re.escape(str(Dtype(dtype)))}'"):
+        view.to_value(dtype)
+    with pytest.raises(ValueError, match="through a view that specifies its own byte order"):
+        mutable.to_value(dtype)
+    with pytest.raises(ValueError, match="through a view that specifies its own byte order"):
+        mutable.write_value(dtype, 1 if "(" not in dtype and "[" not in dtype else (1, 1))
+
+
+def test_a_view_that_states_no_layout_still_passes_a_byte_ordered_dtype_through():
+    # A plain view() makes no claim about byte order, so it stays a
+    # pass-through to the reading Tibs.to_value would give.
+    t = Tibs("0x0100")
+
+    assert t.view().to_value("u16_le") == t.to_value("u16_le") == 1
+    assert t.msb0.to_value("(u8, u8)") == (1, 0)
+    assert Mutibs("0x0100").view().to_value("u16_le") == 1
+
+    m = Mutibs.from_zeros(16)
+    m.view().write_value("u16_le", 1)
+    assert m.hex == "0100"
+
+
+def test_field_views_inherit_the_byte_order_rule_from_their_parent():
+    # field() keeps the parent byte order for whole-byte fields and drops it
+    # otherwise, and the dtype rule has to follow that either way.
+    header = Tibs("0x23a11234").lsb0.le
+
+    assert header.field(31, 16).byte_order == ByteOrder.Little
+    with pytest.raises(ValueError, match="through a view that specifies its own byte order"):
+        header.field(31, 16).to_value("u16_le")
+
+    narrow = header.field(11, 0)
+    assert narrow.byte_order == ByteOrder.Unspecified
+    assert narrow.to_value("u12") == 291
 
 
 def test_view_to_value_rejects_a_range_that_is_not_the_dtype_length():

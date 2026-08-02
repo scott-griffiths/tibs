@@ -128,10 +128,20 @@ Added
   interpretations that have their own view property. The view's byte order and
   bit order are applied first and the dtype then decodes the value the view
   denotes, so `view.to_value(dtype, start, end)` is always
-  `view.to_tibs().to_value(dtype, start, end)`, and a dtype byte order suffix
-  combines with the view's rather than replacing it. `write_value` is the write
+  `view.to_tibs().to_value(dtype, start, end)`. `write_value` is the write
   direction, and like the other view write methods it can't change the length of
   its source.
+
+  Byte order is stated in one place only. A dtype that names a byte order is
+  refused by an `le`, `be` or `lsb0` view, at any nesting depth, because the
+  view's layout is applied first and the suffix would be a second byte order
+  rather than the only one — `t.le.to_value("u16_le")` would otherwise swap
+  twice and land back on the big-endian reading. Put the byte order on the view
+  or on the dtype, not both. The plain `view()` claims no layout and still
+  passes any dtype through. Byte order stays on `Dtype` because a view applies
+  one byte order to the whole view, so per-field records like
+  `"(u8, u16_le, bool)"` and runs like `Tibs.from_values("u16_le", ...)` have no
+  view equivalent; read those from the source `Tibs` or `Mutibs`.
 
   ```python
   >>> m = Mutibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11"))

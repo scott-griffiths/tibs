@@ -1,5 +1,5 @@
 use crate::core::BitCollection;
-use crate::dtype::extract_dtype;
+use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
@@ -62,6 +62,34 @@ fn physical_bits_from_view_bits(
         physical.set(source_index, selected[bit_index]);
     }
     Ok(physical)
+}
+
+/// Refuse a dtype that names a byte order when the view already names one.
+///
+/// A view built with `le`, `be` or `lsb0` states the byte order for everything
+/// read or written through it. The view's layout is applied first, so a `_le`
+/// or `_be` dtype on top of it would be a *second* byte order rather than the
+/// only one: `t.le.to_value("u16_le")` would swap twice and land back on the
+/// big-endian reading. Byte order is stated in exactly one place, so the pair
+/// is refused rather than silently composed.
+///
+/// The plain `view()` is not caught, because it makes no claim about layout and
+/// is a pass-through to the same reading `Tibs.to_value` would give. This is the
+/// same "is byte-oriented" test that [`View::validate_layout`] uses.
+fn validate_dtype_byte_order(
+    dtype: &Dtype,
+    byte_order: ByteOrder,
+    bit_order: BitOrder,
+) -> PyResult<()> {
+    let view_states_byte_order =
+        byte_order != ByteOrder::Unspecified || bit_order != BitOrder::Msb0;
+    if view_states_byte_order && dtype.has_explicit_byte_order() {
+        return Err(PyValueError::new_err(format!(
+            "Cannot use the dtype '{}' through a view that specifies its own byte order or bit order. The view's layout is applied first, so a '_le' or '_be' dtype would add a second byte order rather than replace the view's. Remove the byte order from the dtype, or use the source Tibs or Mutibs instead of a view.",
+            dtype.spec()
+        )));
+    }
+    Ok(())
 }
 
 fn physical_index_for_label(bit_order: BitOrder, label: usize) -> usize {
@@ -733,13 +761,15 @@ impl MutableView {
     ///
     /// The byte order and bit order of the view are applied first, so the dtype
     /// decodes the value denoted by the view rather than the source bits in
-    /// storage. See :meth:`View.to_value`.
+    /// storage. An ``le``, ``be`` or ``lsb0`` view already states the byte
+    /// order, so a dtype that names its own is refused. See
+    /// :meth:`View.to_value`.
     ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :param int | None start: Start bit position within the view. Defaults to 0.
     /// :param int | None end: End bit position within the view. Defaults to len(self).
     /// :return: The decoded Python value.
-    /// :raises ValueError: if the selected range is not exactly the dtype length.
+    /// :raises ValueError: if the selected range is not exactly the dtype length, or if the dtype names a byte order and the view does too.
     ///
     /// .. code-block:: pycon
     ///
@@ -755,6 +785,7 @@ impl MutableView {
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
+        validate_dtype_byte_order(&dtype, self.byte_order, self.bit_order)?;
         let viewed = self.to_tibs_view(py)?;
         let (start, end) = validate_slice(viewed.len(), start, end)?;
         py_from_value(py, &dtype, &viewed.get_slice_unchecked(start, end - start))
@@ -764,14 +795,15 @@ impl MutableView {
     ///
     /// The value is encoded first and the result is then written through the
     /// view, so the byte order and bit order of the view are applied to the
-    /// encoded bits. This is the write direction of :meth:`~to_value`.
+    /// encoded bits. This is the write direction of :meth:`~to_value`, and it
+    /// refuses a dtype that names its own byte order for the same reason.
     ///
     /// The dtype length must match the view length, as a ``MutableView`` never
     /// changes the length of its source.
     ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :param object value: The value to encode.
-    /// :raises ValueError: if the dtype length is not the view length.
+    /// :raises ValueError: if the dtype length is not the view length, or if the dtype names a byte order and the view does too.
     ///
     /// .. code-block:: pycon
     ///
@@ -788,6 +820,7 @@ impl MutableView {
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let dtype = extract_dtype(dtype)?;
+        validate_dtype_byte_order(&dtype, self.byte_order, self.bit_order)?;
         let viewed = bv_from_value(&dtype, value)?;
         self.assign_fixed_width_view_bits(py, viewed)
     }
@@ -1228,10 +1261,12 @@ impl View {
     /// decodes the value denoted by the view rather than the source bits in
     /// storage. This is the same rule the other conversions follow, which makes
     /// this equivalent to ``view.to_tibs().to_value(dtype, start, end)``.
+    /// ``start`` and ``end`` are therefore positions within the viewed bits.
     ///
-    /// ``start`` and ``end`` are therefore positions within the viewed bits, and
-    /// a dtype that carries its own byte order, such as ``"u16_le"``, combines
-    /// with the byte order of the view rather than replacing it.
+    /// Byte order is stated in one place. An ``le``, ``be`` or ``lsb0`` view
+    /// already states it, so a dtype that names its own byte order, such as
+    /// ``"u16_le"``, is refused there rather than applied on top. Give the byte
+    /// order to the view or to the dtype, not to both.
     ///
     /// The selected range must have exactly the dtype length.
     ///
@@ -1239,7 +1274,7 @@ impl View {
     /// :param int | None start: Start bit position within the view. Defaults to 0.
     /// :param int | None end: End bit position within the view. Defaults to len(self).
     /// :return: The decoded Python value.
-    /// :raises ValueError: if the selected range is not exactly the dtype length.
+    /// :raises ValueError: if the selected range is not exactly the dtype length, or if the dtype names a byte order and the view does too.
     ///
     /// .. code-block:: pycon
     ///
@@ -1257,6 +1292,7 @@ impl View {
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
+        validate_dtype_byte_order(&dtype, self.byte_order, self.bit_order)?;
         let viewed = self.to_tibs_view()?;
         let (start, end) = validate_slice(viewed.len(), start, end)?;
         py_from_value(py, &dtype, &viewed.get_slice_unchecked(start, end - start))
