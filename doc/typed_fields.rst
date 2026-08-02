@@ -34,6 +34,10 @@ Integers can be any positive number of bits long; floats must be 16, 32 or 64::
     # Floating point values need to have a length of 16, 32 or 64.
     g = Tibs.from_f(-0.125, 16)
 
+.. note::
+    These `f` floating point types are IEEE 754 only. Other floating point types
+    like bfloat16 are specified with an explicity Dtype, for example `Tibs.from_value("bf16", -0.125)`.
+
 The ``to_`` methods accept optional ``start`` and ``end`` bit positions when you
 only want to interpret part of the data. With no parameters, the ``u``, ``i`` and
 ``f`` properties are a convenient alias, so instead of ``t.to_u()`` you can write

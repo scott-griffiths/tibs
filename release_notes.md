@@ -45,6 +45,25 @@ Added
   Tibs('0b00000101101')
   ```
 
+* Added the `bf16` dtype for bfloat16, the non-IEEE 16-bit float that keeps the
+  8-bit exponent of an `f32` and truncates the mantissa to 7 bits, so its
+  encoding is exactly the top half of the `f32` one. It is the format machine
+  learning and DSP data is usually stored in, and it is not interchangeable
+  with `f16`: the same sixteen bits mean different numbers in each. `bf16` is
+  the only accepted length — there is no `bf8` or `bf32` — and it takes `_le`
+  and `_be` like the other numeric dtypes. It has a new `DtypeKind.BFloat`
+  kind, because `(DtypeKind.Float, 16)` already means IEEE `binary16` and a
+  length alone cannot distinguish the two. For the same reason `from_f`,
+  `to_f` and the `f` property are unchanged and stay IEEE only; bfloat16 is
+  reached through the dtype.
+
+  ```python
+  >>> Tibs.from_value("bf16", 1.0).hex
+  '3f80'
+  >>> Tibs("0x3f80").to_value("f16")
+  1.875
+  ```
+
 * Eight methods for comparing two containers without building an intermediate
   object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
   `is_disjoint`, `is_subset_of` and `is_superset_of`. The counts are equivalent

@@ -316,6 +316,25 @@ def test_view_to_value_reaches_dtypes_the_privileged_kinds_do_not():
     assert Tibs("0b1").view().to_value("bool") is True
 
 
+def test_view_to_value_reaches_bf16_which_has_no_view_property():
+    # to_f is IEEE only and picks its format from the length, so a view can
+    # only reach bfloat16 through a dtype.
+    t = Tibs("0x803f")
+
+    assert t.le.to_value("bf16") == 1.0
+    assert t.to_value("bf16") != 1.0
+    assert t.le.to_f() != 1.0
+
+    with pytest.raises(ValueError, match="through a view that specifies its own byte order"):
+        t.le.to_value("bf16_le")
+
+    m = Mutibs.from_zeros(16)
+    m.le.write_value("bf16", 1.0)
+    assert m.hex == "803f"
+    assert m.le.to_value("bf16") == 1.0
+    assert m.to_value("bf16") != 1.0
+
+
 @pytest.mark.parametrize("spec", ["0x0100", "0x23a11234", "0xdeadbeefcafe"])
 @pytest.mark.parametrize("byte_order", [ByteOrder.Unspecified, ByteOrder.Little, ByteOrder.Big])
 @pytest.mark.parametrize("bit_order", [BitOrder.Msb0, BitOrder.Lsb0])
@@ -346,7 +365,7 @@ def test_view_to_value_takes_byte_order_from_one_place_only():
         t.le.to_value("u16_le")
 
 
-@pytest.mark.parametrize("dtype", ["u16_le", "u16_be", "(u8, u8_le)", "[u16_le; 1]"])
+@pytest.mark.parametrize("dtype", ["u16_le", "u16_be", "bf16_le", "(u8, u8_le)", "[u16_le; 1]"])
 @pytest.mark.parametrize("view_name", ["le", "be", "lsb0"])
 def test_byte_ordered_view_refuses_a_byte_ordered_dtype_at_any_nesting_depth(view_name, dtype):
     view = getattr(Tibs("0x0100"), view_name)

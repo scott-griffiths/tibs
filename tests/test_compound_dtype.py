@@ -362,6 +362,36 @@ def test_array_and_tuple_of_the_same_scalar_byte_match():
     assert array_dtype.unpack(array_packed) == tuple_dtype.unpack(tuple_packed)
 
 
+def test_bf16_records_take_the_fast_flat_record_path():
+    # bf16 is byte-aligned and numeric, so it has to qualify for the record
+    # packer and unpacker exactly as f16 does, not fall back to the generic
+    # field-by-field route.
+    array_dtype = Dtype("[bf16; 4]")
+    tuple_dtype = Dtype("(u8, bf16, bf16_le)")
+    array_records = [(1.0, -2.0, 0.125, 256.0), (0.0, 1.0, 1.0, 1.0)]
+    tuple_records = [(7, 1.0, 1.0), (255, -2.0, 0.125)]
+
+    array_packed = Tibs.from_values(array_dtype, array_records)
+    tuple_packed = Tibs.from_values(tuple_dtype, tuple_records)
+
+    assert array_packed.hex == "3f80c0003e004380" + "00003f803f803f80"
+    assert tuple_packed.hex == "073f80803f" + "ffc000003e"
+    assert array_packed.to_values(array_dtype) == array_records
+    assert tuple_packed.to_values(tuple_dtype) == tuple_records
+
+
+def test_bf16_and_f16_fields_are_decoded_independently_in_one_record():
+    # A record holding both proves the decoder is picked by kind rather than
+    # by the 16-bit field width.
+    dtype = Dtype("(bf16, f16)")
+
+    packed = dtype.pack((1.0, 1.0))
+
+    assert packed.hex == "3f803c00"
+    assert dtype.unpack(packed) == (1.0, 1.0)
+    assert Dtype("(f16, bf16)").unpack(packed) == (1.875, 0.0078125)
+
+
 def test_record_with_a_non_numeric_field_still_packs_and_unpacks_correctly():
     # A `bits4` field has no fast packer/unpacker, so this forces the record
     # back onto the pre-existing generic path field by field.
