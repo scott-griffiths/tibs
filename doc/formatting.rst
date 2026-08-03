@@ -44,7 +44,12 @@ an unsigned reading and there's no sensible way to guess which you meant, so it 
 * ``i`` — the two's complement signed value, as given by :attr:`Tibs.i`.
 * ``e``, ``f``, ``g`` — the IEEE float value, as given by :attr:`Tibs.f`, shown in
   scientific, fixed-point or general form. The uppercase ``E``, ``F`` and ``G`` behave
-  as they do in Python. The length must be 16, 32 or 64 bits.
+  as they do in Python. The length must be 16, 32 or 64 bits, and 16 bits is read as
+  an IEEE ``f16``. There is no format code for the ``bf16`` reading of the same 16
+  bits (see :doc:`dtype`) — unpack it and format the Python float instead::
+
+      >>> f"{Tibs('0x3f80').to_value('bf16'):g}"
+      '1'
 
 The ``u`` and ``i`` codes work at any length (they need at least one bit to interpret),
 while the float codes are limited to the three IEEE widths. The float codes borrow

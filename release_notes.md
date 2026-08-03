@@ -174,14 +174,28 @@ Added
   used directly in f-strings and with `str.format()`. The type codes are `b`, `o`,
   `x` and `X` for the bit representations (equivalent to the `bin`, `oct` and `hex`
   properties, so leading zeros are kept), plus `u` and `i` for the unsigned and
-  signed integer interpretations. The `#` flag adds a `0x` / `0X` / `0b` / `0o`
-  prefix, and `_` groups the digits — with the group size settable through the
-  otherwise unused precision field, so `f"{t:_.8b}"` groups binary by byte. Fill,
-  alignment and width work as they do elsewhere in Python.
+  signed integer interpretations and `e`, `f` and `g` (with their uppercase forms)
+  for the float one. The `#` flag adds a `0x` / `0X` / `0b` / `0o` prefix, and `_`
+  groups the digits — with the group size settable through the otherwise unused
+  precision field, so `f"{t:_.8b}"` groups binary by byte. Fill, alignment and
+  width work as they do elsewhere in Python.
 
   ```python
   >>> f"{Tibs('0xac804f4b'):#_.2x}"
   '0xac_80_4f_4b'
+  ```
+
+  The integer codes follow `Dtype` rather than Python's `d`, because a `Tibs` has
+  both a signed and an unsigned reading and there's no sensible way to guess which
+  was meant. The float codes have no such problem, so they are Python's own: `f` is
+  fixed-point, `e` is scientific and `g` trims trailing zeros, and the precision
+  field means exactly what it does for a `float`. They read the bits as IEEE, so
+  the length must be 16, 32 or 64; the `bf16` interpretation has no format code.
+
+  ```python
+  >>> pi = Tibs.from_f(3.14159, 32)
+  >>> f"{pi:f}", f"{pi:.2f}", f"{pi:.3e}", f"{pi:g}"
+  ('3.141590', '3.14', '3.142e+00', '3.14159')
   ```
 
   Three things differ from integer formatting, because a `Tibs` is a sequence rather
@@ -190,7 +204,7 @@ Added
   itself grouped. And the fill character must not be one that could be mistaken for
   the data, so zero padding is rejected for `b`, `o`, `x` and `X` — it would silently
   change the apparent length of the value, where for an integer it changes nothing.
-  Pad with `<`, `>` or `^` and a non-digit fill instead, or use `u` or `i`.
+  Pad with `<`, `>` or `^` and a non-digit fill instead, or use a numeric code.
 
 * `Tibs` now exports the buffer protocol, so it can be passed straight to
   anything that takes a bytes-like object — `memoryview(t)`, `array.array`,
