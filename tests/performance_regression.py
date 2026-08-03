@@ -43,11 +43,19 @@ CHUNK_SOURCE = Tibs.from_joined(
 _value_rng = random.Random(0xB17)
 VALUE_WORDS = [_value_rng.randrange(1 << 16) for _ in range(20_000)]
 VALUE_BYTES = Tibs.from_values("u16", VALUE_WORDS).to_bytes()
+FLOAT_VALUES = [_value_rng.uniform(-1e6, 1e6) for _ in range(20_000)]
 _bulk_set_rng = random.Random("tibs-bulk-set")
 BULK_SET_POSITIONS = [
     [_bulk_set_rng.randrange(len(SEARCH_TIBS)) for _ in range(8)]
     for _ in range(20_000)
 ]
+# The digit renderers need a whole number of nibbles and tribbles respectively.
+# SEARCH_TIBS is built from bytes so it is already a multiple of four bits.
+HEX_TIBS = SEARCH_TIBS
+OCT_TIBS = SEARCH_TIBS[: (len(SEARCH_TIBS) // 3) * 3]
+# A length that is not a whole number of bytes, and a start that is not on a
+# byte boundary, so the reversal cannot just turn the storage around in place.
+REVERSE_UNALIGNED_TIBS = SEARCH_TIBS[3:-4]
 
 
 def test_find_all_bits(benchmark):
@@ -125,6 +133,12 @@ def test_reverse_bits(benchmark):
     result = benchmark(SEARCH_TIBS.reversed)
     assert result[0] == SEARCH_TIBS[-1]
     assert result[-1] == SEARCH_TIBS[0]
+
+
+def test_reverse_bits_unaligned(benchmark):
+    result = benchmark(REVERSE_UNALIGNED_TIBS.reversed)
+    assert result[0] == REVERSE_UNALIGNED_TIBS[-1]
+    assert result[-1] == REVERSE_UNALIGNED_TIBS[0]
 
 
 def test_shift_left(benchmark):
@@ -227,6 +241,21 @@ def test_to_padded_bytes_unaligned(benchmark):
     assert result == COUNT_BYTES_MINUS_THREE_PADDED
 
 
+def test_to_hex(benchmark):
+    result = benchmark(lambda: HEX_TIBS.hex)
+    assert len(result) == len(HEX_TIBS) // 4
+
+
+def test_to_bin(benchmark):
+    result = benchmark(lambda: SEARCH_TIBS.bin)
+    assert len(result) == len(SEARCH_TIBS)
+
+
+def test_to_oct(benchmark):
+    result = benchmark(lambda: OCT_TIBS.oct)
+    assert len(result) == len(OCT_TIBS) // 3
+
+
 def test_from_bytes_unaligned(benchmark):
     result = benchmark(Tibs.from_bytes, COUNT_BYTES, 3, COUNT_BITS_MINUS_SIX)
     assert result == COUNT_TIBS[3:-3]
@@ -308,6 +337,22 @@ def test_unpack_u16_values(benchmark):
 
     values = benchmark(unpack_u16_values)
     assert values == VALUE_WORDS
+
+
+def test_pack_f32_values(benchmark):
+    def pack_f32_values():
+        return Tibs.from_values("f32", FLOAT_VALUES)
+
+    result = benchmark(pack_f32_values)
+    assert len(result) == 32 * len(FLOAT_VALUES)
+
+
+def test_pack_f64_values(benchmark):
+    def pack_f64_values():
+        return Tibs.from_values("f64", FLOAT_VALUES)
+
+    result = benchmark(pack_f64_values)
+    assert len(result) == 64 * len(FLOAT_VALUES)
 
 
 def test_primes(benchmark):
