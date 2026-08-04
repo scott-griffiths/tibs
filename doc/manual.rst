@@ -160,6 +160,7 @@ The chapters follow the bits and the two ways of reading them.
 
 * :doc:`typed_fields` — reading and writing typed values out of the bits.
 * :doc:`views` — byte order, bit labels and labelled fields.
+* :doc:`reading` — reading fields in sequence with a cursor.
 
 *Reading them as a set of bits*
 
@@ -182,6 +183,7 @@ byte and bit order, rendering values for display, and the encoded byte format.
     sequence
     typed_fields
     views
+    reading
     bitset
     serialization
     tibs_vs_mutibs

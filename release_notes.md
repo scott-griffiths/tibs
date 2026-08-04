@@ -30,6 +30,39 @@ Backwardly incompatible changes
 
 Added
 
+* Added `Reader`, a cursor over a `Tibs` or `Mutibs` for reading fields in
+  sequence. It wraps the container with a bit position so that you don't have
+  to compute `start` and `end` for each field, or thread a position through a
+  search loop. Every method is anchored at `pos`, so none of them take `start`
+  or `end`; the wrapped object stays reachable as `source` for windowed
+  queries. The reads (`read_value`, `read_values`, `read_bits`, `read_to`,
+  `read_past`) raise `ValueError` if the bits aren't there, while the searches
+  (`seek_to`, `seek_past`, `seek_back_to`) return a `bool`, because not
+  finding something you looked for is a normal outcome. In both cases `pos`
+  only moves when the call succeeds. `peek_value` and `peek_bits` read without
+  moving, and `bookmark()` is a context manager that restores `pos` on the way
+  out for lookahead of more than one value.
+
+  Method names state what they return, so there is deliberately no bare
+  `read()`. The `to` and `past` pairs differ in where they leave the cursor:
+  `to` at the start of the match and `past` just after it, which makes
+  `seek_past` the one to drive a loop with.
+
+  ```python
+  >>> r = Reader(Tibs('0x47ff10'))
+  >>> r.read_value('u8')
+  71
+  >>> r.read_value('(bool, u7)')
+  (True, 127)
+  >>> r.remaining
+  8
+  ```
+
+  A `Mutibs` source is read live, so bits appended after the reader was built
+  are there to be read. Reading a `Mutibs` through a `Reader` also copies only
+  the bits being read rather than the whole container, so a scan through a
+  large `Mutibs` stays linear where a loop of `Mutibs.to_value` calls does not.
+
 * Added `DtypeArray` and `DtypeTuple`, alongside the existing scalar dtype
   (now `DtypeSingle`), so a single `Dtype` can describe a structured,
   multi-field value: `Dtype("[u8; 4]")` for four repeated `u8` fields, and

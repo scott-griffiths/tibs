@@ -2,7 +2,7 @@ import sys
 import pytest
 
 sys.path.insert(0, "..")
-from tibs import Tibs, Mutibs
+from tibs import Reader, Tibs, Mutibs
 import random
 import math
 import itertools
@@ -96,3 +96,40 @@ def test_primes(benchmark):
 
     c = benchmark(primes)
     assert c == 8169
+
+
+def test_reader_scan(benchmark):
+    def scan():
+        # A stream of length-prefixed records read with a cursor: the shape a
+        # Reader exists for, where the alternative is threading a bit position
+        # through the loop by hand.
+        s = Mutibs()
+        for i in range(20000):
+            payload = i % 60 + 4
+            s += Tibs.from_u(payload, length=8)
+            s += Tibs.from_zeros(payload)
+        r = Reader(s.to_tibs())
+        total = 0
+        while not r.at_end:
+            payload = r.read_value("u8")
+            r.read_bits(payload)
+            total += payload
+        return total
+
+    c = benchmark(scan)
+    assert c == 669600
+
+
+def test_reader_bookmark(benchmark):
+    def bookmarking():
+        r = Reader(Tibs.from_random(80000, seed=b"99"))
+        total = 0
+        while not r.at_end:
+            # Look ahead further than a single value, then read for real.
+            with r.bookmark():
+                total += r.read_value("u8") + r.read_value("u8")
+            r.read_value("u16")
+        return total
+
+    c = benchmark(bookmarking)
+    assert c == 1282283

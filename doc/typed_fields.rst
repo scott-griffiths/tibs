@@ -12,6 +12,10 @@ This chapter covers the default (big-endian, MSB0) interpretations. When a forma
 uses little-endian byte order or LSB0 bit labels, wrap the value in a
 :doc:`view <views>`; to render a value as text, see :doc:`formatting`.
 
+Every method here locates its field with a ``start`` and an ``end``. When the
+fields come one after another instead, a :doc:`Reader <reading>` keeps the
+position for you.
+
 
 Numbers in and out
 ^^^^^^^^^^^^^^^^^^

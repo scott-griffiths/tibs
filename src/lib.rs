@@ -9,6 +9,7 @@ mod enums;
 mod helpers;
 mod iterator;
 mod mutibs;
+mod reader;
 mod tibs_;
 mod view;
 
@@ -26,6 +27,7 @@ fn tibs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<enums::DtypeKind>()?;
     m.add_class::<view::View>()?;
     m.add_class::<view::MutableView>()?;
+    m.add_class::<reader::Reader>()?;
     m.add_class::<dtype::Dtype>()?;
     m.add_class::<dtype::DtypeSingle>()?;
     m.add_class::<dtype::DtypeArray>()?;

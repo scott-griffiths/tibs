@@ -13,6 +13,7 @@ The public API is grouped into:
 * :doc:`dtype` — Fixed-width scalar, array and tuple data type descriptions
   used for packing and unpacking values.
 * :doc:`view` — Wrappers for byte order, bit order and labelled fields.
+* :doc:`reader` — A cursor for reading bits in sequence.
 * :doc:`other` — Enum classes for byte order, bit order, dtypes and codecs.
 
 .. toctree::
@@ -23,4 +24,5 @@ The public API is grouped into:
     mutibs
     dtype
     view
+    reader
     other

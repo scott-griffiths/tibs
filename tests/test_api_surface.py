@@ -21,6 +21,7 @@ from tibs import (
     DtypeTuple,
     MutableView,
     Mutibs,
+    Reader,
     Tibs,
     View,
 )
@@ -97,6 +98,19 @@ POSITIONAL_ONLY_CALLS = [
      lambda: DtypeTuple.from_params(dtypes=["u8"])),
     ("Dtype.pack(value=)", lambda: Dtype("u8").pack(value=1)),
     ("Dtype.unpack(bits=)", lambda: Dtype("u8").unpack(bits="0xff")),
+    ("Reader(source=)", lambda: Reader(source=Tibs("0xff"))),
+    ("Reader.read_value(dtype=)", lambda: Reader(Tibs("0xff")).read_value(dtype="u8")),
+    ("Reader.read_values(dtype=)", lambda: Reader(Tibs("0xff")).read_values(dtype="u4")),
+    ("Reader.read_bits(n=)", lambda: Reader(Tibs("0xff")).read_bits(n=4)),
+    ("Reader.peek_value(dtype=)", lambda: Reader(Tibs("0xff")).peek_value(dtype="u8")),
+    ("Reader.peek_bits(n=)", lambda: Reader(Tibs("0xff")).peek_bits(n=4)),
+    ("Reader.read_to(needle=)", lambda: Reader(Tibs("0xff")).read_to(needle="0x0f")),
+    ("Reader.read_past(needle=)", lambda: Reader(Tibs("0xff")).read_past(needle="0x0f")),
+    ("Reader.seek_to(needle=)", lambda: Reader(Tibs("0xff")).seek_to(needle="0x0f")),
+    ("Reader.seek_past(needle=)", lambda: Reader(Tibs("0xff")).seek_past(needle="0x0f")),
+    ("Reader.seek_back_to(needle=)",
+     lambda: Reader(Tibs("0xff"), 8).seek_back_to(needle="0x0f")),
+    ("Reader.align(boundary=)", lambda: Reader(Tibs("0xff")).align(boundary=8)),
 ]
 
 
@@ -123,6 +137,9 @@ def test_optional_modifiers_stay_keyword_reachable():
     assert t.le.to_value("u8", start=0, end=8) == 0x3F
     assert t.encode(codec=Codec.Raw) is not None
     assert t.byte_swapped(byte_length=1, start=0, end=24) is not None
+    assert Reader(t, pos=8).pos == 8
+    assert Reader(t).read_values("u8", count=2) == [0x1F, 0x2E]
+    assert Reader(t).seek_to("0x0f", byte_aligned=True, mask="0x0f") is True
     assert str(DtypeSingle.from_params(DtypeKind.Uint, 16, byte_order=ByteOrder.Little)) == "u16_le"
 
 
@@ -157,7 +174,8 @@ def test_no_public_method_takes_a_single_letter_keyword():
     # Single-letter names are fine positionally but would be permanent API if
     # they were keyword-reachable.
     offenders = []
-    for cls in (Tibs, Mutibs, View, MutableView, Dtype, DtypeSingle, DtypeArray, DtypeTuple):
+    for cls in (Tibs, Mutibs, View, MutableView, Reader, Dtype, DtypeSingle, DtypeArray,
+                DtypeTuple):
         for name in dir(cls):
             if name.startswith("_"):
                 continue
