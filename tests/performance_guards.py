@@ -141,6 +141,12 @@ NEEDLE_41 = Tibs("0b" + "0" * 40 + "1")
 assert BIG_T.find(NEEDLE_40) is None, "needle must be absent for the search guards"
 assert BIG_T.find(NEEDLE_41) is None, "needle must be absent for the search guards"
 
+# Two thousand-odd byte-aligned read positions spread over the whole container,
+# so that each read is a small window of a large object. That is the shape a
+# snapshot-then-slice implementation turns quadratic.
+READ_STRIDE = (BITS // 2_000) // 8 * 8
+READ_POSITIONS = tuple(range(0, BITS - 8, READ_STRIDE))
+
 SET_POSITIONS_RANGE = range(0, BITS, 8)
 SET_POSITIONS_LIST = list(SET_POSITIONS_RANGE)
 SET_POSITIONS_TUPLE = tuple(SET_POSITIONS_RANGE)
@@ -265,6 +271,14 @@ def _write_directly() -> Mutibs:
 def _write_u() -> Mutibs:
     WRITE_U_TARGET.write_u(BIG_U)
     return WRITE_U_TARGET
+
+
+def _read_values(container: Tibs | Mutibs) -> list[int]:
+    return [container.to_value("u8", p, p + 8) for p in READ_POSITIONS]
+
+
+def _read_value_lists(container: Tibs | Mutibs) -> list[list[int]]:
+    return [container.to_values("u8", p, p + 8) for p in READ_POSITIONS]
 
 
 GUARDS: list[Guard] = [
@@ -622,6 +636,29 @@ GUARDS: list[Guard] = [
         slow=lambda: ALL_ONES.any(),
         fast=lambda: ONE_ONE.any(),
         limit=4.0,
+    ),
+    # ---- 25. windowed reads from a Mutibs -------------------------------
+    # Both sides make the same two thousand 8-bit reads over the same megabit,
+    # so what is left in the ratio is the cost of reaching a window. On a Tibs
+    # a window shares storage, so the loop is flat in the container length.
+    # These two used to snapshot the whole Mutibs before slicing the window out
+    # of it, copying 125 KB per read: that is quadratic in the container, and
+    # put the ratio in the hundreds at this size while looking merely
+    # unremarkable at a few thousand bits. Reader.read_value takes the fixed
+    # route, through Mutibs::copied_range.
+    Guard(
+        name="Mutibs.to_value loop vs Tibs.to_value loop",
+        site="mutibs.rs to_value - copied_range, not a to_tibs() snapshot",
+        slow=lambda: _read_values(BIG_M),
+        fast=lambda: _read_values(BIG_T),
+        limit=3.0,
+    ),
+    Guard(
+        name="Mutibs.to_values loop vs Tibs.to_values loop",
+        site="mutibs.rs to_values - copied_range, not a to_tibs() snapshot",
+        slow=lambda: _read_value_lists(BIG_M),
+        fast=lambda: _read_value_lists(BIG_T),
+        limit=3.0,
     ),
 ]
 

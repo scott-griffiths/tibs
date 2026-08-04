@@ -118,6 +118,38 @@ impl Mutibs {
         self.copied_range(0, self.len())
     }
 
+    /// A copy of `length` bits starting `start_bit` bits in, as a `Tibs`.
+    ///
+    /// This is what a windowed read of a `Mutibs` should go through. Copying
+    /// only the window is the point: reaching for `to_tibs` and slicing the
+    /// result would copy the whole container on every read, which turns a loop
+    /// of reads over a large `Mutibs` quadratic.
+    ///
+    /// A window short enough to live in a `Tibs`'s inline storage is assembled
+    /// straight into it. Going through `copied_range` would heap-allocate one
+    /// or two bytes for `Tibs::from_bv` to copy inline and drop again, and a
+    /// loop of small reads is exactly where that allocation is the cost.
+    ///
+    /// `start_bit + length` must be within the bit length.
+    pub(crate) fn window(&self, start_bit: usize, length: usize) -> Tibs {
+        debug_assert!(start_bit + length <= self.len());
+        if length == 0 || length > helpers::FAST_INT_BITS {
+            return Tibs::from_bv(self.copied_range(start_bit, length));
+        }
+        let absolute = self.storage_head_offset() + start_bit;
+        let bytes = &self.data.as_raw_slice()[absolute / 8..];
+        let mut inline = [0u8; helpers::FAST_INT_BITS / 8];
+        let out = &mut inline[..length.div_ceil(8)];
+        match absolute % 8 {
+            0 => {
+                out.copy_from_slice(&bytes[..out.len()]);
+                helpers::mask_padding_bits(out, length);
+            }
+            offset => helpers::copy_unaligned_padded_bytes(bytes, offset, length, out),
+        }
+        Tibs::from_inline_bytes(inline, length)
+    }
+
     /// Append the `len` bits starting `offset` bits into `src`, in place.
     ///
     /// Grows the byte storage and copies over bytes. Rebuilding into a fresh
@@ -1989,8 +2021,13 @@ impl Mutibs {
         end: Option<isize>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
-        let snapshot = self.to_tibs();
-        py_values_from_range(py, &snapshot, &dtype, start, end)
+        // Validate against the whole container, then copy out only the
+        // selected bits. Snapshotting through `to_tibs` first would copy every
+        // bit on every call, making a loop of windowed reads over a large
+        // `Mutibs` quadratic.
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        let window = self.window(start, end - start);
+        py_values_from_range(py, &window, &dtype, None, None)
     }
 
     /// Return one value decoded with a dtype.
@@ -2016,9 +2053,9 @@ impl Mutibs {
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        let snapshot = self.to_tibs();
-        let (start, end) = validate_slice(snapshot.len(), start, end)?;
-        let value = snapshot.get_slice_unchecked(start, end - start);
+        // Only the selected bits are copied; see the note in `to_values`.
+        let (start, end) = validate_slice(self.len(), start, end)?;
+        let value = self.window(start, end - start);
         py_from_value(py, &dtype, &value)
     }
 

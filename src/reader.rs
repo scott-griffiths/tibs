@@ -94,19 +94,14 @@ impl Reader {
 
     /// The `length` bits of the source starting at `start`, as a `Tibs`.
     ///
-    /// A `Tibs` source shares its storage, so this is O(1) there and a copy of
-    /// just the window for a `Mutibs`. Going through `Mutibs::to_tibs`
-    /// instead, which is what `Mutibs.to_value` does, would copy the whole
-    /// container on every read, making a scan through a large `Mutibs`
-    /// quadratic.
+    /// A `Tibs` source shares its storage, so this is O(1) there, and a copy
+    /// of just the window for a `Mutibs`.
     ///
     /// `start + length` must be within the source length.
     fn window(&self, py: Python<'_>, start: usize, length: usize) -> Tibs {
         match &self.source {
             ReaderSource::Immutable(tibs) => tibs.borrow(py).get_slice_unchecked(start, length),
-            ReaderSource::Mutable(mutibs) => {
-                Tibs::from_bv(mutibs.borrow(py).copied_range(start, length))
-            }
+            ReaderSource::Mutable(mutibs) => mutibs.borrow(py).window(start, length),
         }
     }
 
