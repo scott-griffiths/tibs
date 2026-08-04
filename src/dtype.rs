@@ -10,6 +10,52 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// The tail of the message given when a spec doesn't start with any known kind.
+const KIND_HINT: &str = "expected a kind of 'u', 'i', 'f', 'bf', 'bool', 'bits', 'bin', 'oct', 'hex' or 'bytes' \
+     followed by a length in bits, for example 'u12'";
+
+/// Translate a numpy/struct style spec such as `"u4"` (four *bytes*) into the
+/// equivalent tibs spec, e.g. `"u32_le"`. `None` if the translation isn't a
+/// valid dtype, so that the caller falls back to a hint without a suggestion.
+fn numpy_style_suggestion(rest: &str, order: &str) -> Option<String> {
+    let (kind, digits) = rest.split_at_checked(1)?;
+    if !matches!(kind, "u" | "i" | "f") || digits.is_empty() {
+        return None;
+    }
+    let bits = digits.parse::<usize>().ok()?.checked_mul(8)?;
+    let candidate = format!("{kind}{bits}{order}");
+    SingleDtype::parse(&candidate).is_ok().then_some(candidate)
+}
+
+/// Translate a long-form kind name borrowed from numpy, C or Python — `"uint12"`,
+/// `"float32"`, `"double"` — into the short tibs spelling. `None` if `base` isn't
+/// one of those or the translation isn't a valid dtype.
+///
+/// Every suggestion produced here starts with a bare `u`, `i` or `f`, so
+/// validating one can never re-enter this function.
+fn long_kind_name_suggestion(base: &str, byte_order: ByteOrder) -> Option<String> {
+    let order = match byte_order {
+        ByteOrder::Unspecified => "",
+        ByteOrder::Little => "_le",
+        ByteOrder::Big => "_be",
+    };
+    let candidate = match base {
+        "double" => format!("f64{order}"),
+        "single" => format!("f32{order}"),
+        "half" => format!("f16{order}"),
+        _ => {
+            let (short, digits) = [("uint", "u"), ("int", "i"), ("float", "f"), ("sint", "i")]
+                .into_iter()
+                .find_map(|(word, short)| Some((short, base.strip_prefix(word)?)))?;
+            if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+            format!("{short}{digits}{order}")
+        }
+    };
+    SingleDtype::parse(&candidate).is_ok().then_some(candidate)
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SingleDtype {
     pub(crate) kind: DtypeKind,
@@ -92,6 +138,28 @@ impl SingleDtype {
 
     fn parse(spec: &str) -> PyResult<Self> {
         let spec = spec.trim().to_ascii_lowercase();
+
+        // numpy and struct write the byte order as a leading character and
+        // count bytes rather than bits, so both differences need pointing out
+        // before anything else rejects the spec as an unknown kind.
+        if let Some(first) = spec.chars().next()
+            && matches!(first, '<' | '>' | '=' | '|')
+        {
+            let order = match first {
+                '<' => "_le",
+                '>' => "_be",
+                _ => "",
+            };
+            let hint = match numpy_style_suggestion(&spec[1..], order) {
+                Some(suggestion) => format!(" Did you mean '{suggestion}'?"),
+                None => String::new(),
+            };
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': a byte order is written as a '_le' or '_be' \
+                 suffix, not a leading character, and lengths are in bits, not bytes.{hint}"
+            )));
+        }
+
         let (base, byte_order) = if let Some(base) = spec.strip_suffix("_le") {
             (base, ByteOrder::Little)
         } else if let Some(base) = spec.strip_suffix("_be") {
@@ -104,6 +172,18 @@ impl SingleDtype {
             return Self::from_parts(DtypeKind::Bool, 1, byte_order);
         }
 
+        // A bool is one bit by definition, so 'bool8' is nearly always someone
+        // reaching for eight of them.
+        if let Some(count) = base.strip_prefix("bool")
+            && count.chars().all(|c| c.is_ascii_digit())
+            && !count.is_empty()
+        {
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': a 'bool' is always 1 bit. \
+                 Did you mean '[bool; {count}]'?"
+            )));
+        }
+
         // 'bf16' is the only spelling accepted, but the format is usually
         // written out in full elsewhere, so send that spelling somewhere
         // rather than letting it fail as an unparseable length.
@@ -113,35 +193,83 @@ impl SingleDtype {
             )));
         }
 
+        // Long-form kind names taken from numpy, C or Python. These have to be
+        // caught before the prefix matching below, which would otherwise read
+        // 'int8' as kind 'i' with a bit length of 'nt8'.
+        if let Some(suggestion) = long_kind_name_suggestion(base, byte_order) {
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': did you mean '{suggestion}'?"
+            )));
+        }
+
         // No other kind starts with 'bf', so this one has no ordering
         // constraint against the 'b' kinds below it.
-        let (kind, length_text) = if let Some(length) = base.strip_prefix("bytes") {
-            (DtypeKind::Bytes, length)
+        let (kind, kind_name, length_text) = if let Some(length) = base.strip_prefix("bytes") {
+            (DtypeKind::Bytes, "bytes", length)
         } else if let Some(length) = base.strip_prefix("bits") {
-            (DtypeKind::Bits, length)
+            (DtypeKind::Bits, "bits", length)
         } else if let Some(length) = base.strip_prefix("bf") {
-            (DtypeKind::BFloat, length)
+            (DtypeKind::BFloat, "bf", length)
         } else if let Some(length) = base.strip_prefix("bin") {
-            (DtypeKind::Bin, length)
+            (DtypeKind::Bin, "bin", length)
         } else if let Some(length) = base.strip_prefix("oct") {
-            (DtypeKind::Oct, length)
+            (DtypeKind::Oct, "oct", length)
         } else if let Some(length) = base.strip_prefix("hex") {
-            (DtypeKind::Hex, length)
+            (DtypeKind::Hex, "hex", length)
         } else if let Some(length) = base.strip_prefix('u') {
-            (DtypeKind::Uint, length)
+            (DtypeKind::Uint, "u", length)
         } else if let Some(length) = base.strip_prefix('i') {
-            (DtypeKind::Int, length)
+            (DtypeKind::Int, "i", length)
         } else if let Some(length) = base.strip_prefix('f') {
-            (DtypeKind::Float, length)
+            (DtypeKind::Float, "f", length)
         } else {
             return Err(PyValueError::new_err(format!(
-                "Cannot parse Dtype spec '{spec}'."
+                "Cannot parse Dtype spec '{spec}': {KIND_HINT}."
             )));
         };
 
-        if length_text.is_empty() || !length_text.chars().all(|c| c.is_ascii_digit()) {
+        if length_text.is_empty() {
             return Err(PyValueError::new_err(format!(
-                "Cannot parse Dtype spec '{spec}': missing or invalid bit length."
+                "Cannot parse Dtype spec '{spec}': expected a bit length after '{kind_name}', \
+                 for example '{kind_name}8'."
+            )));
+        }
+        if !length_text.chars().all(|c| c.is_ascii_digit()) {
+            // A byte order written without its underscore, or a length written
+            // with Python's numeric underscores, both land here.
+            // Both corrections below are only offered once they are known to
+            // parse: 'u12_le' is not a valid dtype even though 'u12le' looks
+            // like it is missing nothing but an underscore.
+            let valid = |candidate: String| Self::parse(&candidate).is_ok().then_some(candidate);
+            let hint = if let Some(candidate) = length_text
+                .strip_suffix("le")
+                .or_else(|| length_text.strip_suffix("be"))
+                .filter(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+                .and_then(|digits| {
+                    valid(format!(
+                        "{kind_name}{digits}_{}",
+                        &length_text[length_text.len() - 2..]
+                    ))
+                }) {
+                format!(" Did you mean '{candidate}'?")
+            } else if let Some(candidate) = Some(length_text)
+                .filter(|text| {
+                    text.contains('_') && text.chars().all(|c| c.is_ascii_digit() || c == '_')
+                })
+                .and_then(|text| valid(format!("{kind_name}{}", text.replace('_', ""))))
+            {
+                format!(" Underscores are not allowed in a bit length: did you mean '{candidate}'?")
+            } else if let Some(suffix) = length_text.rsplit_once('_') {
+                format!(
+                    " '_{}' is not a valid byte order: only '_le' and '_be' are supported.",
+                    suffix.1
+                )
+            } else {
+                String::new()
+            };
+            return Err(PyValueError::new_err(format!(
+                "Cannot parse Dtype spec '{spec}': expected a whole number of bits after \
+                 '{kind_name}', but found '{length_text}'.{hint}"
             )));
         }
         let length = length_text.parse::<i64>().map_err(|_| {
@@ -295,6 +423,10 @@ struct DtypeParser<'a> {
     spec: &'a str,
     bytes: &'a [u8],
     pos: usize,
+    /// Whether this parser may propose corrected specs in its error messages.
+    /// Cleared for the throwaway parsers that check a proposal, so that
+    /// checking a suggestion can't itself go looking for suggestions.
+    suggest: bool,
 }
 
 impl<'a> DtypeParser<'a> {
@@ -303,6 +435,7 @@ impl<'a> DtypeParser<'a> {
             spec,
             bytes: spec.as_bytes(),
             pos: 0,
+            suggest: true,
         }
     }
 
@@ -310,9 +443,54 @@ impl<'a> DtypeParser<'a> {
         let dtype = self.parse_dtype()?;
         self.skip_whitespace();
         if self.pos != self.bytes.len() {
-            return self.error("unexpected trailing text");
+            // A separator left at the top level is a missing bracket: the
+            // fields of a tuple need '(...)' around them, and an array needs
+            // '[...]'. Only suggest the bracketed form if it actually parses.
+            let trimmed = self.spec.trim();
+            return match self.peek() {
+                Some(b',') => self.error_hinted(
+                    "a tuple dtype needs its fields inside parentheses",
+                    self.checked_suggestion(format!("({trimmed})")),
+                ),
+                Some(b';') => self.error_hinted(
+                    "an array dtype needs its dtype and count inside brackets",
+                    self.checked_suggestion(format!("[{trimmed}]")),
+                ),
+                // Two dtypes separated by nothing but space: most likely a
+                // tuple missing both its comma and its parentheses.
+                _ => self.error_hinted(
+                    "unexpected trailing text",
+                    self.checked_suggestion(format!(
+                        "({}, {})",
+                        self.spec[..self.pos].trim(),
+                        self.spec[self.pos..].trim()
+                    )),
+                ),
+            };
         }
         Ok(dtype)
+    }
+
+    /// The canonical spelling of `candidate` if it parses as a dtype spec,
+    /// otherwise `None`. Suggesting the canonical form rather than the
+    /// candidate keeps whatever odd spacing was in the original out of the
+    /// suggestion: `'[u8 4]'` is answered with `'[u8; 4]'`, not `'[u8 ; 4]'`.
+    fn checked_suggestion(&self, candidate: String) -> Option<String> {
+        if !self.suggest {
+            return None;
+        }
+        let mut parser = DtypeParser::new(&candidate);
+        parser.suggest = false;
+        parser.parse().ok().map(|repr| repr.spec())
+    }
+
+    /// The spec with the byte at `self.pos` replaced by `replacement`.
+    fn spec_with_replacement(&self, replacement: char) -> String {
+        let mut candidate = String::with_capacity(self.spec.len());
+        candidate.push_str(&self.spec[..self.pos]);
+        candidate.push(replacement);
+        candidate.push_str(&self.spec[self.pos + 1..]);
+        candidate
     }
 
     fn parse_dtype(&mut self) -> PyResult<DtypeRepr> {
@@ -321,7 +499,10 @@ impl<'a> DtypeParser<'a> {
             Some(b'[') => self.parse_array(),
             Some(b'(') => self.parse_tuple(),
             Some(_) => self.parse_single(),
-            None => self.error("expected a dtype"),
+            None if self.spec.trim().is_empty() => Err(PyValueError::new_err(format!(
+                "Cannot parse a Dtype from an empty spec: {KIND_HINT}."
+            ))),
+            None => self.error("expected a dtype, but reached the end of the spec"),
         }
     }
 
@@ -344,9 +525,33 @@ impl<'a> DtypeParser<'a> {
 
     fn parse_array(&mut self) -> PyResult<DtypeRepr> {
         self.pos += 1;
+        let open = self.pos - 1;
         let dtype = self.parse_dtype()?;
         self.skip_whitespace();
-        self.expect(b';', "expected ';' between the array dtype and count")?;
+        if self.peek() != Some(b';') {
+            // '[u8, 4]' means '[u8; 4]' and '[u8 4]' means the same, but
+            // '[u12, u12]' means '(u12, u12)'. Try the array readings first,
+            // since only a spec whose second half is a count can be an array.
+            let as_array = if self.peek() == Some(b',') {
+                self.spec_with_replacement(';')
+            } else {
+                format!("{}; {}", &self.spec[..self.pos], &self.spec[self.pos..])
+            };
+            let mut as_tuple = self.spec.to_string();
+            as_tuple.replace_range(open..open + 1, "(");
+            if let Some(close) = as_tuple.rfind(']') {
+                as_tuple.replace_range(close..close + 1, ")");
+            }
+            let suggestion = self
+                .checked_suggestion(as_array)
+                .or_else(|| self.checked_suggestion(as_tuple));
+            return self.error_hinted(
+                "expected ';' between the array dtype and count, \
+                 as an array dtype is written '[dtype; count]'",
+                suggestion,
+            );
+        }
+        self.pos += 1;
         self.skip_whitespace();
         let start = self.pos;
         while matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
@@ -365,6 +570,9 @@ impl<'a> DtypeParser<'a> {
             return self.error("array count must be greater than zero");
         }
         self.skip_whitespace();
+        if self.peek().is_none() {
+            return self.error("unterminated array dtype: expected ']'");
+        }
         self.expect(b']', "expected ']' after the array count")?;
         let repr = DtypeRepr::Array {
             dtype: Box::new(dtype),
@@ -383,7 +591,15 @@ impl<'a> DtypeParser<'a> {
 
         let mut dtypes = vec![self.parse_dtype()?];
         self.skip_whitespace();
-        self.expect(b',', "a one-element tuple dtype needs a trailing comma")?;
+        match self.peek() {
+            Some(b',') => self.pos += 1,
+            Some(b')') => {
+                return self.error(
+                    "a one-element tuple dtype needs a trailing comma, for example '(u8,)'",
+                );
+            }
+            _ => return self.error("expected ',' between the fields of a tuple dtype"),
+        }
 
         loop {
             self.skip_whitespace();
@@ -399,7 +615,8 @@ impl<'a> DtypeParser<'a> {
                     self.pos += 1;
                     break;
                 }
-                _ => return self.error("expected ',' or ')' after tuple dtype"),
+                None => return self.error("unterminated tuple dtype: expected ')'"),
+                _ => return self.error("expected ',' or ')' after a tuple field"),
             }
         }
 
@@ -427,8 +644,18 @@ impl<'a> DtypeParser<'a> {
     }
 
     fn error<T>(&self, message: &str) -> PyResult<T> {
+        self.error_hinted(message, None)
+    }
+
+    /// As [`Self::error`], but with a corrected spec suggested after the
+    /// position, so that the message reads as one sentence then the fix.
+    fn error_hinted<T>(&self, message: &str, suggestion: Option<String>) -> PyResult<T> {
+        let hint = match suggestion {
+            Some(suggestion) => format!(" Did you mean '{suggestion}'?"),
+            None => String::new(),
+        };
         Err(PyValueError::new_err(format!(
-            "Cannot parse Dtype spec '{}': {message} at position {}.",
+            "Cannot parse Dtype spec '{}': {message} at position {}.{hint}",
             self.spec, self.pos
         )))
     }

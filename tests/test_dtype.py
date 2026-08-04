@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import math
+import re
 
 import pytest
 from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind, DtypeSingle
@@ -1080,3 +1081,63 @@ def test_from_values_survives_a_list_edited_while_it_is_read(dtype):
 
     growing[0] = Grow()
     assert Tibs.from_values(dtype, growing) == Tibs.from_values(dtype, [1, 2])
+
+
+# Wrong dtype specs mostly come from a handful of habits: a tuple written
+# without its parentheses, an array written with a comma, or a kind spelled the
+# way numpy, struct or C spells it. Each of those should say what the spec
+# should have been rather than only where parsing stopped.
+@pytest.mark.parametrize(
+    ("spec", "suggestion"),
+    [
+        ("u12, u12", "(u12, u12)"),
+        ("u12,u12", "(u12, u12)"),
+        (" u8 , bool , i4 ", "(u8, bool, i4)"),
+        ("u8 u8", "(u8, u8)"),
+        ("u8; 4", "[u8; 4]"),
+        ("[u12, u12]", "(u12, u12)"),
+        ("[u8, 4]", "[u8; 4]"),
+        ("[u8 4]", "[u8; 4]"),
+        ("(u8, [u4, 2])", "(u8, [u4; 2])"),
+        ("uint12", "u12"),
+        ("int8", "i8"),
+        ("float32", "f32"),
+        ("uint16_le", "u16_le"),
+        ("double", "f64"),
+        ("<u4", "u32_le"),
+        (">i2", "i16_be"),
+        ("u16le", "u16_le"),
+        ("bool8", "[bool; 8]"),
+        ("u1_000", "u1000"),
+    ],
+)
+def test_wrong_specs_suggest_the_right_one(spec, suggestion):
+    with pytest.raises(ValueError, match=re.escape(f"'{suggestion}'")):
+        Dtype(spec)
+    Dtype(suggestion)
+
+
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        # No suggestion is possible for these, so the message has to be enough
+        # on its own.
+        ("", "empty spec"),
+        ("   ", "empty spec"),
+        ("12", "expected a kind"),
+        ("8u", "expected a kind"),
+        ("u", "expected a bit length after 'u'"),
+        ("bytes", "expected a bit length after 'bytes'"),
+        ("u12.5", "expected a whole number of bits after 'u', but found '12.5'"),
+        ("hex3.5", "expected a whole number of bits after 'hex', but found '3.5'"),
+        ("u8_ne", "only '_le' and '_be' are supported"),
+        ("=u4", "not a leading character"),
+        ("(u8)", "needs a trailing comma"),
+        ("(u8 u8)", "expected ',' between the fields"),
+        ("(u8, u8", "unterminated tuple dtype"),
+        ("[u8; 4", "unterminated array dtype"),
+    ],
+)
+def test_wrong_specs_explain_themselves(spec, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        Dtype(spec)
