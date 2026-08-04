@@ -70,6 +70,13 @@ OTHER_T = Tibs.from_random(BITS, seed=b"tibs-guards-other")
 BIG_T_EQUAL = Tibs.from_bytes(BIG_T.to_bytes())
 assert BIG_T_EQUAL is not BIG_T
 
+# A second Mutibs with the same bits, and a live view of each, for the
+# MutableView guards. Held rather than rebuilt so that what is timed is the
+# comparison and not the construction.
+BIG_M_EQUAL = Mutibs(BIG_T_EQUAL)
+BIG_M_VIEW = BIG_M.view()
+BIG_M_EQUAL_VIEW = BIG_M_EQUAL.view()
+
 HALF_T = Tibs.from_random(HALF, seed=b"tibs-guards-half")
 # The left operand of a concatenation takes a byte-wide path only when its
 # length is a whole number of bytes; this one deliberately is not.
@@ -658,6 +665,47 @@ GUARDS: list[Guard] = [
         site="mutibs.rs to_values - copied_range, not a to_tibs() snapshot",
         slow=lambda: _read_value_lists(BIG_M),
         fast=lambda: _read_value_lists(BIG_T),
+        limit=3.0,
+    ),
+    # ---- 26. windowed reads through a live MutableView -------------------
+    # The same reads again, one layer up. A plain whole-source view returns
+    # the source bits unchanged, so a window of the view is a window of the
+    # source and should cost what reading the Mutibs directly costs. Building
+    # the whole viewed Tibs first, which is what this did before, copies the
+    # container per read for the same reason section 25 covers.
+    Guard(
+        name="MutableView.to_value loop vs Mutibs.to_value loop",
+        site="view.rs windowed_view - Mutibs::window for a plain whole view",
+        slow=lambda: _read_values(BIG_M_VIEW),
+        fast=lambda: _read_values(BIG_M),
+        limit=3.0,
+    ),
+    # ---- 27. taking a field of a whole-source view -----------------------
+    # Selecting eight labels should not depend on the source length at all.
+    # Mapping them used to go through a materialised index vector for the
+    # whole source - eight bytes per source bit - so this cost a megabyte
+    # allocation and its fill. Making the view is the reference because it is
+    # the rest of the same call: both borrow the source and build a
+    # MutableView, and only the field additionally maps the labels.
+    Guard(
+        name="view().field(7, 0) vs view()",
+        site="view.rs MutableSelection::source_index - Whole is the identity",
+        slow=lambda: BIG_M.view().field(7, 0),
+        fast=lambda: BIG_M.view(),
+        limit=4.0,
+        same_result=False,
+    ),
+    # ---- 28. comparing two live views ------------------------------------
+    # Both compare the same megabit of source. The view additionally checks
+    # that the two selections pick the same positions, which for two whole
+    # views is a length check. Reaching for BitVec's own PartialEq instead of
+    # the crate's bits_equal, or materialising the selections to compare
+    # them, each put this forty times over.
+    Guard(
+        name="MutableView == MutableView vs Mutibs == Mutibs",
+        site="view.rs MutableView.__eq__ - bits_equal and selects_same_as",
+        slow=lambda: BIG_M_VIEW == BIG_M_EQUAL_VIEW,
+        fast=lambda: BIG_M == BIG_M_EQUAL,
         limit=3.0,
     ),
 ]

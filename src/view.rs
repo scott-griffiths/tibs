@@ -330,22 +330,51 @@ impl MutableSelection {
         }
     }
 
-    fn source_indices(&self, source_len: usize) -> PyResult<Vec<usize>> {
+    /// Where viewed bit `index` sits in the source.
+    ///
+    /// `Whole` is the identity, so a caller wanting a handful of positions
+    /// asks for those. Handing back the whole mapping as a `Vec<usize>`
+    /// instead would cost eight bytes per source bit - a field taken from a
+    /// megabit view allocated a megabyte to look up a few labels.
+    ///
+    /// `index` must be less than `len(source_len)`, which the caller has
+    /// already established by validating the layout.
+    fn source_index(&self, index: usize) -> usize {
         match self {
-            MutableSelection::Whole => Ok((0..source_len).collect()),
-            MutableSelection::Field { indices } => {
-                self.len(source_len)?;
-                Ok(indices.clone())
-            }
+            MutableSelection::Whole => index,
+            MutableSelection::Field { indices } => indices[index],
         }
     }
 
-    fn comparable_source_indices(&self, source_len: usize) -> Vec<usize> {
-        match self {
-            MutableSelection::Whole => (0..source_len).collect(),
-            MutableSelection::Field { indices } => indices.clone(),
+    /// Whether two selections pick the same source positions in the same
+    /// order, for `MutableView.__eq__`.
+    ///
+    /// A `Field` that happens to list every position in order selects what
+    /// `Whole` selects, so this normalises rather than matching on the
+    /// variant. Comparing two materialised index vectors, which is how this
+    /// read before, cost eight bytes per source bit on each side.
+    fn selects_same_as(&self, source_len: usize, other: &Self, other_len: usize) -> bool {
+        match (self, other) {
+            (MutableSelection::Whole, MutableSelection::Whole) => source_len == other_len,
+            (MutableSelection::Whole, MutableSelection::Field { indices }) => {
+                is_identity_run(indices, source_len)
+            }
+            (MutableSelection::Field { indices }, MutableSelection::Whole) => {
+                is_identity_run(indices, other_len)
+            }
+            (
+                MutableSelection::Field { indices },
+                MutableSelection::Field {
+                    indices: other_indices,
+                },
+            ) => indices == other_indices,
         }
     }
+}
+
+/// Whether `indices` is `0, 1, .. len - 1`, which is what `Whole` selects.
+fn is_identity_run(indices: &[usize], len: usize) -> bool {
+    indices.len() == len && indices.iter().copied().eq(0..len)
 }
 
 fn format_source_indices(indices: &[usize]) -> String {
@@ -465,7 +494,7 @@ impl MutableView {
         let source = self.source.borrow(py);
         self.validate_current_layout(source.len())?;
         let source_bits = self.selected_source_bits(&source)?;
-        if self.bit_order == BitOrder::Msb0 && self.byte_order != ByteOrder::Little {
+        if self.keeps_physical_order() {
             return Ok(Tibs::from_bv(source_bits));
         }
 
@@ -474,6 +503,42 @@ impl MutableView {
             self.byte_order,
             self.bit_order,
         )?))
+    }
+
+    /// Whether the layout hands the selected bits back in the order they are
+    /// stored, which is the branch `to_tibs_view` returns unchanged.
+    fn keeps_physical_order(&self) -> bool {
+        self.bit_order == BitOrder::Msb0 && self.byte_order != ByteOrder::Little
+    }
+
+    /// The `start..end` bits of the view, as a `Tibs`.
+    ///
+    /// A plain view of the whole source reads the window straight out of the
+    /// source, so the read costs the window rather than a copy of the
+    /// container. Going through `to_tibs_view` for this, which is what this
+    /// did before, materialises every bit on every call and makes a loop of
+    /// windowed reads over a large `Mutibs` quadratic - the same shape that
+    /// `Mutibs.to_value` had.
+    ///
+    /// The other layouts have to take the long way. `le` and `lsb0` reorder
+    /// across the whole selection, so a slice of the reordered bits is not
+    /// the reordering of a slice, and a `Field` selection has no contiguous
+    /// run in the source to take a window of.
+    fn windowed_view(
+        &self,
+        py: Python<'_>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<Tibs> {
+        if matches!(self.selection, MutableSelection::Whole) && self.keeps_physical_order() {
+            let source = self.source.borrow(py);
+            let len = self.validate_current_layout(source.len())?;
+            let (start, end) = validate_slice(len, start, end)?;
+            return Ok(source.window(start, end - start));
+        }
+        let viewed = self.to_tibs_view(py)?;
+        let (start, end) = validate_slice(viewed.len(), start, end)?;
+        Ok(viewed.get_slice_unchecked(start, end - start))
     }
 
     fn assign_from_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
@@ -786,9 +851,8 @@ impl MutableView {
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
         validate_dtype_byte_order(&dtype, self.byte_order, self.bit_order)?;
-        let viewed = self.to_tibs_view(py)?;
-        let (start, end) = validate_slice(viewed.len(), start, end)?;
-        py_from_value(py, &dtype, &viewed.get_slice_unchecked(start, end - start))
+        let value = self.windowed_view(py, start, end)?;
+        py_from_value(py, &dtype, &value)
     }
 
     /// Write the viewed bits from one value encoded with a dtype.
@@ -850,10 +914,11 @@ impl MutableView {
         } else {
             ByteOrder::Unspecified
         };
-        let source_indices = self.selection.source_indices(source.len())?;
+        // `validate_current_layout` above has already checked the selection
+        // against the source, so these lookups are in range.
         let indices = field_source_indices(self.bit_order, byte_order, low, field_len)
             .into_iter()
-            .map(|index| source_indices[index])
+            .map(|index| self.selection.source_index(index))
             .collect();
 
         Ok(Self::from_parts(
@@ -996,11 +1061,14 @@ impl MutableView {
 
         let source = self.source.borrow(py);
         let other_source = other.source.borrow(py);
-        source.as_bitvec_ref() == other_source.as_bitvec_ref()
-            && self.selection.comparable_source_indices(source.len())
-                == other
-                    .selection
-                    .comparable_source_indices(other_source.len())
+        // `bits_equal`, not `BitVec`'s own `PartialEq`: the latter is the
+        // bit-domain `sp_eq` walk that every other comparison in the crate
+        // already avoids, and it ran this forty times slower than `Mutibs ==
+        // Mutibs` over the same bits.
+        source.bits_equal(&*other_source)
+            && self
+                .selection
+                .selects_same_as(source.len(), &other.selection, other_source.len())
     }
 }
 
