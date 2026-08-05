@@ -163,14 +163,7 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     // Lists and tuples are the common bulk path. Reading their items through
     // the C API avoids creating a Bound<PyAny> wrapper for every bit.
     if let Ok(list) = iterable.cast::<PyList>() {
-        return unsafe {
-            bv_from_py_sequence_items(
-                iterable.py(),
-                list.len(),
-                |index| ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t),
-                py_truthy,
-            )
-        };
+        return bv_from_py_list_items(iterable.py(), list, |_py, _index, item| item.is_truthy());
     }
     if let Ok(tuple) = iterable.cast::<PyTuple>() {
         return unsafe {
@@ -195,15 +188,8 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
 
 fn bv_from_strict_bit_pattern(any: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
     if let Ok(list) = any.cast::<PyList>() {
-        return unsafe {
-            bv_from_py_sequence_items(
-                any.py(),
-                list.len(),
-                |index| ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t),
-                |_py, index, item| strict_bit(index, &Bound::from_borrowed_ptr(any.py(), item)),
-            )
-            .map(Some)
-        };
+        return bv_from_py_list_items(any.py(), list, |_py, index, item| strict_bit(index, item))
+            .map(Some);
     }
     if let Ok(tuple) = any.cast::<PyTuple>() {
         return unsafe {
@@ -219,14 +205,57 @@ fn bv_from_strict_bit_pattern(any: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
     Ok(None)
 }
 
+fn bv_from_py_list_items(
+    py: Python<'_>,
+    list: &Bound<'_, PyList>,
+    mut convert_other: impl FnMut(Python<'_>, usize, &Bound<'_, PyAny>) -> PyResult<bool>,
+) -> PyResult<BV> {
+    let mut current_len = list.len();
+    let mut bytes = vec![0u8; current_len.div_ceil(8)];
+    let py_true = unsafe { ffi::Py_True() };
+    let py_false = unsafe { ffi::Py_False() };
+
+    let mut index = 0;
+    while index < current_len {
+        let item = unsafe { ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t) };
+        let bit = if item == py_true {
+            true
+        } else if item == py_false {
+            false
+        } else {
+            // Conversion can execute arbitrary Python, including code that
+            // resizes this list. Keep the current item alive while that code
+            // runs, then use the new length for the next iteration, matching
+            // normal Python list iteration.
+            let item = unsafe { Bound::from_borrowed_ptr_or_err(py, item)? };
+            let bit = convert_other(py, index, &item)?;
+            current_len = list.len();
+            let needed_bytes = current_len.div_ceil(8);
+            if needed_bytes > bytes.len() {
+                bytes.resize(needed_bytes, 0);
+            }
+            bit
+        };
+        if bit {
+            bytes[index / 8] |= 0x80 >> (index & 7);
+        }
+        index += 1;
+    }
+
+    bytes.truncate(index.div_ceil(8));
+    let mut bv = BV::from_vec(bytes);
+    bv.truncate(index);
+    Ok(bv)
+}
+
 unsafe fn bv_from_py_sequence_items(
     py: Python<'_>,
     len: usize,
     mut get_item: impl FnMut(usize) -> *mut ffi::PyObject,
     mut convert_other: impl FnMut(Python<'_>, usize, *mut ffi::PyObject) -> PyResult<bool>,
 ) -> PyResult<BV> {
-    // The callers pass list/tuple indices in bounds, so borrowed item pointers
-    // are valid while the GIL is held. Pack directly into Msb0 bytes to avoid
+    // The callers pass tuple indices in bounds, so borrowed item pointers are
+    // valid while the GIL is held. Pack directly into Msb0 bytes to avoid
     // BitVec::push overhead for large Python bool sequences.
     let mut bytes = vec![0u8; len.div_ceil(8)];
     let py_true = unsafe { ffi::Py_True() };
