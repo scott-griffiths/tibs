@@ -435,7 +435,13 @@ fn format_source_indices(indices: &[usize]) -> String {
 ///     Assigning through ``u``, ``i`` or ``f`` mutates the source ``Mutibs`` without
 ///     changing its length.
 ///
-#[pyclass(module = "tibs")]
+// `frozen` even though the view is the mutating half of the pair: what it
+// mutates is the source `Mutibs`, never itself. Every field here is fixed at
+// construction, so the view needs no borrow flag, and on a free-threaded build
+// that is the difference between reading a field from several threads and
+// having all but one of those reads refused with `RuntimeError: Already
+// borrowed`. The source keeps its own flag; only its contention remains.
+#[pyclass(module = "tibs", frozen)]
 pub struct MutableView {
     pub(crate) source: Py<Mutibs>,
     pub(crate) byte_order: ByteOrder,
