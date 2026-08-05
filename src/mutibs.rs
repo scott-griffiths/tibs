@@ -10,7 +10,8 @@ use crate::helpers::{
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
     head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
     rotate_bits_left, str_to_bv, try_extract_index, validate_index, validate_length,
-    validate_logical_op_lengths, validate_offset, validate_shift, validate_slice,
+    validate_logical_op_lengths, validate_offset, validate_shift, validate_slice, with_locked,
+    with_locked_mut,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -1260,8 +1261,16 @@ impl Mutibs {
     ///
     /// :return: The binary representation.
     #[pyo3(signature = (start = None, end = None), text_signature = "($self, start=None, end=None)")]
-    pub fn to_bin(&self, start: Option<isize>, end: Option<isize>) -> PyResult<String> {
-        self.map_slice(start, end, |bits| Ok(BitCollection::to_binary(bits)))
+    pub fn to_bin(
+        slf: &Bound<'_, Self>,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<String> {
+        // A read needs the section too: a shared borrow does not conflict with
+        // another reader, but it does lose to a writer.
+        with_locked(slf, |m| {
+            m.map_slice(start, end, |bits| Ok(BitCollection::to_binary(bits)))
+        })
     }
 
     /// Replace the current bits from a binary string.
@@ -2008,13 +2017,13 @@ impl Mutibs {
     }
 
     /// The bit length of the Mutibs.
-    pub fn __len__(&self) -> usize {
-        self.len()
+    pub fn __len__(slf: &Bound<'_, Self>) -> PyResult<usize> {
+        with_locked(slf, |m| Ok(m.len()))
     }
 
     /// Whether the Mutibs has any bits.
-    pub fn __bool__(&self) -> bool {
-        !self.as_bitvec_ref().is_empty()
+    pub fn __bool__(slf: &Bound<'_, Self>) -> PyResult<bool> {
+        with_locked(slf, |m| Ok(!m.as_bitvec_ref().is_empty()))
     }
 
     /// Return a list of values decoded with a dtype.
@@ -3548,9 +3557,8 @@ impl Mutibs {
     ///     >>> m
     ///     Mutibs('0b101')
     ///
-    pub fn __iadd__(slf: PyRefMut<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<()> {
-        Self::extend(slf, other)?;
-        Ok(())
+    pub fn __iadd__(slf: &Bound<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<()> {
+        Self::extend(slf, other)
     }
 
     /// Append a single bit to the current Mutibs in-place.
@@ -3566,16 +3574,19 @@ impl Mutibs {
     ///     Mutibs('0b1')
     ///
     #[pyo3(signature = (bit, /), text_signature = "($self, bit, /)")]
-    pub fn append<'a>(mut slf: PyRefMut<'a, Self>, bit: &Bound<'_, PyAny>) -> PyResult<()> {
-        match helpers::convert_to_bool(bit) {
-            Some(b) => {
-                slf.as_mut_bitvec_ref().push(b);
-                Ok(())
-            }
-            None => Err(PyTypeError::new_err(
+    pub fn append(slf: &Bound<'_, Self>, bit: &Bound<'_, PyAny>) -> PyResult<()> {
+        // The argument is resolved to a plain `bool` first. Doing it inside the
+        // closure would run Python (`__bool__`, `__index__`) with the critical
+        // section held, which suspends it. See `helpers::locking`.
+        let Some(b) = helpers::convert_to_bool(bit) else {
+            return Err(PyTypeError::new_err(
                 "Only True, False, 0 or 1 can be appended.",
-            )),
-        }
+            ));
+        };
+        with_locked_mut(slf, |m| {
+            m.as_mut_bitvec_ref().push(b);
+            Ok(())
+        })
     }
 
     /// Remove and return the final bit.
@@ -3591,11 +3602,18 @@ impl Mutibs {
     ///     >>> a
     ///     Mutibs('0b10')
     ///
-    pub fn pop<'py>(&mut self, py: Python<'py>) -> PyResult<pyo3::Borrowed<'py, 'py, PyBool>> {
-        match self.as_mut_bitvec_ref().pop() {
-            Some(bit) => Ok(PyBool::new(py, bit)),
-            None => Err(PyIndexError::new_err("pop from empty Mutibs.")),
-        }
+    pub fn pop<'py>(
+        slf: &Bound<'py, Self>,
+        py: Python<'py>,
+    ) -> PyResult<pyo3::Borrowed<'py, 'py, PyBool>> {
+        let bit = with_locked_mut(slf, |m| {
+            m.as_mut_bitvec_ref()
+                .pop()
+                .ok_or_else(|| PyIndexError::new_err("pop from empty Mutibs."))
+        })?;
+        // `PyBool::new` is a borrowed singleton, so building it outside the
+        // closure costs nothing and keeps the section free of Python calls.
+        Ok(PyBool::new(py, bit))
     }
 
     /// Extend the current Mutibs in-place.
@@ -3611,35 +3629,48 @@ impl Mutibs {
     ///     Mutibs('0x0f0a')
     ///
     #[pyo3(signature = (bs, /), text_signature = "($self, bs, /)")]
-    pub fn extend<'a>(mut slf: PyRefMut<'a, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
-        // Check if bs is the same object as slf
+    pub fn extend(slf: &Bound<'_, Self>, bs: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Self-extension reads and writes the one object, so it stays entirely
+        // inside a single critical section.
         if bs.as_ptr() == slf.as_ptr() {
-            // If bs is slf, clone inner bits first then extend
-            let bits_clone = slf.to_bitvec();
-            slf.append_run(bits_clone.as_raw_slice(), 0, bits_clone.len());
-        } else if let Ok(tibs) = bs.extract::<PyRef<Tibs>>() {
-            // Existing tibs containers can be borrowed directly; avoid
-            // materializing a temporary Tibs through the generic converter.
-            slf.append_collection(&*tibs);
-        } else if let Ok(mutibs) = bs.extract::<PyRef<Mutibs>>() {
-            // Mutibs inputs also expose a stable bit slice while we hold the
-            // Python reference.
-            slf.append_collection(&*mutibs);
-        } else {
-            let bits = promote_to_bv(bs)?;
-            if slf.is_empty() {
+            return with_locked_mut(slf, |m| {
+                let bits_clone = m.to_bitvec();
+                m.append_run(bits_clone.as_raw_slice(), 0, bits_clone.len());
+                Ok(())
+            });
+        }
+        // Everything that can run Python is done first: the type checks here
+        // and, in the fallback, the whole iterator protocol inside
+        // `promote_to_bv`. Only settled Rust data crosses into the closure.
+        // A `Tibs` or `Mutibs` operand is borrowed rather than materialised,
+        // which is why this is not simply `promote_to_bv` for every input.
+        if let Ok(tibs) = bs.extract::<PyRef<Tibs>>() {
+            return with_locked_mut(slf, |m| {
+                m.append_collection(&*tibs);
+                Ok(())
+            });
+        }
+        if let Ok(mutibs) = bs.extract::<PyRef<Mutibs>>() {
+            return with_locked_mut(slf, |m| {
+                m.append_collection(&*mutibs);
+                Ok(())
+            });
+        }
+        let bits = promote_to_bv(bs)?;
+        with_locked_mut(slf, |m| {
+            if m.is_empty() {
                 // For an empty receiver, move the promoted BitVec into place
                 // rather than copying it into another allocation.
-                *slf.as_mut_bitvec_ref() = bits;
+                *m.as_mut_bitvec_ref() = bits;
             } else {
-                slf.append_run(
+                m.append_run(
                     bits.as_raw_slice(),
                     head_bit_offset(bits.as_bitslice()),
                     bits.len(),
                 );
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Extend the current Mutibs in-place from the start.

@@ -168,6 +168,16 @@ def tolerant(fn, count=ITERATIONS):
     return worker
 
 
+def repeat_op(target, op, count=ITERATIONS):
+    """Worker that applies `op` to `target` `count` times, tolerating nothing."""
+
+    def worker():
+        for _ in range(count):
+            op(target)
+
+    return worker
+
+
 def counted(fn, count=ITERATIONS):
     """Worker that repeats `fn` and records how many attempts actually took effect.
 
@@ -555,19 +565,62 @@ class TestConstructionUnderLoad:
 class TestFreeThreadedGaps:
     """How a refused call has to behave, and the one thing still missing."""
 
+    # Methods wrapped in the critical section, and the bits each call adds.
+    # Extend this list as the conversion proceeds: an entry here asserts that
+    # the method never refuses, which is stronger than merely never corrupting.
+    SERIALISED = [
+        ("append", lambda m: m.append(True), 1),
+        ("extend_tibs", lambda m: m.extend(Tibs("0b1011")), 4),
+        ("extend_list", lambda m: m.extend([True, False, True, True]), 4),
+    ]
+
+    @pytest.mark.parametrize(
+        "op,per_call", [(op, n) for _, op, n in SERIALISED], ids=[i for i, _, _ in SERIALISED]
+    )
+    def test_converted_mutation_serialises(self, op, per_call):
+        m = Mutibs()
+        errors = run_concurrently(*(repeat_op(m, op) for _ in range(THREADS)))
+        assert_no_failures(errors)
+        # No refusals at all, so every call landed: the length is exact rather
+        # than merely consistent with a tally of survivors.
+        assert len(m) == THREADS * ITERATIONS * per_call
+
+    def test_converted_reads_never_refuse_under_writers(self):
+        m = Mutibs.from_ones(BITS)
+
+        def read():
+            for _ in range(ITERATIONS):
+                len(m)
+                bool(m)
+                assert "0" not in m.to_bin()
+
+        def write():
+            for _ in range(ITERATIONS):
+                m.append(True)
+                if len(m) > BITS // 2:
+                    m.pop()
+
+        errors = run_concurrently(*(read for _ in range(6)), write, write)
+        assert_no_failures(errors)
+        assert m.count(0) == 0
+
     @pytest.mark.xfail(
         FREE_THREADED,
         strict=True,
-        reason="PyO3 gives a non-frozen pyclass an atomic borrow flag, not a lock, "
-        "so concurrent mutation of one Mutibs is refused rather than serialised",
+        reason="not yet wrapped in a critical section; PyO3's borrow flag is a "
+        "flag, not a lock, so concurrent callers are refused rather than queued",
     )
-    def test_concurrent_mutation_serialises_instead_of_refusing(self):
-        m = Mutibs()
-        errors = run_concurrently(
-            *(tolerant(lambda: m.append(True)) for _ in range(THREADS))
+    def test_unconverted_mutation_still_refuses(self):
+        # The same assertion `test_converted_mutation_serialises` makes, aimed at
+        # a method that has not been wrapped yet. When this starts passing,
+        # `reverse` has been converted: move it into SERIALISED and re-aim this
+        # at whatever is still outstanding.
+        m = Mutibs.from_ones(BITS)
+        workers, tallies = zip(
+            *(counted(lambda: m.reverse()) for _ in range(THREADS))
         )
-        assert_no_failures(errors)
-        assert len(m) == THREADS * ITERATIONS
+        run_concurrently(*workers)
+        assert sum(t[0] for t in tallies) == THREADS * ITERATIONS
 
     @pytest.mark.parametrize("subject", ["view", "reader", "equality"])
     def test_borrow_contention_raises_instead_of_panicking(self, subject):

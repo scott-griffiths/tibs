@@ -1,0 +1,73 @@
+//! Serialising access to a non-frozen `#[pyclass]` across threads.
+//!
+//! PyO3 gives a non-frozen `#[pyclass]` an atomic borrow flag, not a lock. Two
+//! threads that reach the same object at once do not queue: the loser is
+//! refused with `RuntimeError: Already borrowed`. That is safe but useless -
+//! `m.append(x)` in a worker thread would need wrapping in `try`, which no
+//! Python container asks of its callers.
+//!
+//! CPython's per-object critical section is the missing lock. Entering one
+//! takes the object's `PyMutex`, so the second thread *blocks* and then finds
+//! the borrow flag free. `with_critical_section` is a no-op on GIL-enabled
+//! builds, compiling to a direct call, so the abi3 wheel is unaffected.
+//!
+//! # The rule these helpers cannot enforce
+//!
+//! **No Python may run inside the closure.** A critical section is suspended by
+//! any call back into the interpreter, at which point another thread can enter
+//! and mutate. Nothing is corrupted - the borrow flag still holds - but the
+//! call may be refused, and the object may change under a suspended thread.
+//!
+//! So convert every Python argument to owned Rust data *before* calling these:
+//! consume iterables, resolve `__index__`, extract buffers. Dropping a
+//! `Py<PyAny>` inside the closure counts too, since a decref can run `__del__`.
+//!
+//! # What this does and does not promise
+//!
+//! One call becomes atomic. A *sequence* of calls does not, exactly as for
+//! `list`: `if len(m): m.pop()` can still race, because the two calls are the
+//! caller's transaction and only the caller knows where it begins. That is the
+//! same contract every Python container offers, and the same one the GIL gave -
+//! it never made check-then-act atomic either.
+
+use pyo3::PyClass;
+use pyo3::prelude::*;
+use pyo3::pyclass::boolean_struct::False;
+use pyo3::sync::critical_section::with_critical_section;
+
+/// Run `f` with shared access to `slf`, serialised against other threads.
+///
+/// Use for every read reached from Python. A shared borrow does not conflict
+/// with another shared borrow, but it does conflict with a writer, so a read
+/// left unwrapped is refused whenever a write is in flight.
+#[inline]
+pub(crate) fn with_locked<T, R>(
+    slf: &Bound<'_, T>,
+    f: impl FnOnce(&T) -> PyResult<R>,
+) -> PyResult<R>
+where
+    T: PyClass,
+{
+    // Entered unconditionally. Trying the borrow first and falling back to the
+    // section only on failure looks like a free optimisation - the borrow flag
+    // is atomic, so a borrow that succeeds is already safe - but it defeats the
+    // purpose: a thread waiting inside the section still loses to one that
+    // skipped it, and measured refusals went from 0% back to 6%. Mutual
+    // exclusion only holds if every caller goes through the same gate. This is
+    // what CPython's own containers do.
+    with_critical_section(slf.as_any(), || f(&*slf.try_borrow()?))
+}
+
+/// Run `f` with exclusive access to `slf`, serialised against other threads.
+///
+/// Use for every mutation reached from Python.
+#[inline]
+pub(crate) fn with_locked_mut<T, R>(
+    slf: &Bound<'_, T>,
+    f: impl FnOnce(&mut T) -> PyResult<R>,
+) -> PyResult<R>
+where
+    T: PyClass<Frozen = False>,
+{
+    with_critical_section(slf.as_any(), || f(&mut *slf.try_borrow_mut()?))
+}
