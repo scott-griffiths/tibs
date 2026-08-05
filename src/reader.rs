@@ -86,11 +86,20 @@ pub struct Reader {
 
 impl Reader {
     /// The current length of the source, which a `Mutibs` can change.
-    fn source_len(&self, py: Python<'_>) -> usize {
-        match &self.source {
-            ReaderSource::Immutable(tibs) => tibs.borrow(py).len(),
-            ReaderSource::Mutable(mutibs) => mutibs.borrow(py).len(),
-        }
+    ///
+    /// The two arms differ deliberately, and every other source access below
+    /// follows the same split. `Tibs` is a frozen pyclass, so it has no borrow
+    /// flag: `get` reaches it with no check and no `Result`. `Mutibs` is not
+    /// frozen, so another thread can hold it on a free-threaded build, and
+    /// `try_borrow` is what turns that into a Python exception. `borrow` would
+    /// panic instead, and a panic arrives as `pyo3_runtime.PanicException`,
+    /// which does not inherit from `Exception` and so escapes a caller's
+    /// `except`.
+    fn source_len(&self, py: Python<'_>) -> PyResult<usize> {
+        Ok(match &self.source {
+            ReaderSource::Immutable(tibs) => tibs.get().len(),
+            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.len(),
+        })
     }
 
     /// The `length` bits of the source starting at `start`, as a `Tibs`.
@@ -99,11 +108,11 @@ impl Reader {
     /// of just the window for a `Mutibs`.
     ///
     /// `start + length` must be within the source length.
-    fn window(&self, py: Python<'_>, start: usize, length: usize) -> Tibs {
-        match &self.source {
-            ReaderSource::Immutable(tibs) => tibs.borrow(py).get_slice_unchecked(start, length),
-            ReaderSource::Mutable(mutibs) => mutibs.borrow(py).window(start, length),
-        }
+    fn window(&self, py: Python<'_>, start: usize, length: usize) -> PyResult<Tibs> {
+        Ok(match &self.source {
+            ReaderSource::Immutable(tibs) => tibs.get().get_slice_unchecked(start, length),
+            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.window(start, length),
+        })
     }
 
     /// Search the source, shared by the seeking and reading-to methods.
@@ -116,11 +125,10 @@ impl Reader {
     ) -> PyResult<Option<usize>> {
         match &self.source {
             ReaderSource::Immutable(tibs) => {
-                let source = tibs.borrow(py);
-                find_in_bits(py, source.as_bitslice(), &needle, params, reverse)
+                find_in_bits(py, tibs.get().as_bitslice(), &needle, params, reverse)
             }
             ReaderSource::Mutable(mutibs) => {
-                let source = mutibs.borrow(py);
+                let source = mutibs.try_borrow(py)?;
                 find_in_bits(py, source.as_bitslice(), &needle, params, reverse)
             }
         }
@@ -138,7 +146,7 @@ impl Reader {
         // A `pos` beyond a shrunken source would fail `validate_slice` inside
         // the search with a message about slice positions, which says nothing
         // about the cursor. Nothing can be found ahead of the end anyway.
-        if self.pos > self.source_len(py) {
+        if self.pos > self.source_len(py)? {
             return Ok(None);
         }
         self.search(
@@ -156,7 +164,7 @@ impl Reader {
 
     /// Validate a new cursor position against the current source length.
     fn checked_pos(&self, py: Python<'_>, pos: i64) -> PyResult<usize> {
-        validate_pos(pos, self.source_len(py))
+        validate_pos(pos, self.source_len(py)?)
     }
 }
 
@@ -182,10 +190,10 @@ impl Reader {
     #[pyo3(signature = (source, /, pos = 0), text_signature = "(source, /, pos=0)")]
     pub fn py_new(source: &Bound<'_, PyAny>, pos: i64) -> PyResult<Self> {
         let (source, len) = if let Ok(tibs) = source.extract::<Py<Tibs>>() {
-            let len = tibs.borrow(source.py()).len();
+            let len = tibs.get().len();
             (ReaderSource::Immutable(tibs), len)
         } else if let Ok(mutibs) = source.extract::<Py<Mutibs>>() {
-            let len = mutibs.borrow(source.py()).len();
+            let len = mutibs.try_borrow(source.py())?.len();
             (ReaderSource::Mutable(mutibs), len)
         } else {
             let tibs = source.extract::<Tibs>()?;
@@ -273,14 +281,14 @@ impl Reader {
 
     /// The number of bits between :attr:`~Reader.pos` and the end.
     #[getter]
-    pub fn remaining(&self, py: Python<'_>) -> usize {
-        remaining_bits(self.pos, self.source_len(py))
+    pub fn remaining(&self, py: Python<'_>) -> PyResult<usize> {
+        Ok(remaining_bits(self.pos, self.source_len(py)?))
     }
 
     /// Whether there is nothing left to read.
     #[getter]
-    pub fn at_end(&self, py: Python<'_>) -> bool {
-        self.pos >= self.source_len(py)
+    pub fn at_end(&self, py: Python<'_>) -> PyResult<bool> {
+        Ok(self.pos >= self.source_len(py)?)
     }
 
     /// Read one value with a dtype, advancing by the dtype length.
@@ -304,8 +312,8 @@ impl Reader {
     #[pyo3(signature = (dtype, /), text_signature = "($self, dtype, /)")]
     pub fn read_value(&mut self, py: Python<'_>, dtype: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        let end = end_of_read(self.pos, dtype.length, self.source_len(py))?;
-        let value = py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length))?;
+        let end = end_of_read(self.pos, dtype.length, self.source_len(py)?)?;
+        let value = py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length)?)?;
         self.pos = end;
         Ok(value)
     }
@@ -343,7 +351,7 @@ impl Reader {
         count: Option<i64>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
-        let len = self.source_len(py);
+        let len = self.source_len(py)?;
         let bits = match count {
             None => remaining_bits(self.pos, len) / dtype.length * dtype.length,
             Some(count) if count < 0 => {
@@ -359,7 +367,7 @@ impl Reader {
             })?,
         };
         let end = end_of_read(self.pos, bits, len)?;
-        let window = self.window(py, self.pos, bits);
+        let window = self.window(py, self.pos, bits)?;
         let values = py_values_from_range(py, &window, &dtype, None, None)?;
         self.pos = end;
         Ok(values)
@@ -385,8 +393,8 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn read_bits(&mut self, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        let end = end_of_read(self.pos, n, self.source_len(py))?;
-        let bits = self.window(py, self.pos, n);
+        let end = end_of_read(self.pos, n, self.source_len(py)?)?;
+        let bits = self.window(py, self.pos, n)?;
         self.pos = end;
         Ok(bits)
     }
@@ -421,7 +429,7 @@ impl Reader {
         mask: Option<Tibs>,
     ) -> PyResult<Tibs> {
         let found = self.require_found(self.find_from_pos(py, needle, byte_aligned, mask)?)?;
-        let bits = self.window(py, self.pos, found - self.pos);
+        let bits = self.window(py, self.pos, found - self.pos)?;
         self.pos = found;
         Ok(bits)
     }
@@ -457,7 +465,7 @@ impl Reader {
         let needle_len = needle.len();
         let found = self.require_found(self.find_from_pos(py, needle, byte_aligned, mask)?)?;
         let end = found + needle_len;
-        let bits = self.window(py, self.pos, end - self.pos);
+        let bits = self.window(py, self.pos, end - self.pos)?;
         self.pos = end;
         Ok(bits)
     }
@@ -479,8 +487,8 @@ impl Reader {
     #[pyo3(signature = (dtype, /), text_signature = "($self, dtype, /)")]
     pub fn peek_value(&self, py: Python<'_>, dtype: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        end_of_read(self.pos, dtype.length, self.source_len(py))?;
-        py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length))
+        end_of_read(self.pos, dtype.length, self.source_len(py)?)?;
+        py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length)?)
     }
 
     /// Read the next ``n`` bits without moving the cursor.
@@ -501,8 +509,8 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn peek_bits(&self, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        end_of_read(self.pos, n, self.source_len(py))?;
-        Ok(self.window(py, self.pos, n))
+        end_of_read(self.pos, n, self.source_len(py)?)?;
+        self.window(py, self.pos, n)
     }
 
     /// Return a context manager that restores the position on exit.
@@ -558,7 +566,7 @@ impl Reader {
         }
         let boundary = boundary as u64;
         let skip = ((boundary - self.pos as u64 % boundary) % boundary) as usize;
-        let len = self.source_len(py);
+        let len = self.source_len(py)?;
         if self.pos + skip > len {
             return Err(PyValueError::new_err(format!(
                 "Cannot align to {boundary} bits from position {}: it would move past the end of the {len} bits.",
@@ -681,7 +689,7 @@ impl Reader {
     ) -> PyResult<bool> {
         // Clamped rather than passed through, so that a `pos` left beyond a
         // truncated `Mutibs` searches what is there instead of raising.
-        let end = self.pos.min(self.source_len(py)) as isize;
+        let end = self.pos.min(self.source_len(py)?) as isize;
         let params = SearchParams {
             start: None,
             end: Some(end),
@@ -698,16 +706,16 @@ impl Reader {
     }
 
     /// Return the length of the source in bits.
-    pub fn __len__(&self, py: Python<'_>) -> usize {
+    pub fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         self.source_len(py)
     }
 
-    pub fn __repr__(&self, py: Python<'_>) -> String {
+    pub fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let source = match &self.source {
-            ReaderSource::Immutable(tibs) => tibs.borrow(py).__repr__(),
-            ReaderSource::Mutable(mutibs) => mutibs.borrow(py).__repr__(),
+            ReaderSource::Immutable(tibs) => tibs.get().__repr__(),
+            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.__repr__(),
         };
-        format!("Reader({source}, {})", self.pos)
+        Ok(format!("Reader({source}, {})", self.pos))
     }
 }
 
@@ -762,9 +770,9 @@ impl Bookmark {
         exc_type: &Bound<'_, PyAny>,
         exc_value: &Bound<'_, PyAny>,
         traceback: &Bound<'_, PyAny>,
-    ) -> bool {
+    ) -> PyResult<bool> {
         let _ = (exc_type, exc_value, traceback);
-        self.reader.borrow_mut(py).pos = self.pos;
-        false
+        self.reader.try_borrow_mut(py)?.pos = self.pos;
+        Ok(false)
     }
 }

@@ -385,7 +385,7 @@ impl Tibs {
             return self.logical_op_with_tibs(other.get(), op);
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            let other = other.borrow();
+            let other = other.try_borrow()?;
             validate_logical_op_lengths(self.len(), other.len())?;
             return Ok(self.logical_op(&*other, op));
         }
@@ -1724,6 +1724,8 @@ impl Tibs {
             ));
         }
         let (data_ptr, data_len) = {
+            // Infallible: Tibs is a frozen pyclass, so it has no borrow flag
+            // to contend for and this cannot fail on a free-threaded build.
             let bits = slf.borrow();
             let Some(bytes) = BitCollection::byte_aligned_raw_data(&*bits) else {
                 return Err(PyBufferError::new_err(
@@ -2091,17 +2093,19 @@ impl Tibs {
     /// >>> Tibs('0b1110') == Tibs('0xe')
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
         // Python exception when the other side is the class not tried first.
         if let Ok(other) = other.cast::<Tibs>() {
-            return self.bits_equal(other.get());
+            return Ok(self.bits_equal(other.get()));
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            let other = other.borrow();
-            return self.bits_equal(&*other);
+            // `try_borrow`: a Mutibs held by another thread has to raise rather
+            // than panic, and must not be reported as unequal.
+            let other = other.try_borrow()?;
+            return Ok(self.bits_equal(&*other));
         }
-        false
+        Ok(false)
     }
 
     /// Return a hash of the logical bit sequence.

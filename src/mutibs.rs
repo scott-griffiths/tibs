@@ -1029,17 +1029,19 @@ impl Mutibs {
     /// >>> Mutibs('0xf2') == Tibs('0b11110010')
     /// True
     ///
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
         // Python exception when the other side is the class not tried first.
         if let Ok(other) = other.cast::<Tibs>() {
-            return self.bits_equal(other.get());
+            return Ok(self.bits_equal(other.get()));
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            let other = other.borrow();
-            return self.bits_equal(&*other);
+            // `try_borrow`: a Mutibs held by another thread has to raise rather
+            // than panic, and must not be reported as unequal.
+            let other = other.try_borrow()?;
+            return Ok(self.bits_equal(&*other));
         }
-        false
+        Ok(false)
     }
 
     #[classattr]

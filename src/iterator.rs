@@ -196,6 +196,8 @@ impl FindAllIterator {
         // The immutable borrows of slf (to access slf.haystack and slf.search_needle)
         // will end when this block finishes.
         let find_result = {
+            // Infallible: the haystack is a frozen Tibs. See the note in
+            // `Reader::source_len` for the cases that do need `try_borrow`.
             let haystack_rs = slf.haystack.borrow(py);
             let lps = &slf.lps;
             let alignment_mod8 = if byte_aligned { Some(0) } else { None };
@@ -312,6 +314,7 @@ impl ChunksIterator {
 
         // Create a cheap slice without copying the underlying data.
         let chunk_bits = {
+            // Infallible: a frozen Tibs has no borrow flag to contend for.
             let bits = slf.bits_object.borrow(slf.py());
             bits.get_slice_unchecked(start, take)
         };
@@ -376,6 +379,7 @@ impl ValuesIterator {
         }
 
         let value = {
+            // Infallible: a frozen Tibs has no borrow flag to contend for.
             let bits = slf.bits_object.borrow(py);
             bits.get_slice_unchecked(slf.current_pos, slf.chunk_size)
         };

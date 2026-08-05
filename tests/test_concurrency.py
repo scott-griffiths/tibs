@@ -24,22 +24,26 @@ What counts as a failure
 
 PyO3 gives every non-frozen ``#[pyclass]`` an atomic borrow flag rather than a
 lock, so on a free-threaded build two threads that touch the same ``Mutibs`` at
-once do not serialise: the loser is refused. The refusal arrives as
-``RuntimeError: Already borrowed`` from a generated method, or as a Rust panic
-from one of the explicit ``Py::borrow``/``borrow_mut`` calls in ``view.rs``,
-``reader.rs`` and ``iterator.rs``. Both are refusals *before* any mutation runs,
-so they cost throughput and ergonomics, not correctness.
+once do not serialise: the loser is refused with ``RuntimeError: Already
+borrowed``. The refusal happens *before* any mutation runs, so it costs
+throughput and ergonomics, not correctness.
 
 The tests below therefore split into two kinds:
 
 * Correctness tests, which tolerate a refusal but not a wrong answer. A refused
   call must leave no trace, and a call that succeeds must see a coherent
   snapshot. These must always pass.
-* Two ``xfail(strict=True)`` tests that state what tibs would need for the
-  Free Threading classifier to mean what a caller would assume: mutation that
-  serialises instead of refusing, and refusals that raise instead of panicking.
-  They pass normally on GIL-enabled builds. If either starts passing on a
-  free-threaded build, the limitation is gone and the marker should go with it.
+* One ``xfail(strict=True)`` test stating what tibs would need for the Free
+  Threading classifier to mean what a caller would assume: mutation that
+  serialises instead of refusing. It passes normally on GIL-enabled builds. If
+  it starts passing on a free-threaded build, the limitation is gone and the
+  marker should go with it.
+
+A refusal must arrive as a Python exception. ``view.rs``, ``reader.rs``,
+``tibs_.rs`` and ``mutibs.rs`` reach their source through ``try_borrow`` for
+exactly this reason, and ``test_borrow_contention_raises_instead_of_panicking``
+holds them to it: a Rust panic would arrive as ``pyo3_runtime.PanicException``,
+which does not inherit from ``Exception`` and so escapes a caller's ``except``.
 
 The value invariant used throughout is that a ``Mutibs`` of all ones stays all
 ones: appending ones, extending with ones, popping, deleting, inserting ones,
@@ -78,9 +82,11 @@ EXPECTED_RACE_ERRORS = (IndexError, ValueError, TypeError, OverflowError)
 def is_borrow_refusal(e):
     """True for PyO3 refusing simultaneous access to one non-frozen pyclass.
 
-    Two shapes, one cause: a generated method returns ``PyBorrowError`` as
-    ``RuntimeError``, while the hand-written ``Py::borrow`` calls panic. Neither
-    has mutated anything by the time it gives up.
+    The refusal is a ``RuntimeError`` carrying ``PyBorrowError``, raised before
+    the call has mutated anything. A panic is matched too, so that the tests here
+    stay honest about where refusals come from rather than passing by accident if
+    a ``try_borrow`` is ever lost; the panic case is what
+    ``test_borrow_contention_raises_instead_of_panicking`` fails on.
     """
     if isinstance(e, RuntimeError) and "borrow" in str(e).lower():
         return True
@@ -547,12 +553,7 @@ class TestConstructionUnderLoad:
 
 
 class TestFreeThreadedGaps:
-    """What the Free Threading classifier would have to mean, but does not yet.
-
-    Both of these pass on a GIL-enabled build. On a free-threaded build they are
-    strict xfails, so if either starts passing the limitation has been fixed and
-    the marker should be removed along with the note in the module docstring.
-    """
+    """How a refused call has to behave, and the one thing still missing."""
 
     @pytest.mark.xfail(
         FREE_THREADED,
@@ -568,16 +569,15 @@ class TestFreeThreadedGaps:
         assert_no_failures(errors)
         assert len(m) == THREADS * ITERATIONS
 
-    @pytest.mark.xfail(
-        FREE_THREADED,
-        strict=True,
-        reason="view.rs, reader.rs and iterator.rs reach the source through the "
-        "panicking Py::borrow/borrow_mut; contention should raise, not panic",
-    )
-    @pytest.mark.parametrize("subject", ["view", "reader"])
+    @pytest.mark.parametrize("subject", ["view", "reader", "equality"])
     def test_borrow_contention_raises_instead_of_panicking(self, subject):
         m = Mutibs.from_ones(BITS)
-        target = m.field(0, 7) if subject == "view" else Reader(m)
+        targets = {
+            "view": lambda: m.field(0, 7),
+            "reader": lambda: Reader(m),
+            "equality": lambda: (Tibs.from_ones(BITS), m.field(0, 7)),
+        }
+        target = targets[subject]()
 
         def resize():
             m.extend("0xff")
@@ -593,9 +593,20 @@ class TestFreeThreadedGaps:
                     if subject == "view":
                         assert len(target) == 8
                         assert target.u == 255
-                    else:
+                    elif subject == "reader":
                         target.pos = 0
                         assert target.read_value("u8") == 255
+                    else:
+                        # Tibs.__eq__, Mutibs.__eq__ and MutableView.__eq__ each
+                        # borrow the Mutibs on the other side.
+                        stable, view = target
+                        # Whether this one is True depends on the racing length,
+                        # so only the absence of a panic is asserted.
+                        stable == m  # noqa: B015
+                        # These two hold both borrows within the one call, so a
+                        # resize cannot land between them.
+                        assert m == m
+                        assert view == view
                 except (RuntimeError, *EXPECTED_RACE_ERRORS):
                     pass
 
