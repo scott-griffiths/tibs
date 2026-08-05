@@ -239,10 +239,10 @@ class TestIterators:
 class TestErrorHandling:
 
     def test_from_i_errors(self):
-        with pytest.raises(OverflowError):
-            Tibs.from_i(128, 8)  # Overflows (signed)
-        with pytest.raises(OverflowError):
-            Tibs.from_i(-129, 8)  # Overflows (signed)
+        with pytest.raises(ValueError):
+            Tibs.from_i(128, 8)  # Out of range (signed)
+        with pytest.raises(ValueError):
+            Tibs.from_i(-129, 8)  # Out of range (signed)
 
     def test_from_f_errors(self):
         with pytest.raises(ValueError):
@@ -916,8 +916,8 @@ class TestDtypeViewMutableViewEdgeCoverage:
         assert d.unpack_values(bytearray(b"\x05\x06")) == [5, 6]
         assert d.unpack_values(memoryview(b"\x07\x08")) == [7, 8]
 
-    def test_dtype_pack_values_reports_late_item_overflow(self):
-        with pytest.raises(OverflowError):
+    def test_dtype_pack_values_reports_late_out_of_range_item(self):
+        with pytest.raises(ValueError):
             Dtype("u4").pack_values([1, 2, 16])
 
     def test_dtype_bytes_pack_rejects_overlong_values(self):
@@ -1052,7 +1052,7 @@ class TestDtypeViewMutableViewEdgeCoverage:
         assert m == Mutibs("0xff")
 
         original = m.to_tibs()
-        with pytest.raises(OverflowError):
+        with pytest.raises(ValueError):
             m.view().i = -129
 
         assert m == original

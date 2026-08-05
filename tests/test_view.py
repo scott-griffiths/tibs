@@ -613,7 +613,7 @@ def test_mutable_view_write_value_is_fixed_width_and_leaves_the_source_alone():
 
     assert m == original
 
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         m.le.write_value("u16", 1 << 16)
 
     assert m == original
@@ -723,7 +723,7 @@ def test_mutable_view_field_write_failure_leaves_source_unchanged():
     original = m.to_tibs()
     field = m.lsb0.field(31, 26)
 
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         field.u = 64
 
     assert m == original
@@ -733,7 +733,7 @@ def test_mutable_view_set_errors_leave_value_unchanged():
     m = Mutibs.from_zeros(4)
     original = m.to_tibs()
 
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         m.view().write_u(16)
 
     assert m == original

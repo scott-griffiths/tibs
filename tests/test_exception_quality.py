@@ -21,9 +21,8 @@ def _exception_details(error):
 def test_split_at_does_not_treat_an_oversized_integer_as_an_iterable(cls):
     bits = cls("0b1")
 
-    # A normal out-of-range split position is a ValueError. Preserving the
-    # integer conversion's OverflowError would also be coherent; claiming that
-    # the integer is not iterable is not.
+    # A normal out-of-range split position is a ValueError; claiming that the
+    # integer is not iterable is not.
     with pytest.raises(ValueError):
         bits.split_at(OVERSIZED_INDEX)
 
@@ -134,7 +133,7 @@ def test_nested_dtype_context_preserves_the_original_user_exception():
 
 
 BULK_DTYPE_ERROR_CASES = [
-    pytest.param("u8", [1, 2, 256, 4], OverflowError, 2, id="bytewise-u8"),
+    pytest.param("u8", [1, 2, 256, 4], ValueError, 2, id="bytewise-u8"),
     pytest.param("bool", [True, False, 2, True], TypeError, 2, id="bitwise-bool"),
     pytest.param("hex8", ["00", "11", "f", "22"], ValueError, 2, id="general-hex"),
 ]
@@ -197,7 +196,7 @@ def test_empty_decode_error_uses_grammatical_python_terminology(cls):
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])
 @pytest.mark.parametrize("method_name", ["from_u", "from_i"])
-def test_integer_constructor_docstring_names_overflow_error(cls, method_name):
+def test_integer_constructor_docstring_names_value_error(cls, method_name):
     docstring = getattr(cls, method_name).__doc__
 
-    assert ":raises OverflowError:" in docstring
+    assert ":raises ValueError:" in docstring

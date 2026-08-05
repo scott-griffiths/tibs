@@ -7,7 +7,8 @@ use crate::helpers::{
     BS, BV, LogicalOp, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
     bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros,
     bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    validate_index, validate_length, validate_logical_op_lengths, validate_offset, validate_shift,
+    validate_slice,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -17,7 +18,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::ffi;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
+use pyo3::types::{PyBool, PyBytes, PyInt, PyList, PySlice, PyTuple, PyType};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::{c_int, c_void};
 use std::hash::{Hash, Hasher};
@@ -190,17 +191,10 @@ pub(crate) fn count_in_bits(
                 ),
             }
         }
-        Err(error) => {
-            if error.is_instance_of::<PyTypeError>(py)
-                && (value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>())
-            {
-                Err(error)
-            } else {
-                Err(PyValueError::new_err(
-                    "Cannot convert value to 0, 1 or a Tibs",
-                ))
-            }
-        }
+        Err(_) if value.is_instance_of::<PyInt>() => Err(PyValueError::new_err(
+            "Cannot convert value to 0, 1 or a Tibs",
+        )),
+        Err(error) => Err(error),
     }
 }
 
@@ -598,7 +592,20 @@ fn validate_dtype_value_length(dtype: &SingleDtype, bv: BV) -> PyResult<BV> {
 }
 
 fn add_value_path(py: Python<'_>, error: PyErr, path: &str) -> PyErr {
-    PyErr::from_type(error.get_type(py), (format!("At value{path}: {error}"),))
+    let message = format!("At value{path}: {error}");
+    if error.value(py).setattr("args", (message,)).is_err() {
+        let _ = error
+            .value(py)
+            .call_method1("add_note", (format!("At value{path}."),));
+    }
+    error
+}
+
+fn add_value_note(py: Python<'_>, error: PyErr, path: &str) -> PyErr {
+    let _ = error
+        .value(py)
+        .call_method1("add_note", (format!("At value{path}."),));
+    error
 }
 
 fn append_dtype_value(
@@ -1102,8 +1109,13 @@ pub(crate) fn bv_from_values_iter(
         let byte_length = packer.byte_length();
         let capacity = hint.and_then(|len| len.checked_mul(byte_length));
         let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+        let mut index = 0;
         for_each_value(py, iterable, packer.plain_type(), |item| {
-            packer.push(&mut bytes, item)
+            packer
+                .push(&mut bytes, item)
+                .map_err(|error| add_value_note(py, error, &format!("[{index}]")))?;
+            index += 1;
+            Ok(())
         })?;
         return Ok(BV::from_vec(bytes));
     }
@@ -1114,8 +1126,13 @@ pub(crate) fn bv_from_values_iter(
     if let Some(packer) = BitwisePacker::for_dtype(single) {
         let capacity = hint.and_then(|len| len.checked_mul(packer.length()));
         let mut out = helpers::BitAccumulator::with_bit_capacity(capacity);
+        let mut index = 0;
         for_each_value(py, iterable, packer.plain_type(), |item| {
-            packer.push(&mut out, item)
+            packer
+                .push(&mut out, item)
+                .map_err(|error| add_value_note(py, error, &format!("[{index}]")))?;
+            index += 1;
+            Ok(())
         })?;
         return Ok(out.into_bitvec());
     }
@@ -1128,7 +1145,10 @@ pub(crate) fn bv_from_values_iter(
             py.check_signals()?;
             check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
-        bv.extend(bv_from_single_value(single, &item?)?);
+        bv.extend(
+            bv_from_single_value(single, &item?)
+                .map_err(|error| add_value_note(py, error, &format!("[{index}]")))?,
+        );
     }
     Ok(bv)
 }
@@ -2042,7 +2062,7 @@ impl Tibs {
             Some(c) => {
                 if c < 0 {
                     return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk generator - count of {c} given, but it must be > 0 if present."
+                        "Cannot create chunk generator - count of {c} given, but it must be >= 0 if present."
                     )));
                 }
                 c as usize
@@ -2716,7 +2736,7 @@ impl Tibs {
             None => None,
         };
         let offset = match offset {
-            Some(offset) => Some(validate_length(offset)?),
+            Some(offset) => Some(validate_offset(offset)?),
             None => None,
         };
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
@@ -2784,9 +2804,9 @@ impl Tibs {
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
-        seed: Option<Vec<u8>>,
+        seed: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        let bv = bv_from_random(length, secure, &seed)?;
+        let bv = bv_from_random(length, secure, seed)?;
         Ok(Tibs::from_bv(bv))
     }
 
@@ -3718,8 +3738,8 @@ impl Tibs {
     ///
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
-    pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Tibs> {
-        tibs_codec::decode_bytes::<Tibs>(b)
+    pub fn decode(_cls: &Bound<'_, PyType>, b: &Bound<'_, PyAny>) -> PyResult<Tibs> {
+        tibs_codec::decode_bytes::<Tibs>(bytes_like_to_vec(b)?)
     }
 
     /// Encode the tibs as a bytes instance.

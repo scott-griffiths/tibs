@@ -138,6 +138,27 @@ pub(crate) fn bytes_like_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
     }
 }
 
+pub(crate) fn try_extract_index(index: &Bound<'_, PyAny>) -> PyResult<Option<isize>> {
+    let py = index.py();
+    let indexed = unsafe { ffi::PyNumber_Index(index.as_ptr()) };
+    if indexed.is_null() {
+        let error = PyErr::fetch(py);
+        return if error.is_instance_of::<PyTypeError>(py) {
+            Ok(None)
+        } else {
+            Err(error)
+        };
+    }
+
+    let value = unsafe { ffi::PyLong_AsSsize_t(indexed) };
+    unsafe { ffi::Py_DECREF(indexed) };
+    if value == -1 && unsafe { !ffi::PyErr_Occurred().is_null() } {
+        Err(PyErr::fetch(py))
+    } else {
+        Ok(Some(value))
+    }
+}
+
 pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     // Lists and tuples are the common bulk path. Reading their items through
     // the C API avoids creating a Bound<PyAny> wrapper for every bit.

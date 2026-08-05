@@ -17,17 +17,17 @@ pub(crate) fn byte_order_name(is_little_endian: bool) -> &'static str {
     if is_little_endian { "little" } else { "big" }
 }
 
-fn overflow_error(value: &Bound<'_, PyAny>, length: usize, signed: bool) -> PyErr {
+fn range_error(value: &Bound<'_, PyAny>, length: usize, signed: bool) -> PyErr {
     let signed_text = if signed { " signed" } else { "" };
     // A value with more than a few thousand digits can't be rendered at all,
     // because of CPython's integer to string conversion limit. Such a value is
     // certainly too big for the field, so report the field on its own.
     match value.str() {
-        Ok(shown) => PyOverflowError::new_err(format!(
+        Ok(shown) => PyValueError::new_err(format!(
             "Value {shown} does not fit in {length}{signed_text} bits."
         )),
         Err(_) => {
-            PyOverflowError::new_err(format!("Value does not fit in {length}{signed_text} bits."))
+            PyValueError::new_err(format!("Value does not fit in {length}{signed_text} bits."))
         }
     }
 }
@@ -54,7 +54,7 @@ fn to_index<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     unsafe { Bound::from_owned_ptr_or_err(py, indexed) }
 }
 
-/// Call `int.to_bytes` on `value`, reporting an overflow against the field
+/// Call `int.to_bytes` on `value`, reporting a range error against the field
 /// rather than against the byte count `to_bytes` was given.
 ///
 /// The value comes back right-aligned in `byte_length` bytes.
@@ -81,7 +81,7 @@ fn big_int_to_bytes<'py>(
     let bytes = match call {
         Ok(bytes) => bytes,
         Err(err) if err.is_instance_of::<PyOverflowError>(py) => {
-            return Err(overflow_error(value, length, signed));
+            return Err(range_error(value, length, signed));
         }
         Err(err) => return Err(err),
     };
@@ -121,7 +121,7 @@ fn bv_from_big_int(
         bits[..pad].not_any()
     };
     if !fits {
-        return Err(overflow_error(&value, length, signed));
+        return Err(range_error(&value, length, signed));
     }
     Ok(bits[pad..].to_bitvec())
 }
@@ -141,7 +141,7 @@ pub(crate) fn bv_from_uint(
         // general path below, which reports them against the field length.
         if let Ok(value) = value.extract::<u64>() {
             if length < FAST_INT_BITS && value >= (1u64 << length) {
-                return Err(PyOverflowError::new_err(format!(
+                return Err(PyValueError::new_err(format!(
                     "Value {value} does not fit in {length} bits."
                 )));
             }
@@ -172,7 +172,7 @@ pub(crate) fn bv_from_int(
                 let min_val = -(1i64 << (length - 1));
                 let max_val = (1i64 << (length - 1)) - 1;
                 if value < min_val || value > max_val {
-                    return Err(PyOverflowError::new_err(format!(
+                    return Err(PyValueError::new_err(format!(
                         "Value {value} does not fit in {length} signed bits."
                     )));
                 }

@@ -9,8 +9,8 @@ use crate::helpers::{
     bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
     head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
-    rotate_bits_left, str_to_bv, validate_index, validate_length, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    rotate_bits_left, str_to_bv, try_extract_index, validate_index, validate_length,
+    validate_logical_op_lengths, validate_offset, validate_shift, validate_slice,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -26,6 +26,14 @@ use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PySlice, PyTuple, PyType};
 use std::ops::Not;
+
+fn index_conversion_error(py: Python<'_>, error: PyErr, length: usize) -> PyErr {
+    if error.is_instance_of::<PyOverflowError>(py) {
+        PyIndexError::new_err(format!("Index is out of range for length of {length}"))
+    } else {
+        error
+    }
+}
 
 ///     A mutable container of binary data.
 ///
@@ -604,26 +612,34 @@ impl Mutibs {
             self.set_from_list(value, list)?;
         } else if let Ok(tuple) = pos.cast::<PyTuple>() {
             self.set_from_tuple(value, tuple)?;
-        } else if let Ok(index) = pos.extract::<isize>() {
-            if value {
-                self.set_index(index)?;
-            } else {
-                self.unset_index(index)?;
-            }
-        } else if pos.is_instance_of::<pyo3::types::PyRange>() {
-            let start = pos
-                .getattr("start")?
-                .extract::<Option<isize>>()?
-                .unwrap_or(0);
-            let stop = pos.getattr("stop")?.extract::<isize>()?;
-            let step = pos
-                .getattr("step")?
-                .extract::<Option<isize>>()?
-                .unwrap_or(1);
-            self.set_from_slice(value, start, stop, step)?;
         } else {
-            let indices = Self::collect_position_indices(pos)?;
-            self.set_from_sequence(value, indices)?;
+            match try_extract_index(pos)
+                .map_err(|error| index_conversion_error(pos.py(), error, self.len()))?
+            {
+                Some(index) => {
+                    if value {
+                        self.set_index(index)?;
+                    } else {
+                        self.unset_index(index)?;
+                    }
+                }
+                None if pos.is_instance_of::<pyo3::types::PyRange>() => {
+                    let start = pos
+                        .getattr("start")?
+                        .extract::<Option<isize>>()?
+                        .unwrap_or(0);
+                    let stop = pos.getattr("stop")?.extract::<isize>()?;
+                    let step = pos
+                        .getattr("step")?
+                        .extract::<Option<isize>>()?
+                        .unwrap_or(1);
+                    self.set_from_slice(value, start, stop, step)?;
+                }
+                None => {
+                    let indices = Self::collect_position_indices(pos)?;
+                    self.set_from_sequence(value, indices)?;
+                }
+            }
         }
 
         Ok(())
@@ -697,7 +713,9 @@ impl Mutibs {
                 *self.as_mut_bitvec_ref() = std::mem::take(&mut *self.as_mut_bitvec_ref()).not();
             }
             Some(p) => {
-                if let Ok(pos) = p.extract::<isize>() {
+                if let Some(pos) = try_extract_index(p)
+                    .map_err(|error| index_conversion_error(p.py(), error, self.len()))?
+                {
                     let pos: usize = validate_index(pos, self.len())?;
                     let value = self.as_bitvec_ref()[pos];
                     self.as_mut_bitvec_ref().set(pos, !value);
@@ -1596,7 +1614,7 @@ impl Mutibs {
     /// :return: None
     ///
     /// :raises ValueError: if the current length is zero.
-    /// :raises OverflowError: if the integer doesn't fit in the current length.
+    /// :raises ValueError: if the integer doesn't fit in the current length.
     ///
     /// .. code-block:: pycon
     ///
@@ -1682,7 +1700,7 @@ impl Mutibs {
     /// :return: None
     ///
     /// :raises ValueError: if the current length is zero.
-    /// :raises OverflowError: if the integer doesn't fit in the current length.
+    /// :raises ValueError: if the integer doesn't fit in the current length.
     ///
     /// .. code-block:: pycon
     ///
@@ -1886,9 +1904,9 @@ impl Mutibs {
         _cls: &Bound<'_, PyType>,
         length: i64,
         secure: bool,
-        seed: Option<Vec<u8>>,
+        seed: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        let bv = bv_from_random(length, secure, &seed)?;
+        let bv = bv_from_random(length, secure, seed)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1917,7 +1935,7 @@ impl Mutibs {
             None => None,
         };
         let offset = match offset {
-            Some(offset) => Some(validate_length(offset)?),
+            Some(offset) => Some(validate_offset(offset)?),
             None => None,
         };
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
@@ -2165,9 +2183,10 @@ impl Mutibs {
         // Fast path for exact int keys, then slices, and only then the general
         // integer extraction, which raises and discards a Python exception for
         // a key it cannot convert.
-        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0
-            && let Ok(index) = key.extract::<isize>()
-        {
+        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0 {
+            let index = key
+                .extract::<isize>()
+                .map_err(|error| index_conversion_error(key.py(), error, length))?;
             if value.is_truthy()? {
                 slf.set_index(index)?;
             } else {
@@ -2237,7 +2256,9 @@ impl Mutibs {
         }
         // Anything else that can still act as an index, such as a NumPy
         // integer, which the `PyLong_Check` above does not accept.
-        if let Ok(index) = key.extract::<isize>() {
+        if let Some(index) = try_extract_index(key)
+            .map_err(|error| index_conversion_error(key.py(), error, length))?
+        {
             if value.is_truthy()? {
                 slf.set_index(index)?;
             } else {
@@ -2271,9 +2292,10 @@ impl Mutibs {
         // Fast path for exact int keys, then slices, and only then the general
         // integer extraction, which raises and discards a Python exception for
         // a key it cannot convert.
-        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0
-            && let Ok(mut index) = key.extract::<i64>()
-        {
+        if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0 {
+            let mut index = key
+                .extract::<i64>()
+                .map_err(|error| index_conversion_error(key.py(), error, length))?;
             if index < 0 {
                 index += length as i64;
             }
@@ -2322,7 +2344,10 @@ impl Mutibs {
         }
         // Anything else that can still act as an index, such as a NumPy
         // integer, which the `PyLong_Check` above does not accept.
-        if let Ok(mut index) = key.extract::<i64>() {
+        if let Some(index) = try_extract_index(key)
+            .map_err(|error| index_conversion_error(key.py(), error, length))?
+        {
+            let mut index = index as i64;
             if index < 0 {
                 index += length as i64;
             }
@@ -2934,8 +2959,8 @@ impl Mutibs {
     ///
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
-    pub fn decode(_cls: &Bound<'_, PyType>, b: Vec<u8>) -> PyResult<Self> {
-        tibs_codec::decode_bytes::<Mutibs>(b)
+    pub fn decode(_cls: &Bound<'_, PyType>, b: &Bound<'_, PyAny>) -> PyResult<Self> {
+        tibs_codec::decode_bytes::<Mutibs>(bytes_like_to_vec(b)?)
     }
 
     /// Encode the Mutibs as a bytes instance.

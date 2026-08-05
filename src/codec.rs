@@ -380,7 +380,9 @@ fn decode_varint(bits: &BS) -> PyResult<(usize, usize)> {
 
 pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
     if b.is_empty() {
-        return Err(PyValueError::new_err("Cannot decode an empty bytes."));
+        return Err(PyValueError::new_err(
+            "Cannot decode an empty byte sequence.",
+        ));
     }
     let bv = BV::from_vec(b);
     let single_byte_flag = bv[0];

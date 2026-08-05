@@ -549,7 +549,7 @@ def test_dtype_pack_values_accepts_empty_iterables_and_generators():
 
 def test_from_values_propagates_item_errors():
     d = Dtype("u8")
-    with pytest.raises(OverflowError, match="does not fit"):
+    with pytest.raises(ValueError, match="does not fit"):
         Tibs.from_values(d, [1, 256])
 
 
@@ -615,7 +615,7 @@ def test_from_values_bulk_path_reports_bad_items_like_from_value(spec):
 
 
 @pytest.mark.parametrize("spec", ["u8", "u16", "u16_le", "i16", "i32", "u64", "i64", "u72"])
-def test_from_values_bulk_path_reports_overflow_like_from_value(spec):
+def test_from_values_bulk_path_reports_range_errors_like_from_value(spec):
     length = int(spec[1:].split("_")[0])
     if spec.startswith("u"):
         out_of_range = [(1 << length), -1]
@@ -623,9 +623,9 @@ def test_from_values_bulk_path_reports_overflow_like_from_value(spec):
         out_of_range = [1 << (length - 1), -(1 << (length - 1)) - 1]
 
     for value in out_of_range:
-        with pytest.raises(OverflowError) as bulk:
+        with pytest.raises(ValueError) as bulk:
             Tibs.from_values(spec, [0, value])
-        with pytest.raises(OverflowError) as single:
+        with pytest.raises(ValueError) as single:
             Tibs.from_value(spec, value)
         assert str(bulk.value) == str(single.value)
 
@@ -640,7 +640,7 @@ def test_from_values_bulk_path_accepts_index_objects():
 
     assert Tibs.from_values("u8", [Index(1), Index(255)]) == Tibs.from_hex("01ff")
     assert Tibs.from_values("u72", [Index(1)]) == Tibs.from_hex("000000000000000001")
-    with pytest.raises(OverflowError, match="does not fit"):
+    with pytest.raises(ValueError, match="does not fit"):
         Tibs.from_values("u8", [Index(256)])
 
 
@@ -714,7 +714,7 @@ def test_from_values_bit_path_reports_bad_items_like_from_value(spec):
 
 
 @pytest.mark.parametrize("spec", ["u1", "u3", "u12", "i12", "u57", "i57", "u58", "u65", "i129"])
-def test_from_values_bit_path_reports_overflow_like_from_value(spec):
+def test_from_values_bit_path_reports_range_errors_like_from_value(spec):
     length = int(spec[1:])
     if spec.startswith("u"):
         out_of_range = [(1 << length), -1]
@@ -722,9 +722,9 @@ def test_from_values_bit_path_reports_overflow_like_from_value(spec):
         out_of_range = [1 << (length - 1), -(1 << (length - 1)) - 1]
 
     for value in out_of_range:
-        with pytest.raises(OverflowError) as bulk:
+        with pytest.raises(ValueError) as bulk:
             Tibs.from_values(spec, [0, value])
-        with pytest.raises(OverflowError) as single:
+        with pytest.raises(ValueError) as single:
             Tibs.from_value(spec, value)
         assert str(bulk.value) == str(single.value)
 
@@ -739,7 +739,7 @@ def test_from_values_bit_path_accepts_index_objects():
 
     assert Tibs.from_values("u12", [Index(1), Index(0xFFF)]) == Tibs.from_hex("001fff")
     assert Tibs.from_values("u65", [Index(1)]) == Tibs.from_bin("0" * 64 + "1")
-    with pytest.raises(OverflowError, match="does not fit"):
+    with pytest.raises(ValueError, match="does not fit"):
         Tibs.from_values("u12", [Index(0x1000)])
 
 
@@ -948,7 +948,7 @@ def test_dtype_string_errors_are_reported_by_value_methods():
 def test_dtype_pack_and_unpack_error_consistency():
     d = Dtype("u8")
 
-    with pytest.raises(OverflowError, match="does not fit"):
+    with pytest.raises(ValueError, match="does not fit"):
         d.pack(256)
     with pytest.raises(ValueError, match="Dtype length"):
         Dtype("hex8").pack("f")
@@ -1015,9 +1015,9 @@ def test_to_values_when_the_storage_starts_part_way_into_a_byte():
 def test_values_above_the_signed_range_round_trip():
     values = [0, (1 << 63) - 1, 1 << 63, (1 << 64) - 1]
     assert Tibs.from_values("u64", values).to_values("u64") == values
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         Tibs.from_values("u64", [1 << 64])
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         Tibs.from_values("u64", [-1])
 
 

@@ -1,6 +1,7 @@
 use super::bits::BV;
+use super::python::bytes_like_to_vec;
 use super::validation::validate_length;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use rand::rngs::{StdRng, SysRng};
 use rand::{Rng, SeedableRng, TryRng};
@@ -24,8 +25,25 @@ fn process_seed(seed: &Option<Vec<u8>>) -> [u8; 32] {
     }
 }
 
-pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) -> PyResult<BV> {
+pub(crate) fn bv_from_random(
+    length: i64,
+    secure: bool,
+    seed: Option<&Bound<'_, PyAny>>,
+) -> PyResult<BV> {
     let length = validate_length(length)?;
+    let seed = seed
+        .map(|seed| {
+            bytes_like_to_vec(seed).map_err(|error| {
+                if error.is_instance_of::<PyTypeError>(seed.py()) {
+                    PyTypeError::new_err(
+                        "seed must be a bytes-like object: bytes, bytearray or memoryview.",
+                    )
+                } else {
+                    error
+                }
+            })
+        })
+        .transpose()?;
     if secure && seed.is_some() {
         return Err(PyValueError::new_err(
             "A seed cannot be used when generating secure random data.",
@@ -41,7 +59,7 @@ pub(crate) fn bv_from_random(length: i64, secure: bool, seed: &Option<Vec<u8>>) 
             .try_fill_bytes(&mut data)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     } else {
-        let seed_arr = process_seed(seed);
+        let seed_arr = process_seed(&seed);
         let mut rng = StdRng::from_seed(seed_arr);
         rng.fill_bytes(&mut data);
     }

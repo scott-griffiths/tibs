@@ -27,6 +27,7 @@ pub(crate) use numeric::{
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{
     bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, convert_to_bool, promote_to_bv,
+    try_extract_index,
 };
 pub(crate) use random::bv_from_random;
 pub(crate) use raw_bytes::{
@@ -42,5 +43,5 @@ pub(crate) use search::{
 pub(crate) use splice::{copy_bits, fill_bits, move_bits};
 pub(crate) use validation::{
     normalize_split_position, validate_index, validate_length, validate_logical_op_lengths,
-    validate_shift, validate_slice,
+    validate_offset, validate_shift, validate_slice,
 };

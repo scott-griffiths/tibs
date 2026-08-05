@@ -3,15 +3,15 @@ use crate::helpers::{
     bv_from_zeros, byte_order_name, contains_bit, copy_unaligned_padded_bytes, count_bitslice,
     count_pair_bits, extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
-    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, validate_index,
-    validate_slice,
+    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, try_extract_index,
+    validate_index, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
 use bitvec::prelude::*;
 use half::f16;
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyInt};
@@ -284,7 +284,7 @@ pub(crate) trait BitCollection: Sized + Clone {
             Some(c) => {
                 if c < 0 {
                     return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk list - count of {c} given, but it must be > 0."
+                        "Cannot create chunk list - count of {c} given, but it must be >= 0."
                     )));
                 }
                 c as usize
@@ -314,16 +314,23 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn collect_split_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Vec<Self>> {
         let len = self.len();
-        let positions = if let Ok(position) = pos.extract::<isize>() {
-            vec![normalize_split_position(position, len)?]
-        } else {
-            let capacity = pos.len().ok().unwrap_or(1);
-            let mut positions = Vec::with_capacity(capacity);
-            for item in pos.try_iter()? {
-                let position = item?.extract::<isize>()?;
-                positions.push(normalize_split_position(position, len)?);
+        let positions = match try_extract_index(pos) {
+            Ok(Some(position)) => vec![normalize_split_position(position, len)?],
+            Err(error) if error.is_instance_of::<PyOverflowError>(pos.py()) => {
+                return Err(PyValueError::new_err(format!(
+                    "Split position is out of range for length of {len}."
+                )));
             }
-            positions
+            Err(error) => return Err(error),
+            Ok(None) => {
+                let capacity = pos.len().ok().unwrap_or(1);
+                let mut positions = Vec::with_capacity(capacity);
+                for item in pos.try_iter()? {
+                    let position = item?.extract::<isize>()?;
+                    positions.push(normalize_split_position(position, len)?);
+                }
+                positions
+            }
         };
 
         let mut pieces = Vec::with_capacity(positions.len() + 1);

@@ -3,11 +3,11 @@ use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
-    bv_from_uint, bytes_like_to_vec, format_bit_collection, validate_slice,
+    bv_from_uint, bytes_like_to_vec, format_bit_collection, try_extract_index, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::{Tibs, bv_from_value, py_from_value};
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyType};
 
@@ -173,19 +173,42 @@ fn field_source_indices(
     indices
 }
 
-fn extract_source_indices(source_indices: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
+fn source_index_error(index: &Bound<'_, PyAny>, source_len: usize, view_name: &str) -> PyErr {
+    let index = index
+        .str()
+        .map_or_else(|_| "<unprintable>".to_string(), |value| value.to_string());
+    PyValueError::new_err(format!(
+        "{view_name} source index {index} is out of range for source length {source_len}."
+    ))
+}
+
+fn extract_source_indices(
+    source_indices: &Bound<'_, PyAny>,
+    source_len: usize,
+    view_name: &str,
+) -> PyResult<Vec<usize>> {
     let capacity = source_indices.len().ok().unwrap_or(16);
     let mut indices = Vec::with_capacity(capacity);
     for item in source_indices.try_iter()? {
-        indices.push(item?.extract::<usize>()?);
+        let item = item?;
+        let index = match try_extract_index(&item) {
+            Ok(Some(index)) if index >= 0 => index as usize,
+            Ok(Some(_)) => return Err(source_index_error(&item, source_len, view_name)),
+            Err(error) if error.is_instance_of::<PyOverflowError>(item.py()) => {
+                return Err(source_index_error(&item, source_len, view_name));
+            }
+            Err(error) => return Err(error),
+            Ok(None) => return Err(PyTypeError::new_err("Source indices must be integers.")),
+        };
+        indices.push(index);
     }
     Ok(indices)
 }
 
 fn validate_source_indices(indices: &[usize], source_len: usize, view_name: &str) -> PyResult<()> {
-    if indices.iter().any(|&index| index >= source_len) {
+    if let Some(&index) = indices.iter().find(|&&index| index >= source_len) {
         return Err(PyValueError::new_err(format!(
-            "{view_name} source is too short for this field."
+            "{view_name} source is too short for index {index}; source length is {source_len}."
         )));
     }
 
@@ -662,7 +685,7 @@ impl MutableView {
     ) -> PyResult<Self> {
         let byte_order = byte_order.unwrap_or(ByteOrder::Unspecified);
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
-        let indices = extract_source_indices(indices)?;
+        let indices = extract_source_indices(indices, source.len(), "MutableView")?;
         let selection = MutableSelection::from_indices(indices, source.len())?;
         View::validate_layout(selection.len(source.len())?, byte_order, bit_order)?;
         Ok(Self::from_parts(
@@ -1146,7 +1169,7 @@ impl View {
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
 
         if let Ok(tibs) = source.extract::<PyRef<'_, Tibs>>() {
-            let indices = extract_source_indices(indices)?;
+            let indices = extract_source_indices(indices, tibs.len(), "View")?;
             return View::from_indices_bits(tibs.as_bitslice(), indices, byte_order, bit_order);
         }
 

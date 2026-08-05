@@ -226,7 +226,7 @@ def test_compound_pack_requires_exact_value_count(dtype, value):
 def test_nested_pack_errors_report_the_value_path_without_changing_exception_type():
     dtype = Dtype("[(u8, bool); 2]")
 
-    with pytest.raises(OverflowError) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         dtype.pack(((1, True), (256, False)))
 
     message = str(exc_info.value).lower()

@@ -37,6 +37,15 @@ pub(crate) fn validate_length(length: i64) -> PyResult<usize> {
     Ok(length as usize)
 }
 
+pub(crate) fn validate_offset(offset: i64) -> PyResult<usize> {
+    if offset < 0 {
+        return Err(PyValueError::new_err(format!(
+            "Negative bit offset given: {offset}."
+        )));
+    }
+    validate_length(offset)
+}
+
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {
     if a != b {
         Err(PyValueError::new_err(format!(

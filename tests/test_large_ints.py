@@ -118,33 +118,33 @@ def test_to_u_and_to_i_accept_a_range(cls):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("length", ALL_LENGTHS)
-def test_unsigned_overflow(cls, length):
-    with pytest.raises(OverflowError):
+def test_unsigned_out_of_range(cls, length):
+    with pytest.raises(ValueError):
         cls.from_u(1 << length, length)
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         cls.from_u((1 << length) + 1, length)
 
 
 @pytest.mark.parametrize("length", ALL_LENGTHS)
-def test_signed_overflow(cls, length):
-    with pytest.raises(OverflowError):
+def test_signed_out_of_range(cls, length):
+    with pytest.raises(ValueError):
         cls.from_i(1 << (length - 1), length)
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         cls.from_i(-(1 << (length - 1)) - 1, length)
 
 
 @pytest.mark.parametrize("length", ALL_LENGTHS)
 def test_negative_value_for_unsigned(cls, length):
-    # Whatever the length, a negative value is an OverflowError rather than the
-    # TypeError or ValueError that a different code path might produce.
-    with pytest.raises(OverflowError):
+    # Whatever the length, a negative value is a ValueError rather than the
+    # TypeError that a different code path might produce.
+    with pytest.raises(ValueError):
         cls.from_u(-1, length)
 
 
 def test_hugely_oversized_value_reports_the_field_not_the_word_size(cls):
     # This used to be pyo3's "int too big to convert", which described u128
     # rather than the field the user asked for.
-    with pytest.raises(OverflowError) as excinfo:
+    with pytest.raises(ValueError) as excinfo:
         cls.from_u(1 << 200, 8)
     assert "8" in str(excinfo.value)
 
@@ -246,12 +246,12 @@ def test_mutibs_write_and_property_set(length):
 
 
 @pytest.mark.parametrize("length", [64, 65, 200])
-def test_mutibs_write_overflow_leaves_value_untouched(length):
+def test_mutibs_out_of_range_write_leaves_value_untouched(length):
     m = Mutibs.from_u(1, length)
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         m.write_u(1 << length)
     assert m.u == 1
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         m.write_i(1 << (length - 1))
     assert m.u == 1
 
@@ -279,7 +279,7 @@ def test_mutable_view_writes_large_values(length):
     assert m.u == value
     v.write_i(-1)
     assert m.all()
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         v.u = 1 << length
 
 

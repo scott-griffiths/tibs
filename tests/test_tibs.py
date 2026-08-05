@@ -232,7 +232,7 @@ def test_from_i():
 
 
 def test_from_i_errors():
-    with pytest.raises(OverflowError):
+    with pytest.raises(ValueError):
         _ = Tibs.from_i(4, 2)
 
 
