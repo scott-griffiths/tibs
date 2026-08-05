@@ -3729,7 +3729,7 @@ impl Tibs {
     ///
     /// :param bytes | bytearray b: The encoded bytes to decode.
     /// :return: A new Tibs.
-    /// :raises ValueError: for badly formed, truncated or extended input bytes.
+    /// :raises tibs.DecodeError: for badly formed, truncated or extended input bytes.
     ///
     /// .. code-block:: pycon
     ///
@@ -3739,7 +3739,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: &Bound<'_, PyAny>) -> PyResult<Tibs> {
-        tibs_codec::decode_bytes::<Tibs>(bytes_like_to_vec(b)?)
+        tibs_codec::decode_bytes::<Tibs>(b.py(), bytes_like_to_vec(b)?)
     }
 
     /// Encode the tibs as a bytes instance.

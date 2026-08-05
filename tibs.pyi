@@ -12,6 +12,12 @@ _DtypeScalarValue = Union[int, float, str, bytes, bool, "Tibs"]
 _DtypeValue = Union[_DtypeScalarValue, tuple["_DtypeValue", ...]]
 
 
+class ReadError(ValueError): ...
+
+
+class DecodeError(ValueError): ...
+
+
 class ByteOrder:
     Unspecified: ClassVar[ByteOrder]
     Big: ClassVar[ByteOrder]

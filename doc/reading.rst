@@ -199,7 +199,7 @@ because you asked for something specific and it was not there::
     >>> r.read_value('u8')
     Traceback (most recent call last):
         ...
-    ValueError: Cannot read 8 bits at position 4: only 4 of the 8 bits are left.
+    tibs.ReadError: Cannot read 8 bits at position 4: only 4 of the 8 bits are left.
 
 Whenever a method raises, the cursor is exactly where it was. A failed read
 never leaves you half way into a value, so there is nothing to unwind::

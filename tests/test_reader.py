@@ -1,6 +1,6 @@
 import pytest
 
-from tibs import DtypeArray, Mutibs, Reader, Tibs
+from tibs import DtypeArray, Mutibs, ReadError, Reader, Tibs
 
 
 # --- construction and state ------------------------------------------------
@@ -179,6 +179,19 @@ def test_read_bits_from_a_mutibs_gives_a_tibs():
     assert bits == Tibs("0xf0")
 
 
+def test_incomplete_reads_raise_read_error():
+    with pytest.raises(ReadError):
+        Reader(Tibs("0b1")).read_value("u8")
+    with pytest.raises(ReadError):
+        Reader(Tibs("0b1")).read_values("u1", 2)
+    with pytest.raises(ReadError):
+        Reader(Tibs("0b1")).read_bits(2)
+    with pytest.raises(ReadError):
+        Reader(Tibs("0b1")).peek_value("u8")
+    with pytest.raises(ReadError):
+        Reader(Tibs("0b1")).peek_bits(2)
+
+
 def test_read_to_stops_at_the_match():
     r = Reader(Tibs("0x0000ff12"))
 
@@ -215,9 +228,9 @@ def test_read_to_and_read_past_honour_byte_aligned_and_mask():
 def test_read_to_raises_when_the_needle_is_missing():
     r = Reader(Tibs("0x0000"), 4)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ReadError):
         r.read_to("0xff")
-    with pytest.raises(ValueError):
+    with pytest.raises(ReadError):
         r.read_past("0xff")
     assert r.pos == 4
 
@@ -264,7 +277,7 @@ def test_bookmark_restores_after_an_exception():
 def test_bookmark_does_not_suppress_exceptions():
     r = Reader(Tibs("0x010203"))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ReadError):
         with r.bookmark():
             r.read_bits(100)
 
@@ -520,7 +533,7 @@ def test_a_truncated_mutibs_source_leaves_the_cursor_past_the_end():
     assert r.remaining == 0
     assert r.at_end
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ReadError):
         r.read_bits(1)
     assert r.seek_to("0x01") is False
     assert r.seek_back_to("0x01") is True

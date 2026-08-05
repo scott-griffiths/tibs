@@ -2950,7 +2950,7 @@ impl Mutibs {
     ///
     /// :param bytes | bytearray b: The encoded bytes to decode.
     /// :return: A new Mutibs.
-    /// :raises ValueError: for badly formed, truncated or extended input bytes.
+    /// :raises tibs.DecodeError: for badly formed, truncated or extended input bytes.
     ///
     /// .. code-block:: pycon
     ///
@@ -2960,7 +2960,7 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (b, /), text_signature = "(cls, b, /)")]
     pub fn decode(_cls: &Bound<'_, PyType>, b: &Bound<'_, PyAny>) -> PyResult<Self> {
-        tibs_codec::decode_bytes::<Mutibs>(bytes_like_to_vec(b)?)
+        tibs_codec::decode_bytes::<Mutibs>(b.py(), bytes_like_to_vec(b)?)
     }
 
     /// Encode the Mutibs as a bytes instance.

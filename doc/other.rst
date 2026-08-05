@@ -1,7 +1,7 @@
 .. currentmodule:: tibs
 
-Enums
------
+Enums and exceptions
+--------------------
 
 .. autoclass:: tibs.ByteOrder
    :members:
@@ -75,3 +75,17 @@ larger byte-like data.
 The encoded byte format stores enough length information to decode one value exactly. Future versions should
 continue to decode complete values written by earlier stable versions, but the exact bytes produced by
 ``Codec.Auto`` may change between releases. See :doc:`byte_format` for the format details.
+
+Exceptions
+----------
+
+.. autoexception:: tibs.ReadError
+
+This Tibs-specific exception is a subclass of :class:`ValueError`. It is raised when a :class:`Reader` cannot
+complete a requested read from the bits that remain, or cannot find the delimiter requested by
+:meth:`Reader.read_to` or :meth:`Reader.read_past`.
+
+.. autoexception:: tibs.DecodeError
+
+This Tibs-specific exception is a subclass of :class:`ValueError`. It is raised when :meth:`Tibs.decode` or
+:meth:`Mutibs.decode` receives malformed, truncated or extended encoded data.

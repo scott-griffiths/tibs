@@ -12,6 +12,7 @@ from tibs import (
     BitOrder,
     ByteOrder,
     Codec,
+    DecodeError,
     Dtype,
     DtypeKind,
     DtypeSingle,
@@ -751,13 +752,13 @@ class TestConcreteRegressionCases:
 MALFORMED_ZSTD = bytes.fromhex("110d28b52ffd240001000099e9d851")
 
 
-def test_mutibs_decode_malformed_zstd_with_impossible_padding_raises_value_error():
-    with pytest.raises(ValueError):
+def test_mutibs_decode_malformed_zstd_with_impossible_padding_raises_decode_error():
+    with pytest.raises(DecodeError):
         Mutibs.decode(MALFORMED_ZSTD)
 
 
-def test_tibs_decode_malformed_zstd_with_impossible_padding_raises_value_error():
-    with pytest.raises(ValueError):
+def test_tibs_decode_malformed_zstd_with_impossible_padding_raises_decode_error():
+    with pytest.raises(DecodeError):
         Tibs.decode(MALFORMED_ZSTD)
 
 
@@ -866,9 +867,9 @@ class TestAdditionalCoverage:
         assert 3 * Tibs("0b10") == Tibs("0b101010")
         assert Mutibs("0b01") * 3 == Tibs("0b010101")
 
-    def test_mutibs_decode_malformed_zstd_with_impossible_padding_raises_value_error(self):
+    def test_mutibs_decode_malformed_zstd_with_impossible_padding_raises_decode_error(self):
         malformed = bytes.fromhex("110d28b52ffd240001000099e9d851")
-        with pytest.raises(ValueError):
+        with pytest.raises(DecodeError):
             Mutibs.decode(malformed)
 
     def test_bytes_apis_reject_integer_sequences(self):
@@ -1236,23 +1237,23 @@ class TestDecodeHeaderOverflow:
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_raw_payload_length_overflows_when_added_to_the_header(self, cls):
-        with pytest.raises(ValueError, match="too large to decode"):
+        with pytest.raises(DecodeError, match="too large to decode"):
             cls.decode(_encoded(RAW, OVERSIZED))
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_rice_payload_length_overflows_when_added_to_the_header(self, cls):
         # One padding byte, so the config-block length check passes first.
-        with pytest.raises(ValueError, match="too large to decode"):
+        with pytest.raises(DecodeError, match="too large to decode"):
             cls.decode(_encoded(RICE, OVERSIZED, b"\x00"))
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_zstd_payload_length_overflows_when_added_to_the_header(self, cls):
-        with pytest.raises(ValueError, match="too large to decode"):
+        with pytest.raises(DecodeError, match="too large to decode"):
             cls.decode(_encoded(ZSTD, OVERSIZED))
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_payload_length_overflows_when_scaled_to_bits(self, cls):
-        with pytest.raises(ValueError, match="too large to decode"):
+        with pytest.raises(DecodeError, match="too large to decode"):
             cls.decode(_encoded(RAW, UNSCALABLE))
 
 
@@ -1260,19 +1261,19 @@ class TestDecodeMalformedZstdPayload:
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_payload_that_is_not_a_zstd_frame(self, cls):
         payload = b"\x00\x00\x00\x00"
-        with pytest.raises(ValueError, match="could not be decoded"):
+        with pytest.raises(DecodeError, match="could not be decoded"):
             cls.decode(_encoded(ZSTD, len(payload), payload))
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_frame_header_without_a_decompressed_size(self, cls):
         payload = bytes.fromhex("28b52ffd0000")
-        with pytest.raises(ValueError, match="did not include its decompressed size"):
+        with pytest.raises(DecodeError, match="did not include its decompressed size"):
             cls.decode(_encoded(ZSTD, len(payload), payload))
 
     @pytest.mark.parametrize("cls", [Tibs, Mutibs])
     def test_frame_with_a_corrupt_body(self, cls):
         payload = bytes.fromhex("28b52ffd24ff00ffffffff")
-        with pytest.raises(ValueError, match="could not be decoded"):
+        with pytest.raises(DecodeError, match="could not be decoded"):
             cls.decode(_encoded(ZSTD, len(payload), payload))
 
 

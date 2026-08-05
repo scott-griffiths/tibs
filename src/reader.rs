@@ -1,3 +1,4 @@
+use crate::ReadError;
 use crate::core::BitCollection;
 use crate::dtype::extract_dtype;
 use crate::mutibs::Mutibs;
@@ -49,7 +50,7 @@ fn validate_pos(pos: i64, len: usize) -> PyResult<usize> {
 fn end_of_read(pos: usize, needed: usize, len: usize) -> PyResult<usize> {
     match pos.checked_add(needed) {
         Some(end) if end <= len => Ok(end),
-        _ => Err(PyValueError::new_err(format!(
+        _ => Err(ReadError::new_err(format!(
             "Cannot read {needed} bits at position {pos}: only {} of the {len} bits are left.",
             remaining_bits(pos, len)
         ))),
@@ -290,7 +291,7 @@ impl Reader {
     ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :return: The decoded Python value.
-    /// :raises ValueError: if fewer than ``dtype.length`` bits remain, in which case the position does not move.
+    /// :raises tibs.ReadError: if fewer than ``dtype.length`` bits remain, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -323,7 +324,8 @@ impl Reader {
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None count: The number of values to read, or ``None`` for as many as fit.
     /// :return: A list of decoded Python values.
-    /// :raises ValueError: if ``count`` is negative, or if that many values do not fit in the bits that remain, in which case the position does not move.
+    /// :raises ValueError: if ``count`` is negative or too large to represent.
+    /// :raises tibs.ReadError: if the requested values do not fit in the bits that remain, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -371,7 +373,8 @@ impl Reader {
     ///
     /// :param int n: The number of bits to read.
     /// :return: The bits read.
-    /// :raises ValueError: if ``n`` is negative or more than :attr:`~Reader.remaining`, in which case the position does not move.
+    /// :raises ValueError: if ``n`` is negative.
+    /// :raises tibs.ReadError: if ``n`` is more than :attr:`~Reader.remaining`, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -398,7 +401,8 @@ impl Reader {
     /// :param bool byte_aligned: If ``True``, only match on byte boundaries.
     /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bits between the current position and the match.
-    /// :raises ValueError: if ``needle`` is empty or is not found at or after the current position, in which case the position does not move.
+    /// :raises ValueError: if ``needle`` is empty.
+    /// :raises tibs.ReadError: if ``needle`` is not found at or after the current position, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -431,7 +435,8 @@ impl Reader {
     /// :param bool byte_aligned: If ``True``, only match on byte boundaries.
     /// :param object | None mask: If present, only the bits set in the mask need to match. Defaults to ``None``.
     /// :return: The bits between the current position and the end of the match.
-    /// :raises ValueError: if ``needle`` is empty or is not found at or after the current position, in which case the position does not move.
+    /// :raises ValueError: if ``needle`` is empty.
+    /// :raises tibs.ReadError: if ``needle`` is not found at or after the current position, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -461,7 +466,7 @@ impl Reader {
     ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :return: The decoded Python value.
-    /// :raises ValueError: if fewer than ``dtype.length`` bits remain.
+    /// :raises tibs.ReadError: if fewer than ``dtype.length`` bits remain.
     ///
     /// .. code-block:: pycon
     ///
@@ -482,7 +487,8 @@ impl Reader {
     ///
     /// :param int n: The number of bits to read.
     /// :return: The bits read.
-    /// :raises ValueError: if ``n`` is negative or more than :attr:`~Reader.remaining`.
+    /// :raises ValueError: if ``n`` is negative.
+    /// :raises tibs.ReadError: if ``n`` is more than :attr:`~Reader.remaining`.
     ///
     /// .. code-block:: pycon
     ///
@@ -713,7 +719,7 @@ impl Reader {
     /// named for the `Tibs` they return and have nothing to return here.
     fn require_found(&self, found: Option<usize>) -> PyResult<usize> {
         found.ok_or_else(|| {
-            PyValueError::new_err(format!(
+            ReadError::new_err(format!(
                 "Cannot read: the bits to find were not found at or after position {}. Use seek_to or seek_past if not finding them is expected.",
                 self.pos
             ))

@@ -14,7 +14,7 @@ The public API is grouped into:
   used for packing and unpacking values.
 * :doc:`view` — Wrappers for byte order, bit order and labelled fields.
 * :doc:`reader` — A cursor for reading bits in sequence.
-* :doc:`other` — Enum classes for byte order, bit order, dtypes and codecs.
+* :doc:`other` — Enum classes and exceptions.
 
 .. toctree::
     :maxdepth: 1

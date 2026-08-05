@@ -6,7 +6,7 @@ are expected to fail until the corresponding exception paths are fixed.
 
 import pytest
 
-from tibs import Dtype, Mutibs, MutableView, Tibs, View
+from tibs import DecodeError, Dtype, Mutibs, MutableView, ReadError, Tibs, View
 
 
 OVERSIZED_INDEX = 2**100
@@ -15,6 +15,11 @@ OVERSIZED_INDEX = 2**100
 def _exception_details(error):
     """Return the message and any Python 3.11 exception notes."""
     return "\n".join([str(error), *getattr(error, "__notes__", ())])
+
+
+def test_module_specific_errors_are_value_errors():
+    assert issubclass(ReadError, ValueError)
+    assert issubclass(DecodeError, ValueError)
 
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])
@@ -187,11 +192,10 @@ def test_negative_from_bytes_offset_error_names_the_offset_parameter(cls):
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])
 def test_empty_decode_error_uses_grammatical_python_terminology(cls):
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(DecodeError) as exc_info:
         cls.decode(b"")
 
-    message = str(exc_info.value).lower()
-    assert "empty byte sequence" in message or "empty bytes object" in message
+    assert str(exc_info.value) == "Cannot decode an empty byte sequence."
 
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])

@@ -1,3 +1,4 @@
+use crate::DecodeError;
 use crate::core::BitCollection;
 use crate::enums::Codec;
 use crate::helpers::{BS, BV};
@@ -378,7 +379,7 @@ fn decode_varint(bits: &BS) -> PyResult<(usize, usize)> {
     Ok((value, bits_consumed))
 }
 
-pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
+fn decode_bytes_inner<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
     if b.is_empty() {
         return Err(PyValueError::new_err(
             "Cannot decode an empty byte sequence.",
@@ -422,6 +423,16 @@ pub(crate) fn decode_bytes<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
         0b010 => decode_zstd_payload(&bv, bit_padding, data_start, data_bits),
         _ => Err(PyValueError::new_err("The codec value is reserved.")),
     }
+}
+
+pub(crate) fn decode_bytes<C: BitCollection>(py: Python<'_>, b: Vec<u8>) -> PyResult<C> {
+    decode_bytes_inner(b).map_err(|error| {
+        if error.is_instance_of::<PyValueError>(py) {
+            DecodeError::new_err(error.value(py).to_string())
+        } else {
+            error
+        }
+    })
 }
 
 pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResult<Vec<u8>> {
