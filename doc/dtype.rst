@@ -126,46 +126,27 @@ and ``_be`` like the other numeric dtypes, and has its own kind::
     >>> Dtype("bf16").kind
     DtypeKind.BFloat
 
-Narrow OCP and P3109 numeric formats
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exotic floating point formats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Tibs also supports the scalar elements used by the Open Compute Project's
 microscaling formats and two eight-bit formats from the draft IEEE P3109 work.
-Their names include the specification family and have intrinsic widths::
-
-    >>> Dtype("ocp_e2m1")
-    DtypeSingle('ocp_e2m1')
-    >>> values = [0.5, 1.0, 3.0, 6.0]
-    >>> Tibs.from_values("ocp_e2m1", values).hex
-    '1257'
-    >>> Tibs("0x1257").to_values("ocp_e2m1")
-    [0.5, 1.0, 3.0, 6.0]
 
 See :ref:`exotic-floats` for the complete list of dtypes, bit layouts,
-ranges, special values, conversion rules, specification versions and
-Bitstring name equivalents. Tibs currently provides the unscaled element
-encodings only; it does not implement OCP scaling blocks.
-
-A scalar dtype can also be built without parsing a string::
-
-    >>> DtypeSingle.from_params(DtypeKind.Uint, 16, ByteOrder.Little)
-    DtypeSingle('u16_le')
-
-The general :class:`Dtype` base class has no ``from_params`` method because the
-three concrete variants require different parameters.
+ranges, special values and conversion rules.
 
 .. _kinds-as-dtypes:
 
-Kinds that are dtypes on their own
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fixed width dtypes
+^^^^^^^^^^^^^^^^^^
 
-Some kinds fix their own bit length: ``bool`` is always one bit, ``bf16``
-always sixteen, and each narrow format above has an intrinsic width. For those,
+Some dtype kinds fix their own bit length: ``bool`` is always one bit, ``bf16``
+always sixteen, and each of the exotic float formats has an intrinsic width. For those,
 the :class:`DtypeKind` on its own already says everything the dtype does, so the
 length may be omitted and the kind used directly wherever a dtype is accepted::
 
-    >>> DtypeSingle.from_params(DtypeKind.OcpE2M1)
-    DtypeSingle('ocp_e2m1')
+    >>> DtypeSingle.from_params(DtypeKind.Bool)
+    DtypeSingle('bool')
     >>> Tibs("0x1257").to_values(DtypeKind.OcpE2M1)
     [0.5, 1.0, 3.0, 6.0]
 
