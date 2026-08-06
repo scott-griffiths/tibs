@@ -1,0 +1,62 @@
+name: Exotic float conformance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/exotic-float-conformance.yaml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/conformance/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/exotic-float-conformance.yaml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/conformance/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Pinned external oracles
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out pinned P3109 public snapshot
+        uses: actions/checkout@v6
+        with:
+          repository: P3109/Public
+          ref: aa9d236d7a31b38fbe43b703a0bfdfc3d8be5d45
+          path: .oracles/p3109
+      - name: Check out pinned Bitstring 5 oracle
+        uses: actions/checkout@v6
+        with:
+          repository: scott-griffiths/bitstring
+          ref: c336d1e6a6ebf7ccc364840cb12949a7b012d985
+          path: .oracles/bitstring
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install test environment
+        run: |
+          python -m pip install pytest ".[conformance]"
+          # The pinned Bitstring 5 beta still declares tibs<2. Installing it
+          # without dependencies keeps this checkout as the backend under test.
+          python -m pip install --no-deps .oracles/bitstring
+      - name: Run exotic-float conformance tests
+        env:
+          TIBS_P3109_SNAPSHOT: ${{ github.workspace }}/.oracles/p3109
+        run: |
+          # A missing optional oracle must fail this dedicated job rather than
+          # turning the complete module into a successful collection-time skip.
+          python -c "import bitstring, gfloat, ml_dtypes, numpy"
+          python -m pytest tests/conformance -q

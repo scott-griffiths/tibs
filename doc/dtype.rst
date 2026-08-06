@@ -43,8 +43,10 @@ Single dtypes
 ^^^^^^^^^^^^^
 
 A single dtype starts with a kind and usually ends with the number of bits used
-by one value. The ``bool`` dtype is the exception: it is always exactly one bit
-long and has no length suffix.
+by one value. The ``bool`` dtype is always exactly one bit long and has no
+length suffix. The named OCP and P3109 formats documented in
+:ref:`exotic-floats` also have intrinsic widths, so their names do not take a
+separate length suffix.
 
 .. csv-table::
    :header: "Form", "Meaning", "Example"
@@ -70,8 +72,8 @@ as immutable :class:`Tibs` objects.
     Lengths are consistently in bits throughout Tibs. In particular,
     ``"bytes32"`` is four bytes long, not 32 bytes long.
 
-For integer and floating-point dtypes, append ``_le`` or ``_be`` to specify
-the byte order of a whole-byte value::
+For the generic ``uN``, ``iN``, ``fN`` and ``bf16`` dtypes, append ``_le`` or
+``_be`` to specify the byte order of a whole-byte value::
 
     >>> Dtype("u16_le")
     DtypeSingle('u16_le')
@@ -80,7 +82,9 @@ the byte order of a whole-byte value::
 
 Byte order cannot be used with ``bool``, ``bits``, ``bin``, ``oct``, ``hex``
 or ``bytes`` dtypes. Floating-point values support the IEEE widths 16, 32 and
-64 bits.
+64 bits. The named narrow formats below likewise reject ``_le`` and ``_be``:
+their bit layout is intrinsic to the encoding, and repeated sub-byte values
+are packed consecutively in normal Tibs bit order.
 
 ``bf16`` is a second 16-bit float, and not an IEEE one. It spends 8 bits on the
 exponent and 7 on the mantissa, where ``f16`` spends 5 and 10, which makes it
@@ -121,6 +125,26 @@ and ``_be`` like the other numeric dtypes, and has its own kind::
     DtypeSingle('bf16_le')
     >>> Dtype("bf16").kind
     DtypeKind.BFloat
+
+Narrow OCP and P3109 numeric formats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Tibs also supports the scalar elements used by the Open Compute Project's
+microscaling formats and two eight-bit formats from the draft IEEE P3109 work.
+Their names include the specification family and have intrinsic widths::
+
+    >>> Dtype("ocp_e2m1")
+    DtypeSingle('ocp_e2m1')
+    >>> values = [0.5, 1.0, 3.0, 6.0]
+    >>> Tibs.from_values("ocp_e2m1", values).hex
+    '1257'
+    >>> Tibs("0x1257").to_values("ocp_e2m1")
+    [0.5, 1.0, 3.0, 6.0]
+
+See :ref:`exotic-floats` for the complete list of dtypes, bit layouts,
+ranges, special values, conversion rules, specification versions and
+Bitstring name equivalents. Tibs currently provides the unscaled element
+encodings only; it does not implement OCP scaling blocks.
 
 A scalar dtype can also be built without parsing a string::
 

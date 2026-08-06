@@ -62,6 +62,16 @@ dev = [
     # both of which are run by hand.
     "bitarray",
 ]
+conformance = [
+    # Pinned standards/compatibility oracles for the low-precision dtype suite.
+    # Keep these separate from normal development and runtime dependencies so
+    # an upstream semantic change produces an intentional, reviewable update.
+    "gfloat==0.5.2",
+    "ml-dtypes==0.5.4",
+    # The Bitstring 5 oracle is installed from an exact source commit by the
+    # conformance workflow. It is kept out of dependency resolution because
+    # its pre-release metadata still excludes the current Tibs major version.
+]
 
 [tool.maturin]
 module-name = "tibs"
