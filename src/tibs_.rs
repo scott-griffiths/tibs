@@ -13,6 +13,7 @@ use crate::helpers::{
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
 use crate::view::View;
+use bitvec::field::BitField;
 use half::{bf16, f16};
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
@@ -528,7 +529,58 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
     }
 }
 
+/// The narrow numeric encoding selected by a public dtype kind.
+///
+/// This mapping lives at the dtype/Python boundary rather than in `helpers` so
+/// the pure codec does not depend on the public PyO3 enum.
+#[inline]
+fn narrow_float_format(kind: DtypeKind) -> Option<helpers::NarrowFloatFormat> {
+    Some(match kind {
+        DtypeKind::Binary8P3 => helpers::NarrowFloatFormat::Binary8P3,
+        DtypeKind::Binary8P4 => helpers::NarrowFloatFormat::Binary8P4,
+        DtypeKind::OcpE4M3Saturate => helpers::NarrowFloatFormat::OcpE4M3Saturate,
+        DtypeKind::OcpE4M3Overflow => helpers::NarrowFloatFormat::OcpE4M3Overflow,
+        DtypeKind::OcpE5M2Saturate => helpers::NarrowFloatFormat::OcpE5M2Saturate,
+        DtypeKind::OcpE5M2Overflow => helpers::NarrowFloatFormat::OcpE5M2Overflow,
+        DtypeKind::OcpE3M2 => helpers::NarrowFloatFormat::OcpE3M2,
+        DtypeKind::OcpE2M3 => helpers::NarrowFloatFormat::OcpE2M3,
+        DtypeKind::OcpE2M1 => helpers::NarrowFloatFormat::OcpE2M1,
+        DtypeKind::OcpE8M0 => helpers::NarrowFloatFormat::OcpE8M0,
+        DtypeKind::OcpInt8 => helpers::NarrowFloatFormat::OcpInt8,
+        _ => return None,
+    })
+}
+
+fn narrow_float_error(
+    value: f64,
+    format: helpers::NarrowFloatFormat,
+    error: helpers::NarrowFloatEncodeError,
+) -> PyErr {
+    PyValueError::new_err(format!(
+        "Cannot encode {value:?} as '{}': {error}.",
+        format.name()
+    ))
+}
+
+#[inline]
+fn encode_narrow_float(value: f64, format: helpers::NarrowFloatFormat) -> PyResult<u8> {
+    helpers::encode_narrow_float(value, format)
+        .map_err(|error| narrow_float_error(value, format, error))
+}
+
+fn bv_from_narrow_float(value: f64, format: helpers::NarrowFloatFormat) -> PyResult<BV> {
+    let length = format.bit_length();
+    let raw = encode_narrow_float(value, format)?;
+    let mut bv = BV::repeat(false, length);
+    bv.store_be(raw);
+    Ok(bv)
+}
+
 fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResult<BV> {
+    if let Some(format) = narrow_float_format(dtype.kind) {
+        debug_assert_eq!(dtype.length, format.bit_length());
+        return bv_from_narrow_float(value.extract::<f64>()?, format);
+    }
     match dtype.kind {
         DtypeKind::Float => {
             let is_little_endian = dtype.byte_order == ByteOrder::Little;
@@ -573,6 +625,17 @@ fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResu
         DtypeKind::Hex => {
             validate_dtype_value_length(dtype, bv_from_hex(&value.extract::<String>()?)?)
         }
+        DtypeKind::Binary8P3
+        | DtypeKind::Binary8P4
+        | DtypeKind::OcpE4M3Saturate
+        | DtypeKind::OcpE4M3Overflow
+        | DtypeKind::OcpE5M2Saturate
+        | DtypeKind::OcpE5M2Overflow
+        | DtypeKind::OcpE3M2
+        | DtypeKind::OcpE2M3
+        | DtypeKind::OcpE2M1
+        | DtypeKind::OcpE8M0
+        | DtypeKind::OcpInt8 => unreachable!("narrow numeric dtypes dispatch before the match"),
     }
 }
 
@@ -702,6 +765,8 @@ enum BytewisePacker {
     /// Kept apart from `Float` because that variant picks its conversion by
     /// byte length, and two bytes does not distinguish `f16` from `bf16`.
     BFloat { is_little_endian: bool },
+    /// A fixed-width narrow format whose complete code point is one byte.
+    NarrowFloat { format: helpers::NarrowFloatFormat },
 }
 
 impl BytewisePacker {
@@ -710,6 +775,10 @@ impl BytewisePacker {
     /// of a one-shot iterable would lose those items.
     fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> Option<Self> {
         debug_assert!(length > 0);
+        if let Some(format) = narrow_float_format(kind) {
+            debug_assert_eq!(length, format.bit_length());
+            return (length == 8).then_some(BytewisePacker::NarrowFloat { format });
+        }
         if !length.is_multiple_of(8) {
             return None;
         }
@@ -745,6 +814,7 @@ impl BytewisePacker {
                 byte_length
             }
             BytewisePacker::BFloat { .. } => 2,
+            BytewisePacker::NarrowFloat { .. } => 1,
         }
     }
 
@@ -753,9 +823,9 @@ impl BytewisePacker {
     fn plain_type(&self) -> *mut ffi::PyTypeObject {
         match *self {
             BytewisePacker::Int { .. } => &raw mut ffi::PyLong_Type,
-            BytewisePacker::Float { .. } | BytewisePacker::BFloat { .. } => {
-                &raw mut ffi::PyFloat_Type
-            }
+            BytewisePacker::Float { .. }
+            | BytewisePacker::BFloat { .. }
+            | BytewisePacker::NarrowFloat { .. } => &raw mut ffi::PyFloat_Type,
         }
     }
 
@@ -780,6 +850,10 @@ impl BytewisePacker {
             }
             BytewisePacker::BFloat { is_little_endian } => {
                 helpers::push_bf16_bytes(out, value.extract::<f64>()?, is_little_endian);
+                Ok(())
+            }
+            BytewisePacker::NarrowFloat { format } => {
+                out.push(encode_narrow_float(value.extract::<f64>()?, format)?);
                 Ok(())
             }
         }
@@ -937,9 +1011,11 @@ fn bv_from_values_iter_record(
 /// The counterpart to [`BytewisePacker`] for the dtypes it turns down because
 /// their length is not a whole number of bytes, so that values have to be
 /// packed end to end across byte boundaries rather than written out whole.
+#[derive(Clone, Copy)]
 enum BitwisePacker {
     Int { length: usize, signed: bool },
     Bool,
+    NarrowFloat { format: helpers::NarrowFloatFormat },
 }
 
 impl BitwisePacker {
@@ -950,6 +1026,10 @@ impl BitwisePacker {
     /// number of bytes cannot carry an explicit byte order, because `Dtype`
     /// rejects the combination when it is built, so these are all big-endian.
     fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
+        if let Some(format) = narrow_float_format(dtype.kind) {
+            debug_assert_eq!(dtype.length, format.bit_length());
+            return (dtype.length < 8).then_some(BitwisePacker::NarrowFloat { format });
+        }
         // A bool dtype is one bit long, likewise by construction.
         if dtype.kind == DtypeKind::Bool {
             return Some(BitwisePacker::Bool);
@@ -975,6 +1055,7 @@ impl BitwisePacker {
         match *self {
             BitwisePacker::Int { length, .. } => length,
             BitwisePacker::Bool => 1,
+            BitwisePacker::NarrowFloat { format } => format.bit_length(),
         }
     }
 
@@ -982,7 +1063,10 @@ impl BitwisePacker {
     /// See [`for_each_value`]. A bool dtype takes `True` and `False` too, but
     /// they are not of exactly this type and so go the owned route.
     fn plain_type(&self) -> *mut ffi::PyTypeObject {
-        &raw mut ffi::PyLong_Type
+        match self {
+            BitwisePacker::Int { .. } | BitwisePacker::Bool => &raw mut ffi::PyLong_Type,
+            BitwisePacker::NarrowFloat { .. } => &raw mut ffi::PyFloat_Type,
+        }
     }
 
     fn push(&self, out: &mut helpers::BitAccumulator, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -999,6 +1083,11 @@ impl BitwisePacker {
                     "bool dtype values must be True, False, 0 or 1.",
                 )),
             },
+            BitwisePacker::NarrowFloat { format } => {
+                let raw = encode_narrow_float(value.extract::<f64>()?, format)?;
+                out.push(u64::from(raw), format.bit_length());
+                Ok(())
+            }
         }
     }
 }
@@ -1161,6 +1250,7 @@ enum NumericReading {
     /// cannot tell a two-byte `bf16` from a two-byte `f16`, so the two
     /// readings have to be distinct here rather than share a decoder.
     BFloat,
+    NarrowFloat(helpers::NarrowFloatFormat),
 }
 
 /// How the byte-wise path in [`py_from_value_parts`] decodes one value.
@@ -1191,18 +1281,23 @@ impl BytewiseUnpacker {
             return None;
         }
         let byte_length = dtype_length / 8;
-        let reading = match dtype_kind {
-            DtypeKind::Uint => NumericReading::Uint,
-            DtypeKind::Int => NumericReading::Int,
-            DtypeKind::Float => {
-                debug_assert!(matches!(byte_length, 2 | 4 | 8));
-                NumericReading::Float
+        let reading = if let Some(format) = narrow_float_format(dtype_kind) {
+            debug_assert_eq!(dtype_length, format.bit_length());
+            NumericReading::NarrowFloat(format)
+        } else {
+            match dtype_kind {
+                DtypeKind::Uint => NumericReading::Uint,
+                DtypeKind::Int => NumericReading::Int,
+                DtypeKind::Float => {
+                    debug_assert!(matches!(byte_length, 2 | 4 | 8));
+                    NumericReading::Float
+                }
+                DtypeKind::BFloat => {
+                    debug_assert_eq!(byte_length, 2);
+                    NumericReading::BFloat
+                }
+                _ => return None,
             }
-            DtypeKind::BFloat => {
-                debug_assert_eq!(byte_length, 2);
-                NumericReading::BFloat
-            }
-            _ => return None,
         };
         let is_little_endian = byte_order == ByteOrder::Little;
         Some(Self {
@@ -1277,6 +1372,9 @@ impl BytewiseUnpacker {
                 _ => f16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
             },
             NumericReading::BFloat => bf16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
+            NumericReading::NarrowFloat(format) => {
+                helpers::decode_narrow_float(raw as u8, format).into_bound_py_any(py)
+            }
         }
     }
 
@@ -1306,7 +1404,14 @@ impl BytewiseUnpacker {
     }
 }
 
-/// Unpacker for integer dtypes narrower than a byte.
+/// How a [`SubByteUnpacker`] interprets the raw field it extracts.
+#[derive(Clone, Copy)]
+enum SubByteReading {
+    Int { signed: bool },
+    NarrowFloat(helpers::NarrowFloatFormat),
+}
+
+/// Unpacker for numeric dtypes narrower than a byte.
 ///
 /// [`BytewiseUnpacker`] needs whole bytes, so `u1`..`u7` and their signed twins
 /// fell through to the general route, which rebuilds a `Tibs` window and
@@ -1315,7 +1420,7 @@ impl BytewiseUnpacker {
 #[derive(Clone, Copy)]
 struct SubByteUnpacker {
     length: usize,
-    signed: bool,
+    reading: SubByteReading,
 }
 
 impl SubByteUnpacker {
@@ -1324,14 +1429,19 @@ impl SubByteUnpacker {
         if dtype_length >= 8 {
             return None;
         }
-        let signed = match dtype_kind {
-            DtypeKind::Uint => false,
-            DtypeKind::Int => true,
-            _ => return None,
+        let reading = if let Some(format) = narrow_float_format(dtype_kind) {
+            debug_assert_eq!(dtype_length, format.bit_length());
+            SubByteReading::NarrowFloat(format)
+        } else {
+            match dtype_kind {
+                DtypeKind::Uint => SubByteReading::Int { signed: false },
+                DtypeKind::Int => SubByteReading::Int { signed: true },
+                _ => return None,
+            }
         };
         Some(Self {
             length: dtype_length,
-            signed,
+            reading,
         })
     }
 
@@ -1358,11 +1468,15 @@ impl SubByteUnpacker {
         // enough that two bytes always cover it.
         let window = ((bytes[byte] as u16) << 8) | bytes.get(byte + 1).copied().unwrap_or(0) as u16;
         let raw = (window >> (16 - offset - self.length)) & ((1u16 << self.length) - 1);
-        if self.signed {
-            let pad = 16 - self.length;
-            ((((raw << pad) as i16) >> pad) as i64).into_bound_py_any(py)
-        } else {
-            (raw as i64).into_bound_py_any(py)
+        match self.reading {
+            SubByteReading::Int { signed: true } => {
+                let pad = 16 - self.length;
+                ((((raw << pad) as i16) >> pad) as i64).into_bound_py_any(py)
+            }
+            SubByteReading::Int { signed: false } => (raw as i64).into_bound_py_any(py),
+            SubByteReading::NarrowFloat(format) => {
+                helpers::decode_narrow_float(raw as u8, format).into_bound_py_any(py)
+            }
         }
     }
 }
@@ -1411,6 +1525,17 @@ pub(crate) fn py_from_value_parts(
         DtypeKind::Bin => BitCollection::to_binary(value).into_py_any(py),
         DtypeKind::Oct => BitCollection::to_octal(value)?.into_py_any(py),
         DtypeKind::Hex => BitCollection::to_hexadecimal(value)?.into_py_any(py),
+        DtypeKind::Binary8P3
+        | DtypeKind::Binary8P4
+        | DtypeKind::OcpE4M3Saturate
+        | DtypeKind::OcpE4M3Overflow
+        | DtypeKind::OcpE5M2Saturate
+        | DtypeKind::OcpE5M2Overflow
+        | DtypeKind::OcpE3M2
+        | DtypeKind::OcpE2M3
+        | DtypeKind::OcpE2M1
+        | DtypeKind::OcpE8M0
+        | DtypeKind::OcpInt8 => unreachable!("narrow numeric dtypes unpack through fast paths"),
     }
 }
 
