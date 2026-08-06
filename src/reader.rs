@@ -713,7 +713,7 @@ impl Reader {
     pub fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let source = match &self.source {
             ReaderSource::Immutable(tibs) => tibs.get().__repr__(),
-            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.__repr__(),
+            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.repr_string(),
         };
         Ok(format!("Reader({source}, {})", self.pos))
     }

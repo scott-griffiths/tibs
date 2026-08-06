@@ -126,75 +126,71 @@ pub(crate) fn find_all_in_bits(
     }
 }
 
-pub(crate) fn count_in_bits(
-    py: Python<'_>,
-    haystack: &BS,
-    value: Option<&Bound<'_, PyAny>>,
-    params: SearchParams,
-) -> PyResult<usize> {
-    let (start, end) = validate_slice(haystack.len(), params.start, params.end)?;
+/// What `count` was asked to count, with every Python conversion already done.
+pub(crate) enum CountTarget {
+    /// A single bit value. This is also the no-value case, which counts ones.
+    Bit(bool),
+    /// A pattern to count non-overlapping occurrences of.
+    Pattern(Tibs),
+}
 
+/// Turn `count`'s `value` argument into a [`CountTarget`].
+///
+/// This is separated from [`count_in_bits`] so that a `Mutibs` count can do its
+/// Python work - `__bool__`, `__index__`, promotion to `Tibs` - *before* taking
+/// the critical section that the count itself runs under. Nothing here may move
+/// into `count_in_bits` without breaking that. See [`crate::helpers::locking`].
+pub(crate) fn resolve_count_target(value: Option<&Bound<'_, PyAny>>) -> PyResult<CountTarget> {
     let Some(value) = value else {
-        return match prepare_mask(params.mask, 1)? {
-            Some(_) => Ok(helpers::count_candidate_positions(
-                start,
-                end,
-                params.byte_aligned,
-            )),
-            None => Ok(helpers::count_single_bit(
-                haystack,
-                true,
-                start,
-                end,
-                params.byte_aligned,
-            )),
-        };
+        return Ok(CountTarget::Bit(true));
     };
-
     if let Some(bit) = helpers::convert_to_bool(value) {
-        return match prepare_mask(params.mask, 1)? {
-            Some(_) => Ok(helpers::count_candidate_positions(
-                start,
-                end,
-                params.byte_aligned,
-            )),
-            None => Ok(helpers::count_single_bit(
-                haystack,
-                bit,
-                start,
-                end,
-                params.byte_aligned,
-            )),
-        };
+        return Ok(CountTarget::Bit(bit));
     }
-
     match Tibs::extract(value.as_borrowed()) {
-        Ok(value) => {
-            let mask = prepare_mask(params.mask, value.len())?;
-            match mask {
-                Some(mask) => helpers::count_bitvec_masked(
-                    py,
-                    haystack,
-                    value.as_bitslice(),
-                    mask.as_bitslice(),
-                    start,
-                    end,
-                    params.byte_aligned,
-                ),
-                None => helpers::count_bitvec(
-                    py,
-                    haystack,
-                    value.as_bitslice(),
-                    start,
-                    end,
-                    params.byte_aligned,
-                ),
-            }
-        }
+        Ok(pattern) => Ok(CountTarget::Pattern(pattern)),
         Err(_) if value.is_instance_of::<PyInt>() => Err(PyValueError::new_err(
             "Cannot convert value to 0, 1 or a Tibs",
         )),
         Err(error) => Err(error),
+    }
+}
+
+/// Count over already-resolved arguments. Runs no Python beyond signal checks.
+pub(crate) fn count_in_bits(
+    py: Python<'_>,
+    haystack: &BS,
+    target: &CountTarget,
+    params: SearchParams,
+) -> PyResult<usize> {
+    let (start, end) = validate_slice(haystack.len(), params.start, params.end)?;
+
+    match target {
+        // A mask over a single bit leaves nothing to compare, so every
+        // candidate position matches and only the positions are counted.
+        CountTarget::Bit(bit) => Ok(match prepare_mask(params.mask, 1)? {
+            Some(_) => helpers::count_candidate_positions(start, end, params.byte_aligned),
+            None => helpers::count_single_bit(haystack, *bit, start, end, params.byte_aligned),
+        }),
+        CountTarget::Pattern(pattern) => match prepare_mask(params.mask, pattern.len())? {
+            Some(mask) => helpers::count_bitvec_masked(
+                py,
+                haystack,
+                pattern.as_bitslice(),
+                mask.as_bitslice(),
+                start,
+                end,
+                params.byte_aligned,
+            ),
+            None => helpers::count_bitvec(
+                py,
+                haystack,
+                pattern.as_bitslice(),
+                start,
+                end,
+                params.byte_aligned,
+            ),
+        },
     }
 }
 
@@ -469,7 +465,7 @@ impl Tibs {
     fn copy_with_mutation(&self, f: impl FnOnce(&mut Mutibs) -> PyResult<()>) -> PyResult<Self> {
         let mut out = self.to_mutibs();
         f(&mut out)?;
-        Ok(out.to_tibs())
+        Ok(out.tibs_copy())
     }
 }
 
@@ -523,7 +519,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
             return Ok(tibs_ref.clone());
         }
         if let Ok(mutibs_ref) = obj.extract::<PyRef<Mutibs>>() {
-            return Ok(mutibs_ref.to_tibs());
+            return Ok(mutibs_ref.tibs_copy());
         }
         let bv = promote_to_bv(&obj)?;
         Ok(Tibs::from_bv(bv))
@@ -3087,7 +3083,7 @@ impl Tibs {
         count_in_bits(
             py,
             self.as_bitslice(),
-            value,
+            &resolve_count_target(value)?,
             SearchParams {
                 start,
                 end,
@@ -3144,7 +3140,8 @@ impl Tibs {
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.copy_with_mutation(|out| out.apply_set_positions(true, pos))
+        let positions = Mutibs::read_positions(Some(pos))?;
+        self.copy_with_mutation(|out| out.apply_set_positions(true, &positions))
     }
 
     /// Return a new Tibs with one or many bits set to 0.
@@ -3162,7 +3159,8 @@ impl Tibs {
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.copy_with_mutation(|out| out.apply_set_positions(false, pos))
+        let positions = Mutibs::read_positions(Some(pos))?;
+        self.copy_with_mutation(|out| out.apply_set_positions(false, &positions))
     }
 
     /// Return a new Tibs with selected bits inverted.
@@ -3184,7 +3182,8 @@ impl Tibs {
         if pos.is_none() {
             return Ok(self.inverted_copy());
         }
-        self.copy_with_mutation(|out| out.apply_invert_positions(pos))
+        let positions = Mutibs::read_positions(pos)?;
+        self.copy_with_mutation(|out| out.apply_invert_positions(&positions))
     }
 
     /// Insert bits at position pos and return a new Tibs.

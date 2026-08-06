@@ -23,21 +23,25 @@ What counts as a failure
 ------------------------
 
 PyO3 gives every non-frozen ``#[pyclass]`` an atomic borrow flag rather than a
-lock, so on a free-threaded build two threads that touch the same ``Mutibs`` at
-once do not serialise: the loser is refused with ``RuntimeError: Already
-borrowed``. The refusal happens *before* any mutation runs, so it costs
-throughput and ergonomics, not correctness.
+lock, so two threads reaching the same ``Mutibs`` do not serialise on their own:
+the loser is refused with ``RuntimeError: Already borrowed``. Every ``Mutibs``
+method therefore runs inside CPython's per-object critical section, which makes
+the second thread *wait* instead. See ``src/helpers/locking.rs``.
 
-The tests below therefore split into two kinds:
+The tests below split into two kinds:
 
 * Correctness tests, which tolerate a refusal but not a wrong answer. A refused
   call must leave no trace, and a call that succeeds must see a coherent
-  snapshot. These must always pass.
-* One ``xfail(strict=True)`` test stating what tibs would need for the Free
-  Threading classifier to mean what a caller would assume: mutation that
-  serialises instead of refusing. It passes normally on GIL-enabled builds. If
-  it starts passing on a free-threaded build, the limitation is gone and the
-  marker should go with it.
+  snapshot.
+* Serialisation tests, which assert that calls are not refused at all.
+
+The second kind cannot be made absolute. The interpreter may suspend a critical
+section - for a GC pause, or a signal check inside a long search - while the
+borrow is still held, and a thread entering the section then finds the borrow
+taken. That is rare, costs a refusal rather than correctness, and is why
+``test_no_public_attribute_refuses`` counts refusals per attribute rather than
+requiring zero: an unwrapped method loses a large share of its own calls, while
+a suspended section costs one call of whatever happened to be running.
 
 A refusal must arrive as a Python exception. ``view.rs``, ``reader.rs``,
 ``tibs_.rs`` and ``mutibs.rs`` reach their source through ``try_borrow`` for
@@ -51,6 +55,7 @@ reversing, rotating and byte swapping all preserve it. A zero bit appearing
 anywhere means a read or a write saw a buffer that was mid-resize.
 """
 
+import collections
 import subprocess
 import sys
 import sysconfig
@@ -587,40 +592,211 @@ class TestFreeThreadedGaps:
 
     def test_converted_reads_never_refuse_under_writers(self):
         m = Mutibs.from_ones(BITS)
+        needle = Tibs("0b11111111")
 
         def read():
             for _ in range(ITERATIONS):
                 len(m)
                 bool(m)
                 assert "0" not in m.to_bin()
+                assert m.count(0) == 0
+                assert m.find("0b0") is None
+                assert m.find(needle) == 0
+                assert needle in m
+                assert m.find_all("0b0") == []
+                # The conversion family, method and property forms.
+                assert "0" not in m.hex.replace("f", "")
+                assert m.to_hex(0, 8) == "ff"
+                assert m.bytes.count(0) == 0
+                assert m.to_padded_bytes(0, 16) == b"\xff\xff"
+                assert m.to_u(0, 8) == 255
+                assert m.to_i(0, 8) == -1
+                assert all(m.to_bools(0, 16))
+                assert m.to_value("u8", 0, 8) == 255
+                assert m.to_values("u8", 0, 16) == [255, 255]
+                assert m.to_raw_data()[0].count(0) == 0
 
         def write():
+            # Only converted methods, and only byte-aligned ones. An unconverted
+            # writer such as `del m[-8:]` takes its exclusive borrow without
+            # entering the critical section, and a reader inside the section
+            # still loses to it - the guarantee holds only once every path goes
+            # through the same gate. Byte alignment keeps `hex` and `bytes`
+            # legal throughout; their length rules are the library's, not a
+            # concurrency effect.
             for _ in range(ITERATIONS):
-                m.append(True)
                 if len(m) > BITS // 2:
-                    m.pop()
+                    m.write_bytes(b"\xff" * (BITS // 16))
+                else:
+                    m.extend("0xff")
 
         errors = run_concurrently(*(read for _ in range(6)), write, write)
         assert_no_failures(errors)
         assert m.count(0) == 0
 
-    @pytest.mark.xfail(
-        FREE_THREADED,
-        strict=True,
-        reason="not yet wrapped in a critical section; PyO3's borrow flag is a "
-        "flag, not a lock, so concurrent callers are refused rather than queued",
-    )
-    def test_unconverted_mutation_still_refuses(self):
-        # The same assertion `test_converted_mutation_serialises` makes, aimed at
-        # a method that has not been wrapped yet. When this starts passing,
-        # `reverse` has been converted: move it into SERIALISED and re-aim this
-        # at whatever is still outstanding.
-        m = Mutibs.from_ones(BITS)
-        workers, tallies = zip(
-            *(counted(lambda: m.reverse()) for _ in range(THREADS))
+    def test_converted_writers_never_refuse(self):
+        # Every writer installs the same all-ones value at a fixed length, so a
+        # refusal, a torn write or a length change would all show up. `write_u`
+        # in particular builds its value outside the lock and confirms the
+        # length before installing it.
+        m = Mutibs.from_ones(64)
+        ones = (1 << 64) - 1
+
+        def by_int():
+            for _ in range(ITERATIONS):
+                m.write_u(ones)
+                m.u = ones
+
+        def by_text():
+            for _ in range(ITERATIONS):
+                m.write_hex("ff" * 8)
+                m.hex = "ff" * 8
+
+        def by_bytes():
+            for _ in range(ITERATIONS):
+                m.write_bytes(b"\xff" * 8)
+                m.bytes = b"\xff" * 8
+
+        def check():
+            for _ in range(ITERATIONS):
+                assert m.count(0) == 0, "a writer installed a zero bit"
+                assert len(m) == 64, "a length-preserving write changed the length"
+
+        errors = run_concurrently(
+            by_int, by_int, by_text, by_text, by_bytes, by_bytes, check, check
         )
-        run_concurrently(*workers)
-        assert sum(t[0] for t in tallies) == THREADS * ITERATIONS
+        assert_no_failures(errors)
+        assert len(m) == 64
+        assert m.count(0) == 0
+
+    def test_converted_inspection_and_mutation_never_refuse(self):
+        # Every mutation here preserves "all ones at a fixed length", so a
+        # refusal, a torn write or a stray zero would all show. `set` and
+        # `invert` read their positions out of Python before locking, which is
+        # the part that made them impossible to wrap.
+        m = Mutibs.from_ones(256)
+        indices = list(range(0, 256, 3))
+
+        def by_positions():
+            for _ in range(ITERATIONS):
+                m.set(indices)
+                m.set(range(0, 256, 5))
+                m.set(7)
+                m.set(tuple(indices[:8]))
+
+        def by_whole():
+            # No `invert()` here: a pair of them returns to all ones, but the
+            # all-zeros state in between is a real state that the checkers are
+            # entitled to observe. Per-call atomicity does not make a pair of
+            # calls atomic - that is the contract, not a gap in it.
+            for _ in range(ITERATIONS):
+                m.reverse()
+                m.rotate_left(3)
+                m.byte_swap()
+
+        def by_operator():
+            # `nonlocal` because `m |= x` is an assignment to `m` as far as
+            # Python scoping is concerned, even though it mutates in place.
+            nonlocal m
+            ones = Tibs.from_ones(256)
+            for _ in range(ITERATIONS):
+                m |= ones
+                m &= ones
+
+        def check():
+            for _ in range(ITERATIONS):
+                assert m.all(), "a converted mutation left a zero bit"
+                assert m.any()
+                assert len(m) == 256
+                assert m.reversed().all()
+                assert m.rotated_left(1).all()
+                assert m.byte_swapped().all()
+                assert m.set_at(3).all()
+                assert not m.inverted().any()
+
+        errors = run_concurrently(
+            by_positions, by_positions, by_whole, by_operator, check, check
+        )
+        assert_no_failures(errors)
+        assert m.all()
+        assert len(m) == 256
+
+    def test_no_public_attribute_refuses(self):
+        # The whole class goes through the critical section now, so sweep it
+        # rather than listing methods by hand: anything still taking its borrow
+        # directly shows up here, including a method added later without a
+        # wrapper. 24 bits so that oct, hex and bytes are all legal.
+        ones = Tibs.from_ones(24)
+        argument_sets = ((), (ones,), (0,), (0, ones), (ones, ones))
+        names = [n for n in dir(Mutibs) if not n.startswith("_")]
+        ROUNDS = 20
+
+        refusals = collections.Counter()
+
+        def exercise(m, name):
+            """Touch one attribute, returning whether it did anything.
+
+            Refusals are recorded with the attribute named rather than raised.
+            They cannot be asserted away entirely: the interpreter may suspend a
+            critical section - for a GC pause, or a signal check inside a long
+            search - while the borrow is still held, and the thread that then
+            enters the section finds the borrow taken. That is rare and costs a
+            refusal, never correctness. A method that was never wrapped refuses
+            on a large fraction of its calls instead, which is what the rate
+            check below distinguishes.
+            """
+            try:
+                attribute = getattr(m, name)
+            except (TypeError, ValueError, IndexError):
+                return False  # a property this receiver cannot produce
+            except RuntimeError:
+                refusals[name] += 1
+                return True
+            if not callable(attribute):
+                return True
+            for args in argument_sets:
+                try:
+                    attribute(*args)
+                except (TypeError, ValueError, IndexError):
+                    continue
+                except RuntimeError:
+                    refusals[name] += 1
+                return True
+            return False
+
+        reachable = [n for n in names if exercise(Mutibs.from_ones(24), n)]
+        # A floor, so a sweep that silently stops reaching anything still fails.
+        assert len(reachable) > 40, f"only reached {len(reachable)} attributes"
+
+        m = Mutibs.from_ones(24)
+
+        def touch_all():
+            for _ in range(ROUNDS):
+                for name in reachable:
+                    exercise(m, name)
+
+        def write():
+            # Counted, not raised: the writer can lose a call to a suspended
+            # section just as a reader can.
+            for _ in range(ROUNDS * len(reachable)):
+                try:
+                    m.write_bytes(b"\xff" * 3)
+                except RuntimeError:
+                    refusals["write_bytes"] += 1
+
+        errors = run_concurrently(touch_all, touch_all, write, write)
+        assert_no_failures(errors)
+        # Counted per attribute rather than in total, which is what separates
+        # the two causes. An unwrapped method loses a large share of its own
+        # calls - `field` refused over a thousand times in a two-second probe
+        # before it was wrapped - while a suspended section costs one call of
+        # whichever attribute happened to be running.
+        per_attribute = 2 * ROUNDS
+        worst = refusals.most_common(1)
+        assert not worst or worst[0][1] <= per_attribute // 4, (
+            f"{worst[0][0]} refused {worst[0][1]} of its {per_attribute} calls; "
+            f"all refusals: {dict(refusals)}"
+        )
 
     @pytest.mark.parametrize("subject", ["view", "reader", "equality"])
     def test_borrow_contention_raises_instead_of_panicking(self, subject):

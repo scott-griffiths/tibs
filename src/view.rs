@@ -4,6 +4,7 @@ use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
     bv_from_uint, bytes_like_to_vec, format_bit_collection, try_extract_index, validate_slice,
+    with_locked, with_locked_mut, with_locked2,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::{Tibs, bv_from_value, py_from_value};
@@ -477,14 +478,35 @@ impl MutableView {
         }
     }
 
+    /// Read the source under its critical section.
+    ///
+    /// `MutableView` is frozen, so it has no borrow flag of its own; what needs
+    /// serialising is the `Mutibs` it points at. Every source access below goes
+    /// through one of these two, or a writer elsewhere refuses the read.
+    fn with_source<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&Mutibs) -> PyResult<R>,
+    ) -> PyResult<R> {
+        with_locked(self.source.bind(py), f)
+    }
+
+    /// Write to the source under its critical section.
+    fn with_source_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut Mutibs) -> PyResult<R>,
+    ) -> PyResult<R> {
+        with_locked_mut(self.source.bind(py), f)
+    }
+
     fn with_layout(
         &self,
         py: Python<'_>,
         byte_order: ByteOrder,
         bit_order: BitOrder,
     ) -> PyResult<Self> {
-        let source = self.source.try_borrow(py)?;
-        let len = self.selection.len(source.len())?;
+        let len = self.with_source(py, |source| self.selection.len(source.len()))?;
         View::validate_layout(len, byte_order, bit_order)?;
         Ok(Self::from_parts(
             self.source.clone_ref(py),
@@ -520,9 +542,10 @@ impl MutableView {
     }
 
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
-        let source = self.source.try_borrow(py)?;
-        self.validate_current_layout(source.len())?;
-        let source_bits = self.selected_source_bits(&source)?;
+        let source_bits = self.with_source(py, |source| {
+            self.validate_current_layout(source.len())?;
+            self.selected_source_bits(source)
+        })?;
         if self.keeps_physical_order() {
             return Ok(Tibs::from_bv(source_bits));
         }
@@ -560,10 +583,11 @@ impl MutableView {
         end: Option<isize>,
     ) -> PyResult<Tibs> {
         if matches!(self.selection, MutableSelection::Whole) && self.keeps_physical_order() {
-            let source = self.source.try_borrow(py)?;
-            let len = self.validate_current_layout(source.len())?;
-            let (start, end) = validate_slice(len, start, end)?;
-            return Ok(source.window(start, end - start));
+            return self.with_source(py, |source| {
+                let len = self.validate_current_layout(source.len())?;
+                let (start, end) = validate_slice(len, start, end)?;
+                Ok(source.window(start, end - start))
+            });
         }
         let viewed = self.to_tibs_view(py)?;
         let (start, end) = validate_slice(viewed.len(), start, end)?;
@@ -571,32 +595,30 @@ impl MutableView {
     }
 
     fn assign_from_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
-        let mut source = self.source.try_borrow_mut(py)?;
-        let len = self.validate_current_layout(source.len())?;
-        let physical = physical_bits_from_view_bits(viewed, self.byte_order, self.bit_order)?;
-        debug_assert_eq!(len, physical.len());
+        self.with_source_mut(py, |source| {
+            let len = self.validate_current_layout(source.len())?;
+            let physical = physical_bits_from_view_bits(viewed, self.byte_order, self.bit_order)?;
+            debug_assert_eq!(len, physical.len());
 
-        match &self.selection {
-            MutableSelection::Whole => {
-                *source.as_mut_bitvec_ref() = physical;
-            }
-            MutableSelection::Field { indices } => {
-                debug_assert_eq!(indices.len(), physical.len());
-                for (bit_index, &source_index) in indices.iter().enumerate() {
-                    source
-                        .as_mut_bitvec_ref()
-                        .set(source_index, physical[bit_index]);
+            match &self.selection {
+                MutableSelection::Whole => {
+                    *source.as_mut_bitvec_ref() = physical;
+                }
+                MutableSelection::Field { indices } => {
+                    debug_assert_eq!(indices.len(), physical.len());
+                    for (bit_index, &source_index) in indices.iter().enumerate() {
+                        source
+                            .as_mut_bitvec_ref()
+                            .set(source_index, physical[bit_index]);
+                    }
                 }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     fn assign_fixed_width_view_bits(&self, py: Python<'_>, viewed: BV) -> PyResult<()> {
-        let source = self.source.try_borrow(py)?;
-        let len = self.validate_current_layout(source.len())?;
-        drop(source);
-
+        let len = self.with_source(py, |source| self.validate_current_layout(source.len()))?;
         if viewed.len() != len {
             return Err(PyValueError::new_err(format!(
                 "Cannot change the length of a MutableView. The current length is {len} bits, but the assigned value has {} bits. Use the source Mutibs or slice assignment when changing shape.",
@@ -608,28 +630,19 @@ impl MutableView {
     }
 
     fn assign_u(&self, py: Python<'_>, u: &Bound<'_, PyAny>) -> PyResult<()> {
-        let source = self.source.try_borrow(py)?;
-        let len = self.validate_current_layout(source.len())?;
-        drop(source);
-
+        let len = self.with_source(py, |source| self.validate_current_layout(source.len()))?;
         let viewed = bv_from_uint(u, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
     fn assign_i(&self, py: Python<'_>, i: &Bound<'_, PyAny>) -> PyResult<()> {
-        let source = self.source.try_borrow(py)?;
-        let len = self.validate_current_layout(source.len())?;
-        drop(source);
-
+        let len = self.with_source(py, |source| self.validate_current_layout(source.len()))?;
         let viewed = bv_from_int(i, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
 
     fn assign_f(&self, py: Python<'_>, f: f64) -> PyResult<()> {
-        let source = self.source.try_borrow(py)?;
-        let len = self.validate_current_layout(source.len())?;
-        drop(source);
-
+        let len = self.with_source(py, |source| self.validate_current_layout(source.len()))?;
         let viewed = bv_from_f64(f, len, false)?;
         self.assign_from_view_bits(py, viewed)
     }
@@ -758,8 +771,7 @@ impl MutableView {
 
     /// Return the current number of source bits in the view.
     pub fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
-        let source = self.source.try_borrow(py)?;
-        self.current_len(source.len())
+        self.with_source(py, |source| self.current_len(source.len()))
     }
 
     /// Interpret the viewed bits as an unsigned integer.
@@ -935,8 +947,8 @@ impl MutableView {
     /// ``MutableView`` is a live view onto the selected source bits.
     #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
     pub fn field(&self, py: Python<'_>, a: i64, b: i64) -> PyResult<Self> {
-        let source = self.source.try_borrow(py)?;
-        let current_len = self.validate_current_layout(source.len())?;
+        let current_len =
+            self.with_source(py, |source| self.validate_current_layout(source.len()))?;
         let (low, field_len) = validate_field_labels(current_len, a, b)?;
         let byte_order = if field_len.is_multiple_of(8) {
             self.byte_order
@@ -1036,13 +1048,14 @@ impl MutableView {
     }
 
     pub fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let source = self.source.try_borrow(py)?;
-        let mut parts = match &self.selection {
-            MutableSelection::Whole => vec![source.__repr__()],
-            MutableSelection::Field { indices } => {
-                vec![source.__repr__(), format_source_indices(indices)]
-            }
-        };
+        let mut parts = self.with_source(py, |source| {
+            Ok(match &self.selection {
+                MutableSelection::Whole => vec![source.repr_string()],
+                MutableSelection::Field { indices } => {
+                    vec![source.repr_string(), format_source_indices(indices)]
+                }
+            })
+        })?;
         parts.push(self.byte_order.repr_name().to_string());
         parts.push(self.bit_order.repr_name().to_string());
         Ok(match &self.selection {
@@ -1086,22 +1099,30 @@ impl MutableView {
         let Ok(other) = other.cast::<MutableView>() else {
             return Ok(false);
         };
-        let other = other.try_borrow()?;
+        // `MutableView` is frozen, so reaching it needs no borrow of its own.
+        let other = other.get();
 
         if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
             return Ok(false);
         }
 
-        let source = self.source.try_borrow(py)?;
-        let other_source = other.source.try_borrow(py)?;
-        // `bits_equal`, not `BitVec`'s own `PartialEq`: the latter is the
-        // bit-domain `sp_eq` walk that every other comparison in the crate
-        // already avoids, and it ran this forty times slower than `Mutibs ==
-        // Mutibs` over the same bits.
-        Ok(source.bits_equal(&*other_source)
-            && self
-                .selection
-                .selects_same_as(source.len(), &other.selection, other_source.len()))
+        // Both sources at once: locking them in turn would suspend the first.
+        with_locked2(
+            self.source.bind(py),
+            other.source.bind(py),
+            |source, other_source| {
+                // `bits_equal`, not `BitVec`'s own `PartialEq`: the latter is
+                // the bit-domain `sp_eq` walk that every other comparison in
+                // the crate already avoids, and it ran this forty times slower
+                // than `Mutibs == Mutibs` over the same bits.
+                Ok(source.bits_equal(other_source)
+                    && self.selection.selects_same_as(
+                        source.len(),
+                        &other.selection,
+                        other_source.len(),
+                    ))
+            },
+        )
     }
 }
 

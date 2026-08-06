@@ -22,6 +22,14 @@
 //! consume iterables, resolve `__index__`, extract buffers. Dropping a
 //! `Py<PyAny>` inside the closure counts too, since a decref can run `__del__`.
 //!
+//! One exception is accepted deliberately. The search helpers call
+//! `Python::check_signals` every `SIGNAL_CHECK_INTERVAL` bits so that Ctrl-C
+//! interrupts a long scan, and a pending Python signal handler is Python. A
+//! search over more than that many bits can therefore have its section
+//! suspended, and another thread may then be refused. Refusal, not corruption:
+//! the borrow is still held throughout. Responsiveness to Ctrl-C is worth more
+//! than removing a refusal that only arises on multi-kilobit searches.
+//!
 //! # What this does and does not promise
 //!
 //! One call becomes atomic. A *sequence* of calls does not, exactly as for
@@ -33,7 +41,7 @@
 use pyo3::PyClass;
 use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::False;
-use pyo3::sync::critical_section::with_critical_section;
+use pyo3::sync::critical_section::{with_critical_section, with_critical_section2};
 
 /// Run `f` with shared access to `slf`, serialised against other threads.
 ///
@@ -70,4 +78,27 @@ where
     T: PyClass<Frozen = False>,
 {
     with_critical_section(slf.as_any(), || f(&mut *slf.try_borrow_mut()?))
+}
+
+/// Run `f` with shared access to two objects at once, serialised against other
+/// threads.
+///
+/// For the comparisons and set operations that read a second container: taking
+/// the two sections one after another would leave the first suspended while the
+/// second was entered, so the pair has to be acquired together. Two is the
+/// limit the C API offers; a third operand has to be snapshotted instead.
+#[inline]
+pub(crate) fn with_locked2<T, U, R>(
+    a: &Bound<'_, T>,
+    b: &Bound<'_, U>,
+    f: impl FnOnce(&T, &U) -> PyResult<R>,
+) -> PyResult<R>
+where
+    T: PyClass,
+    U: PyClass,
+{
+    with_critical_section2(a.as_any(), b.as_any(), || {
+        // Both borrows are shared, so `a` and `b` being the same object is fine.
+        f(&*a.try_borrow()?, &*b.try_borrow()?)
+    })
 }
