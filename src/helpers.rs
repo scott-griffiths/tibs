@@ -24,7 +24,7 @@ pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_p
 pub(crate) use format::format_bit_collection;
 pub(crate) use locking::{with_locked, with_locked_mut, with_locked_mut2, with_locked2};
 pub(crate) use minifloat::{
-    NarrowFloatEncodeError, NarrowFloatFormat, decode_narrow_float, encode_narrow_float,
+    NarrowFloatEncodeError, NarrowFloatFormat, encode_narrow_float, narrow_float_decode_table,
 };
 pub(crate) use numeric::{
     FAST_INT_BITS, bv_from_bf16, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name,

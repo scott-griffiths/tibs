@@ -1250,7 +1250,10 @@ enum NumericReading {
     /// cannot tell a two-byte `bf16` from a two-byte `f16`, so the two
     /// readings have to be distinct here rather than share a decoder.
     BFloat,
-    NarrowFloat(helpers::NarrowFloatFormat),
+    /// A narrow float, carrying its decode table rather than its format: the
+    /// format is fixed for the whole sequence, so resolving it once here keeps
+    /// the dispatch out of the per-value path.
+    NarrowFloat(&'static [f64; 256]),
 }
 
 /// How the byte-wise path in [`py_from_value_parts`] decodes one value.
@@ -1283,7 +1286,7 @@ impl BytewiseUnpacker {
         let byte_length = dtype_length / 8;
         let reading = if let Some(format) = narrow_float_format(dtype_kind) {
             debug_assert_eq!(dtype_length, format.bit_length());
-            NumericReading::NarrowFloat(format)
+            NumericReading::NarrowFloat(helpers::narrow_float_decode_table(format))
         } else {
             match dtype_kind {
                 DtypeKind::Uint => NumericReading::Uint,
@@ -1372,9 +1375,7 @@ impl BytewiseUnpacker {
                 _ => f16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
             },
             NumericReading::BFloat => bf16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
-            NumericReading::NarrowFloat(format) => {
-                helpers::decode_narrow_float(raw as u8, format).into_bound_py_any(py)
-            }
+            NumericReading::NarrowFloat(table) => table[raw as usize].into_bound_py_any(py),
         }
     }
 
@@ -1408,7 +1409,8 @@ impl BytewiseUnpacker {
 #[derive(Clone, Copy)]
 enum SubByteReading {
     Int { signed: bool },
-    NarrowFloat(helpers::NarrowFloatFormat),
+    /// The decode table for the field's format. See [`NumericReading`].
+    NarrowFloat(&'static [f64; 256]),
 }
 
 /// Unpacker for numeric dtypes narrower than a byte.
@@ -1431,7 +1433,7 @@ impl SubByteUnpacker {
         }
         let reading = if let Some(format) = narrow_float_format(dtype_kind) {
             debug_assert_eq!(dtype_length, format.bit_length());
-            SubByteReading::NarrowFloat(format)
+            SubByteReading::NarrowFloat(helpers::narrow_float_decode_table(format))
         } else {
             match dtype_kind {
                 DtypeKind::Uint => SubByteReading::Int { signed: false },
@@ -1474,9 +1476,7 @@ impl SubByteUnpacker {
                 ((((raw << pad) as i16) >> pad) as i64).into_bound_py_any(py)
             }
             SubByteReading::Int { signed: false } => (raw as i64).into_bound_py_any(py),
-            SubByteReading::NarrowFloat(format) => {
-                helpers::decode_narrow_float(raw as u8, format).into_bound_py_any(py)
-            }
+            SubByteReading::NarrowFloat(table) => table[raw as usize].into_bound_py_any(py),
         }
     }
 }

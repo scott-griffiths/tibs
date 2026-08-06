@@ -21,6 +21,24 @@ pub(crate) enum NarrowFloatFormat {
 }
 
 impl NarrowFloatFormat {
+    /// Every variant, in discriminant order, so that `format as usize` indexes
+    /// this and any table built from it.
+    pub(crate) const ALL: [Self; 11] = [
+        Self::Binary8P3,
+        Self::Binary8P4,
+        Self::OcpE4M3Saturate,
+        Self::OcpE4M3Overflow,
+        Self::OcpE5M2Saturate,
+        Self::OcpE5M2Overflow,
+        Self::OcpE3M2,
+        Self::OcpE2M3,
+        Self::OcpE2M1,
+        Self::OcpE8M0,
+        Self::OcpInt8,
+    ];
+
+    pub(crate) const COUNT: usize = Self::ALL.len();
+
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Binary8P3 => "binary8p3",
@@ -167,6 +185,15 @@ impl BinaryFormat {
     const fn min_normal_exponent(self) -> i32 {
         1 - self.bias
     }
+
+    /// The value of the least significant subnormal bit, `2^(1-bias-mantissa)`.
+    ///
+    /// Every supported format puts this well inside the binary64 normal range,
+    /// so the constant is just an exponent field.
+    const fn subnormal_quantum(self) -> f64 {
+        let exponent = 1 - self.bias - self.mantissa_bits as i32;
+        f64::from_bits(((exponent + 1023) as u64) << 52)
+    }
 }
 
 /// Decode one already-extracted narrow-format code point to an `f64`.
@@ -175,10 +202,41 @@ impl BinaryFormat {
 /// Every in-range code point has a defined result, although that result may be
 /// a NaN or infinity for formats which provide those special values.
 #[inline]
-pub(crate) fn decode_narrow_float(raw: u8, format: NarrowFloatFormat) -> f64 {
-    let length = format.bit_length();
-    debug_assert!(length == 8 || raw < (1 << length));
+fn decode_narrow_float(raw: u8, format: NarrowFloatFormat) -> f64 {
+    narrow_float_decode_table(format)[raw as usize]
+}
 
+/// Every code point of `format`, decoded.
+///
+/// An unpacker resolves this once and indexes it per value, which keeps the
+/// one-time `LazyLock` check and the format dispatch out of the loop.
+pub(crate) fn narrow_float_decode_table(format: NarrowFloatFormat) -> &'static [f64; 256] {
+    &DECODE_TABLES[format as usize]
+}
+
+/// Every code point of every format, decoded once.
+///
+/// A format has at most 256 code points, so decoding is a table lookup rather
+/// than a per-value walk through the format's special cases. 22 KB of static
+/// data, of which one 2 KB row is touched per unpack.
+static DECODE_TABLES: std::sync::LazyLock<[[f64; 256]; NarrowFloatFormat::COUNT]> =
+    std::sync::LazyLock::new(|| {
+        std::array::from_fn(|format_index| {
+            let format = NarrowFloatFormat::ALL[format_index];
+            let length = format.bit_length();
+            std::array::from_fn(|raw| {
+                if length < 8 && raw >= (1 << length) {
+                    // Unreachable code points for a four- or six-bit format;
+                    // the row is square so the index arithmetic stays uniform.
+                    f64::NAN
+                } else {
+                    decode_narrow_float_uncached(raw as u8, format)
+                }
+            })
+        })
+    });
+
+fn decode_narrow_float_uncached(raw: u8, format: NarrowFloatFormat) -> f64 {
     match format {
         NarrowFloatFormat::OcpE8M0 => decode_e8m0(raw),
         NarrowFloatFormat::OcpInt8 => (raw as i8 as f64) * (1.0 / 64.0),
@@ -240,14 +298,19 @@ fn decode_binary(raw: u8, format: NarrowFloatFormat, binary: BinaryFormat) -> f6
 
     let negative = raw & binary.sign_mask() != 0;
     let exponent = ((raw >> binary.mantissa_bits) & binary.exponent_mask()) as i32;
-    let mantissa = (raw & binary.mantissa_mask()) as u32;
+    let mantissa = (raw & binary.mantissa_mask()) as u64;
     let magnitude = if exponent == 0 {
         // Subnormals use 0.M * 2^(1-bias), equivalently
-        // integer(M) * 2^(1-bias-mantissa_bits).
-        (mantissa as f64) * 2.0f64.powi(1 - binary.bias - binary.mantissa_bits as i32)
+        // integer(M) * 2^(1-bias-mantissa_bits). The mantissa is a handful of
+        // bits and the quantum a constant, so the product is exact.
+        (mantissa as f64) * binary.subnormal_quantum()
     } else {
-        let significand = (1u32 << binary.mantissa_bits) | mantissa;
-        (significand as f64) * 2.0f64.powi(exponent - binary.bias - binary.mantissa_bits as i32)
+        // A normal narrow value is 1.M * 2^(exponent-bias), which is a
+        // binary64 with the same fraction bits left-aligned and the exponent
+        // rebiased. Every supported format's normal range sits inside
+        // binary64's, so the assembled exponent field is always in range.
+        let biased = (exponent - binary.bias + 1023) as u64;
+        f64::from_bits((biased << 52) | (mantissa << (52 - binary.mantissa_bits as u32)))
     };
 
     if negative { -magnitude } else { magnitude }
@@ -398,7 +461,9 @@ fn decode_e8m0(raw: u8) -> f64 {
     if raw == 0xff {
         f64::NAN
     } else {
-        2.0f64.powi(raw as i32 - 127)
+        // 2^(raw-127) rebiased into binary64: 0x00 gives 2^-127 and 0xfe gives
+        // 2^127, both comfortably normal, so this is only an exponent field.
+        f64::from_bits(((raw as u64 + (1023 - 127)) << 52))
     }
 }
 
@@ -823,3 +888,4 @@ mod tests {
         );
     }
 }
+
