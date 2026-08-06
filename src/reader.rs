@@ -260,13 +260,13 @@ impl Reader {
     ///     True
     ///
     #[getter]
-    // No section: the field is fixed at construction, so a momentary borrow is
-    // all this needs and there is nothing for another thread to change.
-    pub fn source(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(match &slf.try_borrow()?.source {
+    // No section and no borrow: the class is frozen, so `get` is a plain
+    // pointer read, and the field is fixed at construction anyway.
+    pub fn source(slf: &Bound<'_, Self>, py: Python<'_>) -> Py<PyAny> {
+        match &slf.get().source {
             ReaderSource::Immutable(tibs) => tibs.clone_ref(py).into_any(),
             ReaderSource::Mutable(mutibs) => mutibs.clone_ref(py).into_any(),
-        })
+        }
     }
 
     /// The current bit position.

@@ -18,6 +18,38 @@ use pyo3::types::{PyBytes, PyDict, PyInt};
 use std::borrow::Cow;
 
 // Trait used for commonality between the Tibs and Mutibs structs.
+/// `split_at` positions read out of Python, before any length is applied.
+pub(crate) enum SplitPositions {
+    At(Vec<isize>),
+    /// A single position too large to be an index. Reported at split time so
+    /// the message can quote the length actually in force.
+    Overflow,
+}
+
+/// Read `split_at`'s positions.
+///
+/// Separated from [`BitCollection::split_at_positions`] so that a `Mutibs`
+/// split can do its Python work - `__index__`, walking an iterable - before
+/// taking the critical section the split itself runs under. See
+/// [`crate::helpers::locking`].
+pub(crate) fn read_split_positions(pos: &Bound<'_, PyAny>) -> PyResult<SplitPositions> {
+    match try_extract_index(pos) {
+        Ok(Some(position)) => Ok(SplitPositions::At(vec![position])),
+        Err(error) if error.is_instance_of::<PyOverflowError>(pos.py()) => {
+            Ok(SplitPositions::Overflow)
+        }
+        Err(error) => Err(error),
+        Ok(None) => {
+            let capacity = pos.len().ok().unwrap_or(1);
+            let mut positions = Vec::with_capacity(capacity);
+            for item in pos.try_iter()? {
+                positions.push(item?.extract::<isize>()?);
+            }
+            Ok(SplitPositions::At(positions))
+        }
+    }
+}
+
 pub(crate) trait BitCollection: Sized + Clone {
     fn from_bv(bv: BV) -> Self;
     fn to_bitvec(&self) -> BV;
@@ -312,30 +344,22 @@ pub(crate) trait BitCollection: Sized + Clone {
         Ok(chunks)
     }
 
-    fn collect_split_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Vec<Self>> {
+    /// Split at already-read positions. Runs no Python.
+    ///
+    /// The positions are normalised here rather than while reading, so they are
+    /// checked against the length in force at split time.
+    fn split_at_positions(&self, positions: &SplitPositions) -> PyResult<Vec<Self>> {
         let len = self.len();
-        let positions = match try_extract_index(pos) {
-            Ok(Some(position)) => vec![normalize_split_position(position, len)?],
-            Err(error) if error.is_instance_of::<PyOverflowError>(pos.py()) => {
-                return Err(PyValueError::new_err(format!(
-                    "Split position is out of range for length of {len}."
-                )));
-            }
-            Err(error) => return Err(error),
-            Ok(None) => {
-                let capacity = pos.len().ok().unwrap_or(1);
-                let mut positions = Vec::with_capacity(capacity);
-                for item in pos.try_iter()? {
-                    let position = item?.extract::<isize>()?;
-                    positions.push(normalize_split_position(position, len)?);
-                }
-                positions
-            }
+        let SplitPositions::At(positions) = positions else {
+            return Err(PyValueError::new_err(format!(
+                "Split position is out of range for length of {len}."
+            )));
         };
 
         let mut pieces = Vec::with_capacity(positions.len() + 1);
         let mut start = 0;
         for position in positions {
+            let position = normalize_split_position(*position, len)?;
             if position < start {
                 return Err(PyValueError::new_err(
                     "Split positions must be in nondecreasing order.",

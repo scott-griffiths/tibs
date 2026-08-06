@@ -102,3 +102,29 @@ where
         f(&*a.try_borrow()?, &*b.try_borrow()?)
     })
 }
+
+/// Run `f` with `a` locked for writing and `b` for reading, both together.
+///
+/// For a mutation that reads a second container in place rather than copying
+/// it, such as `Mutibs.extend(other_mutibs)`. Locking only the receiver would
+/// leave a thread writing to `b` refused by the borrow held on it here, and
+/// locking them in turn would suspend the first section.
+///
+/// `a` and `b` must be different objects: one exclusive and one shared borrow
+/// of the same object conflict. Callers reaching this with a possible self
+/// operand have to special-case that first, as `extend` does.
+#[inline]
+pub(crate) fn with_locked_mut2<T, U, R>(
+    a: &Bound<'_, T>,
+    b: &Bound<'_, U>,
+    f: impl FnOnce(&mut T, &U) -> PyResult<R>,
+) -> PyResult<R>
+where
+    T: PyClass<Frozen = False>,
+    U: PyClass,
+{
+    debug_assert!(!std::ptr::eq(a.as_ptr(), b.as_ptr()));
+    with_critical_section2(a.as_any(), b.as_any(), || {
+        f(&mut *a.try_borrow_mut()?, &*b.try_borrow()?)
+    })
+}

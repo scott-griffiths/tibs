@@ -1,6 +1,7 @@
 use crate::codec as tibs_codec;
 use crate::core::{
-    BitCollection, concatenate_bitcollections, push_collection_run, repeat_bitcollection,
+    BitCollection, concatenate_bitcollections, push_collection_run, read_split_positions,
+    repeat_bitcollection,
 };
 use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
@@ -11,7 +12,7 @@ use crate::helpers::{
     head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
     rotate_bits_left, str_to_bv, try_extract_index, validate_index, validate_length,
     validate_logical_op_lengths, validate_offset, validate_shift, validate_slice, with_locked,
-    with_locked_mut,
+    with_locked_mut, with_locked_mut2, with_locked2,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -34,15 +35,6 @@ use std::ops::Not;
 /// reading a `range`'s attributes, calling `__index__` - has to finish before
 /// the critical section is entered, so it produces one of these and the write
 /// works from it. See [`crate::helpers::locking`].
-/// How many positions `Positions::Few` holds without allocating.
-///
-/// Deliberately small. Every `Positions` value is as large as this array, and
-/// it is moved out of the reader on every call, so a generous inline buffer
-/// makes the single-index `set(7)` pay for a capacity it never uses: at 16 the
-/// enum reached 136 bytes and `set(7)` measured 24% slower than not splitting
-/// at all. Four covers the short literal lists and tuples without that.
-const INLINE_POSITIONS: usize = 4;
-
 pub(crate) enum Positions {
     /// Every bit: `invert()` with no argument.
     All,
@@ -69,6 +61,15 @@ pub(crate) enum Positions {
     /// can quote the length actually in force.
     IndexOverflow,
 }
+
+/// How many positions `Positions::Few` holds without allocating.
+///
+/// Deliberately small. Every `Positions` value is as large as this array, and
+/// it is moved out of the reader on every call, so a generous inline buffer
+/// makes the single-index `set(7)` pay for a capacity it never uses: at 16 the
+/// enum reached 136 bytes and `set(7)` measured 24% slower than not splitting
+/// at all. Four covers the short literal lists and tuples without that.
+const INLINE_POSITIONS: usize = 4;
 
 /// An indexing key for `__setitem__` and `__delitem__`, read out of Python.
 ///
@@ -1360,14 +1361,15 @@ impl Mutibs {
             return with_locked(slf, |m| Ok(m.bits_equal(other.get())));
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            // Comparing an object with itself would take the same borrow twice.
-            // Both are shared, so that is allowed, but the section is entered
-            // once either way.
+            // Comparing an object with itself is trivially true, and skips a
+            // section that `with_critical_section2` would collapse anyway.
             if other.as_ptr() == slf.as_ptr() {
                 return Ok(true);
             }
-            let other = other.try_borrow()?;
-            return with_locked(slf, |m| Ok(m.bits_equal(&*other)));
+            // Both operands, together. Locking only the receiver would leave a
+            // thread writing to `other` refused by the borrow held here, and
+            // locking them in turn would suspend the first.
+            return with_locked2(slf, other, |m, other| Ok(m.bits_equal(other)));
         }
         Ok(false)
     }
@@ -2738,11 +2740,10 @@ impl Mutibs {
         py: Python<'_>,
         pos: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyTuple>> {
-        // `collect_split_at` reads the positions out of `pos`, which is Python,
-        // so the whole call stays outside and only the snapshot is taken under
-        // the lock.
-        let source = with_locked(slf, |m| Ok(m.clone()))?;
-        let pieces = BitCollection::collect_split_at(&source, pos)?;
+        // Positions first, since reading them is Python; the split itself then
+        // runs under the lock with no copy of the source.
+        let positions = read_split_positions(pos)?;
+        let pieces = with_locked(slf, |m| m.split_at_positions(&positions))?;
         Ok(PyTuple::new(py, pieces)?.unbind())
     }
 
@@ -3932,16 +3933,21 @@ impl Mutibs {
         // and, in the fallback, the whole iterator protocol inside
         // `promote_to_bv`. Only settled Rust data crosses into the closure.
         // A `Tibs` or `Mutibs` operand is borrowed rather than materialised,
-        // which is why this is not simply `promote_to_bv` for every input.
+        // which is why this is not simply `promote_to_bv` for every input. A
+        // `Tibs` is frozen, so only the receiver needs locking; a `Mutibs`
+        // operand needs its own section, below.
         if let Ok(tibs) = bs.extract::<PyRef<Tibs>>() {
             return with_locked_mut(slf, |m| {
                 m.append_collection(&*tibs);
                 Ok(())
             });
         }
-        if let Ok(mutibs) = bs.extract::<PyRef<Mutibs>>() {
-            return with_locked_mut(slf, |m| {
-                m.append_collection(&*mutibs);
+        if let Ok(mutibs) = bs.cast::<Mutibs>() {
+            // Both objects, together: the operand is read in place rather than
+            // copied, so its section has to be held too. Self-extension was
+            // handled above, so the two are known to be different here.
+            return with_locked_mut2(slf, mutibs, |m, other| {
+                m.append_collection(other);
                 Ok(())
             });
         }

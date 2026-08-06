@@ -1,5 +1,5 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, concatenate_bitcollections};
+use crate::core::{BitCollection, concatenate_bitcollections, read_split_positions};
 use crate::dtype::{Dtype, DtypeRepr, RecordField, RecordLayout, SingleDtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
@@ -8,7 +8,7 @@ use crate::helpers::{
     bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros,
     bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
     validate_index, validate_length, validate_logical_op_lengths, validate_offset, validate_shift,
-    validate_slice,
+    validate_slice, with_locked,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -381,9 +381,11 @@ impl Tibs {
             return self.logical_op_with_tibs(other.get(), op);
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            let other = other.try_borrow()?;
-            validate_logical_op_lengths(self.len(), other.len())?;
-            return Ok(self.logical_op(&*other, op));
+            // See `__eq__`: the operand is locked, `self` is frozen.
+            return with_locked(other, |other| {
+                validate_logical_op_lengths(self.len(), other.len())?;
+                Ok(self.logical_op(other, op))
+            });
         }
         let other = Tibs::extract(other.as_borrowed())?;
         self.logical_op_with_tibs(&other, op)
@@ -1982,7 +1984,7 @@ impl Tibs {
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
     pub fn split_at(&self, py: Python<'_>, pos: &Bound<'_, PyAny>) -> PyResult<Py<PyTuple>> {
-        let pieces = BitCollection::collect_split_at(self, pos)?;
+        let pieces = self.split_at_positions(&read_split_positions(pos)?)?;
         Ok(PyTuple::new(py, pieces)?.unbind())
     }
 
@@ -2096,10 +2098,10 @@ impl Tibs {
             return Ok(self.bits_equal(other.get()));
         }
         if let Ok(other) = other.cast::<Mutibs>() {
-            // `try_borrow`: a Mutibs held by another thread has to raise rather
-            // than panic, and must not be reported as unequal.
-            let other = other.try_borrow()?;
-            return Ok(self.bits_equal(&*other));
+            // The operand needs its own section, or a thread writing to it is
+            // refused by the borrow held here. `self` is a frozen `Tibs`, so
+            // there is nothing to lock on this side and one section is enough.
+            return with_locked(other, |other| Ok(self.bits_equal(other)));
         }
         Ok(false)
     }

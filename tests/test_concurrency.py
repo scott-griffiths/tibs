@@ -670,6 +670,35 @@ class TestFreeThreadedGaps:
         assert_no_failures(errors)
         assert m.count(0) == 0
 
+    def test_two_operand_calls_never_refuse(self):
+        # Every other serialisation test writes to the *receiver*, so a method
+        # that locks `self` but reaches its operand unprotected passes them all.
+        # Here the writer targets the operand instead.
+        receiver = Mutibs.from_ones(1024)
+        operand = Mutibs.from_ones(1024)
+
+        def compare():
+            for _ in range(ITERATIONS):
+                assert receiver == operand
+                assert operand == receiver
+                assert Tibs.from_ones(1024) == operand
+                assert (Tibs.from_ones(1024) & operand).all()
+
+        def extend():
+            for _ in range(ITERATIONS):
+                target = Mutibs()
+                target.extend(operand)
+                assert len(target) == 1024
+
+        def write_operand():
+            for _ in range(ITERATIONS):
+                operand.write_bytes(b"\xff" * 128)
+
+        errors = run_concurrently(
+            compare, compare, extend, extend, write_operand, write_operand
+        )
+        assert_no_failures(errors)
+
     def test_converted_writers_never_refuse(self):
         # Every writer installs the same all-ones value at a fixed length, so a
         # refusal, a torn write or a length change would all show up. `write_u`
