@@ -63,17 +63,17 @@ ORACLE_VERSIONS = {
 BITSTRING_VERSION = "5.0.0_beta1"
 BITSTRING_COMMIT = "c336d1e6a6ebf7ccc364840cb12949a7b012d985"
 
-# The P3109 formats are provisional.  This is the public-draft snapshot whose
-# K8P3SE and K8P4SE encodings Tibs freezes under the names below.
+# The P3109 formats are provisional. This public-draft snapshot keeps the
+# conformance test reproducible while the standard continues to develop.
 P3109_PUBLIC_COMMIT = "aa9d236d7a31b38fbe43b703a0bfdfc3d8be5d45"
 
 P3109_VALUE_TABLES = (
     (
-        "p3109_k8p3se",
+        "binary8p3",
         Path("Value Tables/Hexadecimal/K8/P3/signed/Binary8p3se.csv"),
     ),
     (
-        "p3109_k8p4se",
+        "binary8p4",
         Path("Value Tables/Hexadecimal/K8/P4/signed/Binary8p4se.csv"),
     ),
 )
@@ -91,22 +91,22 @@ class FormatCase:
     exact_only: bool = False
 
 
-P3109_K8P3SE = format_info_p3109(8, 3)
-P3109_K8P4SE = format_info_p3109(8, 4)
+BINARY8P3 = format_info_p3109(8, 3)
+BINARY8P4 = format_info_p3109(8, 4)
 
 
 FORMAT_CASES = (
     FormatCase(
-        "p3109_k8p3se",
+        "binary8p3",
         8,
-        P3109_K8P3SE,
+        BINARY8P3,
         "p3binary",
         canonical_nan=0x80,
     ),
     FormatCase(
-        "p3109_k8p4se",
+        "binary8p4",
         8,
-        P3109_K8P4SE,
+        BINARY8P4,
         "p4binary",
         canonical_nan=0x80,
     ),
@@ -358,20 +358,20 @@ def test_bitstring_snapshot_is_pinned() -> None:
 
 def test_gfloat_p3109_descriptors_match_the_public_draft_snapshot() -> None:
     assert P3109_PUBLIC_COMMIT == "aa9d236d7a31b38fbe43b703a0bfdfc3d8be5d45"
-    assert P3109_K8P3SE.name == "p3109_k8p3se", P3109_PUBLIC_COMMIT
-    assert P3109_K8P3SE.bits == 8, P3109_PUBLIC_COMMIT
-    assert P3109_K8P3SE.precision == 3, P3109_PUBLIC_COMMIT
-    assert P3109_K8P3SE.max == 49152.0, P3109_PUBLIC_COMMIT
-    assert P3109_K8P4SE.name == "p3109_k8p4se", P3109_PUBLIC_COMMIT
-    assert P3109_K8P4SE.bits == 8, P3109_PUBLIC_COMMIT
-    assert P3109_K8P4SE.precision == 4, P3109_PUBLIC_COMMIT
-    assert P3109_K8P4SE.max == 224.0, P3109_PUBLIC_COMMIT
+    assert BINARY8P3.name == "p3109_k8p3se", P3109_PUBLIC_COMMIT
+    assert BINARY8P3.bits == 8, P3109_PUBLIC_COMMIT
+    assert BINARY8P3.precision == 3, P3109_PUBLIC_COMMIT
+    assert BINARY8P3.max == 49152.0, P3109_PUBLIC_COMMIT
+    assert BINARY8P4.name == "p3109_k8p4se", P3109_PUBLIC_COMMIT
+    assert BINARY8P4.bits == 8, P3109_PUBLIC_COMMIT
+    assert BINARY8P4.precision == 4, P3109_PUBLIC_COMMIT
+    assert BINARY8P4.max == 224.0, P3109_PUBLIC_COMMIT
 
 
 @pytest.mark.parametrize(
     ("tibs_spec", "relative_path"),
     P3109_VALUE_TABLES,
-    ids=("p3109_k8p3se", "p3109_k8p4se"),
+    ids=("binary8p3", "binary8p4"),
 )
 def test_p3109_public_snapshot_exhaustive_raw_decode(
     tibs_spec: str,

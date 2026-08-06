@@ -48,19 +48,19 @@ def test_noncanonical_and_ambiguous_spellings_are_rejected(spec):
 
 
 KNOWN_CODES = [
-    ("p3109_k8p3se", 0x00, 0.0),
-    ("p3109_k8p3se", 0x01, 2.0**-17),
-    ("p3109_k8p3se", 0x04, 2.0**-15),
-    ("p3109_k8p3se", 0x7E, 49152.0),
-    ("p3109_k8p3se", 0x7F, math.inf),
-    ("p3109_k8p3se", 0x80, math.nan),
-    ("p3109_k8p3se", 0xFF, -math.inf),
-    ("p3109_k8p4se", 0x01, 2.0**-10),
-    ("p3109_k8p4se", 0x08, 2.0**-7),
-    ("p3109_k8p4se", 0x7E, 224.0),
-    ("p3109_k8p4se", 0x7F, math.inf),
-    ("p3109_k8p4se", 0x80, math.nan),
-    ("p3109_k8p4se", 0xFF, -math.inf),
+    ("binary8p3", 0x00, 0.0),
+    ("binary8p3", 0x01, 2.0**-17),
+    ("binary8p3", 0x04, 2.0**-15),
+    ("binary8p3", 0x7E, 49152.0),
+    ("binary8p3", 0x7F, math.inf),
+    ("binary8p3", 0x80, math.nan),
+    ("binary8p3", 0xFF, -math.inf),
+    ("binary8p4", 0x01, 2.0**-10),
+    ("binary8p4", 0x08, 2.0**-7),
+    ("binary8p4", 0x7E, 224.0),
+    ("binary8p4", 0x7F, math.inf),
+    ("binary8p4", 0x80, math.nan),
+    ("binary8p4", 0xFF, -math.inf),
     ("ocp_e4m3_saturate", 0x01, 2.0**-9),
     ("ocp_e4m3_saturate", 0x08, 2.0**-6),
     ("ocp_e4m3_saturate", 0x7E, 448.0),
@@ -213,8 +213,8 @@ def test_formats_without_nan_reject_it(spec):
 @pytest.mark.parametrize(
     "spec,expected",
     [
-        ("p3109_k8p3se", 0x80),
-        ("p3109_k8p4se", 0x80),
+        ("binary8p3", 0x80),
+        ("binary8p4", 0x80),
         ("ocp_e4m3_saturate", 0xFF),
         ("ocp_e4m3_overflow", 0xFF),
         ("ocp_e5m2_saturate", 0xFF),
@@ -299,8 +299,8 @@ def test_every_binary16_input_matches_the_independent_reference(spec):
 
 
 SAMPLE_VALUES = {
-    "p3109_k8p3se": [0.0, 2.0**-17, 1.0, -2.0, 49152.0, math.inf],
-    "p3109_k8p4se": [0.0, 2.0**-10, 1.0, -2.0, 224.0, -math.inf],
+    "binary8p3": [0.0, 2.0**-17, 1.0, -2.0, 49152.0, math.inf],
+    "binary8p4": [0.0, 2.0**-10, 1.0, -2.0, 224.0, -math.inf],
     "ocp_e4m3_saturate": [0.0, -0.0, 2.0**-9, 1.0, -2.0, 448.0],
     "ocp_e4m3_overflow": [0.0, -0.0, 2.0**-9, 1.0, -2.0, 448.0],
     "ocp_e5m2_saturate": [0.0, -0.0, 2.0**-16, 1.0, -2.0, 57344.0],
@@ -367,7 +367,7 @@ def test_subbyte_arrays_and_mixed_compound_dtypes_round_trip():
 
 def test_bytewise_arrays_and_mixed_compound_dtypes_round_trip_unaligned():
     tuple_dtype = Dtype(
-        "(p3109_k8p4se, ocp_e4m3_overflow, ocp_e8m0, ocp_int8)"
+        "(binary8p4, ocp_e4m3_overflow, ocp_e8m0, ocp_int8)"
     )
     records = [
         (1.0, 448.0, 0.5, -2.0),

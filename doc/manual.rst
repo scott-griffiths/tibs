@@ -173,7 +173,8 @@ The chapters follow the bits and the two ways of reading them.
 
 The manual covers the major features but is not exhaustive — see the :doc:`api`
 docs for every method and parameter, and the :doc:`appendices` for background on
-byte and bit order, rendering values for display, and the encoded byte format.
+byte and bit order, rendering values for display, the encoded byte format, and
+the eight-bit and smaller floating-point formats.
 
 
 .. toctree::

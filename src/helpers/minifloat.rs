@@ -7,8 +7,8 @@ use std::fmt;
 /// caller from accidentally applying it to a format for which it is meaningless.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum NarrowFloatFormat {
-    P3109K8P3SE,
-    P3109K8P4SE,
+    Binary8P3,
+    Binary8P4,
     OcpE4M3Saturate,
     OcpE4M3Overflow,
     OcpE5M2Saturate,
@@ -23,8 +23,8 @@ pub(crate) enum NarrowFloatFormat {
 impl NarrowFloatFormat {
     pub(crate) const fn name(self) -> &'static str {
         match self {
-            Self::P3109K8P3SE => "p3109_k8p3se",
-            Self::P3109K8P4SE => "p3109_k8p4se",
+            Self::Binary8P3 => "binary8p3",
+            Self::Binary8P4 => "binary8p4",
             Self::OcpE4M3Saturate => "ocp_e4m3_saturate",
             Self::OcpE4M3Overflow => "ocp_e4m3_overflow",
             Self::OcpE5M2Saturate => "ocp_e5m2_saturate",
@@ -47,7 +47,7 @@ impl NarrowFloatFormat {
 
     const fn binary_format(self) -> Option<BinaryFormat> {
         match self {
-            Self::P3109K8P3SE => Some(BinaryFormat {
+            Self::Binary8P3 => Some(BinaryFormat {
                 bits: 8,
                 exponent_bits: 5,
                 mantissa_bits: 2,
@@ -55,7 +55,7 @@ impl NarrowFloatFormat {
                 max_finite_code: 0x7e,
                 has_negative_zero: false,
             }),
-            Self::P3109K8P4SE => Some(BinaryFormat {
+            Self::Binary8P4 => Some(BinaryFormat {
                 bits: 8,
                 exponent_bits: 4,
                 mantissa_bits: 3,
@@ -109,7 +109,7 @@ impl NarrowFloatFormat {
 
     const fn nan_code(self) -> Option<u8> {
         match self {
-            Self::P3109K8P3SE | Self::P3109K8P4SE => Some(0x80),
+            Self::Binary8P3 | Self::Binary8P4 => Some(0x80),
             Self::OcpE4M3Saturate
             | Self::OcpE4M3Overflow
             | Self::OcpE5M2Saturate
@@ -204,7 +204,7 @@ pub(crate) fn encode_narrow_float(
 
 fn decode_binary(raw: u8, format: NarrowFloatFormat, binary: BinaryFormat) -> f64 {
     match format {
-        NarrowFloatFormat::P3109K8P3SE | NarrowFloatFormat::P3109K8P4SE => {
+        NarrowFloatFormat::Binary8P3 | NarrowFloatFormat::Binary8P4 => {
             if raw == 0x80 {
                 return f64::NAN;
             }
@@ -299,7 +299,7 @@ fn encode_binary_overflow(
 ) -> Result<u8, NarrowFloatEncodeError> {
     let sign = if negative { binary.sign_mask() } else { 0 };
     let code = match format {
-        NarrowFloatFormat::P3109K8P3SE | NarrowFloatFormat::P3109K8P4SE => 0x7f | sign,
+        NarrowFloatFormat::Binary8P3 | NarrowFloatFormat::Binary8P4 => 0x7f | sign,
         NarrowFloatFormat::OcpE4M3Saturate | NarrowFloatFormat::OcpE5M2Saturate => {
             binary.max_finite_code | sign
         }
@@ -453,8 +453,8 @@ mod tests {
     use super::*;
 
     const ALL_FORMATS: [NarrowFloatFormat; 11] = [
-        NarrowFloatFormat::P3109K8P3SE,
-        NarrowFloatFormat::P3109K8P4SE,
+        NarrowFloatFormat::Binary8P3,
+        NarrowFloatFormat::Binary8P4,
         NarrowFloatFormat::OcpE4M3Saturate,
         NarrowFloatFormat::OcpE4M3Overflow,
         NarrowFloatFormat::OcpE5M2Saturate,
@@ -467,8 +467,8 @@ mod tests {
     ];
 
     const BINARY_FORMATS: [NarrowFloatFormat; 9] = [
-        NarrowFloatFormat::P3109K8P3SE,
-        NarrowFloatFormat::P3109K8P4SE,
+        NarrowFloatFormat::Binary8P3,
+        NarrowFloatFormat::Binary8P4,
         NarrowFloatFormat::OcpE4M3Saturate,
         NarrowFloatFormat::OcpE4M3Overflow,
         NarrowFloatFormat::OcpE5M2Saturate,
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn p3109_known_values_and_specials() {
-        let p3 = NarrowFloatFormat::P3109K8P3SE;
+        let p3 = NarrowFloatFormat::Binary8P3;
         assert_eq!(decode_narrow_float(0x00, p3), 0.0);
         assert_eq!(decode_narrow_float(0x01, p3), 2.0f64.powi(-17));
         assert_eq!(decode_narrow_float(0x40, p3), 1.0);
@@ -515,7 +515,7 @@ mod tests {
         assert_eq!(decode_narrow_float(0x7f, p3), f64::INFINITY);
         assert_eq!(decode_narrow_float(0xff, p3), f64::NEG_INFINITY);
 
-        let p4 = NarrowFloatFormat::P3109K8P4SE;
+        let p4 = NarrowFloatFormat::Binary8P4;
         assert_eq!(decode_narrow_float(0x01, p4), 2.0f64.powi(-10));
         assert_eq!(decode_narrow_float(0x08, p4), 2.0f64.powi(-7));
         assert_eq!(decode_narrow_float(0x40, p4), 1.0);
@@ -588,10 +588,7 @@ mod tests {
             )));
             assert_eq!(encode_narrow_float(-0.0, format), Ok(sign_mask as u8));
         }
-        for format in [
-            NarrowFloatFormat::P3109K8P3SE,
-            NarrowFloatFormat::P3109K8P4SE,
-        ] {
+        for format in [NarrowFloatFormat::Binary8P3, NarrowFloatFormat::Binary8P4] {
             assert!(decode_narrow_float(0x80, format).is_nan());
             assert_eq!(encode_narrow_float(-0.0, format), Ok(0x00));
             assert_eq!(encode_narrow_float(-f64::MIN_POSITIVE, format), Ok(0x00));
@@ -677,8 +674,8 @@ mod tests {
     #[test]
     fn p3109_overflow_midpoints_match_the_draft_formats() {
         for (format, midpoint, max) in [
-            (NarrowFloatFormat::P3109K8P3SE, 53_248.0, 49_152.0),
-            (NarrowFloatFormat::P3109K8P4SE, 232.0, 224.0),
+            (NarrowFloatFormat::Binary8P3, 53_248.0, 49_152.0),
+            (NarrowFloatFormat::Binary8P4, 232.0, 224.0),
         ] {
             assert_eq!(encode_narrow_float(midpoint, format), Ok(0x7e));
             assert_eq!(decode_narrow_float(0x7e, format), max);

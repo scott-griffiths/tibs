@@ -6,8 +6,8 @@ from tibs import ByteOrder, Dtype, DtypeKind, DtypeSingle
 
 
 NARROW_FORMATS = [
-    ("p3109_k8p3se", DtypeKind.P3109K8P3SE, 8),
-    ("p3109_k8p4se", DtypeKind.P3109K8P4SE, 8),
+    ("binary8p3", DtypeKind.Binary8P3, 8),
+    ("binary8p4", DtypeKind.Binary8P4, 8),
     ("ocp_e4m3_saturate", DtypeKind.OcpE4M3Saturate, 8),
     ("ocp_e4m3_overflow", DtypeKind.OcpE4M3Overflow, 8),
     ("ocp_e5m2_saturate", DtypeKind.OcpE5M2Saturate, 8),
@@ -34,6 +34,10 @@ def test_existing_dtype_kind_integer_values_remain_stable():
         DtypeKind.Hex,
     ]
     assert [int(kind) for kind in existing] == list(range(10))
+
+
+def test_narrow_dtype_kind_integer_values_remain_stable():
+    assert [int(kind) for _, kind, _ in NARROW_FORMATS] == list(range(10, 21))
 
 
 @pytest.mark.parametrize(("spec", "kind", "length"), NARROW_FORMATS)
@@ -72,6 +76,9 @@ def test_narrow_format_rejects_byte_order(spec, kind, length):
 @pytest.mark.parametrize(
     "alias",
     [
+        # Earlier development spellings, replaced before release.
+        "p3109_k8p3se",
+        "p3109_k8p4se",
         "p3binary",
         "p4binary",
         "e4m3mxfp_saturate",
@@ -88,6 +95,6 @@ def test_narrow_format_rejects_byte_order(spec, kind, length):
         "e5m2mxfp",
     ],
 )
-def test_bitstring_aliases_are_not_accepted(alias):
+def test_noncanonical_aliases_are_not_accepted(alias):
     with pytest.raises(ValueError):
         Dtype(alias)

@@ -5,8 +5,8 @@ conversion algorithm used by the Rust implementation.  The formats contain at
 most 256 encodings, so choosing between adjacent decoded values is both simple
 and an independent way to test round-to-nearest, ties-to-even.
 
-The definitions are frozen to OCP MX v1.0/OFP8 v1.0 and the P3109 signed,
-extended K8P3 and K8P4 draft configurations reviewed for this feature.  Live
+The definitions use OCP MX v1.0/OFP8 v1.0 and the P3109 signed, extended K8P3
+and K8P4 draft configurations reviewed for this feature. Live
 comparisons with external libraries belong in the optional conformance suite;
 normal tests must remain dependency-free.
 """
@@ -38,8 +38,8 @@ class NarrowFormat:
 FORMATS = {
     fmt.name: fmt
     for fmt in (
-        NarrowFormat("p3109_k8p3se", 8, "p3109", 5, 2, 16, "extended", False),
-        NarrowFormat("p3109_k8p4se", 8, "p3109", 4, 3, 8, "extended", False),
+        NarrowFormat("binary8p3", 8, "p3109", 5, 2, 16, "extended", False),
+        NarrowFormat("binary8p4", 8, "p3109", 4, 3, 8, "extended", False),
         NarrowFormat("ocp_e4m3_saturate", 8, "ocp_e4m3", 4, 3, 7),
         NarrowFormat("ocp_e4m3_overflow", 8, "ocp_e4m3", 4, 3, 7, "overflow"),
         NarrowFormat("ocp_e5m2_saturate", 8, "ocp_e5m2", 5, 2, 15),

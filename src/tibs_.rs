@@ -538,8 +538,8 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Tibs {
 #[inline]
 fn narrow_float_format(kind: DtypeKind) -> Option<helpers::NarrowFloatFormat> {
     Some(match kind {
-        DtypeKind::P3109K8P3SE => helpers::NarrowFloatFormat::P3109K8P3SE,
-        DtypeKind::P3109K8P4SE => helpers::NarrowFloatFormat::P3109K8P4SE,
+        DtypeKind::Binary8P3 => helpers::NarrowFloatFormat::Binary8P3,
+        DtypeKind::Binary8P4 => helpers::NarrowFloatFormat::Binary8P4,
         DtypeKind::OcpE4M3Saturate => helpers::NarrowFloatFormat::OcpE4M3Saturate,
         DtypeKind::OcpE4M3Overflow => helpers::NarrowFloatFormat::OcpE4M3Overflow,
         DtypeKind::OcpE5M2Saturate => helpers::NarrowFloatFormat::OcpE5M2Saturate,
@@ -627,8 +627,8 @@ fn bv_from_single_value(dtype: &SingleDtype, value: &Bound<'_, PyAny>) -> PyResu
         DtypeKind::Hex => {
             validate_dtype_value_length(dtype, bv_from_hex(&value.extract::<String>()?)?)
         }
-        DtypeKind::P3109K8P3SE
-        | DtypeKind::P3109K8P4SE
+        DtypeKind::Binary8P3
+        | DtypeKind::Binary8P4
         | DtypeKind::OcpE4M3Saturate
         | DtypeKind::OcpE4M3Overflow
         | DtypeKind::OcpE5M2Saturate
@@ -1527,8 +1527,8 @@ pub(crate) fn py_from_value_parts(
         DtypeKind::Bin => BitCollection::to_binary(value).into_py_any(py),
         DtypeKind::Oct => BitCollection::to_octal(value)?.into_py_any(py),
         DtypeKind::Hex => BitCollection::to_hexadecimal(value)?.into_py_any(py),
-        DtypeKind::P3109K8P3SE
-        | DtypeKind::P3109K8P4SE
+        DtypeKind::Binary8P3
+        | DtypeKind::Binary8P4
         | DtypeKind::OcpE4M3Saturate
         | DtypeKind::OcpE4M3Overflow
         | DtypeKind::OcpE5M2Saturate

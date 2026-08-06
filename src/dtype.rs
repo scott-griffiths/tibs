@@ -11,15 +11,15 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// The tail of the message given when a spec doesn't start with any known kind.
-const KIND_HINT: &str = "expected a kind: either a fixed format such as 'p3109_k8p3se' or \
+const KIND_HINT: &str = "expected a kind: either a fixed format such as 'binary8p3' or \
      'ocp_e4m3_saturate', or 'u', 'i', 'f', 'bf', 'bool', 'bits', 'bin', 'oct', 'hex' or \
      'bytes' followed by a length in bits, for example 'u12'";
 
 /// Scalar encodings whose bit length is intrinsic to the named format rather
 /// than written as a suffix in the dtype spec.
 const FIXED_FORMATS: [(&str, DtypeKind, usize); 11] = [
-    ("p3109_k8p3se", DtypeKind::P3109K8P3SE, 8),
-    ("p3109_k8p4se", DtypeKind::P3109K8P4SE, 8),
+    ("binary8p3", DtypeKind::Binary8P3, 8),
+    ("binary8p4", DtypeKind::Binary8P4, 8),
     ("ocp_e4m3_saturate", DtypeKind::OcpE4M3Saturate, 8),
     ("ocp_e4m3_overflow", DtypeKind::OcpE4M3Overflow, 8),
     ("ocp_e5m2_saturate", DtypeKind::OcpE5M2Saturate, 8),
@@ -329,8 +329,8 @@ impl SingleDtype {
             DtypeKind::Int => format!("i{}{byte_order}", self.length),
             DtypeKind::Float => format!("f{}{byte_order}", self.length),
             DtypeKind::BFloat => format!("bf{}{byte_order}", self.length),
-            DtypeKind::P3109K8P3SE => "p3109_k8p3se".to_string(),
-            DtypeKind::P3109K8P4SE => "p3109_k8p4se".to_string(),
+            DtypeKind::Binary8P3 => "binary8p3".to_string(),
+            DtypeKind::Binary8P4 => "binary8p4".to_string(),
             DtypeKind::OcpE4M3Saturate => "ocp_e4m3_saturate".to_string(),
             DtypeKind::OcpE4M3Overflow => "ocp_e4m3_overflow".to_string(),
             DtypeKind::OcpE5M2Saturate => "ocp_e5m2_saturate".to_string(),

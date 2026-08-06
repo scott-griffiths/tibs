@@ -214,7 +214,8 @@ methods repeat the complete dtype::
 For whole-byte generic ``uN``, ``iN``, ``fN`` and ``bf16`` values, append
 ``_le`` or ``_be`` to the dtype string when byte order matters. These suffixes
 mean little-endian and big-endian byte order respectively. Fixed-width named
-OCP/P3109 formats reject byte-order suffixes::
+OCP/P3109 formats reject byte-order suffixes; see :ref:`exotic-floats` for
+their layouts and conversion rules::
 
     >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
     '3412cdab'
