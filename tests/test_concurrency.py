@@ -35,13 +35,17 @@ The tests below split into two kinds:
   snapshot.
 * Serialisation tests, which assert that calls are not refused at all.
 
-The second kind cannot be made absolute. The interpreter may suspend a critical
-section - for a GC pause, or a signal check inside a long search - while the
-borrow is still held, and a thread entering the section then finds the borrow
-taken. That is rare, costs a refusal rather than correctness, and is why
-``test_no_public_attribute_refuses`` counts refusals per attribute rather than
-requiring zero: an unwrapped method loses a large share of its own calls, while
-a suspended section costs one call of whatever happened to be running.
+The second kind only applies to a free-threaded build. `with_critical_section`
+compiles to a direct call when the GIL is present, so there is no serialisation
+to assert there - the borrow flag behaves exactly as it did before any of this.
+
+Nor can it be made absolute even on a free-threaded build. The interpreter may
+suspend a critical section - for a GC pause, or a signal check inside a long
+search - while the borrow is still held, and a thread entering the section then
+finds the borrow taken. That is rare, costs a refusal rather than correctness,
+and is why ``test_no_public_attribute_refuses`` counts refusals per attribute
+rather than requiring zero: an unwrapped method loses a large share of its own
+calls, while a suspended section costs one call of whatever was running.
 
 A refusal must arrive as a Python exception. ``view.rs``, ``reader.rs``,
 ``tibs_.rs`` and ``mutibs.rs`` reach their source through ``try_borrow`` for
@@ -527,6 +531,38 @@ class TestReaderConcurrency:
         )
         assert_only_race_errors(errors)
 
+    def test_reader_methods_never_refuse(self):
+        # A Reader over a Mutibs holds two objects at once: its own cursor and
+        # the source it reads through. Both sections are entered together, so a
+        # thread writing the source directly queues behind a read in flight
+        # rather than being refused by the borrow it is holding.
+        m = Mutibs.from_values("u8", [0xFF] * 64)
+        reader = Reader(m)
+        needle = Tibs("0xff")
+
+        def read():
+            for _ in range(ITERATIONS):
+                reader.pos = 0
+                assert reader.read_value("u8") == 0xFF
+                assert reader.read_bits(8) == needle
+                assert reader.peek_value("u8") == 0xFF
+                assert reader.peek_bits(8) == needle
+                reader.align(8)
+                reader.byte_pos = 1
+                assert reader.seek_to(needle)
+                assert not reader.at_end
+                assert reader.remaining <= len(reader)
+                repr(reader)
+                with reader.bookmark():
+                    reader.read_bits(8)
+
+        def write():
+            for _ in range(ITERATIONS):
+                m.write_bytes(b"\xff" * 64)
+
+        errors = run_concurrently(read, read, write, write)
+        assert_no_failures(errors)
+
     def test_reader_over_a_mutating_source(self):
         m = Mutibs.from_values("u8", [0xFF] * (BITS // 8))
 
@@ -786,6 +822,13 @@ class TestFreeThreadedGaps:
 
         errors = run_concurrently(touch_all, touch_all, write, write)
         assert_no_failures(errors)
+        if not FREE_THREADED:
+            # `with_critical_section` compiles to a direct call on a GIL-enabled
+            # build, so there is no serialisation to assert: two threads that
+            # interleave at a GIL release point contend on the borrow flag
+            # exactly as they did before any of this. Reaching every attribute
+            # without a crash or a panic is all this proves here.
+            return
         # Counted per attribute rather than in total, which is what separates
         # the two causes. An unwrapped method loses a large share of its own
         # calls - `field` refused over a thousand times in a two-second probe

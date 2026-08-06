@@ -5,6 +5,8 @@ use crate::mutibs::Mutibs;
 use crate::tibs_::{SearchParams, Tibs, find_in_bits, py_from_value, py_values_from_range};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::sync::critical_section::{with_critical_section, with_critical_section2};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The bit container a [`Reader`] reads from, kept as the Python object rather
 /// than a snapshot of its bits.
@@ -78,10 +80,17 @@ fn end_of_read(pos: usize, needed: usize, len: usize) -> PyResult<usize> {
 ///         >>> r.remaining
 ///         8
 ///
-#[pyclass(module = "tibs")]
+// `frozen` so that the reader has no borrow flag of its own. Reaching `source`
+// otherwise needed a borrow taken outside any critical section, which is the
+// very thing being eliminated: a thread merely asking which source to lock
+// would be refused by a read already in flight.
+#[pyclass(module = "tibs", frozen)]
 pub struct Reader {
     source: ReaderSource,
-    pos: usize,
+    /// Atomic only to satisfy `Sync` for a frozen pyclass. Every access is
+    /// already inside the reader's critical section, which is what makes a
+    /// whole method atomic, so `Relaxed` is all the ordering needed.
+    pos: AtomicUsize,
 }
 
 impl Reader {
@@ -146,14 +155,14 @@ impl Reader {
         // A `pos` beyond a shrunken source would fail `validate_slice` inside
         // the search with a message about slice positions, which says nothing
         // about the cursor. Nothing can be found ahead of the end anyway.
-        if self.pos > self.source_len(py)? {
+        if self.position() > self.source_len(py)? {
             return Ok(None);
         }
         self.search(
             py,
             needle,
             SearchParams {
-                start: Some(self.pos as isize),
+                start: Some(self.position() as isize),
                 end: None,
                 byte_aligned,
                 mask,
@@ -165,6 +174,37 @@ impl Reader {
     /// Validate a new cursor position against the current source length.
     fn checked_pos(&self, py: Python<'_>, pos: i64) -> PyResult<usize> {
         validate_pos(pos, self.source_len(py)?)
+    }
+
+    /// The cursor position. See the note on the field.
+    #[inline]
+    fn position(&self) -> usize {
+        self.pos.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    fn set_position(&self, pos: usize) {
+        self.pos.store(pos, Ordering::Relaxed);
+    }
+
+    /// Run `f` with the reader locked, and its source locked too when that is a
+    /// `Mutibs`.
+    ///
+    /// A `Tibs` source is frozen, so nothing can be mutating it and the
+    /// reader's own section is enough. A `Mutibs` source can be written
+    /// directly by another thread, so its section has to be held for as long as
+    /// the reader reads through it - and entered together with the reader's,
+    /// since taking the second on its own would suspend the first.
+    fn with_reader<R>(slf: &Bound<'_, Self>, f: impl FnOnce(&Self) -> PyResult<R>) -> PyResult<R> {
+        // `get` rather than a borrow: the class is frozen, so this is a plain
+        // pointer read and cannot be refused.
+        let reader = slf.get();
+        match &reader.source {
+            ReaderSource::Mutable(mutibs) => {
+                with_critical_section2(slf.as_any(), mutibs.bind(slf.py()).as_any(), || f(reader))
+            }
+            ReaderSource::Immutable(_) => with_critical_section(slf.as_any(), || f(reader)),
+        }
     }
 }
 
@@ -202,7 +242,7 @@ impl Reader {
         };
         Ok(Reader {
             source,
-            pos: validate_pos(pos, len)?,
+            pos: AtomicUsize::new(validate_pos(pos, len)?),
         })
     }
 
@@ -220,11 +260,13 @@ impl Reader {
     ///     True
     ///
     #[getter]
-    pub fn source(&self, py: Python<'_>) -> Py<PyAny> {
-        match &self.source {
+    // No section: the field is fixed at construction, so a momentary borrow is
+    // all this needs and there is nothing for another thread to change.
+    pub fn source(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(match &slf.try_borrow()?.source {
             ReaderSource::Immutable(tibs) => tibs.clone_ref(py).into_any(),
             ReaderSource::Mutable(mutibs) => mutibs.clone_ref(py).into_any(),
-        }
+        })
     }
 
     /// The current bit position.
@@ -238,14 +280,16 @@ impl Reader {
     /// :raises ValueError: if set outside ``0`` to ``len(self)``.
     ///
     #[getter]
-    pub fn pos(&self) -> usize {
-        self.pos
+    pub fn pos(slf: &Bound<'_, Self>) -> PyResult<usize> {
+        Self::with_reader(slf, |r| Ok(r.position()))
     }
 
     #[setter(pos)]
-    pub fn set_pos(&mut self, py: Python<'_>, pos: i64) -> PyResult<()> {
-        self.pos = self.checked_pos(py, pos)?;
-        Ok(())
+    pub fn set_pos(slf: &Bound<'_, Self>, py: Python<'_>, pos: i64) -> PyResult<()> {
+        Self::with_reader(slf, |r| {
+            r.set_position(r.checked_pos(py, pos)?);
+            Ok(())
+        })
     }
 
     /// The current position in bytes.
@@ -260,35 +304,39 @@ impl Reader {
     ///     8
     ///
     #[getter]
-    pub fn byte_pos(&self) -> PyResult<usize> {
-        if !self.pos.is_multiple_of(8) {
-            return Err(PyValueError::new_err(format!(
-                "Position of {} bits is not byte aligned, so it has no byte position.",
-                self.pos
-            )));
-        }
-        Ok(self.pos / 8)
+    pub fn byte_pos(slf: &Bound<'_, Self>) -> PyResult<usize> {
+        Self::with_reader(slf, |r| {
+            if !r.position().is_multiple_of(8) {
+                return Err(PyValueError::new_err(format!(
+                    "Position of {} bits is not byte aligned, so it has no byte position.",
+                    r.position()
+                )));
+            }
+            Ok(r.position() / 8)
+        })
     }
 
     #[setter(byte_pos)]
-    pub fn set_byte_pos(&mut self, py: Python<'_>, byte_pos: i64) -> PyResult<()> {
+    pub fn set_byte_pos(slf: &Bound<'_, Self>, py: Python<'_>, byte_pos: i64) -> PyResult<()> {
         let pos = byte_pos.checked_mul(8).ok_or_else(|| {
             PyValueError::new_err(format!("Byte position of {byte_pos} is too large."))
         })?;
-        self.pos = self.checked_pos(py, pos)?;
-        Ok(())
+        Self::with_reader(slf, |r| {
+            r.set_position(r.checked_pos(py, pos)?);
+            Ok(())
+        })
     }
 
     /// The number of bits between :attr:`~Reader.pos` and the end.
     #[getter]
-    pub fn remaining(&self, py: Python<'_>) -> PyResult<usize> {
-        Ok(remaining_bits(self.pos, self.source_len(py)?))
+    pub fn remaining(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<usize> {
+        Self::with_reader(slf, |r| Ok(remaining_bits(r.position(), r.source_len(py)?)))
     }
 
     /// Whether there is nothing left to read.
     #[getter]
-    pub fn at_end(&self, py: Python<'_>) -> PyResult<bool> {
-        Ok(self.pos >= self.source_len(py)?)
+    pub fn at_end(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        Self::with_reader(slf, |r| Ok(r.position() >= r.source_len(py)?))
     }
 
     /// Read one value with a dtype, advancing by the dtype length.
@@ -310,12 +358,21 @@ impl Reader {
     ///     (True, 127)
     ///
     #[pyo3(signature = (dtype, /), text_signature = "($self, dtype, /)")]
-    pub fn read_value(&mut self, py: Python<'_>, dtype: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    pub fn read_value(
+        slf: &Bound<'_, Self>,
+        py: Python<'_>,
+        dtype: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        // `extract_dtype` parses a spec string and `py_from_value` builds the
+        // result object; both are Python, so both stay outside the section.
         let dtype = extract_dtype(dtype)?;
-        let end = end_of_read(self.pos, dtype.length, self.source_len(py)?)?;
-        let value = py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length)?)?;
-        self.pos = end;
-        Ok(value)
+        let window = Self::with_reader(slf, |r| {
+            let end = end_of_read(r.position(), dtype.length, r.source_len(py)?)?;
+            let window = r.window(py, r.position(), dtype.length)?;
+            r.set_position(end);
+            Ok(window)
+        })?;
+        py_from_value(py, &dtype, &window)
     }
 
     /// Read a list of values of one dtype, advancing past all of them.
@@ -345,15 +402,16 @@ impl Reader {
     ///
     #[pyo3(signature = (dtype, /, count = None), text_signature = "($self, dtype, /, count=None)")]
     pub fn read_values(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         dtype: &Bound<'_, PyAny>,
         count: Option<i64>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
-        let len = self.source_len(py)?;
-        let bits = match count {
-            None => remaining_bits(self.pos, len) / dtype.length * dtype.length,
+        let window = Self::with_reader(slf, |r| {
+            let len = r.source_len(py)?;
+            let bits = match count {
+            None => remaining_bits(r.position(), len) / dtype.length * dtype.length,
             Some(count) if count < 0 => {
                 return Err(PyValueError::new_err(format!(
                     "Cannot read a negative number of values ({count})."
@@ -366,11 +424,12 @@ impl Reader {
                 ))
             })?,
         };
-        let end = end_of_read(self.pos, bits, len)?;
-        let window = self.window(py, self.pos, bits)?;
-        let values = py_values_from_range(py, &window, &dtype, None, None)?;
-        self.pos = end;
-        Ok(values)
+            let end = end_of_read(r.position(), bits, len)?;
+            let window = r.window(py, r.position(), bits)?;
+            r.set_position(end);
+            Ok(window)
+        })?;
+        py_values_from_range(py, &window, &dtype, None, None)
     }
 
     /// Read the next ``n`` bits, advancing by ``n``.
@@ -391,12 +450,14 @@ impl Reader {
     ///     Tibs('0xf')
     ///
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
-    pub fn read_bits(&mut self, py: Python<'_>, n: i64) -> PyResult<Tibs> {
+    pub fn read_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        let end = end_of_read(self.pos, n, self.source_len(py)?)?;
-        let bits = self.window(py, self.pos, n)?;
-        self.pos = end;
-        Ok(bits)
+        Self::with_reader(slf, |r| {
+            let end = end_of_read(r.position(), n, r.source_len(py)?)?;
+            let bits = r.window(py, r.position(), n)?;
+            r.set_position(end);
+            Ok(bits)
+        })
     }
 
     /// Read up to the next occurrence of ``needle``, leaving the cursor on it.
@@ -422,16 +483,18 @@ impl Reader {
     ///
     #[pyo3(signature = (needle, /, byte_aligned = false, mask = None), text_signature = "($self, needle, /, byte_aligned=False, mask=None)")]
     pub fn read_to(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         needle: Tibs,
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Tibs> {
-        let found = self.require_found(self.find_from_pos(py, needle, byte_aligned, mask)?)?;
-        let bits = self.window(py, self.pos, found - self.pos)?;
-        self.pos = found;
-        Ok(bits)
+        Self::with_reader(slf, |r| {
+            let found = r.require_found(r.find_from_pos(py, needle, byte_aligned, mask)?)?;
+            let bits = r.window(py, r.position(), found - r.position())?;
+            r.set_position(found);
+            Ok(bits)
+        })
     }
 
     /// Read up to and including the next occurrence of ``needle``.
@@ -456,18 +519,20 @@ impl Reader {
     ///
     #[pyo3(signature = (needle, /, byte_aligned = false, mask = None), text_signature = "($self, needle, /, byte_aligned=False, mask=None)")]
     pub fn read_past(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         needle: Tibs,
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<Tibs> {
-        let needle_len = needle.len();
-        let found = self.require_found(self.find_from_pos(py, needle, byte_aligned, mask)?)?;
-        let end = found + needle_len;
-        let bits = self.window(py, self.pos, end - self.pos)?;
-        self.pos = end;
-        Ok(bits)
+        Self::with_reader(slf, |r| {
+            let needle_len = needle.len();
+            let found = r.require_found(r.find_from_pos(py, needle, byte_aligned, mask)?)?;
+            let end = found + needle_len;
+            let bits = r.window(py, r.position(), end - r.position())?;
+            r.set_position(end);
+            Ok(bits)
+        })
     }
 
     /// Read one value with a dtype without moving the cursor.
@@ -485,10 +550,17 @@ impl Reader {
     ///     0
     ///
     #[pyo3(signature = (dtype, /), text_signature = "($self, dtype, /)")]
-    pub fn peek_value(&self, py: Python<'_>, dtype: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    pub fn peek_value(
+        slf: &Bound<'_, Self>,
+        py: Python<'_>,
+        dtype: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        end_of_read(self.pos, dtype.length, self.source_len(py)?)?;
-        py_from_value(py, &dtype, &self.window(py, self.pos, dtype.length)?)
+        let window = Self::with_reader(slf, |r| {
+            end_of_read(r.position(), dtype.length, r.source_len(py)?)?;
+            r.window(py, r.position(), dtype.length)
+        })?;
+        py_from_value(py, &dtype, &window)
     }
 
     /// Read the next ``n`` bits without moving the cursor.
@@ -507,10 +579,12 @@ impl Reader {
     ///     0
     ///
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
-    pub fn peek_bits(&self, py: Python<'_>, n: i64) -> PyResult<Tibs> {
+    pub fn peek_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        end_of_read(self.pos, n, self.source_len(py)?)?;
-        self.window(py, self.pos, n)
+        Self::with_reader(slf, |r| {
+            end_of_read(r.position(), n, r.source_len(py)?)?;
+            r.window(py, r.position(), n)
+        })
     }
 
     /// Return a context manager that restores the position on exit.
@@ -532,11 +606,12 @@ impl Reader {
     ///     >>> r.pos
     ///     0
     ///
-    pub fn bookmark(slf: PyRef<'_, Self>) -> Bookmark {
-        Bookmark {
-            pos: slf.pos,
-            reader: slf.into(),
-        }
+    pub fn bookmark(slf: &Bound<'_, Self>) -> PyResult<Bookmark> {
+        let pos = Self::with_reader(slf, |r| Ok(r.position()))?;
+        Ok(Bookmark {
+            pos,
+            reader: slf.clone().unbind(),
+        })
     }
 
     /// Move forward to the next multiple of ``boundary`` bits.
@@ -558,23 +633,25 @@ impl Reader {
     ///     8
     ///
     #[pyo3(signature = (boundary = 8, /), text_signature = "($self, boundary=8, /)")]
-    pub fn align(&mut self, py: Python<'_>, boundary: i64) -> PyResult<usize> {
+    pub fn align(slf: &Bound<'_, Self>, py: Python<'_>, boundary: i64) -> PyResult<usize> {
         if boundary <= 0 {
             return Err(PyValueError::new_err(format!(
                 "Alignment boundary must be greater than zero, but received {boundary}."
             )));
         }
         let boundary = boundary as u64;
-        let skip = ((boundary - self.pos as u64 % boundary) % boundary) as usize;
-        let len = self.source_len(py)?;
-        if self.pos + skip > len {
-            return Err(PyValueError::new_err(format!(
-                "Cannot align to {boundary} bits from position {}: it would move past the end of the {len} bits.",
-                self.pos
-            )));
-        }
-        self.pos += skip;
-        Ok(skip)
+        Self::with_reader(slf, |r| {
+            let skip = ((boundary - r.position() as u64 % boundary) % boundary) as usize;
+            let len = r.source_len(py)?;
+            if r.position() + skip > len {
+                return Err(PyValueError::new_err(format!(
+                    "Cannot align to {boundary} bits from position {}: it would move past the end of the {len} bits.",
+                    r.position()
+                )));
+            }
+            r.set_position(r.position() + skip);
+            Ok(skip)
+        })
     }
 
     /// Move to the next occurrence of ``needle``, leaving the cursor on it.
@@ -604,19 +681,21 @@ impl Reader {
     ///
     #[pyo3(signature = (needle, /, byte_aligned = false, mask = None), text_signature = "($self, needle, /, byte_aligned=False, mask=None)")]
     pub fn seek_to(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         needle: Tibs,
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<bool> {
-        match self.find_from_pos(py, needle, byte_aligned, mask)? {
-            Some(found) => {
-                self.pos = found;
-                Ok(true)
+        Self::with_reader(slf, |r| {
+            match r.find_from_pos(py, needle, byte_aligned, mask)? {
+                Some(found) => {
+                    r.set_position(found);
+                    Ok(true)
+                }
+                None => Ok(false),
             }
-            None => Ok(false),
-        }
+        })
     }
 
     /// Move to just after the next occurrence of ``needle``.
@@ -643,20 +722,22 @@ impl Reader {
     ///
     #[pyo3(signature = (needle, /, byte_aligned = false, mask = None), text_signature = "($self, needle, /, byte_aligned=False, mask=None)")]
     pub fn seek_past(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         needle: Tibs,
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<bool> {
         let needle_len = needle.len();
-        match self.find_from_pos(py, needle, byte_aligned, mask)? {
-            Some(found) => {
-                self.pos = found + needle_len;
-                Ok(true)
+        Self::with_reader(slf, |r| {
+            match r.find_from_pos(py, needle, byte_aligned, mask)? {
+                Some(found) => {
+                    r.set_position(found + needle_len);
+                    Ok(true)
+                }
+                None => Ok(false),
             }
-            None => Ok(false),
-        }
+        })
     }
 
     /// Move back to the previous occurrence of ``needle``.
@@ -681,41 +762,45 @@ impl Reader {
     ///
     #[pyo3(signature = (needle, /, byte_aligned = false, mask = None), text_signature = "($self, needle, /, byte_aligned=False, mask=None)")]
     pub fn seek_back_to(
-        &mut self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         needle: Tibs,
         byte_aligned: bool,
         mask: Option<Tibs>,
     ) -> PyResult<bool> {
-        // Clamped rather than passed through, so that a `pos` left beyond a
-        // truncated `Mutibs` searches what is there instead of raising.
-        let end = self.pos.min(self.source_len(py)?) as isize;
-        let params = SearchParams {
-            start: None,
-            end: Some(end),
-            byte_aligned,
-            mask,
-        };
-        match self.search(py, needle, params, true)? {
-            Some(found) => {
-                self.pos = found;
-                Ok(true)
+        Self::with_reader(slf, |r| {
+            // Clamped rather than passed through, so that a `pos` left beyond a
+            // truncated `Mutibs` searches what is there instead of raising.
+            let end = r.position().min(r.source_len(py)?) as isize;
+            let params = SearchParams {
+                start: None,
+                end: Some(end),
+                byte_aligned,
+                mask,
+            };
+            match r.search(py, needle, params, true)? {
+                Some(found) => {
+                    r.set_position(found);
+                    Ok(true)
+                }
+                None => Ok(false),
             }
-            None => Ok(false),
-        }
+        })
     }
 
     /// Return the length of the source in bits.
-    pub fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
-        self.source_len(py)
+    pub fn __len__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<usize> {
+        Self::with_reader(slf, |r| r.source_len(py))
     }
 
-    pub fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let source = match &self.source {
-            ReaderSource::Immutable(tibs) => tibs.get().__repr__(),
-            ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.repr_string(),
-        };
-        Ok(format!("Reader({source}, {})", self.pos))
+    pub fn __repr__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<String> {
+        Self::with_reader(slf, |r| {
+            let source = match &r.source {
+                ReaderSource::Immutable(tibs) => tibs.get().__repr__(),
+                ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.repr_string(),
+            };
+            Ok(format!("Reader({source}, {})", r.position()))
+        })
     }
 }
 
@@ -729,7 +814,7 @@ impl Reader {
         found.ok_or_else(|| {
             ReadError::new_err(format!(
                 "Cannot read: the bits to find were not found at or after position {}. Use seek_to or seek_past if not finding them is expected.",
-                self.pos
+                self.position()
             ))
         })
     }
@@ -772,7 +857,12 @@ impl Bookmark {
         traceback: &Bound<'_, PyAny>,
     ) -> PyResult<bool> {
         let _ = (exc_type, exc_value, traceback);
-        self.reader.try_borrow_mut(py)?.pos = self.pos;
+        // The reader's own section, so that restoring the bookmark queues
+        // behind any read in flight rather than being refused by it.
+        Reader::with_reader(self.reader.bind(py), |reader| {
+            reader.set_position(self.pos);
+            Ok(())
+        })?;
         Ok(false)
     }
 }
