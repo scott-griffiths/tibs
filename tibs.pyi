@@ -7,7 +7,7 @@ __author__: str
 
 _BitPattern = list[bool | int] | tuple[bool | int, ...]
 _TibsLike = Union["Tibs", "Mutibs", str, bytes, bytearray, memoryview, _BitPattern]
-_DtypeLike = Union["Dtype", str]
+_DtypeLike = Union["Dtype", "DtypeKind", str]
 _DtypeScalarValue = Union[int, float, str, bytes, bool, "Tibs"]
 _DtypeValue = Union[_DtypeScalarValue, tuple["_DtypeValue", ...]]
 
@@ -95,7 +95,7 @@ class DtypeSingle(Dtype):
     def from_params(
             cls,
             kind: DtypeKind,
-            length: int,
+            length: int | None = None,
             /,
             byte_order: ByteOrder | None = ByteOrder.Unspecified
     ) -> DtypeSingle: ...

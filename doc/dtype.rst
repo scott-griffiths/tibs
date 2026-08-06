@@ -154,6 +154,36 @@ A scalar dtype can also be built without parsing a string::
 The general :class:`Dtype` base class has no ``from_params`` method because the
 three concrete variants require different parameters.
 
+.. _kinds-as-dtypes:
+
+Kinds that are dtypes on their own
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some kinds fix their own bit length: ``bool`` is always one bit, ``bf16``
+always sixteen, and each narrow format above has an intrinsic width. For those,
+the :class:`DtypeKind` on its own already says everything the dtype does, so the
+length may be omitted and the kind used directly wherever a dtype is accepted::
+
+    >>> DtypeSingle.from_params(DtypeKind.OcpE2M1)
+    DtypeSingle('ocp_e2m1')
+    >>> Tibs("0x1257").to_values(DtypeKind.OcpE2M1)
+    [0.5, 1.0, 3.0, 6.0]
+
+This is worth knowing mainly because :class:`DtypeKind` is a complete list of
+every kind tibs supports, so it is a way of finding the narrow formats without
+having to know their spelling in advance.
+
+The remaining kinds - ``u``, ``i``, ``f``, ``bits``, ``bin``, ``oct``, ``hex``
+and ``bytes`` - are families of widths rather than single formats, so a length
+is always needed and a bare kind is rejected::
+
+    >>> Dtype("u12").kind
+    DtypeKind.Uint
+    >>> DtypeSingle.from_params(DtypeKind.Uint)
+    Traceback (most recent call last):
+        ...
+    ValueError: DtypeKind.Uint does not determine a length on its own, so one must be given. For example, 'u12'.
+
 Array dtypes
 ^^^^^^^^^^^^
 

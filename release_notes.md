@@ -114,6 +114,22 @@ Added
   'ff'
   ```
 
+* A `DtypeKind` whose length is intrinsic — the eleven narrow formats above,
+  plus `bool` and `bf16` — is now accepted anywhere a dtype is, and its length
+  may be omitted from `DtypeSingle.from_params`. Such a kind already carries
+  everything the dtype does, so it no longer has to be wrapped in a
+  `DtypeSingle` that restates a length with only one legal value. `DtypeKind`
+  lists every kind tibs supports, which makes it a way of discovering the
+  narrow formats without knowing their names in advance. The other eight kinds
+  are families of widths, so they still need a length and say so.
+
+  ```python
+  >>> Tibs("0x1257").to_values(DtypeKind.OcpE2M1)
+  [0.5, 1.0, 3.0, 6.0]
+  >>> DtypeSingle.from_params(DtypeKind.OcpE2M1)
+  DtypeSingle('ocp_e2m1')
+  ```
+
 * Eight methods for comparing two containers without building an intermediate
   object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
   `is_disjoint`, `is_subset_of` and `is_superset_of`. The counts are equivalent
@@ -315,6 +331,11 @@ Performance improvements
   a `struct` call (such as `"(i16_be, i16_be, i32_be)"` against `">hhl"`) to
   around 1.5-1.8x the time of the handwritten `struct` code, down from roughly
   10x slower when compound dtypes were first implemented.
+* Parsed dtype specs are now cached, so passing a string where a dtype is
+  expected no longer re-parses it on every call. This mattered most for short
+  operations, where parsing could dominate: a scalar `to_value("u8")` went from
+  about 345 ns to 165 ns, against 105 ns when passing a prebuilt `Dtype`. Bulk
+  calls were never parse-bound and are unchanged.
 * A number of other operations — string/hex/oct/bin conversion, `from_values`,
   `Mutibs.reverse` and others — moved from bit-at-a-time to byte-at-a-time or
   whole-buffer implementations. Across the local comparison suite (see

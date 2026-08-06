@@ -941,7 +941,7 @@ def test_mutibs_to_values_bits_returns_immutable_tibs_snapshots():
 def test_dtype_string_errors_are_reported_by_value_methods():
     with pytest.raises(ValueError, match="Cannot parse Dtype spec"):
         Tibs.from_value("unknown8", 1)
-    with pytest.raises(TypeError, match="dtype must be a Dtype instance or dtype string"):
+    with pytest.raises(TypeError, match="dtype must be a Dtype instance"):
         Tibs.from_value(object(), 1)
 
 
@@ -1141,3 +1141,106 @@ def test_wrong_specs_suggest_the_right_one(spec, suggestion):
 def test_wrong_specs_explain_themselves(spec, message):
     with pytest.raises(ValueError, match=re.escape(message)):
         Dtype(spec)
+
+
+# The kinds that fix their own bit length, and so describe a complete dtype
+# without one being written alongside: the fixed formats, plus Bool and BFloat.
+INTRINSIC_LENGTH_KINDS = [
+    (DtypeKind.Bool, 1, "bool"),
+    (DtypeKind.BFloat, 16, "bf16"),
+    (DtypeKind.Binary8P3, 8, "binary8p3"),
+    (DtypeKind.Binary8P4, 8, "binary8p4"),
+    (DtypeKind.OcpE4M3Saturate, 8, "ocp_e4m3_saturate"),
+    (DtypeKind.OcpE4M3Overflow, 8, "ocp_e4m3_overflow"),
+    (DtypeKind.OcpE5M2Saturate, 8, "ocp_e5m2_saturate"),
+    (DtypeKind.OcpE5M2Overflow, 8, "ocp_e5m2_overflow"),
+    (DtypeKind.OcpE3M2, 6, "ocp_e3m2"),
+    (DtypeKind.OcpE2M3, 6, "ocp_e2m3"),
+    (DtypeKind.OcpE2M1, 4, "ocp_e2m1"),
+    (DtypeKind.OcpE8M0, 8, "ocp_e8m0"),
+    (DtypeKind.OcpInt8, 8, "ocp_int8"),
+]
+
+# The kinds that are a family of widths, so a length is always needed.
+SIZED_KINDS = [
+    DtypeKind.Uint,
+    DtypeKind.Int,
+    DtypeKind.Float,
+    DtypeKind.Bits,
+    DtypeKind.Bin,
+    DtypeKind.Oct,
+    DtypeKind.Hex,
+    DtypeKind.Bytes,
+]
+
+
+@pytest.mark.parametrize("kind, length, spec", INTRINSIC_LENGTH_KINDS)
+def test_from_params_infers_an_intrinsic_length(kind, length, spec):
+    d = DtypeSingle.from_params(kind)
+    assert d.kind is kind
+    assert d.length == length
+    assert d == Dtype(spec)
+    # Passing the length explicitly stays valid and means the same thing.
+    assert DtypeSingle.from_params(kind, length) == d
+
+
+@pytest.mark.parametrize("kind", SIZED_KINDS)
+def test_from_params_still_requires_a_length_for_sized_kinds(kind):
+    with pytest.raises(ValueError, match="does not determine a length"):
+        DtypeSingle.from_params(kind)
+
+
+@pytest.mark.parametrize("kind", SIZED_KINDS)
+def test_missing_length_message_suggests_a_dtype_that_parses(kind):
+    with pytest.raises(ValueError) as exc:
+        DtypeSingle.from_params(kind)
+    # The suggestion has to satisfy that kind's own length rule -- Float admits
+    # only 16/32/64, Bytes only multiples of 8 -- so it is not one width with
+    # different prefixes.
+    suggestion = re.search(r"For example, '([^']+)'", str(exc.value)).group(1)
+    assert Dtype(suggestion).kind is kind
+
+
+@pytest.mark.parametrize("kind, length, spec", INTRINSIC_LENGTH_KINDS)
+def test_a_bare_kind_is_accepted_as_a_dtype(kind, length, spec):
+    assert Dtype(spec) == DtypeSingle.from_params(kind)
+
+    # A bare kind must mean the same as its spec on every path taking a dtype,
+    # not just on to_value.
+    zeros = Tibs.from_zeros(length)
+    value = zeros.to_value(spec)
+    assert zeros.to_value(kind) == value
+
+    t = Tibs.from_values(kind, [value] * 3)
+    assert t == Tibs.from_values(spec, [value] * 3)
+    assert t.to_values(kind) == t.to_values(spec)
+    assert Tibs.from_value(kind, value) == Tibs.from_value(spec, value)
+    assert Mutibs.from_value(kind, value).to_value(kind) == value
+
+
+@pytest.mark.parametrize("kind", SIZED_KINDS)
+def test_a_bare_sized_kind_is_rejected_as_a_dtype(kind):
+    with pytest.raises(ValueError, match="does not determine a length"):
+        Tibs.from_zeros(8).to_value(kind)
+
+
+def test_dtype_type_error_lists_what_is_accepted():
+    with pytest.raises(TypeError, match="Dtype instance, a DtypeKind with a fixed length, or a"):
+        Tibs.from_zeros(8).to_value(object())
+
+
+def test_repeated_specs_parse_to_equal_but_independent_dtypes():
+    # Specs are cached internally; the cache must not let a caller observe one
+    # dtype object where two equal ones are expected, nor confuse spellings.
+    a, b = Dtype("u16"), Dtype("u16")
+    assert a == b and hash(a) == hash(b)
+    assert Dtype("U16 ") == a
+    assert Dtype("u16_le") != a
+    # A cached hit must not survive as the wrong dtype for a different spec.
+    assert Dtype("u13") != a and Dtype("u13").length == 13
+
+
+def test_invalid_specs_keep_raising_when_repeated():
+    for _ in range(3):
+        with pytest.raises(ValueError, match="Cannot parse Dtype spec"):
+            Dtype("nonsense9")

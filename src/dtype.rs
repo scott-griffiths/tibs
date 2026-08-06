@@ -5,10 +5,11 @@ use crate::iterator::ValuesIterator;
 use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAnyMethods, PyTuple, PyType};
+use pyo3::types::{PyAnyMethods, PyString, PyTuple, PyType};
+use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, RwLock};
 
 /// The tail of the message given when a spec doesn't start with any known kind.
 const KIND_HINT: &str = "expected a kind: either a fixed format such as 'binary8p3' or \
@@ -35,6 +36,60 @@ fn fixed_format_for_kind(kind: DtypeKind) -> Option<(&'static str, usize)> {
     FIXED_FORMATS
         .iter()
         .find_map(|&(spec, candidate, length)| (candidate == kind).then_some((spec, length)))
+}
+
+/// The bit length a kind fixes on its own, if it fixes one.
+///
+/// These are exactly the kinds for which a bare [`DtypeKind`] already describes
+/// a complete dtype — the fixed formats, plus `Bool` (always 1 bit) and
+/// `BFloat` (always 16). Every other kind is a family of widths, so a length
+/// has to be written alongside it.
+pub(crate) fn intrinsic_length(kind: DtypeKind) -> Option<usize> {
+    match kind {
+        DtypeKind::Bool => Some(1),
+        DtypeKind::BFloat => Some(16),
+        _ => fixed_format_for_kind(kind).map(|(_, length)| length),
+    }
+}
+
+/// Resolve the length to build a scalar dtype with, filling in the intrinsic
+/// one when the caller omitted it.
+fn resolve_length(kind: DtypeKind, length: Option<i64>) -> PyResult<i64> {
+    match (length, intrinsic_length(kind)) {
+        (Some(length), _) => Ok(length),
+        (None, Some(intrinsic)) => Ok(intrinsic as i64),
+        (None, None) => {
+            let example = match example_spec(kind) {
+                Some(spec) => format!(" For example, '{spec}'."),
+                None => String::new(),
+            };
+            Err(PyValueError::new_err(format!(
+                "{} does not determine a length on its own, so one must be given.{example}",
+                kind.repr_name(),
+            )))
+        }
+    }
+}
+
+/// A valid dtype of a kind that takes a length, for use in the message shown
+/// when the length is missing.
+///
+/// Each one has to satisfy that kind's own length rule — `Float` admits only
+/// 16, 32 and 64, and `Bytes` only multiples of 8 — so these are not a single
+/// width with different prefixes. `None` for the kinds that fix their own
+/// length, which never reach here from [`resolve_length`].
+fn example_spec(kind: DtypeKind) -> Option<&'static str> {
+    match kind {
+        DtypeKind::Uint => Some("u12"),
+        DtypeKind::Int => Some("i12"),
+        DtypeKind::Float => Some("f32"),
+        DtypeKind::Bits => Some("bits12"),
+        DtypeKind::Bin => Some("bin12"),
+        DtypeKind::Oct => Some("oct12"),
+        DtypeKind::Hex => Some("hex12"),
+        DtypeKind::Bytes => Some("bytes16"),
+        _ => None,
+    }
 }
 
 /// Translate a numpy/struct style spec such as `"u4"` (four *bytes*) into the
@@ -811,15 +866,70 @@ impl Dtype {
     }
 }
 
+/// Upper bound on the number of parsed specs kept in [`SPEC_CACHE`].
+///
+/// Specs come from source code in the overwhelming majority of programs, so a
+/// handful of entries serve every call site. The cap exists only so that a
+/// program building specs dynamically — `f"u{n}"` over a wide range of `n` —
+/// grows the cache to a bounded size rather than leaking. Past the cap, lookups
+/// still hit for everything already cached and misses simply parse as before.
+const SPEC_CACHE_LIMIT: usize = 256;
+
+/// Parsed dtype specs, keyed by the exact string passed in.
+///
+/// Parsing a spec costs appreciably more than the bulk operation it precedes
+/// for short reads — a scalar `to_value("u8")` spent roughly three quarters of
+/// its time in the parser — and the parse result is a pure function of the
+/// string, so caching it is transparent. Two spellings of the same dtype (say
+/// `"u8"` and `"U8 "`) simply occupy separate entries.
+static SPEC_CACHE: LazyLock<RwLock<HashMap<String, Dtype>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Parse a dtype spec, going through [`SPEC_CACHE`].
+fn parse_spec_cached(spec: &str) -> PyResult<Dtype> {
+    if let Ok(cache) = SPEC_CACHE.read()
+        && let Some(dtype) = cache.get(spec)
+    {
+        return Ok(dtype.clone());
+    }
+    // Invalid specs are never cached: they are an error path, not a hot one,
+    // and caching them would let a typo loop fill the cache with entries that
+    // only ever produce errors.
+    let dtype = Dtype::parse_spec(spec)?;
+    if let Ok(mut cache) = SPEC_CACHE.write()
+        && cache.len() < SPEC_CACHE_LIMIT
+    {
+        cache.insert(spec.to_string(), dtype.clone());
+    }
+    Ok(dtype)
+}
+
+/// Build the dtype described by a bare kind, which is possible exactly when the
+/// kind fixes its own length.
+fn dtype_from_kind(kind: DtypeKind) -> PyResult<Dtype> {
+    let length = resolve_length(kind, None)?;
+    Dtype::from_repr(DtypeRepr::Single(SingleDtype::from_parts(
+        kind,
+        length,
+        ByteOrder::Unspecified,
+    )?))
+}
+
 pub(crate) fn extract_dtype(obj: &Bound<'_, PyAny>) -> PyResult<Dtype> {
     if let Ok(dtype) = obj.extract::<PyRef<'_, Dtype>>() {
         return Ok(dtype.clone());
     }
-    if let Ok(spec) = obj.extract::<String>() {
-        return Dtype::parse_spec(&spec);
+    // A kind that fixes its own length already carries everything a dtype does,
+    // so accepting one here saves wrapping `DtypeKind.OcpE2M1` in a
+    // `DtypeSingle` that adds no information.
+    if let Ok(kind) = obj.extract::<DtypeKind>() {
+        return dtype_from_kind(kind);
+    }
+    if let Ok(spec) = obj.cast::<PyString>() {
+        return parse_spec_cached(spec.to_str()?);
     }
     Err(PyTypeError::new_err(
-        "dtype must be a Dtype instance or dtype string.",
+        "dtype must be a Dtype instance, a DtypeKind with a fixed length, or a dtype string.",
     ))
 }
 
@@ -833,7 +943,7 @@ impl Dtype {
     #[new]
     #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     fn py_new(py: Python<'_>, spec: &str) -> PyResult<Py<PyAny>> {
-        Self::parse_spec(spec)?.into_python(py)
+        parse_spec_cached(spec)?.into_python(py)
     }
 
     /// The number of bits used by one complete value.
@@ -970,7 +1080,7 @@ impl DtypeSingle {
     #[new]
     #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     fn py_new(spec: &str) -> PyResult<PyClassInitializer<Self>> {
-        let dtype = Dtype::parse_spec(spec)?;
+        let dtype = parse_spec_cached(spec)?;
         if !matches!(dtype.repr, DtypeRepr::Single(_)) {
             return Err(PyValueError::new_err(
                 "DtypeSingle requires a scalar dtype specification.",
@@ -982,19 +1092,30 @@ impl DtypeSingle {
     /// Construct a scalar dtype from explicit parameters.
     ///
     /// :param DtypeKind kind: The scalar value kind.
-    /// :param int length: The positive bit length.
+    /// :param int | None length: The positive bit length. May be omitted for a
+    ///     kind that fixes its own length, such as ``DtypeKind.OcpE2M1`` or
+    ///     ``DtypeKind.Bool``.
     /// :param ByteOrder | None byte_order: The byte order. Defaults to unspecified.
     /// :return: A scalar dtype.
+    ///
+    ///     .. code-block:: pycon
+    ///
+    ///         >>> DtypeSingle.from_params(DtypeKind.Uint, 12)
+    ///         DtypeSingle('u12')
+    ///         >>> DtypeSingle.from_params(DtypeKind.OcpE2M1)
+    ///         DtypeSingle('ocp_e2m1')
+    ///
     #[classmethod]
-    #[pyo3(signature = (kind, length, /, byte_order = ByteOrder::Unspecified), text_signature = "(cls, kind, length, /, byte_order=None)")]
+    #[pyo3(signature = (kind, length = None, /, byte_order = ByteOrder::Unspecified), text_signature = "(cls, kind, length=None, /, byte_order=None)")]
     fn from_params(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         kind: DtypeKind,
-        length: i64,
+        length: Option<i64>,
         byte_order: Option<ByteOrder>,
     ) -> PyResult<Py<Self>> {
         let byte_order = byte_order.unwrap_or(ByteOrder::Unspecified);
+        let length = resolve_length(kind, length)?;
         let repr = DtypeRepr::Single(SingleDtype::from_parts(kind, length, byte_order)?);
         Py::new(
             py,
@@ -1032,7 +1153,7 @@ impl DtypeArray {
     #[new]
     #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     fn py_new(spec: &str) -> PyResult<PyClassInitializer<Self>> {
-        let dtype = Dtype::parse_spec(spec)?;
+        let dtype = parse_spec_cached(spec)?;
         if !matches!(dtype.repr, DtypeRepr::Array { .. }) {
             return Err(PyValueError::new_err(
                 "DtypeArray requires an array dtype specification.",
@@ -1106,7 +1227,7 @@ impl DtypeTuple {
     #[new]
     #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     fn py_new(spec: &str) -> PyResult<PyClassInitializer<Self>> {
-        let dtype = Dtype::parse_spec(spec)?;
+        let dtype = parse_spec_cached(spec)?;
         if !matches!(dtype.repr, DtypeRepr::Tuple(_)) {
             return Err(PyValueError::new_err(
                 "DtypeTuple requires a tuple dtype specification.",

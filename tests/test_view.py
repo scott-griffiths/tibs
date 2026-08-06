@@ -412,7 +412,7 @@ def test_view_to_value_rejects_a_range_that_is_not_the_dtype_length():
         Tibs("0xff").le.to_value("u4")
     with pytest.raises(ValueError, match="Invalid slice positions"):
         Tibs("0xff").le.to_value("u4", 0, 99)
-    with pytest.raises(TypeError, match="must be a Dtype instance or dtype string"):
+    with pytest.raises(TypeError, match="dtype must be a Dtype instance"):
         Tibs("0xff").view().to_value(8)
 
 
@@ -618,7 +618,7 @@ def test_mutable_view_write_value_is_fixed_width_and_leaves_the_source_alone():
 
     assert m == original
 
-    with pytest.raises(TypeError, match="must be a Dtype instance or dtype string"):
+    with pytest.raises(TypeError, match="dtype must be a Dtype instance"):
         m.le.write_value(16, 1)
 
     assert m == original
