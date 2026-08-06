@@ -97,6 +97,23 @@ Added
   1.875
   ```
 
+* Added eleven fixed-width narrow numeric dtypes: the draft P3109
+  `p3109_k8p3se` and `p3109_k8p4se` formats; OCP `ocp_e4m3` and `ocp_e5m2`
+  with separate `_saturate` and `_overflow` packing policies; `ocp_e3m2`,
+  `ocp_e2m3`, `ocp_e2m1`, `ocp_e8m0` and `ocp_int8`. Packing rounds directly
+  from Python binary64 with round-to-nearest, ties-to-even, so it does not
+  inherit Bitstring's intermediate-binary16 rounding. The P3109 definitions
+  are frozen to public draft commit `aa9d236d7a31b38fbe43b703a0bfdfc3d8be5d45`
+  rather than silently following future draft changes. These are raw scalar
+  encodings only; shared scales and MX block behaviour are not yet included.
+
+  ```python
+  >>> Tibs.from_values("ocp_e2m1", [0.5, 1.0, 3.0, 6.0]).hex
+  '1257'
+  >>> Tibs.from_value("ocp_e4m3_overflow", 1000.0).hex
+  'ff'
+  ```
+
 * Eight methods for comparing two containers without building an intermediate
   object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
   `is_disjoint`, `is_subset_of` and `is_superset_of`. The counts are equivalent

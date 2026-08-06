@@ -40,7 +40,9 @@ Integers can be any positive number of bits long; floats must be 16, 32 or 64::
 
 .. note::
     These `f` floating point types are IEEE 754 only. Other floating point types
-    like bfloat16 are specified with an explicity Dtype, for example `Tibs.from_value("bf16", -0.125)`.
+    such as bfloat16 and the fixed-width OCP/P3109 formats are specified with
+    an explicit Dtype, for example `Tibs.from_value("bf16", -0.125)`; see
+    :doc:`dtype` for the complete list.
 
 The ``to_`` methods accept optional ``start`` and ``end`` bit positions when you
 only want to interpret part of the data. With no parameters, the ``u``, ``i`` and
@@ -209,9 +211,10 @@ methods repeat the complete dtype::
     >>> packed.to_values("(u8, u16_le)")
     [(1, 515), (4, 1286)]
 
-For whole-byte numeric values, append ``_le`` or ``_be`` to the dtype string
-when byte order matters. These suffixes mean little-endian and big-endian byte
-order respectively::
+For whole-byte generic ``uN``, ``iN``, ``fN`` and ``bf16`` values, append
+``_le`` or ``_be`` to the dtype string when byte order matters. These suffixes
+mean little-endian and big-endian byte order respectively. Fixed-width named
+OCP/P3109 formats reject byte-order suffixes::
 
     >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
     '3412cdab'

@@ -79,6 +79,17 @@ pub enum DtypeKind {
     Bin,
     Oct,
     Hex,
+    P3109K8P3SE,
+    P3109K8P4SE,
+    OcpE4M3Saturate,
+    OcpE4M3Overflow,
+    OcpE5M2Saturate,
+    OcpE5M2Overflow,
+    OcpE3M2,
+    OcpE2M3,
+    OcpE2M1,
+    OcpE8M0,
+    OcpInt8,
 }
 
 impl DtypeKind {
@@ -94,6 +105,17 @@ impl DtypeKind {
             DtypeKind::Bin => "DtypeKind.Bin",
             DtypeKind::Oct => "DtypeKind.Oct",
             DtypeKind::Hex => "DtypeKind.Hex",
+            DtypeKind::P3109K8P3SE => "DtypeKind.P3109K8P3SE",
+            DtypeKind::P3109K8P4SE => "DtypeKind.P3109K8P4SE",
+            DtypeKind::OcpE4M3Saturate => "DtypeKind.OcpE4M3Saturate",
+            DtypeKind::OcpE4M3Overflow => "DtypeKind.OcpE4M3Overflow",
+            DtypeKind::OcpE5M2Saturate => "DtypeKind.OcpE5M2Saturate",
+            DtypeKind::OcpE5M2Overflow => "DtypeKind.OcpE5M2Overflow",
+            DtypeKind::OcpE3M2 => "DtypeKind.OcpE3M2",
+            DtypeKind::OcpE2M3 => "DtypeKind.OcpE2M3",
+            DtypeKind::OcpE2M1 => "DtypeKind.OcpE2M1",
+            DtypeKind::OcpE8M0 => "DtypeKind.OcpE8M0",
+            DtypeKind::OcpInt8 => "DtypeKind.OcpInt8",
         }
     }
 }

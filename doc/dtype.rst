@@ -43,8 +43,9 @@ Single dtypes
 ^^^^^^^^^^^^^
 
 A single dtype starts with a kind and usually ends with the number of bits used
-by one value. The ``bool`` dtype is the exception: it is always exactly one bit
-long and has no length suffix.
+by one value. The ``bool`` dtype is always exactly one bit long and has no
+length suffix. The named OCP and P3109 formats documented below also have
+intrinsic widths, so their names do not take a separate length suffix.
 
 .. csv-table::
    :header: "Form", "Meaning", "Example"
@@ -70,8 +71,8 @@ as immutable :class:`Tibs` objects.
     Lengths are consistently in bits throughout Tibs. In particular,
     ``"bytes32"`` is four bytes long, not 32 bytes long.
 
-For integer and floating-point dtypes, append ``_le`` or ``_be`` to specify
-the byte order of a whole-byte value::
+For the generic ``uN``, ``iN``, ``fN`` and ``bf16`` dtypes, append ``_le`` or
+``_be`` to specify the byte order of a whole-byte value::
 
     >>> Dtype("u16_le")
     DtypeSingle('u16_le')
@@ -80,7 +81,9 @@ the byte order of a whole-byte value::
 
 Byte order cannot be used with ``bool``, ``bits``, ``bin``, ``oct``, ``hex``
 or ``bytes`` dtypes. Floating-point values support the IEEE widths 16, 32 and
-64 bits.
+64 bits. The named narrow formats below likewise reject ``_le`` and ``_be``:
+their bit layout is intrinsic to the encoding, and repeated sub-byte values
+are packed consecutively in normal Tibs bit order.
 
 ``bf16`` is a second 16-bit float, and not an IEEE one. It spends 8 bits on the
 exponent and 7 on the mantissa, where ``f16`` spends 5 and 10, which makes it
@@ -121,6 +124,159 @@ and ``_be`` like the other numeric dtypes, and has its own kind::
     DtypeSingle('bf16_le')
     >>> Dtype("bf16").kind
     DtypeKind.BFloat
+
+Narrow OCP and P3109 numeric formats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Tibs also supports the scalar elements used by the Open Compute Project's
+microscaling formats and two eight-bit formats from the draft IEEE P3109 work.
+Their names include the specification family because a width such as four,
+six or eight bits does not identify one floating-point encoding::
+
+    >>> Dtype("ocp_e2m1")
+    DtypeSingle('ocp_e2m1')
+    >>> values = [0.5, 1.0, 3.0, 6.0]
+    >>> Tibs.from_values("ocp_e2m1", values).hex
+    '1257'
+    >>> Tibs("0x1257").to_values("ocp_e2m1")
+    [0.5, 1.0, 3.0, 6.0]
+
+These are the available encodings. ``S/E/M`` gives the number of sign,
+exponent and stored mantissa bits; the implicit leading significand bit is not
+included in ``M``.
+
+.. list-table:: Narrow numeric dtype reference
+   :header-rows: 1
+   :widths: 28 8 12 20 28 27
+
+   * - Dtype
+     - Bits
+     - Layout
+     - Finite range
+     - Special values
+     - Packing outside the finite range
+   * - ``p3109_k8p3se``
+     - 8
+     - S/E/M 1/5/2, bias 16
+     - ±2⁻¹⁷ to ±49,152
+     - One zero, one NaN, ±infinity
+     - Round to ±infinity
+   * - ``p3109_k8p4se``
+     - 8
+     - S/E/M 1/4/3, bias 8
+     - ±2⁻¹⁰ to ±224
+     - One zero, one NaN, ±infinity
+     - Round to ±infinity
+   * - ``ocp_e4m3_saturate``
+     - 8
+     - S/E/M 1/4/3, bias 7
+     - ±2⁻⁹ to ±448
+     - Signed zero and two NaN codes
+     - Clamp to ±448
+   * - ``ocp_e4m3_overflow``
+     - 8
+     - S/E/M 1/4/3, bias 7
+     - ±2⁻⁹ to ±448
+     - Signed zero and two NaN codes
+     - Convert terminal overflow to NaN
+   * - ``ocp_e5m2_saturate``
+     - 8
+     - S/E/M 1/5/2, bias 15
+     - ±2⁻¹⁶ to ±57,344
+     - Signed zero, ±infinity and six NaN codes
+     - Clamp to ±57,344
+   * - ``ocp_e5m2_overflow``
+     - 8
+     - S/E/M 1/5/2, bias 15
+     - ±2⁻¹⁶ to ±57,344
+     - Signed zero, ±infinity and six NaN codes
+     - Convert terminal overflow to ±infinity
+   * - ``ocp_e3m2``
+     - 6
+     - S/E/M 1/3/2, bias 3
+     - ±2⁻⁴ to ±28
+     - Signed zero; no NaN or infinity
+     - Clamp to ±28
+   * - ``ocp_e2m3``
+     - 6
+     - S/E/M 1/2/3, bias 1
+     - ±2⁻³ to ±7.5
+     - Signed zero; no NaN or infinity
+     - Clamp to ±7.5
+   * - ``ocp_e2m1``
+     - 4
+     - S/E/M 1/2/1, bias 1
+     - ±2⁻¹ to ±6
+     - Signed zero; no NaN or infinity
+     - Clamp to ±6
+   * - ``ocp_e8m0``
+     - 8
+     - Unsigned exponent, bias 127
+     - 2⁻¹²⁷ to 2¹²⁷
+     - One NaN; no zero or infinity
+     - Exact powers of two only
+   * - ``ocp_int8``
+     - 8
+     - Signed integer × 2⁻⁶
+     - -2 to 127/64
+     - No NaN or infinity
+     - Clamp to the asymmetric finite range
+
+All ordinary conversions round directly from the Python ``float`` value using
+round-to-nearest, ties-to-even. In particular, Tibs does not first reduce a
+value to ``f16``; values immediately around a target midpoint therefore do not
+suffer a second rounding. The ``saturate`` and ``overflow`` E4M3/E5M2 dtypes
+decode the same bits, but make the packing policy part of the dtype's stable
+identity instead of relying on a global option::
+
+    >>> Tibs.from_value("ocp_e4m3_saturate", 1000.0).hex
+    '7e'
+    >>> Tibs.from_value("ocp_e4m3_overflow", 1000.0).hex
+    'ff'
+
+OCP E4M3 and E5M2 accept Python NaNs and write the deterministic canonical
+code ``0xff``; decoding accepts every NaN code defined by the format. The
+smaller E2M1, E2M3 and E3M2 formats, and ``ocp_int8``, reject NaN because they
+have no NaN encoding. They saturate infinities. ``ocp_int8`` includes the
+optional most-negative OCP value ``0x80``, which decodes as ``-2.0``.
+
+``ocp_e8m0`` is intentionally strict: it packs a positive, in-range, exact
+power of two or NaN, and rejects zero, negative values, infinity and values
+between powers of two::
+
+    >>> Tibs.from_values("ocp_e8m0", [0.5, 1.0, 2.0]).hex
+    '7e7f80'
+
+These dtypes describe **raw scalar elements only**. They do not store a shared
+scale, choose one automatically, associate elements into fixed-size blocks, or
+implement scaled block arithmetic. The OCP specification reserves names such
+as MXFP4 for the combination of a scale and a block of E2M1 elements; calling
+the scalar dtype ``ocp_e2m1`` avoids implying that Tibs has implemented that
+block behaviour. ``ocp_e8m0`` is exposed because its raw scale-element encoding
+is useful independently, but it is not attached to another dtype.
+
+The OCP definitions are frozen to `OCP Microscaling Formats v1.0`_ (September
+2023) and `OCP OFP8 revision 1.0`_ (including its December 2023 correction).
+The P3109 names are deliberately draft-labelled: Tibs freezes K8P3SE and
+K8P4SE to `P3109 public repository commit aa9d236`_ from 29 July 2026. The
+`IEEE P3109 project`_ remains an active project rather than a published
+standard, and this support is not a claim of formal IEEE conformance. A later
+incompatible draft would require a new dtype name; Tibs will not silently
+reinterpret bits written with these names.
+
+For migration from Bitstring 5, the corresponding names are ``p3binary``,
+``p4binary``, ``e4m3mxfp_saturate``, ``e4m3mxfp_overflow``,
+``e5m2mxfp_saturate``, ``e5m2mxfp_overflow``, ``e3m2mxfp``, ``e2m3mxfp``,
+``e2m1mxfp``, ``e8m0mxfp`` and ``mxint`` respectively. Bitstring 4.4 used one
+unsuffixed E4M3 and E5M2 name plus the global
+``bitstring.options.mxfp_overflow`` setting; that global policy is being
+removed in Bitstring 5. The Bitstring spellings are not aliases in Tibs: the
+explicit ``ocp_`` and ``p3109_`` prefixes keep the source definition visible.
+
+.. _OCP Microscaling Formats v1.0: https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf
+.. _OCP OFP8 revision 1.0: https://www.opencompute.org/documents/ocp-8-bit-floating-point-specification-ofp8-revision-1-0-2023-12-01-pdf-1
+.. _P3109 public repository commit aa9d236: https://github.com/P3109/Public/tree/aa9d236d7a31b38fbe43b703a0bfdfc3d8be5d45
+.. _IEEE P3109 project: https://standards.ieee.org/ieee/3109/11165/
 
 A scalar dtype can also be built without parsing a string::
 

@@ -11,8 +11,31 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// The tail of the message given when a spec doesn't start with any known kind.
-const KIND_HINT: &str = "expected a kind of 'u', 'i', 'f', 'bf', 'bool', 'bits', 'bin', 'oct', 'hex' or 'bytes' \
-     followed by a length in bits, for example 'u12'";
+const KIND_HINT: &str = "expected a kind: either a fixed format such as 'p3109_k8p3se' or \
+     'ocp_e4m3_saturate', or 'u', 'i', 'f', 'bf', 'bool', 'bits', 'bin', 'oct', 'hex' or \
+     'bytes' followed by a length in bits, for example 'u12'";
+
+/// Scalar encodings whose bit length is intrinsic to the named format rather
+/// than written as a suffix in the dtype spec.
+const FIXED_FORMATS: [(&str, DtypeKind, usize); 11] = [
+    ("p3109_k8p3se", DtypeKind::P3109K8P3SE, 8),
+    ("p3109_k8p4se", DtypeKind::P3109K8P4SE, 8),
+    ("ocp_e4m3_saturate", DtypeKind::OcpE4M3Saturate, 8),
+    ("ocp_e4m3_overflow", DtypeKind::OcpE4M3Overflow, 8),
+    ("ocp_e5m2_saturate", DtypeKind::OcpE5M2Saturate, 8),
+    ("ocp_e5m2_overflow", DtypeKind::OcpE5M2Overflow, 8),
+    ("ocp_e3m2", DtypeKind::OcpE3M2, 6),
+    ("ocp_e2m3", DtypeKind::OcpE2M3, 6),
+    ("ocp_e2m1", DtypeKind::OcpE2M1, 4),
+    ("ocp_e8m0", DtypeKind::OcpE8M0, 8),
+    ("ocp_int8", DtypeKind::OcpInt8, 8),
+];
+
+fn fixed_format_for_kind(kind: DtypeKind) -> Option<(&'static str, usize)> {
+    FIXED_FORMATS
+        .iter()
+        .find_map(|&(spec, candidate, length)| (candidate == kind).then_some((spec, length)))
+}
 
 /// Translate a numpy/struct style spec such as `"u4"` (four *bytes*) into the
 /// equivalent tibs spec, e.g. `"u32_le"`. `None` if the translation isn't a
@@ -71,6 +94,14 @@ impl SingleDtype {
             )));
         }
         let length = length as usize;
+        if let Some((_, required_length)) = fixed_format_for_kind(kind)
+            && length != required_length
+        {
+            return Err(PyValueError::new_err(format!(
+                "A Dtype of kind {} must have length {required_length} bits. Received {length}.",
+                kind.repr_name()
+            )));
+        }
         if kind == DtypeKind::Bool && length != 1 {
             return Err(PyValueError::new_err(format!(
                 "A Dtype of kind {} must have length 1.",
@@ -167,6 +198,13 @@ impl SingleDtype {
         } else {
             (spec.as_str(), ByteOrder::Unspecified)
         };
+
+        if let Some(&(_, kind, length)) = FIXED_FORMATS
+            .iter()
+            .find(|(candidate, _, _)| *candidate == base)
+        {
+            return Self::from_parts(kind, length as i64, byte_order);
+        }
 
         if base == "bool" {
             return Self::from_parts(DtypeKind::Bool, 1, byte_order);
@@ -291,6 +329,17 @@ impl SingleDtype {
             DtypeKind::Int => format!("i{}{byte_order}", self.length),
             DtypeKind::Float => format!("f{}{byte_order}", self.length),
             DtypeKind::BFloat => format!("bf{}{byte_order}", self.length),
+            DtypeKind::P3109K8P3SE => "p3109_k8p3se".to_string(),
+            DtypeKind::P3109K8P4SE => "p3109_k8p4se".to_string(),
+            DtypeKind::OcpE4M3Saturate => "ocp_e4m3_saturate".to_string(),
+            DtypeKind::OcpE4M3Overflow => "ocp_e4m3_overflow".to_string(),
+            DtypeKind::OcpE5M2Saturate => "ocp_e5m2_saturate".to_string(),
+            DtypeKind::OcpE5M2Overflow => "ocp_e5m2_overflow".to_string(),
+            DtypeKind::OcpE3M2 => "ocp_e3m2".to_string(),
+            DtypeKind::OcpE2M3 => "ocp_e2m3".to_string(),
+            DtypeKind::OcpE2M1 => "ocp_e2m1".to_string(),
+            DtypeKind::OcpE8M0 => "ocp_e8m0".to_string(),
+            DtypeKind::OcpInt8 => "ocp_int8".to_string(),
             DtypeKind::Bool => "bool".to_string(),
             DtypeKind::Bits => format!("bits{}", self.length),
             DtypeKind::Bin => format!("bin{}", self.length),

@@ -47,6 +47,17 @@ class DtypeKind:
     Bin: ClassVar[DtypeKind]
     Oct: ClassVar[DtypeKind]
     Hex: ClassVar[DtypeKind]
+    P3109K8P3SE: ClassVar[DtypeKind]
+    P3109K8P4SE: ClassVar[DtypeKind]
+    OcpE4M3Saturate: ClassVar[DtypeKind]
+    OcpE4M3Overflow: ClassVar[DtypeKind]
+    OcpE5M2Saturate: ClassVar[DtypeKind]
+    OcpE5M2Overflow: ClassVar[DtypeKind]
+    OcpE3M2: ClassVar[DtypeKind]
+    OcpE2M3: ClassVar[DtypeKind]
+    OcpE2M1: ClassVar[DtypeKind]
+    OcpE8M0: ClassVar[DtypeKind]
+    OcpInt8: ClassVar[DtypeKind]
 
 
 class Dtype:
