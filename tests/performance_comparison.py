@@ -310,6 +310,22 @@ def build_bitarray_cases(byte_count, value_count):
             small_and_widths, small_and_values, strict=True
         )
     ]
+    # Bitwise ops on a Tibs of 64 bits or fewer go through a single-word fast
+    # path (padded_word, in tibs_.rs), and the result fits the inline storage.
+    # Past that the result needs a heap allocation, and the per-call cost steps
+    # up ~3x and stays flat there until the operands are big enough for
+    # throughput to dominate again. The 1-64-bit rows sit inside the fast path
+    # and the whole-buffer rows are far past it, so neither samples the band in
+    # between - which is where bitarray is furthest ahead. 256 bits is in it.
+    mid_and_width = 256
+    mid_rng = random.Random("comparison-mid-and")
+    mid_left_value = mid_rng.randrange(1 << mid_and_width)
+    mid_right_value = mid_rng.randrange(1 << mid_and_width)
+    mid_left_bits = int2ba(mid_left_value, length=mid_and_width, endian="big")
+    mid_right_bits = int2ba(mid_right_value, length=mid_and_width, endian="big")
+    mid_left_tibs = Tibs.from_u(mid_left_value, mid_and_width)
+    mid_right_tibs = Tibs.from_u(mid_right_value, mid_and_width)
+
     chunk_target_bits = bitarray("11111", endian="big")
     chunk_target_tibs = Tibs("0b11111")
 
@@ -356,6 +372,18 @@ def build_bitarray_cases(byte_count, value_count):
 
     def tibs_small_ands():
         return [left & right for left, right in small_and_tibs]
+
+    # One operand pair rather than a list, so the row is the bare per-call cost
+    # of a single bitwise op at this width and nothing else. That does mean the
+    # harness's own ~50 ns of loop and call overhead lands on both sides and
+    # drags the ratio toward 1: measured with the operation unrolled into the
+    # loop body instead, the gap here is ~3.5x rather than the ~2.4x reported.
+    # The same compression applies to every sub-microsecond row in the table.
+    def ba_mid_and():
+        return mid_left_bits & mid_right_bits
+
+    def tibs_mid_and():
+        return mid_left_tibs & mid_right_tibs
 
     def ba_small_invert():
         return [~left for left, _ in small_and_bits]
@@ -774,6 +802,7 @@ def build_bitarray_cases(byte_count, value_count):
             tibs_small_ands,
             same_small_bits,
         ),
+        ComparisonCase("256-bit and", ba_mid_and, tibs_mid_and, same_bits),
         ComparisonCase(
             "1-64-bit invert",
             ba_small_invert,
