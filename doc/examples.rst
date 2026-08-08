@@ -43,3 +43,13 @@ Treating the container as a set of bit positions for algebra and comparison.
 
     example_sieve
     example_fingerprints
+
+Across threads
+^^^^^^^^^^^^^^
+
+Dividing one container between threads, and what that is worth on each build of Python.
+
+.. toctree::
+    :maxdepth: 1
+
+    example_parallel_decode

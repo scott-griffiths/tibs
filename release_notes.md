@@ -312,11 +312,14 @@ Added
   back on, and work on separate containers runs on separate threads in parallel
   rather than taking turns.
 
-  A `Tibs` is immutable and can be shared freely between threads. A `Mutibs`
-  cannot: if two threads use the same one at the same time, one of them gets a
-  `RuntimeError` telling it the object is already borrowed, so give each thread
-  its own container or guard the shared one with a lock. Nothing here changes
-  on a normal build of Python, where the GIL serializes the calls anyway.
+  A `Tibs` is immutable and can be shared freely between threads, with no lock
+  taken at all. A `Mutibs` can be shared too: every method runs inside
+  CPython's per-object critical section, so two threads calling into the same
+  container queue up rather than one of them being refused. One call is atomic;
+  a sequence of calls is not, exactly as for a `list`, so a check-then-act
+  still needs your own lock. Nothing here changes on a normal build of Python,
+  where the locking compiles away and the GIL serializes the calls anyway.
+  There's a new appendix in the docs covering this in full.
 
 Changed
 

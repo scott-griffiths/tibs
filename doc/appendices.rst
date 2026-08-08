@@ -12,3 +12,4 @@ A place for miscellaneous information that could be helpful, but isn't essential
     byte_format
     formatting
     exotic_floats
+    free_threading
