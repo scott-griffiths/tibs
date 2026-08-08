@@ -2220,7 +2220,23 @@ impl Tibs {
         // `cast` rather than `extract::<PyRef<_>>`, which builds and discards a
         // Python exception when the other side is the class not tried first.
         if let Ok(other) = other.cast::<Tibs>() {
-            return Ok(self.bits_equal(other.get()));
+            let other = other.get();
+            let length = self.length;
+            if length != other.length {
+                return Ok(false);
+            }
+            // The same single-word fast path the bitwise ops take. Equal
+            // lengths mean equal padding, and `padded_word` clears it, so the
+            // words match exactly when the bits do. Without this a one-byte
+            // compare goes all the way through `any_pair_bits`. The length is
+            // tested here rather than left to `padded_word`'s own `None` so
+            // that a long operand does not pay for two calls into it.
+            if length <= helpers::FAST_INT_BITS {
+                let left = self.padded_word().expect("length bounds both operands");
+                let right = other.padded_word().expect("length bounds both operands");
+                return Ok(left == right);
+            }
+            return Ok(self.bits_equal(other));
         }
         if let Ok(other) = other.cast::<Mutibs>() {
             // The operand needs its own section, or a thread writing to it is
