@@ -1,6 +1,6 @@
 # Release Notes
 
-### August 1st 2026: version 2.0 rc1
+### Unreleased: version 2.0 rc2
 
 Lots of new features added. A few caused some small backwardly incompatible
 changes, so as the user base is still small I just accepted the better API
@@ -10,11 +10,8 @@ Backwardly incompatible changes
 
 * `Dtype` is now a base class and parsing factory rather than a concrete class,
   because a dtype can now describe a structured, multi-field value as well as
-  a single one. `Dtype("u8")` returns a `DtypeSingle` instance instead of an
-  object whose exact type is `Dtype`, so `repr(Dtype("u8"))` is now
-  `DtypeSingle('u8')` rather than `Dtype('u8')`, and `Dtype.from_params` has
-  moved to `DtypeSingle.from_params`. This is why the release is a new major
-  version rather than 1.2 — see `DtypeArray` and `DtypeTuple` below. Code that
+  a single one. `Dtype("u8")` now returns a `DtypeSingle` instance,
+  and see `DtypeArray` and `DtypeTuple` below. Code that
   constructs dtypes with `from_params`, checks their exact type, or relies on
   the old `repr` will need updating; dtype strings for single values such as
   `Dtype("u32")` are unchanged.
@@ -22,31 +19,14 @@ Backwardly incompatible changes
 * The `View` constructor and `View.from_indices` no longer accept a `Mutibs`.
   Use `Mutibs.view()` for a live`MutableView`, or `Mutibs.to_tibs()` for an immutable copy to view.
 
-* Minimum Python version now 3.11 instead of 3.10. Python 3.10 reaches its end
-  of life in October 2026, and dropping it lets a single abi3 wheel cover every
-  supported version — the buffer protocol added below is only part of Python's
-  stable ABI from 3.11, so supporting 3.10 meant building and testing a separate
-  version-pinned wheel for it.
+* The minimum Python version is now 3.11 instead of 3.10.
 
 Added
 
-* Added `Reader`, a cursor over a `Tibs` or `Mutibs` for reading fields in
-  sequence. It wraps the container with a bit position so that you don't have
+* Added the `Reader` class for reading fields in
+  sequence. It wraps a `Tibs` or `Mutibs` with a bit position so that you don't have
   to compute `start` and `end` for each field, or thread a position through a
-  search loop. Every method is anchored at `pos`, so none of them take `start`
-  or `end`; the wrapped object stays reachable as `source` for windowed
-  queries. The reads (`read_value`, `read_values`, `read_bits`, `read_to`,
-  `read_past`) raise `ValueError` if the bits aren't there, while the searches
-  (`seek_to`, `seek_past`, `seek_back_to`) return a `bool`, because not
-  finding something you looked for is a normal outcome. In both cases `pos`
-  only moves when the call succeeds. `peek_value` and `peek_bits` read without
-  moving, and `bookmark()` is a context manager that restores `pos` on the way
-  out for lookahead of more than one value.
-
-  Method names state what they return, so there is deliberately no bare
-  `read()`. The `to` and `past` pairs differ in where they leave the cursor:
-  `to` at the start of the match and `past` just after it, which makes
-  `seek_past` the one to drive a loop with.
+  search loop.
 
   ```python
   >>> r = Reader(Tibs('0x47ff10'))
@@ -58,20 +38,12 @@ Added
   8
   ```
 
-  A `Mutibs` source is read live, so bits appended after the reader was built
-  are there to be read. Reading a `Mutibs` through a `Reader` also copies only
-  the bits being read rather than the whole container, so a scan through a
-  large `Mutibs` stays linear where a loop of `Mutibs.to_value` calls does not.
-
 * Added `DtypeArray` and `DtypeTuple`, alongside the existing scalar dtype
   (now `DtypeSingle`), so a single `Dtype` can describe a structured,
   multi-field value: `Dtype("[u8; 4]")` for four repeated `u8` fields, and
   `Dtype("(u8, u16_le, bool)")` for a fixed sequence of differently-typed
   fields. Both nest to any depth, so an array can contain tuples and vice
-  versa. All three classes support `pack`, `unpack`, `pack_values`,
-  `unpack_values` and `unpack_values_iter`, and a `DtypeTuple` can express the
-  same explicit-width, no-padding layouts as the standard-size forms of
-  `struct` — `"(i16_le, i32_le, i32_le)"` matches `"<hll"`.
+  versa.
 
   ```python
   >>> Dtype("(u8, [bool; 3])").pack((5, [True, False, True]))
@@ -80,15 +52,7 @@ Added
 
 * Added the `bf16` dtype for bfloat16, the non-IEEE 16-bit float that keeps the
   8-bit exponent of an `f32` and truncates the mantissa to 7 bits, so its
-  encoding is exactly the top half of the `f32` one. It is the format machine
-  learning and DSP data is usually stored in, and it is not interchangeable
-  with `f16`: the same sixteen bits mean different numbers in each. `bf16` is
-  the only accepted length — there is no `bf8` or `bf32` — and it takes `_le`
-  and `_be` like the other numeric dtypes. It has a new `DtypeKind.BFloat`
-  kind, because `(DtypeKind.Float, 16)` already means IEEE `binary16` and a
-  length alone cannot distinguish the two. For the same reason `from_f`,
-  `to_f` and the `f` property are unchanged and stay IEEE only; bfloat16 is
-  reached through the dtype.
+  encoding is exactly the top half of the `f32` one.
 
   ```python
   >>> Tibs.from_value("bf16", 1.0).hex
@@ -97,12 +61,11 @@ Added
   1.875
   ```
 
-* Added eleven fixed-width narrow numeric dtypes: the draft P3109
+* Added eleven fixed-width floating point dtypes: the draft P3109
   `binary8p3` and `binary8p4` formats; OCP `ocp_e4m3` and `ocp_e5m2`
   with separate `_saturate` and `_overflow` packing policies; `ocp_e3m2`,
   `ocp_e2m3`, `ocp_e2m1`, `ocp_e8m0` and `ocp_int8`. Packing rounds directly
-  from Python binary64 with round-to-nearest, ties-to-even, so it does not
-  inherit Bitstring's intermediate-binary16 rounding. The P3109 formats are
+  from Python binary64 with round-to-nearest, ties-to-even. The P3109 formats are
   provisional and may be updated as the draft standard develops. These are
   raw scalar encodings only; shared scales and MX block behaviour are not yet
   included.
@@ -116,12 +79,7 @@ Added
 
 * A `DtypeKind` whose length is intrinsic — the eleven narrow formats above,
   plus `bool` and `bf16` — is now accepted anywhere a dtype is, and its length
-  may be omitted from `DtypeSingle.from_params`. Such a kind already carries
-  everything the dtype does, so it no longer has to be wrapped in a
-  `DtypeSingle` that restates a length with only one legal value. `DtypeKind`
-  lists every kind tibs supports, which makes it a way of discovering the
-  narrow formats without knowing their names in advance. The other eight kinds
-  are families of widths, so they still need a length and say so.
+  may be omitted from `DtypeSingle.from_params`.
 
   ```python
   >>> Tibs("0x1257").to_values(DtypeKind.OcpE2M1)
