@@ -32,8 +32,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from tibs import Dtype, Mutibs, Tibs
 
 try:
-    from bitarray import bitarray
-    from bitarray.util import ba2int, int2ba, ones, random_p, zeros
+    from bitarray import bitarray, decodetree
+    from bitarray.util import int2ba, ones, random_p, urandom, zeros
 except ImportError:
     bitarray = None
 
@@ -213,8 +213,14 @@ def build_bitarray_cases(byte_count, value_count):
         find_pattern_start: find_pattern_start + find_pattern_len
     ]
 
+    # A Tibs slice is a view onto shared storage, so its cost does not grow with
+    # the width; a bitarray slice copies. Taking almost the whole buffer would
+    # therefore measure that difference and nothing else, and report a ratio in
+    # the hundreds. A field-sized window is the case worth knowing about, and
+    # narrow enough that per-call overhead still shows through.
     slice_start = min(3, bit_count)
-    slice_end = max(slice_start, bit_count - 4)
+    slice_width = min(4096, bit_count - slice_start)
+    slice_end = slice_start + slice_width
 
     mutation_width = min(10_000, max(1, bit_count // 8))
     mutation_start = (bit_count - mutation_width) // 2
@@ -229,6 +235,30 @@ def build_bitarray_cases(byte_count, value_count):
     rng = random.Random("comparison-values")
     value_words = [rng.randrange(1 << 16) for _ in range(value_count)]
     value_bytes = Tibs.from_values("u16", value_words).to_bytes()
+
+    # A fixed-width code is a prefix code, so bitarray's encode/decode codec
+    # applies to packing integers, and it is its fastest own route: ~2.7x faster
+    # than the obvious extend(int2ba(value)) loop to pack, and ~1.9x faster than
+    # slicing and calling ba2int per value to unpack. Building the table and the
+    # decodetree is setup, done once here, exactly as the tibs side hoists its
+    # dtype. The table has 2**width entries, so this is only affordable for
+    # narrow widths - u16 costs ~90 ms and a few MB to set up.
+    def fixed_width_codec(width):
+        code = {
+            value: int2ba(value, length=width, endian="big")
+            for value in range(1 << width)
+        }
+        return code, decodetree(code)
+
+    u16_code, u16_tree = fixed_width_codec(16)
+    u12_code, u12_tree = fixed_width_codec(12)
+
+    # u12 runs the same job at a width that is not a whole number of bytes,
+    # which is a different path inside tibs.
+    value_words_12 = [word & 0xFFF for word in value_words]
+    value_12_tibs = Tibs.from_values("u12", value_words_12)
+    value_12_bytes = value_12_tibs.to_padded_bytes()
+    value_12_bit_count = len(value_12_tibs)
 
     bulk_set_bit_count = min(byte_count * 8, 2_000_000)
     bulk_set_width = 8
@@ -248,8 +278,12 @@ def build_bitarray_cases(byte_count, value_count):
 
     ba_piece = bitarray("10101", endian="big")
     tibs_piece = Tibs("0b10101")
-    ba_pieces = [ba_piece] * 50_000
-    tibs_pieces = [tibs_piece] * 50_000
+    # Scaled to the input rather than fixed, so that --bytes actually shrinks
+    # this row. bitarray has no join, so its side is a Python-level loop however
+    # it is spelled; preallocating and slice-assigning is slower than extend.
+    piece_count = max(1, min(50_000, bit_count // 5))
+    ba_pieces = [ba_piece] * piece_count
+    tibs_pieces = [tibs_piece] * piece_count
     repeat_pattern_bits = bitarray("1011001011", endian="big")
     repeat_pattern_tibs = Tibs("0b1011001011")
     repeat_count = bit_count // len(repeat_pattern_bits)
@@ -602,26 +636,41 @@ def build_bitarray_cases(byte_count, value_count):
             total += search_tibs.count(1, start, start + 257)
         return total
 
+    # Both sides stay inside their own library here. struct.pack plus frombytes
+    # would beat bitarray's codec on the byte-aligned widths, but struct is
+    # equally available to tibs, so putting it on one side only would measure
+    # struct and a memcpy rather than the two libraries. That question already
+    # has its own rows in the standard library table below.
     def ba_pack_u16():
-        # struct.pack + frombytes is ~50x faster than this loop, but struct is
-        # equally available to tibs, so using it would compare struct with
-        # itself rather than the two libraries. int2ba is bitarray's own route,
-        # and it is the only route for a non-byte-aligned width such as u12.
         out = bitarray(endian="big")
-        for value in value_words:
-            out.extend(int2ba(value, length=16, endian="big"))
+        out.encode(u16_code, value_words)
         return out
 
     def tibs_pack_u16():
         return Tibs.from_values("u16", value_words)
 
     def ba_unpack_u16():
-        # As with packing, struct.unpack is excluded as it is available to both.
         bits = make_bitarray(value_bytes)
-        return [ba2int(bits[index: index + 16]) for index in range(0, len(bits), 16)]
+        return list(bits.decode(u16_tree))
 
     def tibs_unpack_u16():
         return Tibs.from_bytes(value_bytes).to_values("u16")
+
+    def ba_pack_u12():
+        out = bitarray(endian="big")
+        out.encode(u12_code, value_words_12)
+        return out
+
+    def tibs_pack_u12():
+        return Tibs.from_values("u12", value_words_12)
+
+    def ba_unpack_u12():
+        bits = make_bitarray(value_12_bytes)
+        del bits[value_12_bit_count:]
+        return list(bits.decode(u12_tree))
+
+    def tibs_unpack_u12():
+        return Tibs.from_bytes(value_12_bytes)[:value_12_bit_count].to_values("u12")
 
     buffer_view_repeats = 2_000
 
@@ -655,6 +704,11 @@ def build_bitarray_cases(byte_count, value_count):
                 is_prime.unset(range(i * i, sieve_limit, i))
         return is_prime.count([1, 0, 1])
 
+    # Two rows, because the gap between them is a choice of entropy source
+    # rather than a difference between the libraries. random_p is bitarray's
+    # fastest route to uniform bits (faster than urandom) and Mutibs.from_random
+    # defaults to a seeded userspace PRNG, so the first row is PRNG against
+    # PRNG. The second pins both sides to the OS generator, where they agree.
     def ba_random():
         for _ in range(random_repeats):
             out = random_p(random_bit_count)
@@ -663,6 +717,16 @@ def build_bitarray_cases(byte_count, value_count):
     def tibs_random():
         for _ in range(random_repeats):
             out = Mutibs.from_random(random_bit_count)
+        return len(out)
+
+    def ba_secure_random():
+        for _ in range(random_repeats):
+            out = urandom(random_bit_count)
+        return len(out)
+
+    def tibs_secure_random():
+        for _ in range(random_repeats):
+            out = Mutibs.from_random(random_bit_count, True)
         return len(out)
 
     def ba_pop():
@@ -762,7 +826,7 @@ def build_bitarray_cases(byte_count, value_count):
         ),
         ComparisonCase("from bytes", ba_from_bytes, tibs_from_bytes, same_bits),
         ComparisonCase("to bytes", ba_to_bytes, tibs_to_bytes),
-        ComparisonCase("unaligned slices x100", ba_slice, tibs_slice, same_bits),
+        ComparisonCase("unaligned slice x100", ba_slice, tibs_slice, same_bits),
         ComparisonCase("concatenate", ba_concat, tibs_concat, same_bits),
         ComparisonCase(
             "repeat 10-bit pattern",
@@ -785,8 +849,11 @@ def build_bitarray_cases(byte_count, value_count):
         ComparisonCase("slice count", ba_slice_count, tibs_slice_count),
         ComparisonCase("pack u16", ba_pack_u16, tibs_pack_u16, same_bits),
         ComparisonCase("unpack u16", ba_unpack_u16, tibs_unpack_u16),
+        ComparisonCase("pack u12", ba_pack_u12, tibs_pack_u12, same_bits),
+        ComparisonCase("unpack u12", ba_unpack_u12, tibs_unpack_u12),
         ComparisonCase("prime sieve", ba_primes, tibs_primes),
         ComparisonCase("random generation", ba_random, tibs_random),
+        ComparisonCase("secure random generation", ba_secure_random, tibs_secure_random),
         ComparisonCase("pop all bits", ba_pop, tibs_pop),
         ComparisonCase("chunks_iter", ba_chunks, tibs_chunks),
         ComparisonCase("repeated buffer view", ba_buffer_view, tibs_buffer_view),
@@ -1173,7 +1240,16 @@ goal rather than an overall score for either library. Where tibs is markedly
 slower than bitarray on a case, that points at something worth optimizing.
 
 I have tried to be fair and idiomatic in using bitarray - any inefficiencies
-are my fault and I'd be happy to correct them.
+are my fault and I'd be happy to correct them. Where bitarray has a faster route
+to a job than the obvious spelling, it gets it: its encode/decode codec for
+packing fixed-width values, and its own fancy indexing for gathering bits. Both
+sides stay inside their own library, so neither is handed a stdlib shortcut the
+other could equally have used - that question is what the second table is for.
+
+Results depend on input size, and --bytes and --values change it. A large buffer
+hides per-call overhead on both sides and rewards whichever library has the
+better inner loop; below a few thousand bytes most rows drop under a microsecond
+and per-call overhead is most of what is left. The defaults sit above that.
 
 The standard library table asks a different question: for a job that doesn't
 need bit-level addressing, is a dedicated library worth it at all? Each case is
