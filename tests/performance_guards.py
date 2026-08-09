@@ -758,6 +758,27 @@ GUARDS: list[Guard] = [
         limit=4.0,
         same_result=False,
     ),
+    # A large field is the same story at the other end: an MSB0 field is a
+    # contiguous run of the source, so describing it costs two integers and
+    # reading it copies bytes. Listing its positions instead cost eight bytes
+    # per bit to describe and a bit-at-a-time gather to read, which put the
+    # immutable form nine thousand times over a plain slice of the same bits.
+    # The slice is the fair reference: both produce the same half-megabit.
+    Guard(
+        name="View.field(half) vs Tibs slice",
+        site="view.rs View.field - FieldMapping::Run",
+        slow=lambda: BIG_T.view().field(0, HALF - 1).to_tibs(),
+        fast=lambda: BIG_T[0:HALF],
+        limit=8.0,
+    ),
+    Guard(
+        name="MutableView.field(half).to_tibs vs Mutibs window",
+        site="view.rs MutableView.selected_source_bits - run copies bytes",
+        slow=lambda: BIG_M.view().field(0, HALF - 1).to_tibs(),
+        fast=lambda: BIG_M.to_tibs()[0:HALF],
+        limit=6.0,
+        same_result=False,
+    ),
     # ---- 28. comparing two live views ------------------------------------
     # Both compare the same megabit of source. The view additionally checks
     # that the two selections pick the same positions, which for two whole

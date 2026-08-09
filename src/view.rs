@@ -21,19 +21,29 @@ fn byte_order_for_field_len(byte_order: ByteOrder, field_len: usize) -> ByteOrde
 }
 
 fn view_bits_from_physical_bits(
-    source: &BS,
+    source: &Tibs,
     byte_order: ByteOrder,
     bit_order: BitOrder,
-) -> PyResult<BV> {
+) -> PyResult<Tibs> {
     let len = source.len();
     let byte_order = byte_order_for_field_len(byte_order, len);
-    let mut selected = BV::with_capacity(len);
-    for index in field_source_indices(bit_order, byte_order, 0, len) {
-        selected.push(source[index]);
-    }
+    // MSB0 reads the bits in the order they are stored, so the gather below is
+    // the identity and only the byte order is left to apply. Both callers
+    // already return early when the layout keeps physical order, so this is
+    // reached for `le` views, where the swap did the real work all along.
+    let selected = if bit_order == BitOrder::Msb0 {
+        source.clone()
+    } else {
+        let bits = source.as_bitslice();
+        let mut selected = BV::with_capacity(len);
+        for index in field_source_indices(bit_order, byte_order, 0, len) {
+            selected.push(bits[index]);
+        }
+        Tibs::from_bv(selected)
+    };
 
     if byte_order == ByteOrder::Little {
-        BitCollection::byte_swap_copy(&Tibs::from_bv(selected), None).map(|tibs| tibs.to_bitvec())
+        BitCollection::byte_swap_copy(&selected, None)
     } else {
         Ok(selected)
     }
@@ -55,6 +65,11 @@ fn physical_bits_from_view_bits(
         viewed
     };
 
+    // As in `view_bits_from_physical_bits`, MSB0 makes the scatter below the
+    // identity, so only the swap already applied above is needed.
+    if bit_order == BitOrder::Msb0 {
+        return Ok(selected);
+    }
     let mut physical = BV::repeat(false, len);
     for (bit_index, source_index) in field_source_indices(bit_order, byte_order, 0, len)
         .into_iter()
@@ -172,6 +187,55 @@ fn field_source_indices(
         }
     }
     indices
+}
+
+/// The ascending contiguous run `indices` describes, if it is one.
+fn run_of(indices: &[usize]) -> Option<(usize, usize)> {
+    let &first = indices.first()?;
+    let len = indices.len();
+    indices
+        .iter()
+        .copied()
+        .eq(first..first + len)
+        .then_some((first, len))
+}
+
+/// Where a field's bits sit in the source.
+///
+/// Nearly every field is a contiguous run: an MSB0 one always is, and an LSB0
+/// one is whenever it lines up with the bytes it spans. Saying so in two
+/// integers rather than listing the positions is the difference between a
+/// description that costs eight bytes per *bit* - sixty-four times the data it
+/// describes - and one that costs nothing, and it lets the bits be copied over
+/// bytes instead of gathered one at a time.
+enum FieldMapping {
+    Run { start: usize, len: usize },
+    Indices(Vec<usize>),
+}
+
+fn field_source_mapping(
+    bit_order: BitOrder,
+    byte_order: ByteOrder,
+    low: usize,
+    field_len: usize,
+) -> FieldMapping {
+    // MSB0 labels run with physical order, so the field is its own run and
+    // there is nothing to build.
+    if bit_order == BitOrder::Msb0 {
+        return FieldMapping::Run {
+            start: low,
+            len: field_len,
+        };
+    }
+    // LSB0 reverses labels within each byte, which still lands on a run
+    // whenever the field lines up with them - a whole byte, or any field
+    // inside one. Rather than work out which alignments those are, build the
+    // positions and ask.
+    let indices = field_source_indices(bit_order, byte_order, low, field_len);
+    match run_of(&indices) {
+        Some((start, len)) => FieldMapping::Run { start, len },
+        None => FieldMapping::Indices(indices),
+    }
 }
 
 fn source_index_error(index: &Bound<'_, PyAny>, source_len: usize, view_name: &str) -> PyErr {
@@ -316,29 +380,49 @@ impl View {
             return Ok(self.source.clone());
         }
 
-        Ok(Tibs::from_bv(view_bits_from_physical_bits(
-            self.source.as_bitslice(),
-            self.byte_order,
-            self.bit_order,
-        )?))
+        view_bits_from_physical_bits(&self.source, self.byte_order, self.bit_order)
     }
 }
 
 #[derive(Clone)]
 enum MutableSelection {
     Whole,
-    Field { indices: Vec<usize> },
+    /// A contiguous ascending run of source positions. See [`FieldMapping`] for
+    /// why this is worth a variant of its own.
+    Run {
+        start: usize,
+        len: usize,
+    },
+    Field {
+        indices: Vec<usize>,
+    },
 }
 
 impl MutableSelection {
     fn from_indices(indices: Vec<usize>, source_len: usize) -> PyResult<Self> {
         validate_source_indices(&indices, source_len, "MutableView")?;
-        Ok(MutableSelection::Field { indices })
+        // `from_indices(range(a, b))` describes a run as surely as `field`
+        // does, and there is no reason for it to be the slower of the two.
+        Ok(match run_of(&indices) {
+            Some((start, len)) => MutableSelection::Run { start, len },
+            None => MutableSelection::Field { indices },
+        })
     }
 
     fn validate(&self, source_len: usize) -> PyResult<()> {
-        if let MutableSelection::Field { indices } = self {
-            validate_source_indices(indices, source_len, "MutableView")?;
+        match self {
+            MutableSelection::Whole => {}
+            MutableSelection::Run { start, len } => {
+                if start.saturating_add(*len) > source_len {
+                    return Err(PyValueError::new_err(format!(
+                        "MutableView source is too short for index {}; source length is {source_len}.",
+                        start + len - 1
+                    )));
+                }
+            }
+            MutableSelection::Field { indices } => {
+                validate_source_indices(indices, source_len, "MutableView")?;
+            }
         }
 
         Ok(())
@@ -347,10 +431,26 @@ impl MutableSelection {
     fn len(&self, source_len: usize) -> PyResult<usize> {
         match self {
             MutableSelection::Whole => Ok(source_len),
+            MutableSelection::Run { len, .. } => {
+                self.validate(source_len)?;
+                Ok(*len)
+            }
             MutableSelection::Field { indices } => {
                 self.validate(source_len)?;
                 Ok(indices.len())
             }
+        }
+    }
+
+    /// The contiguous source range this selection covers, when it has one.
+    ///
+    /// A run of source bits can be read and written over bytes, which is what
+    /// separates the fast paths below from the gather they fall back to.
+    fn as_run(&self, source_len: usize) -> Option<(usize, usize)> {
+        match self {
+            MutableSelection::Whole => Some((0, source_len)),
+            MutableSelection::Run { start, len } => Some((*start, *len)),
+            MutableSelection::Field { .. } => None,
         }
     }
 
@@ -366,6 +466,7 @@ impl MutableSelection {
     fn source_index(&self, index: usize) -> usize {
         match self {
             MutableSelection::Whole => index,
+            MutableSelection::Run { start, .. } => start + index,
             MutableSelection::Field { indices } => indices[index],
         }
     }
@@ -377,28 +478,31 @@ impl MutableSelection {
     /// `Whole` selects, so this normalises rather than matching on the
     /// variant. Comparing two materialised index vectors, which is how this
     /// read before, cost eight bytes per source bit on each side.
+    /// Comparing the variants pairwise would need a case for every combination
+    /// of the three, most of them saying the same thing twice. Reducing each
+    /// side to the run it covers, or the positions it lists, leaves three.
     fn selects_same_as(&self, source_len: usize, other: &Self, other_len: usize) -> bool {
-        match (self, other) {
-            (MutableSelection::Whole, MutableSelection::Whole) => source_len == other_len,
-            (MutableSelection::Whole, MutableSelection::Field { indices }) => {
-                is_identity_run(indices, source_len)
+        match (self.as_run(source_len), other.as_run(other_len)) {
+            (Some(left), Some(right)) => left == right,
+            (Some((start, len)), None) | (None, Some((start, len))) => {
+                let listed = match (self, other) {
+                    (MutableSelection::Field { indices }, _) => indices,
+                    (_, MutableSelection::Field { indices }) => indices,
+                    _ => unreachable!("only a Field has no run"),
+                };
+                listed.len() == len && listed.iter().copied().eq(start..start + len)
             }
-            (MutableSelection::Field { indices }, MutableSelection::Whole) => {
-                is_identity_run(indices, other_len)
-            }
-            (
-                MutableSelection::Field { indices },
-                MutableSelection::Field {
-                    indices: other_indices,
-                },
-            ) => indices == other_indices,
+            (None, None) => match (self, other) {
+                (
+                    MutableSelection::Field { indices },
+                    MutableSelection::Field {
+                        indices: other_indices,
+                    },
+                ) => indices == other_indices,
+                _ => unreachable!("only a Field has no run"),
+            },
         }
     }
-}
-
-/// Whether `indices` is `0, 1, .. len - 1`, which is what `Whole` selects.
-fn is_identity_run(indices: &[usize], len: usize) -> bool {
-    indices.len() == len && indices.iter().copied().eq(0..len)
 }
 
 fn format_source_indices(indices: &[usize]) -> String {
@@ -527,18 +631,22 @@ impl MutableView {
     }
 
     fn selected_source_bits(&self, source: &Mutibs) -> PyResult<BV> {
-        match &self.selection {
-            MutableSelection::Whole => Ok(source.to_bitvec()),
-            MutableSelection::Field { indices } => {
-                self.selection.len(source.len())?;
-                let source_bits = source.as_bitslice();
-                let mut selected = BV::with_capacity(indices.len());
-                for &index in indices {
-                    selected.push(source_bits[index]);
-                }
-                Ok(selected)
-            }
+        // A run is a window of the source, so it copies over bytes. Only a
+        // genuinely scattered selection has to be gathered a bit at a time.
+        if let Some((start, len)) = self.selection.as_run(source.len()) {
+            self.selection.validate(source.len())?;
+            return Ok(source.copied_range(start, len));
         }
+        let MutableSelection::Field { indices } = &self.selection else {
+            unreachable!("only a Field has no run")
+        };
+        self.selection.len(source.len())?;
+        let source_bits = source.as_bitslice();
+        let mut selected = BV::with_capacity(indices.len());
+        for &index in indices {
+            selected.push(source_bits[index]);
+        }
+        Ok(selected)
     }
 
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
@@ -550,11 +658,7 @@ impl MutableView {
             return Ok(Tibs::from_bv(source_bits));
         }
 
-        Ok(Tibs::from_bv(view_bits_from_physical_bits(
-            source_bits.as_bitslice(),
-            self.byte_order,
-            self.bit_order,
-        )?))
+        view_bits_from_physical_bits(&Tibs::from_bv(source_bits), self.byte_order, self.bit_order)
     }
 
     /// Whether the layout hands the selected bits back in the order they are
@@ -582,12 +686,15 @@ impl MutableView {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Tibs> {
-        if matches!(self.selection, MutableSelection::Whole) && self.keeps_physical_order() {
-            return self.with_source(py, |source| {
-                let len = self.validate_current_layout(source.len())?;
-                let (start, end) = validate_slice(len, start, end)?;
-                Ok(source.window(start, end - start))
-            });
+        if self.keeps_physical_order() {
+            let run = self.with_source(py, |source| Ok(self.selection.as_run(source.len())))?;
+            if let Some((run_start, _)) = run {
+                return self.with_source(py, |source| {
+                    let len = self.validate_current_layout(source.len())?;
+                    let (start, end) = validate_slice(len, start, end)?;
+                    Ok(source.window(run_start + start, end - start))
+                });
+            }
         }
         let viewed = self.to_tibs_view(py)?;
         let (start, end) = validate_slice(viewed.len(), start, end)?;
@@ -603,6 +710,12 @@ impl MutableView {
             match &self.selection {
                 MutableSelection::Whole => {
                     *source.as_mut_bitvec_ref() = physical;
+                }
+                // A run is written over bytes, the same way an equal-length
+                // slice assignment to the source itself would be.
+                MutableSelection::Run { start, len } => {
+                    debug_assert_eq!(*len, physical.len());
+                    source.set_slice(*start, start + len, &Tibs::from_bv(physical));
                 }
                 MutableSelection::Field { indices } => {
                     debug_assert_eq!(indices.len(), physical.len());
@@ -957,16 +1070,36 @@ impl MutableView {
         };
         // `validate_current_layout` above has already checked the selection
         // against the source, so these lookups are in range.
-        let indices = field_source_indices(self.bit_order, byte_order, low, field_len)
-            .into_iter()
-            .map(|index| self.selection.source_index(index))
-            .collect();
+        // A run of a run is a run: taking a field of one only moves where it
+        // starts. Only a scattered selection underneath, or a field that is
+        // itself scattered, has to be composed position by position - and that
+        // consumes the positions it was given, so the mapping it walks is
+        // rewritten in place rather than copied into a second allocation.
+        let selection = match field_source_mapping(self.bit_order, byte_order, low, field_len) {
+            FieldMapping::Run { start, len } => match self.selection.as_run(current_len) {
+                Some((outer_start, _)) => MutableSelection::Run {
+                    start: outer_start + start,
+                    len,
+                },
+                None => MutableSelection::Field {
+                    indices: (start..start + len)
+                        .map(|index| self.selection.source_index(index))
+                        .collect(),
+                },
+            },
+            FieldMapping::Indices(indices) => MutableSelection::Field {
+                indices: indices
+                    .into_iter()
+                    .map(|index| self.selection.source_index(index))
+                    .collect(),
+            },
+        };
 
         Ok(Self::from_parts(
             self.source.clone_ref(py),
             byte_order,
             BitOrder::Msb0,
-            MutableSelection::Field { indices },
+            selection,
         ))
     }
 
@@ -1051,6 +1184,14 @@ impl MutableView {
         let mut parts = self.with_source(py, |source| {
             Ok(match &self.selection {
                 MutableSelection::Whole => vec![source.repr_string()],
+                // The same `range(start, stop)` a listed run would print, so
+                // storing a run rather than its positions does not show here.
+                MutableSelection::Run { start, len } => {
+                    vec![
+                        source.repr_string(),
+                        format!("range({start}, {})", start + len),
+                    ]
+                }
                 MutableSelection::Field { indices } => {
                     vec![source.repr_string(), format_source_indices(indices)]
                 }
@@ -1060,7 +1201,7 @@ impl MutableView {
         parts.push(self.bit_order.repr_name().to_string());
         Ok(match &self.selection {
             MutableSelection::Whole => format!("MutableView({})", parts.join(", ")),
-            MutableSelection::Field { .. } => {
+            MutableSelection::Run { .. } | MutableSelection::Field { .. } => {
                 format!("MutableView.from_indices({})", parts.join(", "))
             }
         })
@@ -1535,17 +1676,22 @@ impl View {
             ByteOrder::Unspecified
         };
 
-        let source = self.source.as_bitslice();
-        let mut field = BV::with_capacity(field_len);
-        for index in field_source_indices(self.bit_order, byte_order, low, field_len) {
-            field.push(source[index]);
-        }
+        // A run is a window of the source, and a `Tibs` window shares storage,
+        // so the common field costs nothing at all rather than a bit-by-bit
+        // copy of everything it selects.
+        let field = match field_source_mapping(self.bit_order, byte_order, low, field_len) {
+            FieldMapping::Run { start, len } => self.source.get_slice_unchecked(start, len),
+            FieldMapping::Indices(indices) => {
+                let source = self.source.as_bitslice();
+                let mut field = BV::with_capacity(field_len);
+                for index in indices {
+                    field.push(source[index]);
+                }
+                Tibs::from_bv(field)
+            }
+        };
 
-        Ok(View::from_tibs(
-            Tibs::from_bv(field),
-            byte_order,
-            BitOrder::Msb0,
-        ))
+        Ok(View::from_tibs(field, byte_order, BitOrder::Msb0))
     }
 
     pub fn __repr__(&self) -> String {
