@@ -25,3 +25,18 @@ memchr = "~2.8"
 [profile.release]
 lto = "fat"
 codegen-units = 1
+
+# Optimised like release but without the link-time work, for the rebuild-and-run
+# loop. Roughly twice as fast to build, and every test passes on it just the
+# same.
+#
+# Never measure on this profile. Fat LTO with a single codegen unit is what
+# decides how the hot kernels inline, and several of them are written the way
+# they are because of it - see the comment on `count_pair_bits_with_wide`, where
+# one refactor that removed duplication cost `count_or` and `count_xor` a factor
+# of three. None of that is visible here, so timings taken on this profile look
+# plausible and mean nothing. Benchmarks, guards and releases all use `release`.
+[profile.fastdev]
+inherits = "release"
+lto = false
+codegen-units = 16
