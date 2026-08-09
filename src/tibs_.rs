@@ -251,6 +251,18 @@ impl Tibs {
         }
     }
 
+    /// The logical bit length, straight from the field.
+    ///
+    /// `BitCollection`'s default `len` goes through `as_bitslice`, which has to
+    /// match on the storage variant and build a `&BS` only to ask it for a
+    /// length this type already knows. `len` is called on nearly every path, so
+    /// the difference shows up as soon as an operation is short enough for
+    /// per-call cost to matter.
+    #[inline]
+    pub(crate) fn stored_length(&self) -> usize {
+        self.length
+    }
+
     #[inline]
     fn small_mask(length: usize) -> u64 {
         if length == 0 {

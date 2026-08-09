@@ -474,6 +474,210 @@ pub(crate) fn collect_find_all_positions(
     collect_find_all_positions_kmp(py, haystack, needle, start, end, alignment_mod8)
 }
 
+/// A single-bit scan restricted to the positions congruent to some `phase`
+/// modulo eight, split into the parts that can be reduced over bytes and the
+/// parts that cannot.
+///
+/// Candidates sit eight bits apart and a storage byte holds eight bits, so every
+/// whole byte of the middle holds exactly one candidate, always at the same bit
+/// within it. The middle is therefore one mask tested against a run of bytes,
+/// which vectorises, rather than a bit-pointer decode per candidate. Only the
+/// partial elements at either end are left, and each holds at most seven bits
+/// and so at most one candidate.
+///
+/// Stepping the candidates directly through `haystack[pos]` looks eight times
+/// cheaper than a full scan and measured twenty-one times dearer: a `BitSlice`
+/// index is a pointer decode, not an array read, and nothing about it
+/// vectorises.
+struct AlignedScan<'a> {
+    /// The candidate before `body`, with its value, when the leading partial
+    /// element holds one.
+    head: Option<(usize, bool)>,
+    /// The whole storage bytes of the middle, holding one candidate each.
+    body: &'a [u8],
+    /// Position of `body[0]`'s candidate. The rest follow every eight bits.
+    body_first: usize,
+    /// The bit a `body` candidate occupies, as a mask over its byte.
+    mask: u8,
+    /// The candidate after `body`, as for `head`.
+    tail: Option<(usize, bool)>,
+}
+
+impl<'a> AlignedScan<'a> {
+    /// Split `slice` for a scan of the positions congruent to `phase` mod 8.
+    ///
+    /// Positions are relative to `slice`, so a caller working in another frame
+    /// has to shift `phase` into this one and shift the results back out.
+    fn new(slice: &'a BS, phase: usize) -> Self {
+        debug_assert!(phase < 8);
+        match slice.domain() {
+            Domain::Region { head, body, tail } => {
+                let head_bits = head.map_or(0, |partial| partial.into_bitslice().len());
+                // The offset of the candidate within every byte of `body`, and
+                // so also within the tail, which starts on the same phase.
+                let within = (phase + 8 - head_bits) & 7;
+                let tail_start = head_bits + body.len() * 8;
+                Self {
+                    head: head.and_then(|partial| {
+                        let bits = partial.into_bitslice();
+                        (phase < bits.len()).then(|| (phase, bits[phase]))
+                    }),
+                    body,
+                    body_first: head_bits + within,
+                    mask: 0x80u8 >> within,
+                    tail: tail.and_then(|partial| {
+                        let bits = partial.into_bitslice();
+                        (within < bits.len()).then(|| (tail_start + within, bits[within]))
+                    }),
+                }
+            }
+            // A run inside a single element has no whole byte to reduce over,
+            // and holds at most one candidate however it is placed.
+            Domain::Enclave(_) => Self {
+                head: (phase < slice.len()).then(|| (phase, slice[phase])),
+                body: &[],
+                body_first: 0,
+                mask: 0,
+                tail: None,
+            },
+        }
+    }
+
+    #[inline]
+    fn edge_hit(edge: Option<(usize, bool)>, value: bool) -> Option<usize> {
+        edge.filter(|&(_, bit)| bit == value)
+            .map(|(position, _)| position)
+    }
+
+    /// `mask` repeated into a word, so that eight candidates - one per byte -
+    /// are tested or counted by a single word operation.
+    ///
+    /// This is what `byte_run_bit` does to skip uniform bytes, applied to one
+    /// bit in eight rather than all of them. A byte at a time instead runs at
+    /// roughly two cycles per byte, which is most of what the bit-pointer walk
+    /// this replaced was costing.
+    #[inline]
+    fn splat(&self) -> u64 {
+        u64::from_ne_bytes([self.mask; 8])
+    }
+
+    /// The first (or last) `body` candidate equal to `value`.
+    fn body_hit(&self, value: bool, reverse: bool) -> Option<usize> {
+        let splat = self.splat();
+        // Eight bytes hold no hit exactly when their candidate bits are all the
+        // other value.
+        let skip = if value { 0 } else { splat };
+        let hit = |&byte: &u8| (byte & self.mask != 0) == value;
+        // Each `chunks_exact` remainder sits at the end the scan finishes on,
+        // so the byte-at-a-time pass below picks it up either way.
+        let index = if !reverse {
+            let mut offset = 0;
+            for chunk in self.body.chunks_exact(8) {
+                if u64::from_ne_bytes(chunk.try_into().unwrap()) & splat != skip {
+                    break;
+                }
+                offset += 8;
+            }
+            offset + self.body[offset..].iter().position(hit)?
+        } else {
+            let mut limit = self.body.len();
+            for chunk in self.body.rchunks_exact(8) {
+                if u64::from_ne_bytes(chunk.try_into().unwrap()) & splat != skip {
+                    break;
+                }
+                limit -= 8;
+            }
+            self.body[..limit].iter().rposition(hit)?
+        };
+        Some(self.body_first + index * 8)
+    }
+
+    /// The first (or last, when `reverse`) candidate equal to `value`.
+    fn find(&self, value: bool, reverse: bool) -> Option<usize> {
+        let head = || Self::edge_hit(self.head, value);
+        let tail = || Self::edge_hit(self.tail, value);
+        match reverse {
+            false => head().or_else(|| self.body_hit(value, false)).or_else(tail),
+            true => tail().or_else(|| self.body_hit(value, true)).or_else(head),
+        }
+    }
+
+    /// How many candidates equal `value`.
+    fn count(&self, value: bool) -> usize {
+        let ends = [self.head, self.tail]
+            .into_iter()
+            .flatten()
+            .filter(|&(_, bit)| bit == value)
+            .count();
+        let splat = self.splat();
+        let mut chunks = self.body.chunks_exact(8);
+        let mut set = 0;
+        for chunk in chunks.by_ref() {
+            // Byte order is irrelevant to a popcount, so read native-endian.
+            set += (u64::from_ne_bytes(chunk.try_into().unwrap()) & splat).count_ones() as usize;
+        }
+        for &byte in chunks.remainder() {
+            set += usize::from(byte & self.mask != 0);
+        }
+        ends + if value { set } else { self.body.len() - set }
+    }
+
+    /// Append every candidate equal to `value`, offset by `base`.
+    fn collect(
+        &self,
+        py: Python<'_>,
+        value: bool,
+        base: usize,
+        matches: &mut Vec<u64>,
+    ) -> PyResult<()> {
+        if let Some(position) = Self::edge_hit(self.head, value) {
+            matches.push((base + position) as u64);
+        }
+        // Hoisted out of the loop: `matches` is borrowed mutably throughout, so
+        // a read through `&self` cannot be proved not to alias it and would be
+        // reloaded on every pass.
+        let (body, mask, first) = (self.body, self.mask, base + self.body_first);
+        let splat = self.splat();
+        let skip = if value { 0 } else { splat };
+        let mut check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+        let mut chunks = body.chunks_exact(8);
+        let mut index = 0;
+        for chunk in chunks.by_ref() {
+            // Eight bytes whose candidates are all the other value are skipped
+            // with a single comparison, which is what makes a sparse container
+            // cheap.
+            if u64::from_ne_bytes(chunk.try_into().unwrap()) & splat != skip {
+                for (offset, &byte) in chunk.iter().enumerate() {
+                    if (byte & mask != 0) == value {
+                        matches.push((first + (index + offset) * 8) as u64);
+                    }
+                }
+                if matches.len() >= check_at {
+                    py.check_signals()?;
+                    check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+                }
+            }
+            index += 8;
+        }
+        for (offset, &byte) in chunks.remainder().iter().enumerate() {
+            if (byte & mask != 0) == value {
+                matches.push((first + (index + offset) * 8) as u64);
+            }
+        }
+        if let Some(position) = Self::edge_hit(self.tail, value) {
+            matches.push((base + position) as u64);
+        }
+        Ok(())
+    }
+}
+
+/// The phase, within `haystack[start..end]`, of the positions whose index in
+/// `haystack` is congruent to `required` modulo eight.
+#[inline]
+fn scan_phase(start: usize, required: usize) -> usize {
+    (required + 8 - (start & 7)) & 7
+}
+
 /// The first (or last, when `reverse`) position in `haystack[start..end]`
 /// holding `value`, honouring an optional byte-alignment requirement.
 ///
@@ -495,21 +699,11 @@ fn find_single_bit(
         return None;
     }
     if let Some(required) = alignment_mod8 {
-        // Only every eighth position is a candidate, so the byte skipping below
-        // has nothing to skip. Stepping the candidates directly is already
-        // eight times less work than the windowed scan did.
-        let first = first_aligned(start, required);
-        if first >= end {
-            return None;
-        }
-        if !reverse {
-            return (first..end).step_by(8).find(|&pos| haystack[pos] == value);
-        }
-        let last = first + (end - 1 - first) / 8 * 8;
-        return (first..=last)
-            .rev()
-            .step_by(8)
-            .find(|&pos| haystack[pos] == value);
+        // Only every eighth position is a candidate, and they all sit at the
+        // same bit of their storage byte, so the middle reduces to a masked
+        // byte scan. See `AlignedScan`.
+        let scan = AlignedScan::new(&haystack[start..end], scan_phase(start, required));
+        return scan.find(value, reverse).map(|position| start + position);
     }
 
     let slice = &haystack[start..end];
@@ -596,22 +790,11 @@ fn collect_single_bit_positions(
     alignment_mod8: Option<usize>,
 ) -> PyResult<Vec<u64>> {
     let mut matches = Vec::new();
-    let mut check_at = SIGNAL_CHECK_INTERVAL;
 
     if let Some(required) = alignment_mod8 {
-        let start_mod = start & 7;
-        let adjustment = (required + 8 - start_mod) & 7;
-        let mut pos = start.saturating_add(adjustment);
-        while pos < end {
-            if haystack[pos] == value {
-                matches.push(pos as u64);
-                if matches.len() >= check_at {
-                    py.check_signals()?;
-                    check_at = matches.len().saturating_add(SIGNAL_CHECK_INTERVAL);
-                }
-            }
-            pos += 8;
-        }
+        // Every eighth position, taken over the storage bytes. See `AlignedScan`.
+        let scan = AlignedScan::new(&haystack[start..end], scan_phase(start, required));
+        scan.collect(py, value, start, &mut matches)?;
         return Ok(matches);
     }
 
@@ -1642,15 +1825,8 @@ pub(crate) fn count_single_bit(
     if !byte_aligned {
         return count_bitslice(&haystack[start..end], value);
     }
-    let mut pos = first_aligned(start, 0);
-    let mut count = 0;
-    while pos < end {
-        if haystack[pos] == value {
-            count += 1;
-        }
-        pos += 8;
-    }
-    count
+    // Every eighth position, taken over the storage bytes. See `AlignedScan`.
+    AlignedScan::new(&haystack[start..end], scan_phase(start, 0)).count(value)
 }
 
 /// The number of candidate positions in `[start, end)`: every position, or only

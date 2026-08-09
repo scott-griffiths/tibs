@@ -521,6 +521,37 @@ GUARDS: list[Guard] = [
         limit=4.0,
         same_result=False,
     ),
+    # Asking for byte alignment leaves only every eighth position a candidate,
+    # which looks like less work and used to cost twenty times more: stepping
+    # those positions through a `BitSlice` index is a bit-pointer decode each,
+    # while the unaligned scan drops to the bytes. Candidates all sit at the
+    # same bit of their storage byte, so the aligned scan reads exactly the
+    # bytes the count does and tests one bit in each - which is why a count of
+    # the whole container is still the fair reference.
+    Guard(
+        name="find(single bit, byte_aligned) vs count()",
+        site="search.rs find_single_bit - AlignedScan",
+        slow=lambda: ALL_ZEROS.find(ONE_BIT, byte_aligned=True),
+        fast=lambda: ALL_ZEROS.count(),
+        limit=4.0,
+        same_result=False,
+    ),
+    Guard(
+        name="rfind(single bit, byte_aligned) vs count()",
+        site="search.rs find_single_bit - AlignedScan",
+        slow=lambda: ALL_ZEROS.rfind(ONE_BIT, byte_aligned=True),
+        fast=lambda: ALL_ZEROS.count(),
+        limit=4.0,
+        same_result=False,
+    ),
+    Guard(
+        name="count(byte_aligned) vs count()",
+        site="search.rs count_single_bit - AlignedScan",
+        slow=lambda: BIG_T.count(ONE_BIT, byte_aligned=True),
+        fast=lambda: BIG_T.count(),
+        limit=4.0,
+        same_result=False,
+    ),
     # ---- 16. collecting the positions of a sparse set --------------------
     # `iter_ones` on a `u8` store steps a byte at a time whether or not the
     # byte holds anything, so a sparse container spends everything on empty
@@ -531,6 +562,18 @@ GUARDS: list[Guard] = [
         name="find_all(single bit, sparse) vs count()",
         site="search.rs collect_single_bit_positions - byte skipping",
         slow=lambda: SPARSE_T.find_all(ONE_BIT),
+        fast=lambda: SPARSE_T.count(),
+        limit=4.0,
+        same_result=False,
+    ),
+    # The byte-aligned scan needs the same skipping: it too reduces to a word
+    # comparison per eight candidates, one bit of each byte instead of all of
+    # them. Every set bit of SPARSE_T is at a multiple of eight, so both sides
+    # find the same hundred positions.
+    Guard(
+        name="find_all(single bit, sparse, byte_aligned) vs count()",
+        site="search.rs AlignedScan::collect - byte skipping",
+        slow=lambda: SPARSE_T.find_all(ONE_BIT, byte_aligned=True),
         fast=lambda: SPARSE_T.count(),
         limit=4.0,
         same_result=False,

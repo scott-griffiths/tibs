@@ -808,6 +808,16 @@ impl BitCollection for Tibs {
     }
 
     #[inline]
+    fn len(&self) -> usize {
+        Tibs::stored_length(self)
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        Tibs::stored_length(self) == 0
+    }
+
+    #[inline]
     fn get_slice_unchecked(&self, start_bit: usize, length: usize) -> Self {
         Tibs::get_slice_unchecked(self, start_bit, length)
     }
