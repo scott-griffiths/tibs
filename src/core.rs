@@ -86,7 +86,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         let data = if lhs_offset == rhs_offset {
             logical_op_with_matching_bytes(lhs, rhs, op)
         } else {
-            logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, op)
+            logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
         };
         let mut result = BV::from_vec(data);
         if lhs_offset == 0 {

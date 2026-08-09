@@ -102,6 +102,17 @@ ODD_REALIGNED_OTHER = Tibs(Mutibs(ODD_NUMERIC_OTHER))
 assert ODD_NUMERIC_T == ODD_REALIGNED_T
 assert ODD_NUMERIC_OTHER == ODD_REALIGNED_OTHER
 
+# A pair whose bits start at different offsets within their storage, and a
+# matching pair that starts at the same one. Slicing is what puts a Tibs's
+# first live bit part way through a byte, and three and five are simply two
+# offsets that differ; the trailing trim makes the two lengths agree.
+OFFSET_T = BIG_T[3:-2]
+OFFSET_OTHER = OTHER_T[5:]
+assert len(OFFSET_T) == len(OFFSET_OTHER)
+ALIGNED_T = Tibs(Mutibs(OFFSET_T))
+ALIGNED_OTHER = Tibs(Mutibs(OFFSET_OTHER))
+assert ALIGNED_T == OFFSET_T and ALIGNED_OTHER == OFFSET_OTHER
+
 BIG_BYTES = BIG_T.to_bytes()
 OTHER_BYTES = OTHER_T.to_bytes()
 BIG_U = int.from_bytes(BIG_BYTES, "big")
@@ -558,12 +569,21 @@ GUARDS: list[Guard] = [
     # storage. With a hundred set bits in a million the returned list is small
     # enough that this is a scan measurement, matched against a count of the
     # same bits.
+    #
+    # The limit is 8x rather than the 4x of its neighbours because the
+    # *reference* moved: `count` is one of the kernels that now compiles a
+    # second time with popcnt and AVX2 and picks between them at run time,
+    # which took it to a bit over twice its former speed. Neither side below
+    # regressed when that landed - both still collect a hundred positions in
+    # about sixteen microseconds - but the ratio between them roughly doubled.
+    # A guard here is worth having for the order of magnitude a bit-at-a-time
+    # walk would cost, not for the constant factor between two byte scans.
     Guard(
         name="find_all(single bit, sparse) vs count()",
         site="search.rs collect_single_bit_positions - byte skipping",
         slow=lambda: SPARSE_T.find_all(ONE_BIT),
         fast=lambda: SPARSE_T.count(),
-        limit=4.0,
+        limit=8.0,
         same_result=False,
     ),
     # The byte-aligned scan needs the same skipping: it too reduces to a word
@@ -575,7 +595,7 @@ GUARDS: list[Guard] = [
         site="search.rs AlignedScan::collect - byte skipping",
         slow=lambda: SPARSE_T.find_all(ONE_BIT, byte_aligned=True),
         fast=lambda: SPARSE_T.count(),
-        limit=4.0,
+        limit=8.0,
         same_result=False,
     ),
     # ---- 17. non-canonical large-integer storage -----------------------
@@ -750,6 +770,34 @@ GUARDS: list[Guard] = [
         slow=lambda: BIG_M_VIEW == BIG_M_EQUAL_VIEW,
         fast=lambda: BIG_M == BIG_M_EQUAL,
         limit=3.0,
+    ),
+    # ---- 29. operands holding their bits at different offsets -------------
+    # Every pairwise kernel splits on whether its two operands start at the
+    # same bit of their storage. The matching case reads native-endian words
+    # and vectorises; the mismatched case used to shift each word into place
+    # inside the loop, behind a byte swap and a three-way branch, and measured
+    # six to eight times dearer. It now realigns one operand up front and takes
+    # the matching path, which costs one extra sequential pass - so a small
+    # multiple is expected here and a return to six or more means the
+    # realignment stopped happening.
+    #
+    # Both sides read and combine the same number of bits; only the storage
+    # offsets differ, which is the whole point of the pair.
+    Guard(
+        name="count_and at mismatched offsets vs aligned",
+        site="bitwise.rs count_pair_bits - realigned_to",
+        slow=lambda: OFFSET_T.count_and(OFFSET_OTHER),
+        fast=lambda: ALIGNED_T.count_and(ALIGNED_OTHER),
+        limit=4.0,
+        same_result=False,
+    ),
+    Guard(
+        name="& at mismatched offsets vs aligned",
+        site="bitwise.rs logical_op_with_aligned_bytes - realigned_to",
+        slow=lambda: OFFSET_T & OFFSET_OTHER,
+        fast=lambda: ALIGNED_T & ALIGNED_OTHER,
+        limit=5.0,
+        same_result=False,
     ),
 ]
 

@@ -8,6 +8,72 @@ use super::bits::{BS, BV, BitAccumulator, head_bit_offset};
 use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
 use super::splice::{copy_bits, move_bits};
 
+// ---- Selecting a wider instruction set at run time ----------------------
+//
+// The x86 wheels are built for the base architecture, which has neither
+// `popcnt` nor AVX. `count_ones` therefore compiles to a software population
+// count and the byte loops vectorise no wider than 128 bits. Building the same
+// source at `x86-64-v3` and timing 8 Mbit operands showed what that costs:
+//
+//     count()      4.1x     count_and()  3.7x     count_xor()  3.8x
+//     &, |, ^      1.8x     ~            1.8x     ==           1.3x
+//
+// A wheel cannot simply be built that way - it would fault on any CPU older
+// than 2013 - so each kernel that carries the difference is compiled twice and
+// the pair selected between here, once, on what the CPU actually has.
+//
+// Only x86 is gated. On aarch64 NEON is in the baseline the wheels already
+// target, population count included, so the single compilation is already the
+// wide one and none of this is built at all.
+
+/// Whether this CPU has the instruction set the `_wide` kernels are compiled
+/// for.
+///
+/// `is_x86_feature_detected!` caches its own answer, but behind a call that
+/// does not inline. These kernels are entered on operands short enough for
+/// that to show, so the answer is cached again here where the branch can be
+/// predicted and the load folded into the surrounding code.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[inline]
+fn wide_simd() -> bool {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    /// Holds `2` until the first probe, then `0` or `1`. Relaxed throughout:
+    /// racing threads compute the same answer from the same CPU.
+    static AVAILABLE: AtomicU8 = AtomicU8::new(2);
+    match AVAILABLE.load(Ordering::Relaxed) {
+        0 => false,
+        1 => true,
+        _ => {
+            let found = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt");
+            AVAILABLE.store(found as u8, Ordering::Relaxed);
+            found
+        }
+    }
+}
+
+/// Below this many live bits, a kernel is left to its baseline compilation
+/// whatever the CPU can do.
+///
+/// A `#[target_feature]` function cannot be inlined into a caller that is not
+/// one, so reaching a widened kernel always costs a real call where the
+/// baseline can be folded into its caller outright. Over a few bytes there are
+/// too few words for the wider registers to win that back: measured on
+/// operands of eight to sixty-four bits, dispatching cost five to ten
+/// nanoseconds against calls of about a hundred, and only past a few hundred
+/// bits did the wide kernels pull ahead.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+const WIDE_MIN_BITS: usize = 512;
+
+/// Whether a run of `len_bits` should go to the widened kernels.
+///
+/// The length is tested first and deliberately: it is already in a register,
+/// where the feature flag is a load, so a short operand never touches it.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[inline]
+fn use_wide(len_bits: usize) -> bool {
+    len_bits >= WIDE_MIN_BITS && wide_simd()
+}
+
 #[inline]
 fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
     debug_assert!((-7..=7).contains(&bit_shift));
@@ -260,8 +326,77 @@ fn read_be_u64(bytes: &[u8], index: usize) -> u64 {
     u64::from_be_bytes(bytes[index..index + 8].try_into().unwrap())
 }
 
+/// Below this many live bits, a mismatched operand is shifted word by word
+/// inside the loop rather than realigned up front.
+///
+/// Realigning buys a vectorisable loop at the cost of an allocation and one
+/// extra sequential pass, so it only pays once the loop is long enough to
+/// absorb them. Measured either way over a size sweep of `count_and`, in
+/// nanoseconds per call:
+///
+/// ```text
+///  bits    512   1024   2048   4096   8192  16384
+///  shift   213    271    338    494    849   1339
+///  realign 275    302    403    398    409    562
+/// ```
+///
+/// The two cross between two and four kilobits, so the threshold sits at the
+/// first size where realigning is clearly ahead rather than at the crossing
+/// itself. Below it the fixed cost - an allocation, and a pass that the short
+/// loop would not otherwise make - is most of the call.
+const REALIGN_MIN_BITS: usize = 4096;
+
+/// `rhs`'s live bits copied into a fresh buffer shaped like `lhs`'s, sitting at
+/// `lhs_offset` so that the two can be read as a matching pair.
+///
+/// Every kernel below splits on whether its operands hold their bits at the
+/// same offset in their storage. The matching case reads native-endian words
+/// and vectorises; the mismatched case shifts each word into place inside the
+/// loop, behind a byte swap and a three-way branch, and neither of those
+/// vectorises - which measured six to eight times dearer over a megabit.
+/// Shifting once up front and then taking the matching path costs one extra
+/// sequential pass and wins most of that back.
+fn realigned_to(
+    lhs_len: usize,
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+) -> Vec<u8> {
+    debug_assert_eq!(lhs_len, (lhs_offset + len).div_ceil(8));
+    let mut out = vec![0u8; lhs_len];
+    copy_bits(&mut out, lhs_offset, rhs, rhs_offset, len);
+    out
+}
+
+/// Whether realigning `rhs` onto `lhs`'s offset is worth it here.
+#[inline]
+fn worth_realigning(lhs_offset: usize, rhs_offset: usize, len: usize) -> bool {
+    lhs_offset != rhs_offset && len >= REALIGN_MIN_BITS
+}
+
 #[inline]
 pub(crate) fn logical_op_with_matching_bytes(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if use_wide(lhs.len() * 8) {
+        // SAFETY: `use_wide` reported the features this is compiled for.
+        return unsafe { logical_op_with_matching_bytes_wide(lhs, rhs, op) };
+    }
+    logical_op_with_matching_bytes_impl(lhs, rhs, op)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "popcnt,avx2")]
+unsafe fn logical_op_with_matching_bytes_wide(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
+    logical_op_with_matching_bytes_impl(lhs, rhs, op)
+}
+
+/// `#[inline(always)]`, here and on every other `_impl` below, is what makes
+/// the second compilation worth anything: `#[target_feature]` widens only what
+/// is inlined into it, so a body left as an out-of-line call would be compiled
+/// once, at baseline, and both wrappers would reach the same narrow code.
+#[inline(always)]
+fn logical_op_with_matching_bytes_impl(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
     debug_assert_eq!(lhs.len(), rhs.len());
     lhs.iter()
         .zip(rhs.iter())
@@ -275,10 +410,19 @@ pub(crate) fn logical_op_with_aligned_bytes(
     lhs_offset: usize,
     rhs: &[u8],
     rhs_offset: usize,
+    len: usize,
     op: LogicalOp,
 ) -> Vec<u8> {
     debug_assert!(lhs_offset < 8);
     debug_assert!(rhs_offset < 8);
+
+    // The result outside the live range is discarded by the caller, so the
+    // zeros the realigned copy carries there are as good as the shifted bits
+    // this would otherwise compute.
+    if worth_realigning(lhs_offset, rhs_offset, len) {
+        let rhs = realigned_to(lhs.len(), lhs_offset, rhs, rhs_offset, len);
+        return logical_op_with_matching_bytes(lhs, &rhs, op);
+    }
 
     let rhs_shift = rhs_offset as isize - lhs_offset as isize;
     let mut out = Vec::with_capacity(lhs.len());
@@ -331,10 +475,27 @@ pub(crate) fn logical_op_assign_bytes(
     len: usize,
     op: LogicalOp,
 ) {
+    // An in-place op writes every live bit, so realigning is never wasted.
+    // See `realigned_to`.
+    if worth_realigning(lhs_offset, rhs_offset, len) {
+        let rhs = realigned_to(lhs.len(), lhs_offset, rhs, rhs_offset, len);
+        return logical_op_assign_bytes(lhs, lhs_offset, &rhs, lhs_offset, len, op);
+    }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    let wide = use_wide(len);
     macro_rules! applied {
-        ($byte_op:expr) => {
+        ($byte_op:expr) => {{
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            if wide {
+                // SAFETY: `use_wide` reported the features this is compiled for.
+                return unsafe {
+                    logical_op_assign_bytes_with_wide(
+                        lhs, lhs_offset, rhs, rhs_offset, len, $byte_op,
+                    )
+                };
+            }
             logical_op_assign_bytes_with(lhs, lhs_offset, rhs, rhs_offset, len, $byte_op)
-        };
+        }};
     }
     match op {
         LogicalOp::Or => applied!(|a, b| a | b),
@@ -344,6 +505,24 @@ pub(crate) fn logical_op_assign_bytes(
     }
 }
 
+/// See [`count_pair_bits_with_wide`] for why the choice is made inside each arm
+/// of the match rather than around it.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "popcnt,avx2")]
+unsafe fn logical_op_assign_bytes_with_wide<F>(
+    lhs: &mut [u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    byte_op: F,
+) where
+    F: Fn(u8, u8) -> u8,
+{
+    logical_op_assign_bytes_with(lhs, lhs_offset, rhs, rhs_offset, len, byte_op)
+}
+
+#[inline(always)]
 fn logical_op_assign_bytes_with<F>(
     lhs: &mut [u8],
     lhs_offset: usize,
@@ -441,10 +620,25 @@ pub(crate) fn count_pair_bits(
     len: usize,
     op: LogicalOp,
 ) -> usize {
+    // A count always reads every bit, so realigning can never be wasted work.
+    // See `realigned_to`.
+    if worth_realigning(lhs_offset, rhs_offset, len) {
+        let rhs = realigned_to(lhs.len(), lhs_offset, rhs, rhs_offset, len);
+        return count_pair_bits(lhs, lhs_offset, &rhs, lhs_offset, len, op);
+    }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    let wide = use_wide(len);
     macro_rules! counted {
-        ($word:expr, $byte:expr) => {
+        ($word:expr, $byte:expr) => {{
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            if wide {
+                // SAFETY: `use_wide` reported the features this is compiled for.
+                return unsafe {
+                    count_pair_bits_with_wide(lhs, lhs_offset, rhs, rhs_offset, len, $word, $byte)
+                };
+            }
             count_pair_bits_with(lhs, lhs_offset, rhs, rhs_offset, len, $word, $byte)
-        };
+        }};
     }
     match op {
         LogicalOp::Or => counted!(|a, b| a | b, |a, b| a | b),
@@ -454,6 +648,35 @@ pub(crate) fn count_pair_bits(
     }
 }
 
+/// The widened copy is selected inside each arm of the match rather than around
+/// it, so that the two compilations hold one monomorphisation of the loop per
+/// operation between them.
+///
+/// Hoisting the choice above the match reads better and cost `count_or` and
+/// `count_xor` a factor of three: it puts all four operations in both
+/// compilations, eight bodies of an `#[inline(always)]` loop in one function,
+/// and past that much inlining the optimiser stopped vectorising some of them.
+/// `count_and` stayed fast throughout, which is what makes this worth a comment
+/// - the shape looks harmless and only two of the four arms show the damage.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "popcnt,avx2")]
+unsafe fn count_pair_bits_with_wide<W, B>(
+    lhs: &[u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    word_op: W,
+    byte_op: B,
+) -> usize
+where
+    W: Fn(u64, u64) -> u64,
+    B: Fn(u8, u8) -> u8,
+{
+    count_pair_bits_with(lhs, lhs_offset, rhs, rhs_offset, len, word_op, byte_op)
+}
+
+#[inline(always)]
 fn count_pair_bits_with<W, B>(
     lhs: &[u8],
     lhs_offset: usize,
@@ -548,10 +771,19 @@ pub(crate) fn any_pair_bits(
     len: usize,
     op: LogicalOp,
 ) -> bool {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    let wide = use_wide(len);
     macro_rules! tested {
-        ($word:expr, $byte:expr) => {
+        ($word:expr, $byte:expr) => {{
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            if wide {
+                // SAFETY: `use_wide` reported the features this is compiled for.
+                return unsafe {
+                    any_pair_bits_with_wide(lhs, lhs_offset, rhs, rhs_offset, len, $word, $byte)
+                };
+            }
             any_pair_bits_with(lhs, lhs_offset, rhs, rhs_offset, len, $word, $byte)
-        };
+        }};
     }
     match op {
         LogicalOp::Or => tested!(|a, b| a | b, |a, b| a | b),
@@ -569,17 +801,39 @@ pub(crate) fn any_pair_bits(
 /// 512 bits.
 #[inline]
 pub(crate) fn contains_bit(bytes: &[u8], bit_offset: usize, len: usize, value: bool) -> bool {
-    any_pair_bits_with(
-        bytes,
-        bit_offset,
-        bytes,
-        bit_offset,
-        len,
-        |word, _| if value { word } else { !word },
-        |byte, _| if value { byte } else { !byte },
-    )
+    let word_op = |word: u64, _| if value { word } else { !word };
+    let byte_op = |byte: u8, _| if value { byte } else { !byte };
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if use_wide(len) {
+        // SAFETY: `use_wide` reported the features this is compiled for.
+        return unsafe {
+            any_pair_bits_with_wide(bytes, bit_offset, bytes, bit_offset, len, word_op, byte_op)
+        };
+    }
+    any_pair_bits_with(bytes, bit_offset, bytes, bit_offset, len, word_op, byte_op)
 }
 
+/// See [`count_pair_bits_with_wide`] for why the choice is made inside each arm
+/// of the match rather than around it.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "popcnt,avx2")]
+unsafe fn any_pair_bits_with_wide<W, B>(
+    lhs: &[u8],
+    lhs_offset: usize,
+    rhs: &[u8],
+    rhs_offset: usize,
+    len: usize,
+    word_op: W,
+    byte_op: B,
+) -> bool
+where
+    W: Fn(u64, u64) -> u64,
+    B: Fn(u8, u8) -> u8,
+{
+    any_pair_bits_with(lhs, lhs_offset, rhs, rhs_offset, len, word_op, byte_op)
+}
+
+#[inline(always)]
 fn any_pair_bits_with<W, B>(
     lhs: &[u8],
     lhs_offset: usize,
@@ -995,6 +1249,22 @@ pub(crate) fn deposit_masked_bytes(
 /// - not just the odd bytes at the end - down the byte-at-a-time path.
 #[inline]
 fn count_ones_in_bytes(bytes: &[u8]) -> usize {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if use_wide(bytes.len() * 8) {
+        // SAFETY: `use_wide` reported the features this is compiled for.
+        return unsafe { count_ones_in_bytes_wide(bytes) };
+    }
+    count_ones_in_bytes_impl(bytes)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "popcnt,avx2")]
+unsafe fn count_ones_in_bytes_wide(bytes: &[u8]) -> usize {
+    count_ones_in_bytes_impl(bytes)
+}
+
+#[inline(always)]
+fn count_ones_in_bytes_impl(bytes: &[u8]) -> usize {
     let mut chunks = bytes.chunks_exact(8);
     let mut ones = 0;
     for chunk in chunks.by_ref() {
@@ -1026,4 +1296,131 @@ pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
     }
 
     if count_ones { ones } else { slice.len() - ones }
+}
+
+/// The widened kernels are a second compilation of the same source, so they
+/// cannot disagree with the baseline over what the source says. What they can
+/// disagree over is the dispatch around them: a wrapper handed its arguments in
+/// the wrong order, or one left behind when the function it shadows is edited.
+///
+/// Nothing else catches that. Every CI runner and every developer machine of
+/// the last decade takes the wide path, so the baseline compilation is the one
+/// that never runs - right up until it runs on a user's older CPU, which is the
+/// only reason it exists.
+#[cfg(all(test, any(target_arch = "x86", target_arch = "x86_64")))]
+mod tests {
+    use super::*;
+
+    /// A deterministic spread of bytes. The kernels only care that the bits
+    /// vary, not how, so a small congruential generator saves pulling `rand`
+    /// into a test that would gain nothing from it.
+    fn pattern(seed: u64, len: usize) -> Vec<u8> {
+        let mut state = seed | 1;
+        (0..len)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (state >> 33) as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn wide_kernels_agree_with_their_baseline() {
+        if !wide_simd() {
+            // This CPU runs the baseline everywhere, so there is no second
+            // compilation to compare it against.
+            return;
+        }
+        // Lengths either side of a byte, of a word, of the eight-word block the
+        // predicate scan folds over, and of the point where a mismatched
+        // operand starts being realigned instead of shifted.
+        for len in [
+            1usize, 7, 8, 9, 15, 63, 64, 65, 127, 511, 512, 513, 1023, 1024, 4095, 4096, 4103,
+        ] {
+            for lhs_offset in 0usize..8 {
+                for rhs_offset in 0usize..8 {
+                    let (lo, ro) = (lhs_offset, rhs_offset);
+                    let lhs = pattern(len as u64 * 31 + lo as u64, (lo + len).div_ceil(8));
+                    let rhs = pattern(len as u64 * 17 + ro as u64 + 9, (ro + len).div_ceil(8));
+
+                    macro_rules! assert_agrees {
+                        ($name:expr, $word:expr, $byte:expr, $assign:expr) => {{
+                            let base = count_pair_bits_with(&lhs, lo, &rhs, ro, len, $word, $byte);
+                            // SAFETY: guarded by `wide_simd` above.
+                            let wide = unsafe {
+                                count_pair_bits_with_wide(&lhs, lo, &rhs, ro, len, $word, $byte)
+                            };
+                            assert_eq!(base, wide, "count {} len={len} {lo} {ro}", $name);
+
+                            let base = any_pair_bits_with(&lhs, lo, &rhs, ro, len, $word, $byte);
+                            // SAFETY: guarded by `wide_simd` above.
+                            let wide = unsafe {
+                                any_pair_bits_with_wide(&lhs, lo, &rhs, ro, len, $word, $byte)
+                            };
+                            assert_eq!(base, wide, "any {} len={len} {lo} {ro}", $name);
+
+                            let mut base = lhs.clone();
+                            let mut wide = lhs.clone();
+                            logical_op_assign_bytes_with(&mut base, lo, &rhs, ro, len, $assign);
+                            // SAFETY: guarded by `wide_simd` above.
+                            unsafe {
+                                logical_op_assign_bytes_with_wide(
+                                    &mut wide, lo, &rhs, ro, len, $assign,
+                                )
+                            };
+                            assert_eq!(base, wide, "assign {} len={len} {lo} {ro}", $name);
+                        }};
+                    }
+                    assert_agrees!(
+                        "or",
+                        |a: u64, b: u64| a | b,
+                        |a: u8, b: u8| a | b,
+                        |a: u8, b: u8| a | b
+                    );
+                    assert_agrees!(
+                        "and",
+                        |a: u64, b: u64| a & b,
+                        |a: u8, b: u8| a & b,
+                        |a: u8, b: u8| a & b
+                    );
+                    assert_agrees!(
+                        "xor",
+                        |a: u64, b: u64| a ^ b,
+                        |a: u8, b: u8| a ^ b,
+                        |a: u8, b: u8| a ^ b
+                    );
+                    assert_agrees!(
+                        "andnot",
+                        |a: u64, b: u64| a & !b,
+                        |a: u8, b: u8| a & !b,
+                        |a: u8, b: u8| a & !b
+                    );
+
+                    if lhs.len() == rhs.len() {
+                        for op in [
+                            LogicalOp::Or,
+                            LogicalOp::And,
+                            LogicalOp::Xor,
+                            LogicalOp::AndNot,
+                        ] {
+                            let base = logical_op_with_matching_bytes_impl(&lhs, &rhs, op);
+                            // SAFETY: guarded by `wide_simd` above.
+                            let wide =
+                                unsafe { logical_op_with_matching_bytes_wide(&lhs, &rhs, op) };
+                            assert_eq!(base, wide, "logical_op_with_matching_bytes len={len}");
+                        }
+                    }
+                }
+            }
+            let bytes = pattern(len as u64, len.div_ceil(8));
+            // SAFETY: guarded by `wide_simd` above.
+            assert_eq!(
+                count_ones_in_bytes_impl(&bytes),
+                unsafe { count_ones_in_bytes_wide(&bytes) },
+                "count_ones_in_bytes len={len}"
+            );
+        }
+    }
 }
