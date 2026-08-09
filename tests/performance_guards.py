@@ -165,6 +165,10 @@ assert BIG_T.find(NEEDLE_41) is None, "needle must be absent for the search guar
 READ_STRIDE = (BITS // 2_000) // 8 * 8
 READ_POSITIONS = tuple(range(0, BITS - 8, READ_STRIDE))
 
+# A thousandth of BIG_T's length, to pair against it when what is being timed
+# should not depend on length at all.
+KILOBIT_T = Tibs.from_random(BITS // 1000, seed=b"tibs-guards-kilobit")
+
 SET_POSITIONS_RANGE = range(0, BITS, 8)
 SET_POSITIONS_LIST = list(SET_POSITIONS_RANGE)
 SET_POSITIONS_TUPLE = tuple(SET_POSITIONS_RANGE)
@@ -777,6 +781,22 @@ GUARDS: list[Guard] = [
         slow=lambda: BIG_M.view().field(0, HALF - 1).to_tibs(),
         fast=lambda: BIG_M.to_tibs()[0:HALF],
         limit=6.0,
+        same_result=False,
+    ),
+    # ---- 27b. hashing the same value twice --------------------------------
+    # A Tibs is immutable, so its hash is a pure function of its bits and is
+    # kept after the first call. Both sides here hash a value that has already
+    # been hashed, so both should be a load and a return and the ratio should
+    # sit near one however far apart the lengths are. Losing the cache makes
+    # each side cost its own length instead, and a megabit against a kilobit
+    # is then a thousand to one - which is what a set or dict of large keys
+    # pays on every single lookup.
+    Guard(
+        name="hash(1 Mbit) vs hash(1 kbit), both already hashed",
+        site="tibs_.rs Tibs.__hash__ - SharedBits::hash",
+        slow=lambda: hash(BIG_T),
+        fast=lambda: hash(KILOBIT_T),
+        limit=4.0,
         same_result=False,
     ),
     # ---- 28. comparing two live views ------------------------------------

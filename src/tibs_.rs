@@ -25,6 +25,7 @@ use std::ffi::{c_int, c_void};
 use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicIsize, Ordering};
 
 /// Check a search mask against the length of the bits being searched for.
 ///
@@ -232,7 +233,7 @@ impl Tibs {
             return Self::from_inline_bytes(bytes, length);
         }
         Tibs {
-            data: TibsData::Shared(Arc::new(bv)),
+            data: TibsData::Shared(Arc::new(SharedBits::new(bv))),
             offset: 0,
             length,
         }
@@ -422,7 +423,7 @@ impl Tibs {
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
         match &self.data {
-            TibsData::Shared(data) => &data[self.offset..self.offset + self.length],
+            TibsData::Shared(data) => &data.bits[self.offset..self.offset + self.length],
             TibsData::Inline(bytes) => {
                 &BS::from_slice(bytes)[self.offset..self.offset + self.length]
             }
@@ -454,12 +455,13 @@ impl Tibs {
     pub(crate) fn raw_data_ref(&self) -> (&[u8], usize, usize) {
         match &self.data {
             TibsData::Shared(data) => {
-                let physical_start = helpers::head_bit_offset(data.as_bitslice()) + self.offset;
+                let physical_start =
+                    helpers::head_bit_offset(data.bits.as_bitslice()) + self.offset;
                 let byte_start = physical_start / 8;
                 let bit_offset = physical_start % 8;
                 let byte_len = (bit_offset + self.length).div_ceil(8);
                 (
-                    &data.as_raw_slice()[byte_start..byte_start + byte_len],
+                    &data.bits.as_raw_slice()[byte_start..byte_start + byte_len],
                     bit_offset,
                     self.length,
                 )
@@ -514,8 +516,42 @@ impl Tibs {
 /// Larger values retain shared storage so slicing them remains constant-time.
 #[derive(Clone)]
 enum TibsData {
-    Shared(Arc<BV>),
+    Shared(Arc<SharedBits>),
     Inline([u8; helpers::FAST_INT_BITS / 8]),
+}
+
+/// The hash cache's "not computed yet" marker.
+///
+/// Python reserves `-1` as `tp_hash`'s error return, so [`Tibs::__hash__`]
+/// already never returns it - which makes it exactly the value free to mean
+/// "empty" here, and saves carrying a separate flag.
+const HASH_UNSET: isize = -1;
+
+/// The bits of a value too long to live inline, and the hash of those bits
+/// once something has asked for it.
+///
+/// The cache sits in this allocation rather than in `Tibs` itself. Putting it
+/// there was the obvious thing and took the struct from four machine words to
+/// five, which measured seven to thirteen percent on *every* slice, chunk and
+/// constructor - a bad trade for a cache only some programs ever read. Here it
+/// costs nothing to a value that is never hashed.
+///
+/// Atomic only to satisfy `Sync` for a frozen pyclass, and `Relaxed`
+/// throughout: two threads racing here compute the same number from the same
+/// immutable bits, so either store is correct and nothing is published through
+/// it. Same reasoning as `Reader::pos`.
+struct SharedBits {
+    bits: BV,
+    hash: AtomicIsize,
+}
+
+impl SharedBits {
+    fn new(bits: BV) -> Self {
+        SharedBits {
+            bits,
+            hash: AtomicIsize::new(HASH_UNSET),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -1420,7 +1456,9 @@ impl BytewiseUnpacker {
 /// How a [`SubByteUnpacker`] interprets the raw field it extracts.
 #[derive(Clone, Copy)]
 enum SubByteReading {
-    Int { signed: bool },
+    Int {
+        signed: bool,
+    },
     /// The decode table for the field's format. See [`NumericReading`].
     NarrowFloat(&'static [f64; 256]),
 }
@@ -2260,12 +2298,40 @@ impl Tibs {
     }
 
     /// Return a hash of the logical bit sequence.
+    ///
+    /// Computed once and kept. See the `hash` field: hashing reads every bit,
+    /// so a container that rehashes its keys on every lookup never stops
+    /// paying for their length.
     pub fn __hash__(&self) -> isize {
+        // Only a value covering the whole shared buffer may use its cache: a
+        // slice shares that allocation but not the bits it describes. That is
+        // exactly the shape a value used as a dictionary or set key has, and
+        // the shape whose hash is expensive - a short one lives inline, where
+        // hashing is a few nanoseconds and there is nothing worth keeping.
+        let cache = match &self.data {
+            TibsData::Shared(shared) if self.offset == 0 && self.length == shared.bits.len() => {
+                Some(shared)
+            }
+            _ => None,
+        };
+        if let Some(shared) = cache {
+            let cached = shared.hash.load(Ordering::Relaxed);
+            if cached != HASH_UNSET {
+                return cached;
+            }
+        }
+
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         let hash = hasher.finish() as isize;
-        // Python reserves -1 as the error return value from tp_hash.
-        if hash == -1 { -2 } else { hash }
+        // Python reserves -1 as the error return value from tp_hash, and it is
+        // also what marks the cache empty, so the one value that must not be
+        // returned is the one that must not be stored.
+        let hash = if hash == HASH_UNSET { -2 } else { hash };
+        if let Some(shared) = cache {
+            shared.hash.store(hash, Ordering::Relaxed);
+        }
+        hash
     }
 
     /// Find all occurrences of a bit sequence.
