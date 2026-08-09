@@ -188,6 +188,30 @@ finished or raised::
     >>> r.pos
     0
 
+The :class:`Bookmark` saves the position when the block is entered, not when it
+was made, so one kept in a variable restores whatever each block started from::
+
+    >>> saved = r.bookmark()
+    >>> r.read_value('u8')
+    1
+    >>> with saved:
+    ...     r.read_values('u8')
+    ...
+    [2, 3]
+    >>> r.pos
+    8
+
+To keep a position *and* go on reading past it, take a copy of the reader
+instead. The copy shares the source and starts where the original is, so the
+two cursors move independently over the same bits::
+
+    >>> import copy
+    >>> ahead = copy.copy(r)
+    >>> ahead.read_values('u8')
+    [2, 3]
+    >>> r.pos
+    8
+
 
 When things go wrong
 ^^^^^^^^^^^^^^^^^^^^

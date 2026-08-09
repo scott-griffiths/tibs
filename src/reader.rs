@@ -6,7 +6,7 @@ use crate::tibs_::{SearchParams, Tibs, find_in_bits, py_from_value, py_values_fr
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::{with_critical_section, with_critical_section2};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// The bit container a [`Reader`] reads from, kept as the Python object rather
 /// than a snapshot of its bits.
@@ -18,6 +18,35 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 enum ReaderSource {
     Immutable(Py<Tibs>),
     Mutable(Py<Mutibs>),
+}
+
+impl ReaderSource {
+    /// Another reference to the same source object, for `Reader.__copy__`.
+    fn clone_ref(&self, py: Python<'_>) -> Self {
+        match self {
+            ReaderSource::Immutable(tibs) => ReaderSource::Immutable(tibs.clone_ref(py)),
+            ReaderSource::Mutable(mutibs) => ReaderSource::Mutable(mutibs.clone_ref(py)),
+        }
+    }
+
+    /// The source a `Reader` should hold for `object`, and its current length.
+    ///
+    /// A `Tibs` or `Mutibs` is held as it is so that `Reader.source` gives back
+    /// the object that was passed in; anything else promotable is converted
+    /// once, here, rather than on every read.
+    fn from_object(object: &Bound<'_, PyAny>) -> PyResult<(Self, usize)> {
+        if let Ok(tibs) = object.extract::<Py<Tibs>>() {
+            let len = tibs.get().len();
+            Ok((ReaderSource::Immutable(tibs), len))
+        } else if let Ok(mutibs) = object.extract::<Py<Mutibs>>() {
+            let len = mutibs.try_borrow(object.py())?.len();
+            Ok((ReaderSource::Mutable(mutibs), len))
+        } else {
+            let tibs = object.extract::<Tibs>()?;
+            let len = tibs.len();
+            Ok((ReaderSource::Immutable(Py::new(object.py(), tibs)?), len))
+        }
+    }
 }
 
 /// How many bits are readable from `pos`, saturating at zero.
@@ -229,17 +258,7 @@ impl Reader {
     #[new]
     #[pyo3(signature = (source, /, pos = 0), text_signature = "(source, /, pos=0)")]
     pub fn py_new(source: &Bound<'_, PyAny>, pos: i64) -> PyResult<Self> {
-        let (source, len) = if let Ok(tibs) = source.extract::<Py<Tibs>>() {
-            let len = tibs.get().len();
-            (ReaderSource::Immutable(tibs), len)
-        } else if let Ok(mutibs) = source.extract::<Py<Mutibs>>() {
-            let len = mutibs.try_borrow(source.py())?.len();
-            (ReaderSource::Mutable(mutibs), len)
-        } else {
-            let tibs = source.extract::<Tibs>()?;
-            let len = tibs.len();
-            (ReaderSource::Immutable(Py::new(source.py(), tibs)?), len)
-        };
+        let (source, len) = ReaderSource::from_object(source)?;
         Ok(Reader {
             source,
             pos: AtomicUsize::new(validate_pos(pos, len)?),
@@ -595,7 +614,7 @@ impl Reader {
     /// ahead by more than one value; :meth:`~peek_value` and
     /// :meth:`~peek_bits` are the single-item shorthands.
     ///
-    /// :return: A context manager yielding this ``Reader``.
+    /// :return: A :class:`Bookmark` yielding this ``Reader``.
     ///
     /// .. code-block:: pycon
     ///
@@ -606,12 +625,15 @@ impl Reader {
     ///     >>> r.pos
     ///     0
     ///
-    pub fn bookmark(slf: &Bound<'_, Self>) -> PyResult<Bookmark> {
-        let pos = Self::with_reader(slf, |r| Ok(r.position()))?;
-        Ok(Bookmark {
-            pos,
+    pub fn bookmark(slf: &Bound<'_, Self>) -> Bookmark {
+        // No position read here: the cursor is saved by `Bookmark.__enter__`,
+        // so that a bookmark held and used later saves where the block it is
+        // used by actually starts.
+        Bookmark {
             reader: slf.clone().unbind(),
-        })
+            pos: AtomicUsize::new(0),
+            entered: AtomicBool::new(false),
+        }
     }
 
     /// Move forward to the next multiple of ``boundary`` bits.
@@ -622,7 +644,8 @@ impl Reader {
     ///
     /// :param int boundary: The alignment in bits. Defaults to 8.
     /// :return: The number of bits skipped.
-    /// :raises ValueError: if ``boundary`` is not positive, or if aligning would move past the end, in which case the position does not move.
+    /// :raises ValueError: if ``boundary`` is not positive.
+    /// :raises tibs.ReadError: if aligning would move past the end, in which case the position does not move.
     ///
     /// .. code-block:: pycon
     ///
@@ -642,12 +665,22 @@ impl Reader {
         let boundary = boundary as u64;
         Self::with_reader(slf, |r| {
             let skip = ((boundary - r.position() as u64 % boundary) % boundary) as usize;
-            let len = r.source_len(py)?;
-            if r.position() + skip > len {
-                return Err(PyValueError::new_err(format!(
-                    "Cannot align to {boundary} bits from position {}: it would move past the end of the {len} bits.",
-                    r.position()
-                )));
+            // Only a move can run off the end. Testing `skip` rather than the
+            // sum keeps "nothing moves if the position is already on a
+            // boundary" true even for a cursor left beyond a truncated
+            // `Mutibs`, where the sum is past the end before anything is asked.
+            if skip > 0 {
+                let len = r.source_len(py)?;
+                if r.position() + skip > len {
+                    // A `ReadError` rather than a plain `ValueError`: running
+                    // out of bits is one condition and reports as one type
+                    // wherever it happens. `ReadError` subclasses `ValueError`,
+                    // so anything catching that still catches this.
+                    return Err(ReadError::new_err(format!(
+                        "Cannot align to {boundary} bits from position {}: it would move past the end of the {len} bits.",
+                        r.position()
+                    )));
+                }
             }
             r.set_position(r.position() + skip);
             Ok(skip)
@@ -788,6 +821,63 @@ impl Reader {
         })
     }
 
+    /// Return a second cursor at the same position over the same source.
+    ///
+    /// The source is shared rather than copied, exactly as it is when a
+    /// ``Reader`` is constructed, so a copy of a reader over a ``Mutibs``
+    /// still reads that ``Mutibs`` live. Use :func:`copy.deepcopy` for a
+    /// reader over its own copy of the bits.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> import copy
+    ///     >>> r = Reader(Tibs('0x010203'))
+    ///     >>> r.read_value('u8')
+    ///     1
+    ///     >>> ahead = copy.copy(r)
+    ///     >>> ahead.read_values('u8')
+    ///     [2, 3]
+    ///     >>> r.pos
+    ///     8
+    ///
+    pub fn __copy__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<Self> {
+        Self::with_reader(slf, |r| {
+            Ok(Reader {
+                source: r.source.clone_ref(py),
+                pos: AtomicUsize::new(r.position()),
+            })
+        })
+    }
+
+    /// Return a cursor at the same position over a deep copy of the source.
+    ///
+    /// Unlike :meth:`~Reader.__copy__`, the two readers no longer share bits:
+    /// a ``Mutibs`` source is copied along with the cursor.
+    ///
+    /// :param dict memo: The memo dictionary :mod:`copy` passes through.
+    ///
+    #[pyo3(signature = (memo, /))]
+    pub fn __deepcopy__(
+        slf: &Bound<'_, Self>,
+        py: Python<'_>,
+        memo: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        // Copying the source is Python work - it reaches `Tibs.__reduce__` or
+        // `Mutibs.__copy__`, either of which takes that object's own lock - so
+        // it stays outside the reader's section, and only reading `pos` goes
+        // inside.
+        let source = Self::source(slf, py);
+        let copied = py
+            .import("copy")?
+            .getattr("deepcopy")?
+            .call1((source, memo))?;
+        let (source, _) = ReaderSource::from_object(&copied)?;
+        Ok(Reader {
+            source,
+            pos: AtomicUsize::new(Self::with_reader(slf, |r| Ok(r.position()))?),
+        })
+    }
+
     /// Return the length of the source in bits.
     pub fn __len__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<usize> {
         Self::with_reader(slf, |r| r.source_len(py))
@@ -832,19 +922,59 @@ fn validate_read_length(n: i64) -> PyResult<usize> {
 
 ///     The context manager returned by :meth:`Reader.bookmark`.
 ///
-///     Entering gives back the ``Reader`` it came from, and leaving restores
-///     the position that ``Reader`` had when the bookmark was made.
+///     Entering gives back the ``Reader`` it came from and saves where its
+///     cursor is; leaving puts the cursor back there, whether the block
+///     finished or raised.
 ///
-#[pyclass(module = "tibs")]
+///     The position is taken on the way in rather than when the bookmark was
+///     made, so one that is kept and used more than once saves the position
+///     each block actually starts from. Cannot be constructed directly.
+///
+///     .. code-block:: pycon
+///
+///         >>> r = Reader(Tibs('0x010203'))
+///         >>> saved = r.bookmark()
+///         >>> r.read_value('u8')
+///         1
+///         >>> with saved:
+///         ...     r.read_value('u8')
+///         2
+///         >>> r.pos
+///         8
+///
+// `frozen` for the same reason `Reader` is: `__exit__` runs while a read may be
+// in flight, and a borrow flag here would turn an ordinary `with` block on a
+// shared reader into a spurious "already borrowed".
+#[pyclass(module = "tibs", frozen)]
 pub struct Bookmark {
     reader: Py<Reader>,
-    pos: usize,
+    /// The position to restore, meaningful only while `entered` is set.
+    pos: AtomicUsize,
+    /// Whether a `with` block is currently using this bookmark. Guards against
+    /// one bookmark being entered inside itself, where the single slot above
+    /// would otherwise drop the outer position and restore the inner one twice.
+    entered: AtomicBool,
 }
 
 #[pymethods]
 impl Bookmark {
-    fn __enter__(&self, py: Python<'_>) -> Py<Reader> {
-        self.reader.clone_ref(py)
+    /// Save the reader's position and return the reader.
+    ///
+    /// :return: The :class:`Reader` this bookmark came from.
+    /// :raises ValueError: if this bookmark is already inside a ``with`` block.
+    ///
+    fn __enter__(&self, py: Python<'_>) -> PyResult<Py<Reader>> {
+        let reader = self.reader.bind(py);
+        Reader::with_reader(reader, |r| {
+            if self.entered.swap(true, Ordering::Relaxed) {
+                return Err(PyValueError::new_err(
+                    "This bookmark is already in use by a with block. Call bookmark() again for a nested one.",
+                ));
+            }
+            self.pos.store(r.position(), Ordering::Relaxed);
+            Ok(())
+        })?;
+        Ok(self.reader.clone_ref(py))
     }
 
     /// Restore the saved position and let any exception propagate.
@@ -860,9 +990,29 @@ impl Bookmark {
         // The reader's own section, so that restoring the bookmark queues
         // behind any read in flight rather than being refused by it.
         Reader::with_reader(self.reader.bind(py), |reader| {
-            reader.set_position(self.pos);
+            // Nothing was saved if `__enter__` never ran, so there is nothing
+            // to put back: leave the cursor where it is rather than sending it
+            // to a position this bookmark never saw.
+            if self.entered.swap(false, Ordering::Relaxed) {
+                reader.set_position(self.pos.load(Ordering::Relaxed));
+            }
             Ok(())
         })?;
         Ok(false)
+    }
+
+    // Angle brackets rather than the `Reader(...)` style of the other reprs:
+    // a bookmark cannot be constructed from Python, so there is no call to
+    // echo back.
+    pub fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let reader = Reader::__repr__(self.reader.bind(py), py)?;
+        Ok(if self.entered.load(Ordering::Relaxed) {
+            format!(
+                "<Bookmark of {reader}, restoring to {}>",
+                self.pos.load(Ordering::Relaxed)
+            )
+        } else {
+            format!("<Bookmark of {reader}, not entered>")
+        })
     }
 }

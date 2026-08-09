@@ -17,3 +17,7 @@ See :doc:`reading` in the manual for how the pieces fit together.
    :members:
    :member-order: groupwise
    :undoc-members:
+
+.. autoclass:: tibs.Bookmark
+   :members:
+   :member-order: groupwise

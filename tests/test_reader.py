@@ -1,6 +1,8 @@
+import copy
+
 import pytest
 
-from tibs import DtypeArray, Mutibs, ReadError, Reader, Tibs
+from tibs import Bookmark, DtypeArray, Mutibs, ReadError, Reader, Tibs
 
 
 # --- construction and state ------------------------------------------------
@@ -294,6 +296,106 @@ def test_bookmarks_nest():
     assert r.pos == 0
 
 
+def test_bookmark_saves_the_position_on_entry_not_on_creation():
+    r = Reader(Tibs("0x010203"))
+    saved = r.bookmark()
+
+    r.pos = 8
+    with saved:
+        r.read_bits(8)
+    assert r.pos == 8
+
+
+def test_a_bookmark_can_be_used_again():
+    r = Reader(Tibs("0x01020304"))
+    saved = r.bookmark()
+
+    for expected in (1, 2, 3, 4):
+        with saved:
+            assert r.read_values("u8")[0] == expected
+        assert r.read_value("u8") == expected
+
+
+def test_a_bookmark_cannot_be_entered_inside_itself():
+    r = Reader(Tibs("0x010203"), 8)
+
+    saved = r.bookmark()
+    with pytest.raises(ValueError):
+        with saved:
+            r.read_bits(8)
+            with saved:
+                pass
+    # The outer block still restored what it saved.
+    assert r.pos == 8
+
+
+def test_a_bookmark_that_was_never_entered_leaves_the_cursor_alone():
+    r = Reader(Tibs("0x010203"))
+    saved = r.bookmark()
+
+    r.pos = 16
+    saved.__exit__(None, None, None)
+    assert r.pos == 16
+
+
+def test_bookmark_is_a_public_class_with_a_repr():
+    r = Reader(Tibs("0x0123"), 8)
+    saved = r.bookmark()
+
+    assert isinstance(saved, Bookmark)
+    assert repr(saved) == "<Bookmark of Reader(Tibs('0x0123'), 8), not entered>"
+    with saved:
+        r.read_bits(8)
+        assert repr(saved) == "<Bookmark of Reader(Tibs('0x0123'), 16), restoring to 8>"
+
+
+# --- copying ---------------------------------------------------------------
+
+
+def test_copy_gives_an_independent_cursor_over_the_same_source():
+    t = Tibs("0x010203")
+    r = Reader(t)
+    r.read_value("u8")
+
+    ahead = copy.copy(r)
+    assert ahead.source is t
+    assert ahead.pos == 8
+    assert ahead.read_values("u8") == [2, 3]
+    assert r.pos == 8
+    assert r.read_values("u8") == [2, 3]
+
+
+def test_a_copy_of_a_mutibs_reader_still_reads_it_live():
+    m = Mutibs("0x01")
+    ahead = copy.copy(Reader(m))
+
+    assert ahead.source is m
+    m += "0x02"
+    assert ahead.read_values("u8") == [1, 2]
+
+
+def test_deepcopy_takes_the_source_with_it():
+    m = Mutibs("0x0102")
+    r = Reader(m, 8)
+    detached = copy.deepcopy(r)
+
+    assert detached.source is not m
+    assert detached.pos == 8
+    m += "0x03"
+    assert len(detached) == 16
+    assert detached.read_values("u8") == [2]
+    assert m == Mutibs("0x010203")
+
+
+def test_a_copy_of_a_reader_past_a_truncated_source_keeps_its_position():
+    m = Mutibs("0x010203")
+    r = Reader(m, 24)
+    del m[8:]
+
+    assert copy.copy(r).pos == 24
+    assert copy.deepcopy(r).pos == 24
+
+
 # --- moving ----------------------------------------------------------------
 
 
@@ -323,12 +425,26 @@ def test_align_can_land_exactly_on_the_end():
     assert r.at_end
 
 
-def test_align_past_the_end_raises():
+def test_align_past_the_end_raises_a_read_error():
     r = Reader(Tibs("0b111"), 1)
 
-    with pytest.raises(ValueError):
+    # Running out of bits reports as one type wherever it happens, and a
+    # ReadError is a ValueError, so the older expectation still holds too.
+    with pytest.raises(ReadError):
         r.align()
     assert r.pos == 1
+
+
+def test_align_on_a_boundary_past_a_truncated_source_does_nothing():
+    m = Mutibs("0x010203")
+    r = Reader(m, 24)
+    del m[8:]
+
+    # Already on a boundary, so there is no move to run off the end.
+    assert r.align() == 0
+    assert r.pos == 24
+    with pytest.raises(ReadError):
+        Reader(m, 8).align(16)
 
 
 @pytest.mark.parametrize("boundary", [0, -8])

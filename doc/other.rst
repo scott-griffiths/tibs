@@ -82,8 +82,8 @@ Exceptions
 .. autoexception:: tibs.ReadError
 
 This Tibs-specific exception is a subclass of :class:`ValueError`. It is raised when a :class:`Reader` cannot
-complete a requested read from the bits that remain, or cannot find the delimiter requested by
-:meth:`Reader.read_to` or :meth:`Reader.read_past`.
+complete a requested move from the bits that remain — a read, or an :meth:`Reader.align` that would step past
+the end — or cannot find the delimiter requested by :meth:`Reader.read_to` or :meth:`Reader.read_past`.
 
 .. autoexception:: tibs.DecodeError
 
