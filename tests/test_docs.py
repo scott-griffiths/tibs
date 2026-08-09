@@ -94,10 +94,24 @@ def _globals():
     return {name: getattr(tibs, name) for name in tibs.__all__ if not name.startswith("_")}
 
 
+def _read_doc(filename):
+    """The text of one documentation file.
+
+    The encoding is stated rather than left to the locale, which is what
+    ``read_text`` would otherwise use. Sphinx reads these as UTF-8 and
+    ``exotic_floats.rst`` writes exponents as superscripts, so on a Windows
+    runner - where the locale encoding is cp1252 and CI checks the files out
+    with CRLF endings - the default decoded ``e2 81 bb`` as far as its middle
+    byte and stopped: ``'charmap' codec can't decode byte 0x81``. Nothing was
+    wrong with the file or the library; only this read.
+    """
+    return (DOC_DIR / filename).read_text(encoding="utf-8")
+
+
 def _run(filename):
     """Runs one file, returning the number of failures and examples."""
     unchecked = UNCHECKABLE.get(filename, ())
-    text = (DOC_DIR / filename).read_text()
+    text = _read_doc(filename)
     test = doctest.DocTestParser().get_doctest(
         text, _globals(), filename, str(DOC_DIR / filename), 0
     )
@@ -158,7 +172,7 @@ def test_large_allocation_sizes_are_accurate():
     # 32-bit runner would try to run an example that cannot fit.
     literal = re.compile(r"[\d_]{7,}")
     for filename, recorded in LARGE_ALLOCATION_FILES.items():
-        text = (DOC_DIR / filename).read_text()
+        text = _read_doc(filename)
         largest = 0
         for example in doctest.DocTestParser().get_examples(text):
             for match in literal.finditer(example.source):

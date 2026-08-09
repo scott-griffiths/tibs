@@ -256,7 +256,8 @@ class TestSharedProcessState:
         result = subprocess.run(
             [sys.executable, "-c", _BOOL_CHUNKS_RACE],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=120,
         )
         assert result.returncode == 0, (
