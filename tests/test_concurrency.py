@@ -60,6 +60,7 @@ anywhere means a read or a write saw a buffer that was mid-resize.
 """
 
 import collections
+import copy
 import subprocess
 import sys
 import sysconfig
@@ -552,10 +553,11 @@ class TestReaderConcurrency:
                 reader.byte_pos = 1
                 assert reader.seek_to(needle)
                 assert not reader.at_end
-                assert reader.remaining <= len(reader)
+                assert reader.remaining <= len(reader.source)
                 repr(reader)
                 with reader.bookmark():
                     reader.read_bits(8)
+                assert copy.copy(reader).read_bits(8) == needle
 
         def write():
             for _ in range(ITERATIONS):

@@ -92,13 +92,23 @@ Where the cursor is
 ^^^^^^^^^^^^^^^^^^^
 
 :attr:`~Reader.pos` is the bit position, and can be set to anything from ``0``
-to ``len(reader)``. :attr:`~Reader.byte_pos` is the same thing in bytes, and
-refuses to answer if the cursor is not byte aligned::
+to the length of the source. :attr:`~Reader.byte_pos` is the same thing in
+bytes, and refuses to answer if the cursor is not byte aligned::
 
     >>> r = Reader(Tibs('0x0102030405'))
     >>> r.byte_pos = 3
     >>> r.pos, r.remaining, r.at_end
     (24, 16, False)
+
+A ``Reader`` has no length of its own: :attr:`~Reader.remaining` is what is left
+to read, and ``len(reader.source)`` is how long the whole thing is. There is no
+``len(reader)`` to confuse the two, and no falsy reader either — one that has
+been read to the end is still an object, so use :attr:`~Reader.at_end` rather
+than ``while reader``::
+
+    >>> r = Reader(Tibs('0xff'), 8)
+    >>> r.at_end, r.remaining, len(r.source)
+    (True, 0, 8)
 
 :meth:`~Reader.align` moves forward to the next boundary and says how far it
 went, which is how you skip padding without counting it::

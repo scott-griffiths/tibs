@@ -246,9 +246,15 @@ impl Reader {
     /// Anything else promotable to a ``Tibs``, such as a string or a
     /// ``bytes``, is converted once and the reader holds the result.
     ///
+    /// A :class:`View` is not a source: its byte and bit order decide which
+    /// bits come out, so pass ``view.to_tibs()`` and choose that reading
+    /// yourself. Byte order for a single field is part of the dtype, as in
+    /// ``read_value('u16_le')``.
+    ///
     /// :param object source: The bits to read. A :class:`Tibs` or :class:`Mutibs` is used directly; anything else promotable to ``Tibs`` is converted.
     /// :param int pos: The initial bit position. Defaults to 0.
     /// :raises ValueError: if ``pos`` is negative or beyond the end of ``source``.
+    /// :raises TypeError: if ``source`` cannot be promoted to a ``Tibs``.
     ///
     /// .. code-block:: pycon
     ///
@@ -290,13 +296,13 @@ impl Reader {
 
     /// The current bit position.
     ///
-    /// Setting it moves the cursor anywhere in ``0`` to ``len(self)``
+    /// Setting it moves the cursor anywhere in ``0`` to ``len(self.source)``
     /// inclusive. Negative positions are not accepted: unlike a ``start`` or
     /// ``end`` elsewhere in tibs, this is stored state rather than a one-off
     /// slice bound, so counting from the end would leave
     /// :attr:`~Reader.remaining` disagreeing with the value just assigned.
     ///
-    /// :raises ValueError: if set outside ``0`` to ``len(self)``.
+    /// :raises ValueError: if set outside ``0`` to ``len(self.source)``.
     ///
     #[getter]
     pub fn pos(slf: &Bound<'_, Self>) -> PyResult<usize> {
@@ -878,10 +884,10 @@ impl Reader {
         })
     }
 
-    /// Return the length of the source in bits.
-    pub fn __len__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<usize> {
-        Self::with_reader(slf, |r| r.source_len(py))
-    }
+    // No `__len__`. Every other method is anchored at `pos`, and a length that
+    // is not would have to be the source length - which is `len(self.source)`
+    // already, and would make a spent reader truthy and a reader over empty
+    // bits falsy. `remaining` is the length question a cursor can answer.
 
     pub fn __repr__(slf: &Bound<'_, Self>, py: Python<'_>) -> PyResult<String> {
         Self::with_reader(slf, |r| {

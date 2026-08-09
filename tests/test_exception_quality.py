@@ -6,7 +6,7 @@ are expected to fail until the corresponding exception paths are fixed.
 
 import pytest
 
-from tibs import DecodeError, Dtype, Mutibs, MutableView, ReadError, Tibs, View
+from tibs import DecodeError, Dtype, Mutibs, MutableView, ReadError, Reader, Tibs, View
 
 
 OVERSIZED_INDEX = 2**100
@@ -88,6 +88,23 @@ def test_view_source_index_errors_name_the_invalid_index_and_source_length(
     message = str(exc_info.value)
     assert str(index) in message
     assert str(len(source)) in message
+
+
+@pytest.mark.parametrize(
+    "view",
+    [Tibs("0x0102").le, Mutibs("0x0102").view().lsb0],
+    ids=["View", "MutableView"],
+)
+@pytest.mark.parametrize("promote", [Tibs, Mutibs, Reader])
+def test_promoting_a_view_points_at_to_tibs_rather_than_from_bytes(view, promote):
+    # A view is not bytes-like, truthy items or numeric values, so the general
+    # advice sends the reader somewhere useless. to_tibs() is the answer.
+    with pytest.raises(TypeError) as exc_info:
+        promote(view)
+
+    message = _exception_details(exc_info.value)
+    assert "to_tibs()" in message
+    assert "from_bytes" not in message
 
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])

@@ -1,5 +1,6 @@
 use super::bits::BV;
 use super::parse::str_to_bv;
+use crate::view::{MutableView, View};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PyTuple};
@@ -335,6 +336,12 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     let mut err = format!("Cannot promote object of type <{type_name}> to a Tibs/Mutibs object. ");
     if any.is_instance_of::<PyInt>() {
         err.push_str("Perhaps you want to use the class methods 'from_zeros()', 'from_ones()' or 'from_random()'?");
+    } else if any.is_instance_of::<View>() || any.is_instance_of::<MutableView>() {
+        // A view is not a container of bits but a way of reading one, and its
+        // byte and bit order change which bits `to_tibs()` hands back. Promoting
+        // it silently would have to pick one reading, so name the two methods
+        // that make the choice explicit instead.
+        err.push_str("Use to_tibs() or to_mutibs() to take the bits as the view sees them.");
     } else {
         err.push_str("Use from_bytes(...) for bytes-like data, from_bools(...) for truthy iterables, or from_values(...) for typed numeric values.");
     };

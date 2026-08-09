@@ -33,6 +33,16 @@ Reading and writing numeric fields, with byte order and bit labels handled by a 
     example_ebpf_instruction
     example_scattered_field
 
+Reading in sequence
+^^^^^^^^^^^^^^^^^^^
+
+Working through a stream of records with a cursor instead of a computed position.
+
+.. toctree::
+    :maxdepth: 1
+
+    example_record_stream
+
 Sets of bits
 ^^^^^^^^^^^^
 

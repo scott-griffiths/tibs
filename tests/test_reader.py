@@ -39,9 +39,18 @@ def test_reader_rejects_an_out_of_range_starting_position(pos):
         _ = Reader(Tibs("0x0123"), pos)
 
 
-def test_reader_len_is_the_source_length():
-    assert len(Reader(Tibs("0x0123"))) == 16
-    assert len(Reader(Tibs())) == 0
+def test_a_reader_has_no_length_of_its_own():
+    # Deliberate: a length that is not anchored at pos would have to be the
+    # source length, which is len(r.source), and would make a reader with
+    # nothing left to read still truthy.
+    r = Reader(Tibs("0x0123"))
+
+    with pytest.raises(TypeError):
+        len(r)
+    assert len(r.source) == 16
+    assert r.remaining == 16
+    assert bool(r) is True
+    assert bool(Reader(Tibs())) is True
 
 
 def test_pos_setter_validates_against_the_source_length():
@@ -88,7 +97,7 @@ def test_remaining_and_at_end():
 def test_empty_source_starts_at_the_end():
     r = Reader(Tibs())
 
-    assert (len(r), r.pos, r.remaining, r.at_end) == (0, 0, 0, True)
+    assert (r.pos, r.remaining, r.at_end) == (0, 0, True)
 
 
 def test_repr():
@@ -382,7 +391,7 @@ def test_deepcopy_takes_the_source_with_it():
     assert detached.source is not m
     assert detached.pos == 8
     m += "0x03"
-    assert len(detached) == 16
+    assert len(detached.source) == 16
     assert detached.read_values("u8") == [2]
     assert m == Mutibs("0x010203")
 
@@ -622,7 +631,7 @@ def test_a_mutibs_source_is_read_live():
     assert r.at_end
 
     m += "0x0203"
-    assert len(r) == 24
+    assert len(r.source) == 24
     assert r.remaining == 16
     assert not r.at_end
     assert r.read_values("u8") == [2, 3]
@@ -644,7 +653,7 @@ def test_a_truncated_mutibs_source_leaves_the_cursor_past_the_end():
     r = Reader(m, 24)
 
     del m[8:]
-    assert len(r) == 8
+    assert len(r.source) == 8
     assert r.pos == 24
     assert r.remaining == 0
     assert r.at_end
