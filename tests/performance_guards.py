@@ -840,6 +840,21 @@ GUARDS: list[Guard] = [
         limit=5.0,
         same_result=False,
     ),
+    # ---- 30. walking the gaps a Rice encoding codes -----------------------
+    # Both sides sweep the same megabit looking for set bits and find none, so
+    # both are pure scans of the same storage; only the Rice side then has a
+    # gap list to build, and over an empty container that list holds one entry.
+    # The gap walk reached for `iter_ones`/`iter_zeros`, which step a byte at a
+    # time whether or not the byte holds anything, and that put it ten times
+    # over the byte scan `find_all` does for the same question.
+    Guard(
+        name="encode(Rice) gap walk vs find_all(single bit)",
+        site="codec.rs rice_encoded_gaps - byte scan with an eight-byte skip",
+        slow=lambda: ALL_ZEROS.encode(Codec.Rice),
+        fast=lambda: ALL_ZEROS.find_all(ONE_BIT),
+        limit=5.0,
+        same_result=False,
+    ),
 ]
 
 

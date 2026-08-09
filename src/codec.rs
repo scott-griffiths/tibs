@@ -1,7 +1,7 @@
 use crate::DecodeError;
 use crate::core::BitCollection;
 use crate::enums::Codec;
-use crate::helpers::{BS, BV};
+use crate::helpers::{BS, BV, BitAccumulator};
 use bitvec::prelude::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -15,21 +15,35 @@ fn short_raw_encoded_bit_length(bit_length: usize) -> usize {
     8 + bit_length.div_ceil(8) * 8
 }
 
-fn rice_encode_int(value: usize, k: u8) -> BV {
-    let mut out = BV::new();
-    let quotient = value >> k;
-    for _ in 0..quotient {
-        out.push(true);
+/// The low `count` bits set.
+#[inline]
+fn low_ones(count: usize) -> u64 {
+    if count == 0 {
+        0
+    } else {
+        u64::MAX >> (64 - count)
     }
-    out.push(false);
+}
+
+/// Append the Rice code for `value`: `value >> k` ones, a stop zero, then the
+/// low `k` bits.
+///
+/// The unary part has no bound, so it goes out in chunks the accumulator will
+/// take; what is left of it, the stop bit and the remainder are two more
+/// pushes. `k` is clamped to 31 where it is chosen, so neither exceeds the
+/// accumulator's limit.
+fn push_rice_code(out: &mut BitAccumulator, value: usize, k: u8) {
+    const UNARY_CHUNK: usize = 32;
+    let mut quotient = value >> k;
+    while quotient >= UNARY_CHUNK {
+        out.push(low_ones(UNARY_CHUNK), UNARY_CHUNK);
+        quotient -= UNARY_CHUNK;
+    }
+    // The remaining ones with the stop zero below them, at most 33 bits.
+    out.push(low_ones(quotient) << 1, quotient + 1);
     if k > 0 {
-        let remainder_mask = (1usize << k) - 1;
-        let remainder = value & remainder_mask;
-        for shift in (0..k).rev() {
-            out.push(((remainder >> shift) & 1) == 1);
-        }
+        out.push(value as u64 & low_ones(k as usize), k as usize);
     }
-    out
 }
 
 fn rice_decode_int(bits: &BS, start: usize, k: u8) -> PyResult<(usize, usize)> {
@@ -74,6 +88,7 @@ fn zstd_compress_bytes<C: BitCollection>(bits: &C) -> PyResult<Vec<u8>> {
 
 /// Three-bit markers that follow the two-bit codec tag.
 const RAW_MARKER: u8 = 0b000;
+const RICE_MARKER: u8 = 0b001;
 const ZSTD_MARKER: u8 = 0b010;
 
 /// The byte a Raw or Zstd encoding opens with.
@@ -117,29 +132,73 @@ fn encode_as_raw_bytes<C: BitCollection>(bits: &C) -> Vec<u8> {
     out
 }
 
-fn rice_encoded_gaps(bits: &BS, sparse_bit: bool) -> Vec<usize> {
+/// Record every set bit of `marked`, whose first bit is at `base`.
+#[inline]
+fn push_marked_bits(marked: u8, base: usize, gaps: &mut Vec<usize>, previous: &mut usize) {
+    let mut rest = marked;
+    while rest != 0 {
+        let position = base + rest.leading_zeros() as usize;
+        gaps.push(position - *previous);
+        *previous = position + 1;
+        rest &= !(0x80u8 >> (position - base));
+    }
+}
+
+/// The gaps between the bits equal to `sparse_bit`, which is what a Rice
+/// encoding codes.
+///
+/// `data` is left aligned and holds `len` live bits, with the padding of the
+/// final byte cleared. Walked over the bytes, skipping eight at a time where
+/// none of them holds a coded bit: `iter_ones` and `iter_zeros` step one byte
+/// at a time whether or not that byte holds anything, which measured ten times
+/// the cost of the equivalent byte scan in `search.rs` over the same data.
+fn rice_encoded_gaps(data: &[u8], len: usize, sparse_bit: bool) -> Vec<usize> {
     let mut gaps = Vec::new();
+    if len == 0 {
+        return gaps;
+    }
+    // A coded bit is a one when ones are in the minority and a zero otherwise,
+    // so invert and then look for set bits either way.
+    let mark = |byte: u8| if sparse_bit { byte } else { !byte };
+    let skip_word = if sparse_bit { 0 } else { u64::MAX };
 
     let mut previous = 0;
-    if sparse_bit {
-        for p in bits.iter_ones() {
-            gaps.push(p - previous);
-            previous = p + 1;
+    let whole = len / 8;
+    let tail_bits = len % 8;
+    let mut index = 0;
+    while index + 8 <= whole {
+        let chunk: [u8; 8] = data[index..index + 8].try_into().unwrap();
+        // Byte order is irrelevant to a comparison against a uniform word.
+        if u64::from_ne_bytes(chunk) != skip_word {
+            for (offset, &byte) in chunk.iter().enumerate() {
+                push_marked_bits(mark(byte), (index + offset) * 8, &mut gaps, &mut previous);
+            }
         }
-    } else {
-        for p in bits.iter_zeros() {
-            gaps.push(p - previous);
-            previous = p + 1;
-        }
+        index += 8;
+    }
+    for (offset, &byte) in data[index..whole].iter().enumerate() {
+        push_marked_bits(mark(byte), (index + offset) * 8, &mut gaps, &mut previous);
+    }
+    if tail_bits != 0 {
+        // The padding of the final byte is cleared, which a hunt for zeros
+        // would read as coded bits, so drop it.
+        let marked = mark(data[whole]) & (!0u8 << (8 - tail_bits));
+        push_marked_bits(marked, whole * 8, &mut gaps, &mut previous);
     }
 
-    if let Some(last) = bits.last()
-        && *last != sparse_bit
-    {
-        gaps.push(bits.len() - previous - 1);
+    if final_bit(data, len) != sparse_bit {
+        gaps.push(len - previous - 1);
     }
 
     gaps
+}
+
+/// The last of the `len` live bits of `data`.
+#[inline]
+fn final_bit(data: &[u8], len: usize) -> bool {
+    debug_assert!(len > 0);
+    let last = len - 1;
+    data[last / 8] & (0x80u8 >> (last % 8)) != 0
 }
 
 fn estimated_rice_k(gaps: &[usize]) -> u8 {
@@ -161,53 +220,75 @@ fn rice_payload_bit_length(gaps: &[usize], k: u8) -> usize {
     gaps.iter().map(|gap| (gap >> k) + 1 + k as usize).sum()
 }
 
-fn rice_encoded_bit_length<C: BitCollection>(bits: &C, sparse_bit: bool) -> usize {
-    let gaps = rice_encoded_gaps(bits.as_bitslice(), sparse_bit);
-    let estimated_k = estimated_rice_k(&gaps);
-    let payload_bit_length = rice_payload_bit_length(&gaps, estimated_k);
-    let payload_byte_length = payload_bit_length.div_ceil(8);
-    8 + encode_varint(payload_byte_length as u64).len() + 8 + payload_byte_length * 8
+/// A Rice encoding of a value, worked out but not yet written.
+///
+/// Measuring and emitting both begin with the same gap walk, and `Codec::Auto`
+/// does both whenever Rice wins, so the walk is done once and carried between
+/// them. Doing it twice cost `encode()` a clean factor of two on the inputs
+/// Rice is chosen for.
+struct RiceEncoding {
+    gaps: Vec<usize>,
+    k: u8,
+    payload_bit_length: usize,
+    final_bit: bool,
 }
 
-fn encode_as_rice<C: BitCollection>(bits: &C, sparse_bit: bool) -> BV {
-    let bitslice = bits.as_bitslice();
-
-    let gaps = rice_encoded_gaps(bitslice, sparse_bit);
-    debug_assert!(bitslice.len() > 0);
-    let final_bit = *bitslice
-        .last()
-        .expect("Rice encoding not supported for empty Tibs.");
-    let estimated_k = estimated_rice_k(&gaps);
-
-    let payload_bit_length = rice_payload_bit_length(&gaps, estimated_k);
-    let mut payload = BV::new();
-    for gap in &gaps {
-        payload.extend(rice_encode_int(*gap, estimated_k));
-    }
-    debug_assert_eq!(payload.len(), payload_bit_length);
-    let payload_byte_length = payload_bit_length.div_ceil(8);
-    let bit_padding = payload_byte_length * 8 - payload_bit_length;
-    for _ in 0..bit_padding {
-        payload.push(false);
+impl RiceEncoding {
+    fn new<C: BitCollection>(bits: &C, sparse_bit: bool) -> Self {
+        let len = bits.len();
+        debug_assert!(len > 0);
+        let data = bits.padded_byte_data_cow();
+        let gaps = rice_encoded_gaps(&data, len, sparse_bit);
+        let k = estimated_rice_k(&gaps);
+        let payload_bit_length = rice_payload_bit_length(&gaps, k);
+        RiceEncoding {
+            gaps,
+            k,
+            payload_bit_length,
+            final_bit: final_bit(&data, len),
+        }
     }
 
-    let mut encoded = BV::new();
-    encoded.push(false);
-    encoded.push(false);
-    encoded.push(true);
-    for shift in (0..3).rev() {
-        encoded.push((bit_padding >> shift) & 1 == 1);
+    fn payload_byte_length(&self) -> usize {
+        self.payload_bit_length.div_ceil(8)
     }
-    encoded.extend(encode_varint(payload_byte_length as u64));
-    for shift in (0..5).rev() {
-        encoded.push((estimated_k >> shift) & 1 == 1);
-    }
-    encoded.push(sparse_bit);
-    encoded.push(final_bit);
-    encoded.push(false);
-    encoded.extend(payload);
 
-    encoded
+    fn encoded_bit_length(&self) -> usize {
+        let payload_byte_length = self.payload_byte_length();
+        8 + encode_varint_bytes(payload_byte_length as u64).len() * 8 + 8 + payload_byte_length * 8
+    }
+}
+
+/// The complete Rice body, codec tag included.
+///
+/// Like Raw and Zstd this is a whole number of bytes from its first bit - the
+/// header byte and the eight bits after the varint see to that - so it is
+/// assembled straight into one and returned, rather than pushed a bit at a
+/// time and rebuilt through a bit vector.
+fn encode_as_rice(sparse_bit: bool, rice: &RiceEncoding) -> Vec<u8> {
+    let payload_byte_length = rice.payload_byte_length();
+    let bit_padding = payload_byte_length * 8 - rice.payload_bit_length;
+    let varint = encode_varint_bytes(payload_byte_length as u64);
+
+    let mut out = BitAccumulator::with_bit_capacity(Some(rice.encoded_bit_length()));
+    out.push(u64::from(body_header_byte(RICE_MARKER, bit_padding)), 8);
+    for &byte in &varint {
+        out.push(u64::from(byte), 8);
+    }
+    // Five bits of the Rice parameter, then the two bits needed to rebuild the
+    // run the gaps are relative to, and one spare: another whole byte.
+    out.push(u64::from(rice.k), 5);
+    out.push(u64::from(sparse_bit), 1);
+    out.push(u64::from(rice.final_bit), 1);
+    out.push(0, 1);
+    for &gap in &rice.gaps {
+        push_rice_code(&mut out, gap, rice.k);
+    }
+    out.push(0, bit_padding);
+
+    let encoded = out.into_bitvec();
+    debug_assert_eq!(encoded.len(), rice.encoded_bit_length());
+    encoded.into_vec()
 }
 
 fn exact_payload_end(total: usize, start: usize, len: usize) -> PyResult<usize> {
@@ -482,27 +563,21 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                 if bit_length > 24 {
                     let ones_count = bits.count(true);
                     let sparse_bit = ones_count < bit_length / 2;
-                    let rice_bit_length = rice_encoded_bit_length(bits, sparse_bit);
-                    if rice_bit_length < short_raw_encoded_bit_length(bit_length) {
-                        bv.clear();
-                        bv.push(false);
-                        bv.push(false);
-                        bv.extend(encode_as_rice(bits, sparse_bit));
-                    } else {
-                        bv = short_encoded;
+                    let rice = RiceEncoding::new(bits, sparse_bit);
+                    if rice.encoded_bit_length() < short_raw_encoded_bit_length(bit_length) {
+                        return Ok(encode_as_rice(sparse_bit, &rice));
                     }
+                    bv = short_encoded;
                 } else {
                     bv = short_encoded;
                 }
             }
             65.. => {
-                bv.push(false);
-                bv.push(false);
-
                 let raw_bit_length = raw_encoded_bit_length(bit_length);
                 let mut best_codec = Codec::Raw;
                 let mut best_bit_length = raw_bit_length;
                 let mut best_compressed: Option<Vec<u8>> = None;
+                let mut best_rice: Option<RiceEncoding> = None;
 
                 let ones_count = bits.count(true);
                 let sparse_bit = ones_count < bit_length / 2;
@@ -512,10 +587,12 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                     (bits.len() - ones_count) as f64 / bits.len() as f64
                 };
                 if bit_length <= 128 || sparseness < 0.25 {
-                    let rice_bit_length = rice_encoded_bit_length(bits, sparse_bit);
+                    let rice = RiceEncoding::new(bits, sparse_bit);
+                    let rice_bit_length = rice.encoded_bit_length();
                     if rice_bit_length < best_bit_length {
                         best_codec = Codec::Rice;
                         best_bit_length = rice_bit_length;
+                        best_rice = Some(rice);
                     }
                 }
 
@@ -529,27 +606,30 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                         best_compressed = Some(zstd_compressed);
                     }
                 }
+                // Every body here is a whole number of bytes from its first
+                // bit, so each is returned as bytes rather than rebuilt
+                // through the bit vector.
                 match best_codec {
-                    // Raw and Zstd are whole bytes from their first bit, so
-                    // they are returned as bytes rather than rebuilt through
-                    // the bit vector.
                     Codec::Raw => return Ok(encode_as_raw_bytes(bits)),
                     Codec::Zstd => {
                         let compressed = best_compressed
                             .expect("zstd encoding should be available when selected");
                         return Ok(encode_as_zstd_bytes(bits, compressed));
                     }
-                    Codec::Rice => bv.extend(encode_as_rice(bits, sparse_bit)),
+                    Codec::Rice => {
+                        let rice =
+                            best_rice.expect("rice encoding should be available when selected");
+                        return Ok(encode_as_rice(sparse_bit, &rice));
+                    }
                     Codec::Auto => unreachable!(),
                 }
             }
         },
         Codec::Raw => return Ok(encode_as_raw_bytes(bits)),
         Codec::Rice => {
-            bv.push(false);
-            bv.push(false);
             let sparse_bit = bits.count(true) < bits.len() / 2;
-            bv.extend(encode_as_rice(bits, sparse_bit));
+            let rice = RiceEncoding::new(bits, sparse_bit);
+            return Ok(encode_as_rice(sparse_bit, &rice));
         }
         Codec::Zstd => return Ok(encode_as_zstd_bytes(bits, zstd_compress_bytes(bits)?)),
     }
