@@ -70,18 +70,35 @@ def test_view_from_indices_validates_source_indices():
         _ = View.from_indices(t, [0, 0])
 
 
-def test_view_equality_uses_type_source_and_layout():
+def test_view_equality_uses_selected_bits_and_layout():
     t = Tibs("0x12")
     m = Mutibs("0x12")
 
     assert View(t) == View(m.to_tibs())
     assert View.from_indices(Tibs("0xf0"), range(0, 4)) == View(Tibs("0xf"))
 
+    # Mutability is not part of the value, exactly as for Tibs == Mutibs.
+    assert View(t) == MutableView(m)
+
     assert View(t) != t
-    assert View(t) != MutableView(m)
     assert View(t) != View(Tibs("0x13"))
     assert View(t) != View(t, byte_order=ByteOrder.Big)
     assert View(t) != View(t, bit_order=BitOrder.Lsb0)
+    # A layout difference still counts, whichever pair of types it spans.
+    assert View(t) != MutableView(m, byte_order=ByteOrder.Big)
+    assert View(t) != MutableView(m, bit_order=BitOrder.Lsb0)
+
+
+def test_view_equality_ignores_bits_outside_the_selection():
+    # Only what a view presents counts. Two views showing the same bits are
+    # equal however much of their sources they leave out, and whichever of the
+    # two view types they are.
+    assert Tibs("0xff").field(0, 3) == Tibs("0xf0").field(0, 3)
+    assert Mutibs("0xff").field(0, 3) == Mutibs("0xf0").field(0, 3)
+    assert Tibs("0xff").field(0, 3) == Mutibs("0xf0").field(0, 3)
+    assert Mutibs("0xf0").field(0, 3) == Tibs("0xff").field(0, 3)
+
+    assert Tibs("0xff").field(0, 3) != Mutibs("0x0f").field(0, 3)
 
 
 def test_tibs_view_aliases_create_views():
@@ -186,20 +203,27 @@ def test_mutable_view_from_indices_validates_source_indices():
         _ = MutableView.from_indices(m, [0, 0])
 
 
-def test_mutable_view_equality_uses_type_source_layout_and_source_indices():
+def test_mutable_view_equality_uses_selected_bits_and_layout():
     m1 = Mutibs("0xff")
     m2 = Mutibs("0xff")
 
     assert MutableView(m1) == MutableView(m2)
     assert MutableView(m1) == MutableView.from_indices(m1, range(len(m1)))
 
-    assert MutableView(m1) != View(m1.to_tibs())
+    # Mutability is not part of the value, exactly as for Tibs == Mutibs.
+    assert MutableView(m1) == View(m1.to_tibs())
     assert MutableView(m1) != m1
     assert MutableView(m1) != MutableView(Mutibs("0x00"))
     assert MutableView(m1) != MutableView(m1, byte_order=ByteOrder.Big)
     assert MutableView(m1) != MutableView(m1, bit_order=BitOrder.Lsb0)
-    assert MutableView.from_indices(m1, range(0, 4)) != (
-        MutableView.from_indices(m1, range(4, 8))
+    # Different selections of one source, comparing by the bits they land on:
+    # 0xf0 makes the two halves differ, where 0xff would make them equal.
+    halves = Mutibs("0xf0")
+    assert MutableView.from_indices(halves, range(0, 4)) != (
+        MutableView.from_indices(halves, range(4, 8))
+    )
+    assert MutableView.from_indices(halves, range(0, 4)) == (
+        MutableView.from_indices(Mutibs("0x0f"), range(4, 8))
     )
 
     v1 = MutableView(m1)

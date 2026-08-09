@@ -147,7 +147,7 @@ ONE_ONE = Tibs("0b1")
 # A one-bit needle, and a container holding few enough of them that collecting
 # their positions is a measurement of the scan rather than of list building.
 ONE_BIT = Tibs("0b1")
-SPARSE_T = Tibs.from_zeros(BITS).set_at(range(0, BITS, BITS // 100))
+SPARSE_T = Tibs.from_zeros(BITS).with_set(range(0, BITS, BITS // 100))
 assert ALL_ZEROS.find(ONE_BIT) is None, "the single-bit search guards must miss"
 assert SPARSE_T.count() == 100
 

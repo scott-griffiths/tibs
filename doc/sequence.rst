@@ -171,7 +171,7 @@ is faster when you want them all as a list::
 
 A ``Mutibs`` is deliberately *not* iterable, because its contents could change
 while the iterator was live. Convert with :meth:`Mutibs.to_tibs` (copy) or
-:meth:`Mutibs.as_tibs` (move) first. The same restriction applies to the
+:meth:`Mutibs.take_tibs` (move) first. The same restriction applies to the
 iterator-returning methods such as :meth:`Tibs.chunks_iter`; see
 :doc:`tibs_vs_mutibs`.
 
@@ -247,7 +247,7 @@ Reversing the whole list can be quicker if you need more than just the first few
 results.
 
 Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
-use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.as_tibs`
+use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.take_tibs`
 to move the data if you no longer need the mutable object.
 
 Scanning a byte stream for markers and pulling records out of it is a common use

@@ -133,7 +133,7 @@ class TestSingleBitSearch:
         # The lone bit sits in the tail byte, past every full word the scan
         # skips over.
         for length in (7, 8, 9, 63, 64, 65, 71, 72, 73, 1000, 1001):
-            t = Tibs.from_zeros(length).set_at(length - 1)
+            t = Tibs.from_zeros(length).with_set(length - 1)
             assert t.find([1]) == length - 1, length
             assert t.rfind([1]) == length - 1, length
             assert t.find([0]) == 0, length

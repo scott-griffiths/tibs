@@ -219,11 +219,26 @@ def test_strict_equality_and_hashing():
     assert Tibs("0xf") == Mutibs("0xf")
     assert Mutibs("0xf") == Tibs("0xf")
 
+    # Equality is the one place that does not promote, and it is deliberate
+    # rather than an oversight: a Tibs is hashable, so anything comparing equal
+    # to it would have to hash equal to it, and hash(Tibs('0xff')) cannot agree
+    # with both hash('0xff') and hash(b'\xff'). The standard library draws the
+    # same line with b'a' != 'a'. Do not "fix" these by promoting.
     assert Tibs("0xf") != "0xf"
     assert "0xf" != Tibs("0xf")
     assert Tibs("0xf") != b"\x0f"
+    assert Tibs("0xf") != bytearray(b"\x0f")
+    assert Tibs("0xf") != memoryview(b"\x0f")
     assert Tibs("0b101") != [1, 0, 1]
+    assert Tibs("0b101") != (1, 0, 1)
     assert Mutibs("0xf") != "0xf"
+    assert Mutibs("0b101") != [1, 0, 1]
+
+    # ... while every other argument position does promote, which is the
+    # asymmetry these assertions exist to hold in place.
+    assert Tibs("0xf") + "0xf" == Tibs("0xff")
+    assert "0b101" in Tibs("0b11010")
+    assert Tibs("0b1010").find([1, 0]) == 0
 
     a = Tibs("0xabcd")
     b = Tibs("0xabcd")
@@ -242,7 +257,12 @@ def test_is_things():
     a = Tibs('0b1010101010101010')
     b = Mutibs('0b1')
     assert isinstance(a, Iterable)
-    assert isinstance(b, Iterable)
+    # A Mutibs is deliberately not iterable, and says so through the protocol
+    # rather than only when iteration is attempted: `Mutibs.__iter__` is None,
+    # which `collections.abc` reads as "not implemented".
+    assert not isinstance(b, Iterable)
+    with pytest.raises(TypeError, match="not iterable"):
+        iter(b)
 
 
 def test_bits_from_bytes_string():

@@ -653,7 +653,7 @@ class TestFreeThreadedGaps:
                 assert all(m.to_bools(0, 16))
                 assert m.to_value("u8", 0, 8) == 255
                 assert m.to_values("u8", 0, 16) == [255, 255]
-                assert m.to_raw_data()[0].count(0) == 0
+                assert m._raw_data()[0].count(0) == 0
 
         def write():
             # Only converted methods, and only byte-aligned ones. An unconverted
@@ -779,7 +779,7 @@ class TestFreeThreadedGaps:
                 assert m.reversed().all()
                 assert m.rotated_left(1).all()
                 assert m.byte_swapped().all()
-                assert m.set_at(3).all()
+                assert m.with_set(3).all()
                 assert not m.inverted().any()
 
         errors = run_concurrently(

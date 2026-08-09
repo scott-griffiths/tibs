@@ -140,15 +140,12 @@ regular pattern efficiently::
     '001100101010'
 
 These modify a ``Mutibs`` in place. The copy-returning forms
-:meth:`~Tibs.set_at`, :meth:`~Tibs.unset_at` and :meth:`~Tibs.inverted` are
+:meth:`~Tibs.with_set`, :meth:`~Tibs.with_unset` and :meth:`~Tibs.inverted` are
 available on both types, and are useful when you want expression-style code with
 an immutable ``Tibs``::
 
-    >>> Tibs.from_zeros(8).set_at([1, 6])
+    >>> Tibs.from_zeros(8).with_set([1, 6])
     Tibs('0x42')
-
-(The naming is ``set_at`` / ``unset_at`` rather than ``set`` / ``unset`` because
-the past participle of "set" is also "set"; see :doc:`tibs_vs_mutibs`.)
 
 
 any / all

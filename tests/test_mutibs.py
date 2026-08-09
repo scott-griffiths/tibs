@@ -531,17 +531,17 @@ def test_set_method_chaining():
     assert a == Tibs('0b1010')
 
 
-def test_set_at_returns_new_mutibs():
+def test_with_set_returns_new_mutibs():
     a = Mutibs('0b0000')
-    b = a.set_at([0, 2])
+    b = a.with_set([0, 2])
     assert a == Tibs('0b0000')
     assert b == Tibs('0b1010')
     assert isinstance(b, Mutibs)
 
 
-def test_unset_at_returns_new_mutibs():
+def test_unwith_set_returns_new_mutibs():
     a = Mutibs('0b1111')
-    b = a.unset_at(range(1, 4))
+    b = a.with_unset(range(1, 4))
     assert a == Tibs('0b1111')
     assert b == Tibs('0b1000')
 
@@ -754,7 +754,7 @@ def test_replace_across_word_and_storage_boundaries():
     old_value = Tibs.from_random(129, seed=b'replace-old')
     old = Tibs.from_u(old_value.to_u(), len(old_value))
     source = Tibs('0b011') + old + Tibs('0b0011011') + old + Tibs('0b10')
-    assert old.to_raw_data()[1] != 0
+    assert old._raw_data()[1] != 0
 
     for replacement_length in (125, 129, 134):
         replacement_value = Tibs.from_random(
@@ -762,8 +762,8 @@ def test_replace_across_word_and_storage_boundaries():
         )
         replacement = Tibs.from_u(replacement_value.to_u(), replacement_length)
         target = Mutibs.from_u(source.to_u(), len(source))
-        assert target.to_raw_data()[1] != 0
-        assert replacement.to_raw_data()[1] != 0
+        assert target._raw_data()[1] != 0
+        assert replacement._raw_data()[1] != 0
 
         expected = Tibs.from_bin(source.bin.replace(old.bin, replacement.bin))
         assert target.replace(old, replacement) == 2
@@ -1444,14 +1444,14 @@ def test_clear():
 
 def test_reserve():
     a = Mutibs()
-    assert a.capacity() == 0
+    assert a.capacity == 0
     a.reserve(10)
-    assert a.capacity() >= 10
+    assert a.capacity >= 10
     a += Mutibs.from_random(1000000)
-    b4 = a.capacity()
+    b4 = a.capacity
     assert b4 >= 1000000
     a.clear()
-    assert a.capacity() == b4
+    assert a.capacity == b4
 
 
 def test_insert_slice():

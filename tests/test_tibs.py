@@ -290,11 +290,11 @@ def test_from_f():
 
 def test_raw_bytes_and_offset():
     a = Tibs('0xff00ff')
-    raw_bytes, offset, length = a.to_raw_data()
+    raw_bytes, offset, length = a._raw_data()
     assert raw_bytes == b'\xff\x00\xff'
     assert offset == 0
     b = a[4:20]
-    raw_bytes, offset, length = b.to_raw_data()
+    raw_bytes, offset, length = b._raw_data()
     assert offset == 4
     assert raw_bytes == b'\xff\x00\xff'
     assert Tibs.from_bytes(raw_bytes) & '0x0ffff0' == Tibs('0x0f00f0')
@@ -370,11 +370,11 @@ def test_mutibs_raw_bytes_and_offset():
     # what has to be fed back to read them. Slicing a Mutibs copies rather than
     # sharing, so the copy is free to start on a byte boundary and does; only
     # Tibs, which slices by sharing storage, has to report a non-zero offset.
-    raw_bytes, offset, length = b.to_raw_data()
+    raw_bytes, offset, length = b._raw_data()
     assert Tibs.from_bytes(raw_bytes, offset, length) == Tibs('0xf77')
     assert length == 12
     assert b == Tibs('0xf77')
-    raw_bytes, offset, length = b.as_raw_data()
+    raw_bytes, offset, length = b.take_raw_data()
     assert Tibs.from_bytes(raw_bytes, offset, length) == Tibs('0xf77')
     assert length == 12
     assert b == Tibs()
@@ -455,13 +455,13 @@ def test_bit_ops_alignments():
 def test_raw_data_bug():
     a = Mutibs.from_bytes(b'hello')
     b = a[8:]
-    assert a.to_raw_data() == (b'hello', 0, 40)
-    assert b.to_raw_data() == (b'ello', 0, 32)
+    assert a._raw_data() == (b'hello', 0, 40)
+    assert b._raw_data() == (b'ello', 0, 32)
 
     a = Tibs.from_bytes(b'hello')
     b = a[8:]
-    assert a.to_raw_data() == (b'hello', 0, 40)
-    assert b.to_raw_data() == (b'ello', 0, 32)
+    assert a._raw_data() == (b'hello', 0, 40)
+    assert b._raw_data() == (b'ello', 0, 32)
 
 
 def test_from_bools_generator():
@@ -577,17 +577,17 @@ def test_count_byte_aligned_matches_find_all():
                 needle, mask=mask, byte_aligned=byte_aligned) == expected
 
 
-def test_tibs_set_at_returns_new_instance():
+def test_tibs_with_set_returns_new_instance():
     a = Tibs('0b0000')
-    b = a.set_at([0, -1])
+    b = a.with_set([0, -1])
     assert a == Tibs('0b0000')
     assert b == Tibs('0b1001')
     assert isinstance(b, Tibs)
 
 
-def test_tibs_unset_at_returns_new_instance():
+def test_tibs_unwith_set_returns_new_instance():
     a = Tibs('0b1111')
-    b = a.unset_at(range(2))
+    b = a.with_unset(range(2))
     assert a == Tibs('0b1111')
     assert b == Tibs('0b0011')
 
@@ -776,7 +776,7 @@ def encode_long_int(u: int) -> Tibs:
         m += [1] + chunk  # With continuation bit
     m += [0] + chunks[-1]
     assert len(m) % 8 == 0
-    return m.as_tibs()
+    return m.take_tibs()
 
 
 def decode_to_long_int(t: Tibs) -> int:
@@ -867,14 +867,14 @@ def decode_tibs(b: bytes) -> Tibs:
             m_out = m[7:8]
         else:
             m_out = Mutibs()
-        return m_out.as_tibs()
+        return m_out.take_tibs()
 
     if short_form_flag:
         byte_length = m[2:5].to_u() + 1
         bit_padding = m[5:8].to_u()
         short_length = byte_length * 8 - bit_padding
         m_out = m[8:8 + short_length]
-        return m_out.as_tibs()
+        return m_out.take_tibs()
 
     codec = m[2:5].to_u()
     assert codec == 0
@@ -885,11 +885,11 @@ def decode_tibs(b: bytes) -> Tibs:
         if byte[0] == 0:
             break
     data_start = 8 + len(u)
-    byte_length = decode_to_long_int(u.as_tibs())
+    byte_length = decode_to_long_int(u.take_tibs())
     m_out = m[data_start: data_start + byte_length * 8]
     if bit_padding:
         m_out = m_out[:-bit_padding]
-    return m_out.as_tibs()
+    return m_out.take_tibs()
 
 
 def test_encoding():

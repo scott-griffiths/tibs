@@ -45,7 +45,7 @@ Put a new method in its matching section rather than at the end of the block.
 3. Views and fields - `view`, `le`, `be`, `lsb0`, `msb0`, `field`.
 4. Searching - `find`, `rfind`, the `find_all` variants, `starts_with`, `ends_with`, `count`.
 5. Splitting and iteration - `chunks`, `chunks_iter`, `rchunks_iter`, `split_at`.
-6. Inspection and mutation - `all`, `any`, `set`/`set_at`, `invert`/`inverted`, `reverse`/`reversed`, `byte_swap`/`byte_swapped`, `rotate_*`/`rotated_*`, `insert`/`inserted`, `replace`/`replaced`, and the `Mutibs`-only list operations (`append`, `extend`, `pop`, `clear`, `reserve`).
+6. Inspection and mutation - `all`, `any`, `set`/`with_set`, `invert`/`inverted`, `reverse`/`reversed`, `byte_swap`/`byte_swapped`, `rotate_*`/`rotated_*`, `insert`/`inserted`, `replace`/`replaced`, and the `Mutibs`-only list operations (`append`, `extend`, `pop`, `clear`, `reserve`).
 7. Logical and bitwise - `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`, `is_subset_of`, `extract`, `deposit`/`deposited`.
 8. Serialization - `encode`, `decode`.
 9. Python protocol - every dunder, grouped by kind. Dunders belong here even when they mirror a named method in an earlier section, so that the rule stays mechanical.

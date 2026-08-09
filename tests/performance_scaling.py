@@ -552,8 +552,8 @@ def fingerprint_screen(count: int):
     required_bits[list(REQUIRED_FEATURES)] = 1
     reference_bits = zeros(FEATURE_BITS, endian="big")
     reference_bits[reference_features] = 1
-    required_string = Tibs.from_zeros(FEATURE_BITS).set_at(REQUIRED_FEATURES)
-    reference_string = Tibs.from_zeros(FEATURE_BITS).set_at(reference_features)
+    required_string = Tibs.from_zeros(FEATURE_BITS).with_set(REQUIRED_FEATURES)
+    reference_string = Tibs.from_zeros(FEATURE_BITS).with_set(reference_features)
 
     def with_bitarray():
         matched = 0

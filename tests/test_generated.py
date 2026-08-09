@@ -781,8 +781,8 @@ class TestAdditionalCoverage:
     def test_tibs_set_unset_and_inverted_return_new_instances(self):
         t = Tibs("0b10110010")
 
-        assert t.set_at(range(1, 8, 2)) == Tibs("0b11110111")
-        assert Tibs("0b11111111").unset_at([-1, -3, 0]) == Tibs("0b01111010")
+        assert t.with_set(range(1, 8, 2)) == Tibs("0b11110111")
+        assert Tibs("0b11111111").with_unset([-1, -3, 0]) == Tibs("0b01111010")
         assert Tibs("0b10000001").inverted(range(1, 7)) == Tibs("0b11111111")
         assert t == Tibs("0b10110010")
 
@@ -800,10 +800,10 @@ class TestAdditionalCoverage:
         assert t.byte_swapped(2, start=8, end=40) == Tibs("0x002211443355")
         assert t == Tibs("0x001122334455")
 
-    def test_to_raw_data_reports_offset_and_length_for_unaligned_slice(self):
+    def test_raw_data_reports_offset_and_length_for_unaligned_slice(self):
         t = Tibs("0x123456")[4:20]
 
-        raw_bytes, offset, length = t.to_raw_data()
+        raw_bytes, offset, length = t._raw_data()
 
         assert raw_bytes == b"\x12\x34\x56"
         assert offset == 4
@@ -823,19 +823,19 @@ class TestAdditionalCoverage:
         with pytest.raises(IndexError):
             empty.pop()
 
-    def test_mutibs_as_tibs_moves_data_out_and_empties_source(self):
+    def test_mutibs_take_tibs_moves_data_out_and_empties_source(self):
         m = Mutibs("0x1234")
 
-        moved = m.as_tibs()
+        moved = m.take_tibs()
 
         assert moved == Tibs("0x1234")
         assert m == Tibs()
         assert len(m) == 0
 
-    def test_mutibs_as_raw_data_moves_data_out_and_empties_source(self):
+    def test_mutibs_take_raw_data_moves_data_out_and_empties_source(self):
         m = Mutibs("0x1234")
 
-        assert m.as_raw_data() == (b"\x12\x34", 0, 16)
+        assert m.take_raw_data() == (b"\x12\x34", 0, 16)
         assert m == Tibs()
         assert len(m) == 0
 
@@ -1535,20 +1535,20 @@ class TestFuzzSlicingAndViews:
 
     @FUZZ
     @given(padded_tibs(max_size=256))
-    def test_to_raw_data_reconstructs_offset_slices(self, tb):
+    def test_raw_data_reconstructs_offset_slices(self, tb):
         t, bits = tb
 
-        raw_bytes, offset, length = t.to_raw_data()
+        raw_bytes, offset, length = t._raw_data()
 
         assert length == len(bits)
         assert Tibs.from_bytes(raw_bytes, offset, length).to_bools() == bits
 
     @FUZZ
     @given(padded_mutibs(max_size=256))
-    def test_mutibs_as_raw_data_reconstructs_offset_slices_and_empties_source(self, mb):
+    def test_mutibs_take_raw_data_reconstructs_offset_slices_and_empties_source(self, mb):
         m, bits = mb
 
-        raw_bytes, offset, length = m.as_raw_data()
+        raw_bytes, offset, length = m.take_raw_data()
 
         assert length == len(bits)
         assert Tibs.from_bytes(raw_bytes, offset, length).to_bools() == bits
@@ -1887,7 +1887,7 @@ class TestFuzzMutation:
 
     @FUZZ
     @given(padded_tibs(min_size=1), st.data())
-    def test_immutable_set_at_and_inverted_match_model(self, tb, data):
+    def test_immutable_with_set_and_inverted_match_model(self, tb, data):
         t, bits = tb
         n = len(bits)
         positions = data.draw(st.lists(st.integers(-n, n - 1), max_size=15), label="positions")
@@ -1895,12 +1895,12 @@ class TestFuzzMutation:
         expected = bits[:]
         for p in positions:
             expected[p] = True
-        assert t.set_at(positions).to_bools() == expected
+        assert t.with_set(positions).to_bools() == expected
 
         expected = bits[:]
         for p in positions:
             expected[p] = False
-        assert t.unset_at(positions).to_bools() == expected
+        assert t.with_unset(positions).to_bools() == expected
 
         expected = bits[:]
         for p in positions:
@@ -1946,11 +1946,11 @@ class TestFuzzFoundBugs:
         m.unset(range(0, 1, -1))
         assert m == Mutibs.from_ones(1)
 
-    def test_set_at_empty_range_is_noop(self):
+    def test_with_set_empty_range_is_noop(self):
         # The non-mutating variants route through the same position handling.
         t = Tibs.from_zeros(3)
-        assert t.set_at(range(1, 0)) == t
-        assert t.unset_at(range(0, 2, -1)) == t
+        assert t.with_set(range(1, 0)) == t
+        assert t.with_unset(range(0, 2, -1)) == t
 
     def test_set_range_negative_values_match_list_semantics(self):
         # A range is interpreted exactly like the list of its contents, so
@@ -2051,7 +2051,7 @@ class TestBugHuntFailing:
     # --- Bug 3: position arguments rejected documented Iterable inputs -----
     #
     # tibs.pyi declares pos as `SupportsIndex | Iterable[SupportsIndex]` (or
-    # `| range`) for set/unset/set_at/unset_at and invert/inverted, and the
+    # `| range`) for set/unset/with_set/with_unset and invert/inverted, and the
     # docstrings say "an iterable of bit positions". Generators, iterators
     # and sets are Iterables, and other APIs (split_at, from_bools,
     # from_joined) accept them, but these methods used to raise TypeError
@@ -2067,13 +2067,13 @@ class TestBugHuntFailing:
         m.unset(iter([0, 3]))
         assert m == Mutibs('0b0110')
 
-    def test_tibs_set_at_accepts_generator(self):
+    def test_tibs_with_set_accepts_generator(self):
         t = Tibs.from_zeros(4)
-        assert t.set_at(i for i in [1, 2]) == Tibs('0b0110')
+        assert t.with_set(i for i in [1, 2]) == Tibs('0b0110')
 
-    def test_tibs_unset_at_accepts_set(self):
+    def test_tibs_unwith_set_accepts_set(self):
         t = Tibs.from_ones(4)
-        assert t.unset_at({0, 3}) == Tibs('0b0110')
+        assert t.with_unset({0, 3}) == Tibs('0b0110')
 
     def test_mutibs_invert_accepts_generator(self):
         m = Mutibs('0b0000')

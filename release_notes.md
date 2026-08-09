@@ -21,6 +21,35 @@ Backwardly incompatible changes
 
 * The minimum Python version is now 3.11 instead of 3.10.
 
+* Renamed `set_at` and `unset_at` to `with_set` and `with_unset` on both `Tibs`
+  and `Mutibs`. Copy-returning methods take the past participle of the mutating
+  one (`invert`/`inverted`, `reverse`/`reversed`); "set" is its own participle,
+  so those two take a `with_` prefix instead of an `_at` suffix that meant
+  nothing anywhere else in the API.
+
+* Renamed `Mutibs.as_tibs` to `Mutibs.take_tibs`, and `Mutibs.as_raw_data` to
+  `Mutibs.take_raw_data`. Both empty the object they are called on, which `as_`
+  does not suggest to a Python reader - `numpy.asarray` and CPython's own
+  `PyBytes_AsString` leave their source intact.
+
+* Removed `to_raw_data` from `Tibs` and `Mutibs`. It copied the storage bytes
+  and handed back the internal bit offset with them;
+  `to_padded_bytes()` with `len()` round-trips the same value without exposing
+  the layout, and `encode(Codec.Raw)` is the form to persist.
+
+* `Mutibs.capacity` is now a property rather than a method.
+
+* A `Mutibs` now reports that it is not iterable through the protocol, rather
+  than only when iteration is attempted: `Mutibs.__iter__` is `None`, so
+  `isinstance(m, collections.abc.Iterable)` is `False` where it used to be
+  `True`. The `TypeError` from `iter(m)` is now CPython's generic wording.
+
+* Views now compare by the bits they present rather than by their whole source.
+  A `View` and a `MutableView` showing the same bits under the same layout are
+  now equal, matching `Tibs == Mutibs`; and two views are equal whenever their
+  selections land on the same values, where a `MutableView` used to require
+  that the bits *outside* the view matched too.
+
 Added
 
 * Added the `Reader` class for reading fields in

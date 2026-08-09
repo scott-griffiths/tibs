@@ -649,6 +649,17 @@ impl MutableView {
         Ok(selected)
     }
 
+    /// The bits this view presents, gathered from its source, or `None` when
+    /// the selection no longer fits a source that has since shrunk.
+    ///
+    /// Equality is the one caller that wants the `None` rather than the error:
+    /// a selection that no longer fits presents no bits, so it can hardly
+    /// present the *same* bits as something else, and answering False keeps
+    /// `__eq__` total. The loud error still belongs on the accessors.
+    fn selected_bits_or_stale(&self, py: Python<'_>) -> PyResult<Option<BV>> {
+        self.with_source(py, |source| Ok(self.selected_source_bits(source).ok()))
+    }
+
     fn to_tibs_view(&self, py: Python<'_>) -> PyResult<Tibs> {
         let source_bits = self.with_source(py, |source| {
             self.validate_current_layout(source.len())?;
@@ -1232,38 +1243,74 @@ impl MutableView {
         format_bit_collection(py, &self.to_tibs_view(py)?, format_spec, "MutableView")
     }
 
-    /// Return True if two MutableViews have the same source value and layout.
+    /// Return True if two views present the same bits under the same layout.
+    ///
+    /// Only the selected bits count: what a view leaves out of its source plays
+    /// no part, so two views over different sources are equal whenever they
+    /// show the same values. A :class:`View` and a ``MutableView`` compare
+    /// equal to one another on those same terms, just as a :class:`Tibs` and a
+    /// :class:`Mutibs` do.
     pub fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         // `cast` rather than `extract::<PyRef<_>>`, which folds a failed borrow
         // into the same `Err` as a type mismatch. That would quietly answer
         // False when another thread merely happens to hold the other view.
-        let Ok(other) = other.cast::<MutableView>() else {
-            return Ok(false);
-        };
-        // `MutableView` is frozen, so reaching it needs no borrow of its own.
-        let other = other.get();
+        if let Ok(other) = other.cast::<MutableView>() {
+            // `MutableView` is frozen, so reaching it needs no borrow of its own.
+            let other = other.get();
 
-        if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
-            return Ok(false);
+            if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
+                return Ok(false);
+            }
+
+            // Both sources at once: locking them in turn would suspend the first.
+            return with_locked2(
+                self.source.bind(py),
+                other.source.bind(py),
+                |source, other_source| {
+                    // The same whole source under the same selection has to
+                    // mean the same selected bits, so the common case - two
+                    // views onto one object - settles without gathering
+                    // either side. It also answers a view compared with
+                    // itself after its source shrank, which the gathering
+                    // path below could not.
+                    //
+                    // `bits_equal`, not `BitVec`'s own `PartialEq`: the latter
+                    // is the bit-domain `sp_eq` walk that every other
+                    // comparison in the crate already avoids, and it ran this
+                    // forty times slower than `Mutibs == Mutibs` over the same
+                    // bits.
+                    if source.bits_equal(other_source)
+                        && self.selection.selects_same_as(
+                            source.len(),
+                            &other.selection,
+                            other_source.len(),
+                        )
+                    {
+                        return Ok(true);
+                    }
+                    let (Ok(selected), Ok(other_selected)) = (
+                        self.selected_source_bits(source),
+                        other.selected_source_bits(other_source),
+                    ) else {
+                        return Ok(false);
+                    };
+                    Ok(Tibs::from_bv(selected).bits_equal(&Tibs::from_bv(other_selected)))
+                },
+            );
         }
-
-        // Both sources at once: locking them in turn would suspend the first.
-        with_locked2(
-            self.source.bind(py),
-            other.source.bind(py),
-            |source, other_source| {
-                // `bits_equal`, not `BitVec`'s own `PartialEq`: the latter is
-                // the bit-domain `sp_eq` walk that every other comparison in
-                // the crate already avoids, and it ran this forty times slower
-                // than `Mutibs == Mutibs` over the same bits.
-                Ok(source.bits_equal(other_source)
-                    && self.selection.selects_same_as(
-                        source.len(),
-                        &other.selection,
-                        other_source.len(),
-                    ))
-            },
-        )
+        if let Ok(other) = other.cast::<View>() {
+            let other = other.get();
+            if self.byte_order != other.byte_order || self.bit_order != other.bit_order {
+                return Ok(false);
+            }
+            // A `View` holds its selection already sliced out, so only this
+            // side has to be gathered before the two can be compared.
+            let Some(bits) = self.selected_bits_or_stale(py)? else {
+                return Ok(false);
+            };
+            return Ok(Tibs::from_bv(bits).bits_equal(&other.source));
+        }
+        Ok(false)
     }
 }
 
@@ -1726,14 +1773,33 @@ impl View {
         format_bit_collection(py, &self.to_tibs_view()?, format_spec, "View")
     }
 
-    /// Return True if two Views have the same source value and layout.
-    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        let Ok(other) = other.extract::<PyRef<'_, View>>() else {
-            return false;
-        };
-
-        self.source == other.source
-            && self.byte_order == other.byte_order
-            && self.bit_order == other.bit_order
+    /// Return True if two views present the same bits under the same layout.
+    ///
+    /// A ``View`` and a :class:`MutableView` compare equal to one another on
+    /// those same terms, just as a :class:`Tibs` and a :class:`Mutibs` do.
+    pub fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        // `cast` rather than `extract::<PyRef<_>>`, which folds a failed borrow
+        // into the same `Err` as a type mismatch. That would quietly answer
+        // False when another thread merely happens to hold the other view.
+        if let Ok(other) = other.cast::<View>() {
+            // `View` is frozen, so reaching it needs no borrow of its own.
+            let other = other.get();
+            return Ok(self.source == other.source
+                && self.byte_order == other.byte_order
+                && self.bit_order == other.bit_order);
+        }
+        if let Ok(other_view) = other.cast::<MutableView>() {
+            let mutable = other_view.get();
+            if self.byte_order != mutable.byte_order || self.bit_order != mutable.bit_order {
+                return Ok(false);
+            }
+            // A `View` holds its selection already sliced out, so only the
+            // mutable side has to be gathered before the two can be compared.
+            let Some(bits) = mutable.selected_bits_or_stale(other.py())? else {
+                return Ok(false);
+            };
+            return Ok(self.source.bits_equal(&Tibs::from_bv(bits)));
+        }
+        Ok(false)
     }
 }

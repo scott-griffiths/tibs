@@ -142,6 +142,10 @@ fn index_conversion_error(py: Python<'_>, error: PyErr, length: usize) -> PyErr 
 ///
 ///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
 ///
+///     A ``Mutibs`` is not iterable, as the bits could change underneath an
+///     iterator. Convert first with ``to_tibs()`` for a copy, or ``take_tibs()``
+///     if the mutable object is no longer needed.
+///
 #[pyclass(sequence, skip_from_py_object, module = "tibs")]
 pub struct Mutibs {
     pub data: BV,
@@ -759,8 +763,8 @@ impl Mutibs {
             Positions::Range { start, stop, step } => {
                 self.set_from_slice(value, *start, *stop, *step)
             }
-            // Neutral wording: this arm is shared by set, unset, set_at and
-            // unset_at, so it cannot name one of them.
+            // Neutral wording: this arm is shared by set, unset, with_set and
+            // with_unset, so it cannot name one of them.
             Positions::NotIndexable => Err(PyTypeError::new_err(
                 "The positions argument must be an integer, an iterable of ints, or a range.",
             )),
@@ -1893,20 +1897,15 @@ impl Mutibs {
 
     /// Return a copy of the raw byte information.
     ///
-    /// This returns the underlying byte data and can contain leading and trailing
-    /// bits that are not considered part of the object's value. Usually using
-    /// :meth:`~to_bytes` is what you really need.
-    ///
-    /// See also :meth:`~as_raw_data` which moves the byte data instead of copying it.
+    /// Private, and not part of the public API: it exposes the storage layout,
+    /// which :meth:`~to_padded_bytes` plus :func:`len` already covers for every
+    /// public purpose. It survives only so the tests can see whether a slice
+    /// shared its source's storage, which is otherwise unobservable.
     ///
     /// :return: A tuple of the raw bytes, the bit offset and the bit length.
     ///
-    /// .. code-block:: python
-    ///
-    ///     raw_bytes, offset, length = t.to_raw_data()
-    ///     assert t == Mutibs.from_bytes(raw_bytes, offset=offset, length=length)
-    ///
-    pub fn to_raw_data(slf: &Bound<'_, Self>) -> PyResult<(Vec<u8>, usize, usize)> {
+    #[pyo3(name = "_raw_data")]
+    pub fn raw_data_private(slf: &Bound<'_, Self>) -> PyResult<(Vec<u8>, usize, usize)> {
         with_locked(slf, |m| Ok(m.raw_data()))
     }
 
@@ -1916,16 +1915,14 @@ impl Mutibs {
     /// leading and trailing bits that are not considered part of the object's value. Usually using
     /// :meth:`~to_bytes` is what you really need.
     ///
-    /// See also :meth:`~to_raw_data` which copies the byte data instead of moving it.
-    ///
     /// :return: A tuple of the raw bytes, the bit offset and the bit length.
     ///
     /// .. code-block:: python
     ///
-    ///     raw_bytes, offset, length = t.as_raw_data()
+    ///     raw_bytes, offset, length = t.take_raw_data()
     ///     assert t == []
     ///
-    pub fn as_raw_data(slf: &Bound<'_, Self>) -> PyResult<(Vec<u8>, usize, usize)> {
+    pub fn take_raw_data(slf: &Bound<'_, Self>) -> PyResult<(Vec<u8>, usize, usize)> {
         with_locked_mut(slf, |m| {
             let offset = m.storage_head_offset();
             let len = m.len();
@@ -3298,11 +3295,11 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_zeros(5).set_at([1, 3])
+    ///     >>> Mutibs.from_zeros(5).with_set([1, 3])
     ///     Mutibs('0b01010')
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
-    pub fn set_at(slf: &Bound<'_, Self>, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn with_set(slf: &Bound<'_, Self>, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let positions = Self::read_positions(Some(pos))?;
         with_locked(slf, |m| {
             let mut out = m.clone();
@@ -3321,11 +3318,11 @@ impl Mutibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Mutibs.from_ones(5).unset_at([1, 3])
+    ///     >>> Mutibs.from_ones(5).with_unset([1, 3])
     ///     Mutibs('0b10101')
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
-    pub fn unset_at(slf: &Bound<'_, Self>, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn with_unset(slf: &Bound<'_, Self>, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let positions = Self::read_positions(Some(pos))?;
         with_locked(slf, |m| {
             let mut out = m.clone();
@@ -3697,7 +3694,7 @@ impl Mutibs {
     /// Create and return a Tibs instance from a copy of the Mutibs data.
     ///
     /// This copies the underlying binary data, giving a new independent Tibs object.
-    /// If you no longer need the Mutibs, consider using :meth:`as_tibs` instead to avoid the copy.
+    /// If you no longer need the Mutibs, consider using :meth:`take_tibs` instead to avoid the copy.
     ///
     /// :return: A new Tibs instance with the same bit data.
     ///
@@ -3726,13 +3723,13 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> a = Mutibs('0b10110')
-    ///     >>> b = a.as_tibs()
+    ///     >>> b = a.take_tibs()
     ///     >>> a
     ///     Mutibs()
     ///     >>> b
     ///     Tibs('0b10110')
     ///
-    pub fn as_tibs(slf: &Bound<'_, Self>) -> PyResult<Tibs> {
+    pub fn take_tibs(slf: &Bound<'_, Self>) -> PyResult<Tibs> {
         with_locked_mut(slf, |m| {
             let mut data = std::mem::take(&mut *m.as_mut_bitvec_ref());
             data.shrink_to_fit();
@@ -3774,9 +3771,10 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs()
-    ///     >>> m.capacity() >= len(m)
+    ///     >>> m.capacity >= len(m)
     ///     True
     ///
+    #[getter]
     pub fn capacity(slf: &Bound<'_, Self>) -> PyResult<usize> {
         with_locked(slf, |m| Ok(m.as_bitvec_ref().capacity()))
     }
@@ -3785,7 +3783,7 @@ impl Mutibs {
     ///
     /// This can be helpful as a performance optimization to avoid multiple memory reallocations when
     /// constructing a large Mutibs incrementally. If enough memory is already reserved then
-    /// this method will have no effect. See also :meth:`capacity`.
+    /// this method will have no effect. See also :attr:`capacity`.
     ///
     /// :param int additional: The number of bits that can be appended without any further memory reallocations.
     /// :return: None.
@@ -4316,16 +4314,25 @@ impl Mutibs {
         })
     }
 
+    // `__iter__ = None` rather than an `__iter__` that raises. Both stop
+    // `iter(m)`, and both stop the `__getitem__` fallback that would otherwise
+    // walk a Mutibs a bit at a time, but only this one is honest to
+    // `isinstance(m, collections.abc.Iterable)`: `_check_methods` reads a
+    // `None` entry as "not implemented", where a raising method looks like a
+    // working one until it is called. CPython special-cases the `None` in
+    // `slot_tp_iter`, so the cost is its generic "not iterable" message
+    // instead of a hand-written one - the class docstring carries the hint
+    // that `to_tibs()` and `take_tibs()` are the way across.
+    #[classattr]
+    #[pyo3(name = "__iter__")]
+    fn no_iter(py: Python<'_>) -> Py<PyAny> {
+        py.None()
+    }
+
     // Supply some more helpful errors for things which aren't supported for Mutibs, but are for Tibs.
     // `&Bound` rather than `&self`: these only ever raise, so taking the borrow
     // at all would let a concurrent writer turn an AttributeError into
     // `RuntimeError: Already borrowed`.
-    pub fn __iter__(_slf: &Bound<'_, Self>) -> PyResult<()> {
-        Err(PyTypeError::new_err(
-            "'Mutibs' objects are not iterable. You can use '.to_tibs()' or '.as_tibs()' to convert to a 'Tibs' object that does support iteration.",
-        ))
-    }
-
     pub fn __getattr__(_slf: &Bound<'_, Self>, name: String) -> PyResult<()> {
         if name == "find_all_iter"
             || name == "rfind_all_iter"

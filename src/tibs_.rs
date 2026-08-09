@@ -1860,18 +1860,15 @@ impl Tibs {
 
     /// Return a copy of the raw byte information.
     ///
-    /// This returns the underlying byte data and can contain leading and trailing
-    /// bits that are not considered part of the object's data. Usually using
-    /// :meth:`~to_bytes` is what you really need.
+    /// Private, and not part of the public API: it exposes the storage layout,
+    /// which :meth:`~to_padded_bytes` plus :func:`len` already covers for every
+    /// public purpose. It survives only so the tests can see whether a slice
+    /// shared its source's storage, which is otherwise unobservable.
     ///
     /// :return: A tuple of the raw bytes, the bit offset and the bit length.
     ///
-    /// .. code-block:: python
-    ///
-    ///     raw_bytes, offset, length = t.to_raw_data()
-    ///     assert t == Tibs.from_bytes(raw_bytes, offset=offset, length=length)
-    ///
-    pub fn to_raw_data(&self) -> (Vec<u8>, usize, usize) {
+    #[pyo3(name = "_raw_data")]
+    pub fn raw_data_private(&self) -> (Vec<u8>, usize, usize) {
         self.raw_data()
     }
 
@@ -1880,9 +1877,8 @@ impl Tibs {
     /// This is only possible when the underlying storage starts on a byte
     /// boundary; otherwise a :class:`BufferError` is raised, in which case
     /// :meth:`~to_bytes` or :meth:`~to_padded_bytes` can be used to get an
-    /// owned copy instead. As with the raw byte data exposed by
-    /// :meth:`~to_raw_data`, bits beyond the logical length in the final byte
-    /// are not masked to zero.
+    /// owned copy instead. Bits beyond the logical length in the final byte are
+    /// not masked to zero.
     unsafe fn __getbuffer__(
         slf: Bound<'_, Self>,
         view: *mut ffi::Py_buffer,
@@ -2394,7 +2390,7 @@ impl Tibs {
     ///
     /// Note that this method is not available for :class:`Mutibs` as its value could change while the
     /// generator is still active. For that case, convert to a :class:`Tibs` first with
-    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.as_tibs` if you no longer need the mutable object.
+    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.take_tibs` if you no longer need the mutable object.
     ///
     /// .. code-block:: pycon
     ///
@@ -2429,7 +2425,7 @@ impl Tibs {
     ///
     /// Note that this method is not available for :class:`Mutibs` as its value could change while the
     /// generator is still active. For that case, convert to a :class:`Tibs` first with
-    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.as_tibs` if you no longer need the mutable object.
+    /// :meth:`Mutibs.to_tibs`, or use :meth:`Mutibs.take_tibs` if you no longer need the mutable object.
     ///
     /// .. code-block:: pycon
     ///
@@ -3045,7 +3041,7 @@ impl Tibs {
     #[classmethod]
     #[pyo3(signature = (iterable, /), text_signature = "(cls, iterable, /)")]
     pub fn from_joined(_cls: &Bound<'_, PyType>, iterable: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Build the immutable result directly; going through Mutibs::as_tibs
+        // Build the immutable result directly; going through Mutibs::take_tibs
         // would move through an unnecessary mutable wrapper.
         Ok(Tibs::from_bv(Mutibs::joined_bv_from_iterable(iterable)?))
     }
@@ -3356,11 +3352,11 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_zeros(5).set_at([1, 3])
+    ///     >>> Tibs.from_zeros(5).with_set([1, 3])
     ///     Tibs('0b01010')
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
-    pub fn set_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn with_set(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let positions = Mutibs::read_positions(Some(pos))?;
         self.copy_with_mutation(|out| out.apply_set_positions(true, &positions))
     }
@@ -3375,11 +3371,11 @@ impl Tibs {
     ///
     /// .. code-block:: pycon
     ///
-    ///     >>> Tibs.from_ones(5).unset_at([1, 3])
+    ///     >>> Tibs.from_ones(5).with_unset([1, 3])
     ///     Tibs('0b10101')
     ///
     #[pyo3(signature = (pos, /), text_signature = "($self, pos, /)")]
-    pub fn unset_at(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub fn with_unset(&self, pos: &Bound<'_, PyAny>) -> PyResult<Self> {
         let positions = Mutibs::read_positions(Some(pos))?;
         self.copy_with_mutation(|out| out.apply_set_positions(false, &positions))
     }

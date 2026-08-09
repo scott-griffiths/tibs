@@ -11,7 +11,41 @@ consequences:
   they can be hashed and used in sets.
 * Direct iteration (``for bit in x``) and methods that return iterators over the data are available for
   Tibs, but not Mutibs. This is because for a ``Mutibs`` the data could change while the iterator is live.
-  To iterate over a ``Mutibs`` first convert to a ``Tibs`` with :meth:`Mutibs.to_tibs` or :meth:`Mutibs.as_tibs`.
+  To iterate over a ``Mutibs`` first convert to a ``Tibs`` with :meth:`Mutibs.to_tibs` or :meth:`Mutibs.take_tibs`.
+
+
+What compares equal
+^^^^^^^^^^^^^^^^^^^
+
+Mutability is not part of a value, so a ``Tibs`` and a ``Mutibs`` holding the
+same bits are equal, as are a :class:`View` and a :class:`MutableView`
+presenting the same bits under the same layout::
+
+    >>> Tibs('0xff') == Mutibs('0xff')
+    True
+    >>> Tibs('0xff').view() == Mutibs('0xff').view()
+    True
+
+Equality does *not* promote, though, and this is the one place in the library
+where that is true. Everywhere a bit sequence is accepted - concatenation,
+``in``, :meth:`~Tibs.find`, :meth:`~Tibs.count` and the rest - a ``str``,
+``bytes`` or list of bits is converted for you. ``==`` deliberately does not::
+
+    >>> Tibs('0b1010') == '0b1010'
+    False
+    >>> Tibs('0xff') == b'\xff'
+    False
+
+The reason is hashing. A ``Tibs`` is hashable, so anything it compares equal to
+would have to hash equal to it, and ``hash(Tibs('0xff'))`` cannot agree with
+``hash('0xff')`` and ``hash(b'\xff')`` at the same time. Comparing equal to
+either one would put ``Tibs`` objects and strings in the same dictionary bucket
+while disagreeing about what is in it. This matches the standard library, where
+``b'a' == 'a'`` is likewise ``False``. Convert explicitly when you want the
+comparison::
+
+    >>> Tibs('0b1010') == Tibs('0b1010')
+    True
 
 
 Mutating and copy methods
@@ -61,12 +95,16 @@ new mutable value without changing the original::
    ":meth:`~Mutibs.reverse`", ":meth:`~Mutibs.reversed`"
    ":meth:`~Mutibs.rotate_left`", ":meth:`~Mutibs.rotated_left`"
    ":meth:`~Mutibs.rotate_right`", ":meth:`~Mutibs.rotated_right`"
-   ":meth:`~Mutibs.set`", ":meth:`~Mutibs.set_at`"
-   ":meth:`~Mutibs.unset`", ":meth:`~Mutibs.unset_at`"
+   ":meth:`~Mutibs.set`", ":meth:`~Mutibs.with_set`"
+   ":meth:`~Mutibs.unset`", ":meth:`~Mutibs.with_unset`"
 
 
-The linguistic oddities here are ``set_at()`` and ``unset_at()``, as the past-participle of 'set' is
-also 'set', so the naming pattern failed (English is annoying sometimes).
+The rule is that a copy-returning method takes the past participle of the
+mutating one, and that where the participle is spelled the same as the verb it
+takes a ``with_`` prefix instead. Only ``set`` and ``unset`` need the second
+half of that rule, which is why ``with_set()`` and ``with_unset()`` look
+different from the rest: ``m.set(3)`` changes ``m``, ``m.with_set(3)`` hands
+back a new object with bit 3 set and leaves ``m`` alone.
 
 Not all mutating methods have a copy equivalent - things like ``clear()`` don't make sense for a
 ``Tibs``, and you can use the ``+`` operator to do non-mutating extensions.
@@ -109,7 +147,7 @@ not available for ``Mutibs`` as its data could change while the iterator is acti
     b2b
     2b2
 
-There is also the :meth:`Mutibs.as_tibs` method, which *moves* the data to a ``Tibs`` instead of making a copy.
+There is also the :meth:`Mutibs.take_tibs` method, which *moves* the data to a ``Tibs`` instead of making a copy.
 This is more efficient if you don't need to use the ``Mutibs`` any more (as it will be empty after the move).
 
 
@@ -166,12 +204,12 @@ in place. We could have instead used a ``Tibs``, and returned a new value on eac
 
     limit = 100_000_000
     is_prime = Tibs.from_ones(limit)
-    is_prime = is_prime.unset_at([0, 1])
+    is_prime = is_prime.with_unset([0, 1])
     for i in range(2, isqrt(limit) + 1):
         if is_prime[i]:
-            is_prime = is_prime.unset_at(range(i * i, limit, i))  # No mutation
+            is_prime = is_prime.with_unset(range(i * i, limit, i))  # No mutation
 
-The :meth:`Tibs.unset_at` method returns a brand new ``Tibs`` on each iteration. Most
+The :meth:`Tibs.with_unset` method returns a brand new ``Tibs`` on each iteration. Most
 of the time in this version is spent allocating memory for each new ``Tibs``,
 which is only being used to generate the next value before being destroyed.
 
