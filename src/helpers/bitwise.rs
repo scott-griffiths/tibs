@@ -74,6 +74,35 @@ fn use_wide(len_bits: usize) -> bool {
     len_bits >= WIDE_MIN_BITS && wide_simd()
 }
 
+/// Whether this CPU has `pext`/`pdep`, the gather and scatter instructions that
+/// [`compress_bits`] and [`expand_bits`] emulate.
+///
+/// Cached the same way, and for the same reason, as [`wide_simd`]. Separate
+/// from it because BMI2 and AVX2 are separate features: a CPU can have either
+/// without the other.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn bmi2_available() -> bool {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    static AVAILABLE: AtomicU8 = AtomicU8::new(2);
+    match AVAILABLE.load(Ordering::Relaxed) {
+        0 => false,
+        1 => true,
+        _ => {
+            let found = is_x86_feature_detected!("bmi2");
+            AVAILABLE.store(found as u8, Ordering::Relaxed);
+            found
+        }
+    }
+}
+
+/// Whether a masked gather or scatter over `len_bits` should use `pext`/`pdep`.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn use_bmi2(len_bits: usize) -> bool {
+    len_bits >= WIDE_MIN_BITS && bmi2_available()
+}
+
 #[inline]
 fn align_byte(bytes: &[u8], byte_index: usize, bit_shift: isize) -> u8 {
     debug_assert!((-7..=7).contains(&bit_shift));
@@ -1016,6 +1045,36 @@ fn expand_bits(mut x: u64, mut m: u64) -> u64 {
     x & original_mask
 }
 
+/// [`compress_bits`], or the single instruction that does the same thing.
+///
+/// `PEXT` is a constant so the branch folds away and each loop below is
+/// compiled once per answer rather than testing per word.
+///
+/// SAFETY of the intrinsic: `PEXT` is only ever instantiated as `true` behind a
+/// [`bmi2_available`] check - by [`extract_masked_bytes_pext`] in this module,
+/// and by the agreement test below - so the instruction exists on every CPU
+/// that reaches it. That holds through the call graph and does not depend on
+/// this being inlined.
+#[inline(always)]
+fn compress_with<const PEXT: bool>(x: u64, m: u64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    if PEXT {
+        return unsafe { std::arch::x86_64::_pext_u64(x, m) };
+    }
+    compress_bits(x, m)
+}
+
+/// [`expand_bits`], or the single instruction that does the same thing. The
+/// scattering counterpart to [`compress_with`]; see it for the safety argument.
+#[inline(always)]
+fn expand_with<const PDEP: bool>(x: u64, m: u64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    if PDEP {
+        return unsafe { std::arch::x86_64::_pdep_u64(x, m) };
+    }
+    expand_bits(x, m)
+}
+
 /// Above this many set bits in a word, [`compress_bits`] costs less than
 /// picking the bits out one at a time.
 ///
@@ -1129,6 +1188,27 @@ fn write_bit_run(bytes: &mut [u8], bit_offset: usize, len_bits: usize, value: u6
 /// takes a word at a time, and skips or copies whole words outright where the
 /// mask is uniform, which is the shape most masks actually have.
 pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, ones: usize) -> BV {
+    #[cfg(target_arch = "x86_64")]
+    if use_bmi2(len_bits) {
+        // SAFETY: `use_bmi2` reported the feature this is compiled for.
+        return unsafe { extract_masked_bytes_pext(src, mask, len_bits, ones) };
+    }
+    extract_masked_bytes_impl::<false>(src, mask, len_bits, ones)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "bmi2")]
+unsafe fn extract_masked_bytes_pext(src: &[u8], mask: &[u8], len_bits: usize, ones: usize) -> BV {
+    extract_masked_bytes_impl::<true>(src, mask, len_bits, ones)
+}
+
+#[inline(always)]
+fn extract_masked_bytes_impl<const PEXT: bool>(
+    src: &[u8],
+    mask: &[u8],
+    len_bits: usize,
+    ones: usize,
+) -> BV {
     debug_assert!(src.len() >= len_bits.div_ceil(8));
     debug_assert!(mask.len() >= len_bits.div_ceil(8));
     let mut out = BitAccumulator::with_bit_capacity(Some(ones));
@@ -1153,9 +1233,13 @@ pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, one
         if m == u64::MAX {
             out.push_wide(s, 64);
         } else if selected <= SPARSE_WORD_BITS {
+            // Kept even when `pext` is available. Picking one or two bits out
+            // singly is a handful of operations either way, and measured a few
+            // percent ahead of the instruction on a mask that sparse - unlike
+            // the scattering side, where `place_bits` loses to `pdep` outright.
             out.push(pick_bits(s, m, selected), selected);
         } else {
-            out.push_wide(compress_bits(s, m), selected);
+            out.push_wide(compress_with::<PEXT>(s, m), selected);
         }
     }
 
@@ -1173,7 +1257,7 @@ pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, one
         let m = u64::from_be_bytes(selector) & (!0u64 << (64 - rest));
         if m != 0 {
             let s = u64::from_be_bytes(source);
-            out.push_wide(compress_bits(s, m), m.count_ones() as usize);
+            out.push_wide(compress_with::<PEXT>(s, m), m.count_ones() as usize);
         }
     }
 
@@ -1188,6 +1272,71 @@ pub(crate) fn extract_masked_bytes(src: &[u8], mask: &[u8], len_bits: usize, one
 /// that `value_len` equals the mask's population count.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn deposit_masked_bytes(
+    bits: &mut [u8],
+    bits_offset: usize,
+    value: &[u8],
+    value_offset: usize,
+    value_len: usize,
+    mask: &[u8],
+    mask_offset: usize,
+    len_bits: usize,
+) {
+    #[cfg(target_arch = "x86_64")]
+    if use_bmi2(len_bits) {
+        // SAFETY: `use_bmi2` reported the feature this is compiled for.
+        return unsafe {
+            deposit_masked_bytes_pdep(
+                bits,
+                bits_offset,
+                value,
+                value_offset,
+                value_len,
+                mask,
+                mask_offset,
+                len_bits,
+            )
+        };
+    }
+    deposit_masked_bytes_impl::<false>(
+        bits,
+        bits_offset,
+        value,
+        value_offset,
+        value_len,
+        mask,
+        mask_offset,
+        len_bits,
+    )
+}
+
+#[cfg(target_arch = "x86_64")]
+#[allow(clippy::too_many_arguments)]
+#[target_feature(enable = "bmi2")]
+unsafe fn deposit_masked_bytes_pdep(
+    bits: &mut [u8],
+    bits_offset: usize,
+    value: &[u8],
+    value_offset: usize,
+    value_len: usize,
+    mask: &[u8],
+    mask_offset: usize,
+    len_bits: usize,
+) {
+    deposit_masked_bytes_impl::<true>(
+        bits,
+        bits_offset,
+        value,
+        value_offset,
+        value_len,
+        mask,
+        mask_offset,
+        len_bits,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn deposit_masked_bytes_impl<const PDEP: bool>(
     bits: &mut [u8],
     bits_offset: usize,
     value: &[u8],
@@ -1219,12 +1368,13 @@ pub(crate) fn deposit_masked_bytes(
             let packed = read_bit_run(value, value_offset + consumed, selected);
             let placed = if selected == run_len {
                 packed
-            } else if selected <= SPARSE_WORD_BITS {
+            } else if !PDEP && selected <= SPARSE_WORD_BITS {
                 // `read_bit_run` right-aligns a short run, while `place_bits`
-                // expects word positions. Shift both into the same frame.
+                // expects word positions. Shift both into the same frame. Only
+                // worth it against the software expand; see `extract`'s twin.
                 place_bits(packed, selector << (64 - run_len), selected) >> (64 - run_len)
             } else {
-                expand_bits(packed, selector)
+                expand_with::<PDEP>(packed, selector)
             };
             let updated = if selected == run_len {
                 placed
@@ -1421,6 +1571,91 @@ mod tests {
                 unsafe { count_ones_in_bytes_wide(&bytes) },
                 "count_ones_in_bytes len={len}"
             );
+        }
+    }
+
+    /// The number of set bits in the `len` bits starting `offset` bits in.
+    #[cfg(target_arch = "x86_64")]
+    fn count_run(bytes: &[u8], offset: usize, len: usize) -> usize {
+        (0..len)
+            .filter(|index| {
+                let at = offset + index;
+                bytes[at / 8] & (0x80u8 >> (at % 8)) != 0
+            })
+            .count()
+    }
+
+    /// `pext`/`pdep` replace a parallel-prefix emulation of themselves, so
+    /// unlike the widened kernels these really are two different algorithms and
+    /// could disagree on their own terms - not only through the dispatch. The
+    /// selecting branch differs too: with the instruction available the sparse
+    /// path is skipped, so the two instantiations do not even take the same
+    /// route through the loop.
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn pext_and_pdep_agree_with_the_software_forms() {
+        if !bmi2_available() {
+            return;
+        }
+        // The primitives first, over masks that are empty, full, sparse, dense
+        // and arbitrary, since those are what select between the loop's arms.
+        let mut state = 0x243f_6a88_85a3_08d3u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..4096 {
+            let x = next();
+            let m = match round % 8 {
+                0 => 0,
+                1 => u64::MAX,
+                2 => 1 << (round % 64),
+                3 => next() & next() & next(), // sparse
+                4 => next() | next() | next(), // dense
+                _ => next(),
+            };
+            // SAFETY: guarded by `bmi2_available` above.
+            assert_eq!(compress_bits(x, m), unsafe { compress_with::<true>(x, m) });
+            // SAFETY: guarded by `bmi2_available` above.
+            assert_eq!(expand_bits(x, m), unsafe { expand_with::<true>(x, m) });
+        }
+
+        // Then the whole loops, which choose different arms per instantiation.
+        for len in [1usize, 63, 64, 65, 127, 512, 513, 1000, 4096, 4103] {
+            let bytes = len.div_ceil(8);
+            let src = pattern(len as u64 * 7 + 1, bytes);
+            for mask in [
+                pattern(len as u64 * 11 + 2, bytes),
+                vec![0u8; bytes],
+                vec![0xffu8; bytes],
+                vec![0x80u8; bytes], // one bit per word group, the sparse arm
+            ] {
+                let ones = count_run(&mask, 0, len);
+                let base = extract_masked_bytes_impl::<false>(&src, &mask, len, ones);
+                // SAFETY: guarded by `bmi2_available` above.
+                let wide = unsafe { extract_masked_bytes_pext(&src, &mask, len, ones) };
+                assert_eq!(base, wide, "extract len={len} ones={ones}");
+
+                for offset in 0usize..8 {
+                    let store = len.div_ceil(8) + 1;
+                    let selected = count_run(&mask, 0, len);
+                    let value = pattern(len as u64 * 13 + offset as u64, store);
+                    let mut base = pattern(len as u64 * 17, store);
+                    let mut wide = base.clone();
+                    deposit_masked_bytes_impl::<false>(
+                        &mut base, offset, &value, 0, selected, &mask, 0, len,
+                    );
+                    // SAFETY: guarded by `bmi2_available` above.
+                    unsafe {
+                        deposit_masked_bytes_pdep(
+                            &mut wide, offset, &value, 0, selected, &mask, 0, len,
+                        )
+                    };
+                    assert_eq!(base, wide, "deposit len={len} offset={offset}");
+                }
+            }
         }
     }
 }
