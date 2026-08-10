@@ -1,6 +1,11 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+///     The order of the bytes of a whole-byte value.
+///
+///     ``Unspecified`` is the default and is interpreted bitwise big-endian, which
+///     for whole-byte data is the same as ``Big``, but can be used at any length.
+///     ``Big`` and ``Little`` require a whole number of bytes.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ByteOrder {
@@ -41,6 +46,12 @@ impl ByteOrder {
     }
 }
 
+///     How bit labels are mapped within each byte by a :class:`View`.
+///
+///     ``Msb0`` is the default, and matches ordinary indexing: label 0 is the most
+///     significant bit of the byte. ``Lsb0`` numbers from the least significant bit
+///     instead, as many hardware manuals do. Only the labels differ, never the
+///     stored data.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BitOrder {
@@ -57,6 +68,11 @@ impl BitOrder {
     }
 }
 
+///     The storage strategy used by :meth:`Tibs.encode`.
+///
+///     ``Auto`` is the default and picks whatever is most compact. ``Raw`` stores the
+///     bits directly and is the canonical form to use when the exact bytes matter.
+///     ``Rice`` suits sparse data, and ``Zstd`` larger byte-like data.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy)]
 pub enum Codec {
@@ -66,6 +82,17 @@ pub enum Codec {
     Zstd,
 }
 
+///     The kind of value a :class:`DtypeSingle` encodes.
+///
+///     The kind says how bits become a Python value, and the dtype's length says how
+///     many bits one value takes. ``Uint``, ``Int``, ``Float``, ``Bits``, ``Bin``,
+///     ``Oct``, ``Hex`` and ``Bytes`` are families of widths, so a dtype using one
+///     always needs a length. The remaining thirteen - ``Bool``, ``BFloat`` and the
+///     narrow float formats - have an intrinsic width, so the kind on its own can be
+///     used wherever a dtype is accepted.
+///
+///     Every kind, and the dtype string it corresponds to, is listed in the
+///     documentation for this enum.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DtypeKind {

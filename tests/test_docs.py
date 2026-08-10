@@ -177,7 +177,43 @@ def test_docstring_examples(classname):
     )
 
 
-def test_exception_lists_do_not_go_stale():
+# pyo3 discards doc comments on the variants of a simple enum, and a variant is an
+# instance of its own class so it has nowhere to keep a __doc__ either. DtypeKind's
+# variants are therefore described by hand in other.rst, which these two checks keep
+# in step with the enum.
+ATTRIBUTE_DIRECTIVE = re.compile(r"^\s*\.\. py:attribute:: (\w+)\s*$", re.MULTILINE)
+
+
+def _documented_kinds():
+    text = _read_doc("other.rst")
+    starts = [(m.group(1), m.end()) for m in ATTRIBUTE_DIRECTIVE.finditer(text)]
+    return {
+        name: text[end : starts[i + 1][1] if i + 1 < len(starts) else len(text)]
+        for i, (name, end) in enumerate(starts)
+    }
+
+
+def test_every_dtype_kind_is_documented():
+    documented = set(_documented_kinds())
+    actual = {name for name in dir(tibs.DtypeKind) if not name.startswith("_")}
+    assert documented == actual, (
+        f"doc/other.rst is out of step with DtypeKind: missing "
+        f"{sorted(actual - documented)}, no longer a kind {sorted(documented - actual)}"
+    )
+
+
+def test_fixed_width_kinds_name_their_dtype_string():
+    # A renamed format would otherwise leave the old spelling in the prose.
+    for name, body in _documented_kinds().items():
+        kind = getattr(tibs.DtypeKind, name)
+        try:
+            spelling = str(tibs.DtypeSingle.from_params(kind))
+        except ValueError:
+            continue  # A family of widths; its spelling needs a length.
+        assert f"``{spelling}``" in body, (
+            f"doc/other.rst describes DtypeKind.{name} without naming its dtype "
+            f"string ``{spelling}``"
+        )
     # A new .rst file is picked up automatically; this guards the reverse, that
     # the lists above don't keep naming files that have been renamed or deleted.
     # UNCHECKABLE's per-example staleness is checked in _run.

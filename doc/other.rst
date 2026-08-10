@@ -43,16 +43,113 @@ extraction, see :doc:`byte_and_bit_order` and :doc:`views`.
 .. autoclass:: tibs.DtypeKind
    :members:
    :member-order: groupwise
-   :undoc-members:
+
+   **Families of widths.** A dtype using one of these always needs a length,
+   which is given in bits.
+
+   .. py:attribute:: Uint
+
+      An unsigned integer, written ``uN`` — for example ``u12``. Any length.
+
+   .. py:attribute:: Int
+
+      A two's complement signed integer, written ``iN``. Any length.
+
+   .. py:attribute:: Float
+
+      An IEEE 754 float, written ``fN``. The length must be 16, 32 or 64.
+
+   .. py:attribute:: Bits
+
+      A bit sequence, written ``bitsN`` and decoded as a :class:`Tibs`. Any length.
+
+   .. py:attribute:: Bin
+
+      A binary string, written ``binN``. Any length.
+
+   .. py:attribute:: Oct
+
+      An octal string, written ``octN``. The length must be a multiple of 3.
+
+   .. py:attribute:: Hex
+
+      A hexadecimal string, written ``hexN``. The length must be a multiple of 4.
+
+   .. py:attribute:: Bytes
+
+      A ``bytes`` value, written ``bytesN``. The length must be a multiple of 8,
+      and is in bits, so ``bytes32`` is four bytes long.
+
+   **Fixed widths.** These carry their own length, so the kind alone is a
+   complete dtype. The narrow float layouts, ranges and rounding rules are in
+   :ref:`exotic-floats`.
+
+   .. py:attribute:: Bool
+
+      A Python ``bool`` in a single bit, written ``bool``.
+
+   .. py:attribute:: BFloat
+
+      A 16-bit bfloat16 value, written ``bf16``. Not an IEEE format, and not
+      interchangeable with ``f16``.
+
+   .. py:attribute:: Binary8P3
+
+      The 8-bit draft IEEE P3109 ``binary8p3`` format, favouring range.
+
+   .. py:attribute:: Binary8P4
+
+      The 8-bit draft IEEE P3109 ``binary8p4`` format, favouring precision.
+
+   .. py:attribute:: OcpE5M2Saturate
+
+      The 8-bit OCP ``ocp_e5m2_saturate`` format. Out-of-range values, and
+      infinities, clamp to the largest finite value.
+
+   .. py:attribute:: OcpE5M2Overflow
+
+      The 8-bit OCP ``ocp_e5m2_overflow`` format. Out-of-range values become
+      infinity.
+
+   .. py:attribute:: OcpE4M3Saturate
+
+      The 8-bit OCP ``ocp_e4m3_saturate`` format. Out-of-range values clamp to
+      the largest finite value.
+
+   .. py:attribute:: OcpE4M3Overflow
+
+      The 8-bit OCP ``ocp_e4m3_overflow`` format. Out-of-range values become
+      NaN, as E4M3 has no infinity encoding.
+
+   .. py:attribute:: OcpE3M2
+
+      The 6-bit OCP ``ocp_e3m2`` format. No NaN or infinity.
+
+   .. py:attribute:: OcpE2M3
+
+      The 6-bit OCP ``ocp_e2m3`` format. No NaN or infinity.
+
+   .. py:attribute:: OcpE2M1
+
+      The 4-bit OCP ``ocp_e2m1`` format. No NaN or infinity.
+
+   .. py:attribute:: OcpE8M0
+
+      The 8-bit OCP ``ocp_e8m0`` scale format: an unsigned power of two, or NaN.
+      Values between powers of two are rejected rather than rounded.
+
+   .. py:attribute:: OcpInt8
+
+      The 8-bit OCP ``ocp_int8`` format: a signed integer with an implicit
+      factor of 2⁻⁶, so it decodes to a Python ``float``.
 
 Each :class:`DtypeSingle` instance has a ``kind`` which controls how to create
-and interpret its scalar value. For example, ``DtypeKind.Float`` is used for
-IEEE floating-point data types, and ``DtypeKind.BFloat`` for the 16-bit
-bfloat16 format. Array and tuple dtypes instead describe their children through
-:attr:`DtypeArray.dtype` and :attr:`DtypeTuple.dtypes`.
+and interpret its scalar value. Array and tuple dtypes instead describe their
+children through :attr:`DtypeArray.dtype` and :attr:`DtypeTuple.dtypes`.
 
 Unless you are creating or dealing with data types programmatically, you probably won't need to
-use this enum directly.
+use this enum directly — though it is a complete list of every format tibs supports, which is
+one way to find the narrow ones without knowing their spelling in advance.
 
 ----
 
