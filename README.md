@@ -45,7 +45,9 @@ common platforms; if there are issues then please let me know.
 The tibs library provides two main classes: `Tibs`, which is an immutable sequence of bits
 (similar to how `bytes` works in Python as a sequence of bytes) and `Mutibs`, which is a mutable version (similar to `bytearray` in Python).
 
-### 1. A container of bits
+They can be used in a few ways, depending on what you need:
+
+### 1. As a container of bits
 
 `Tibs` provides an interface very similar
 to `bytes` and other Python containers - you can slice it, concatenate, search it etc. in a
@@ -58,22 +60,23 @@ you two broad views of the binary data.
 
 ### 2. As Typed fields
 
-Pull integers, floats, strings, hex or binary of any
-bit length straight out of the bits, without hand-rolling shifts and masks. Little-endian ordering and LSB0 field labels are handled elegantly so you don't reshuffle data
+Pull integers, floats, bytes, hex or binary of any
+bit length straight out of the bits, without hand-rolling shifts and masks.
+Little-endian ordering and LSB0 field labels are handled elegantly so you don't reshuffle data
 yourself, and `extracted` / `deposit` reach fields that are scattered across a word.
-When the fields come one after another, a `Reader` holds the bit position for
+
+When parsing streams, a `Reader` can wrap the `Tibs` to hold a bit position for
 you, so a parsing loop never has to work out where the next one starts.
 
 `from_u` · `to_f` · `bin` / `hex` · `Dtype` · `pack` / `unpack` · `.le` · `.lsb0` · `field()` · `extracted` / `deposit` · `Reader` · f-string formatting
 
 ### 3. As a set of bits
 
-Bitwise algebra, cardinalities and set predicates, with
-no intermediate object built along the way. `Mutibs` can be used as a large mutable bitset.
+For bitwise algebra, cardinalities and set predicates, with
+no intermediate object built along the way. `Mutibs` can also be used as a large mutable bitset.
 
 `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
 
-These aren't separate modes or types — it's one object, with a rich interface to ask different questions of the same bits.
 
 And it's fast — usually significantly faster than similar libraries, 100% written in Rust
 and with a large emphasis on performance.
@@ -83,13 +86,14 @@ and with a large emphasis on performance.
 
 Some real code to illustrate.
 
-**As a container of bits.** `Tibs` works like `bytes`, except that the unit is the bit instead of the byte. `Mutibs` is its mutable counterpart, for patching in place.
+**As a container of bits.** `Tibs` works like `bytes`, except that the unit is the bit.
+`Mutibs` is its mutable counterpart, for patching in place.
 
 ```pycon
 >>> from tibs import Tibs
 >>> # A 5-bit header, a message, then 3 bits of padding: nothing is byte aligned.
 >>> frame = Tibs('0b10110') + b'the cat rarely blinked' + [0, 0, 0]
->>> bytes(frame).find(b'cat')      # as bytes, the message has been scrambled
+>>> bytes(frame).find(b'cat')      # using bytes, the message can't be found
 -1
 >>> pos = frame.find(b'cat')       # but the tibs still knows where it is
 >>> pos, frame[pos:pos + 24].bytes
@@ -147,10 +151,8 @@ building an intermediate object just to count it.
 
 ```
 
-
-The full documentation covers construction from ints, floats, bytes and strings;
-endianness; searching and replacing; rotations; bit indexing; serialization; views; dtypes and
-much more.
+The full documentation covers construction, interpretation, endianness, searching and replacing,
+indexing, serialization, views, dtypes and much more.
 
 ## Performance
 
@@ -172,39 +174,18 @@ Benchmarks are machine-dependent, but tibs is often almost unreasonably fast.
 ## Examples
 
 The runnable examples in [`examples/`](examples/) are small, but they are meant
-to look like real binary-data tasks. They're grouped by the view each one leans
-on most, though several use more than one.
+to look like real binary-data tasks. Some examples of the examples:
 
-**The bits as a sequence** — searching a stream and slicing fields out of it.
 
-| Example | Shows |
-| --- | --- |
-| [`log_scan.py`](examples/log_scan.py) | Find byte-aligned sync markers and pull records from a stream. |
-| [`instruction_scan.py`](examples/instruction_scan.py) | Search for an opcode with `mask`, ignoring the register fields. |
-| [`patch_config.py`](examples/patch_config.py) | Patch compact config fields in place with `Mutibs`. |
-
-**Typed fields and views** — numeric fields, with byte order and bit labels handled by a view.
-
-| Example | Shows |
-| --- | --- |
-| [`construct.py`](examples/construct.py) | Build and unpack a structured MPEG-style header. |
-| [`sensor_samples.py`](examples/sensor_samples.py) | Pack and unpack 12-bit ADC samples. |
-| [`little_endian_registers.py`](examples/little_endian_registers.py) | Decode and rebuild little-endian register dumps with `u16_le`. |
-| [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode LSB0, little-endian instruction fields. |
-| [`scattered_field.py`](examples/scattered_field.py) | Read and write a register field split around status bits with `extracted`/`deposit`. |
-
-**Reading in sequence** — a cursor through a stream of records.
-
-| Example | Shows |
+| Example |  |
 | --- | --- |
 | [`record_stream.py`](examples/record_stream.py) | Read tagged, variable-length records with a `Reader`. |
-
-**Sets of bits** — bitwise algebra and comparison.
-
-| Example | Shows |
-| --- | --- |
-| [`sieve.py`](examples/sieve.py) | Use a large mutable bitset for a prime sieve. |
+| [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode a real eBPF instruction by chaining LSB0 and little-endian views. |
 | [`fingerprints.py`](examples/fingerprints.py) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
+| [`parallel_decode.py`](examples/parallel_decode.py) | Decode millions of samples across threads on a free-threaded build, with no copying and no locks. |
+
+The rest of [`examples/`](examples/) covers stream scanning, in-place patching,
+structured headers, bulk sample packing and scattered register fields.
 
 
 ## Project status
