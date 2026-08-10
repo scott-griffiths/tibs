@@ -1616,10 +1616,10 @@ mod tests {
                 4 => next() | next() | next(), // dense
                 _ => next(),
             };
-            // SAFETY: guarded by `bmi2_available` above.
-            assert_eq!(compress_bits(x, m), unsafe { compress_with::<true>(x, m) });
-            // SAFETY: guarded by `bmi2_available` above.
-            assert_eq!(expand_bits(x, m), unsafe { expand_with::<true>(x, m) });
+            // Instantiating the intrinsic arm is only sound behind the
+            // `bmi2_available` check above.
+            assert_eq!(compress_bits(x, m), compress_with::<true>(x, m));
+            assert_eq!(expand_bits(x, m), expand_with::<true>(x, m));
         }
 
         // Then the whole loops, which choose different arms per instantiation.

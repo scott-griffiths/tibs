@@ -8,54 +8,38 @@ and upped the major version number.
 
 Backwardly incompatible changes
 
-* `Dtype` is now a base class and parsing factory rather than a concrete class,
-  because a dtype can now describe a structured, multi-field value as well as
-  a single one. `Dtype("u8")` now returns a `DtypeSingle` instance,
-  and see `DtypeArray` and `DtypeTuple` below. Code that
-  constructs dtypes with `from_params`, checks their exact type, or relies on
-  the old `repr` will need updating; dtype strings for single values such as
-  `Dtype("u32")` are unchanged.
+* `Dtype` is now a base class and parsing factory rather than a concrete class.
+  `Dtype("u8")` returns a `DtypeSingle`; see `DtypeArray` and `DtypeTuple`
+  below. Dtype strings are unchanged, but code that uses `from_params`, checks a
+  dtype's exact type, or relies on its `repr` will need updating.
 
 * The `View` constructor and `View.from_indices` no longer accept a `Mutibs`.
-  Use `Mutibs.view()` for a live`MutableView`, or `Mutibs.to_tibs()` for an immutable copy to view.
+  Use `Mutibs.view()` for a live `MutableView`, or `Mutibs.to_tibs()` for an
+  immutable copy to view.
 
 * The minimum Python version is now 3.11 instead of 3.10.
 
 * Renamed `set_at` and `unset_at` to `with_set` and `with_unset` on both `Tibs`
-  and `Mutibs`. Copy-returning methods take the past participle of the mutating
-  one (`invert`/`inverted`, `reverse`/`reversed`); "set" is its own participle,
-  so those two take a `with_` prefix instead of an `_at` suffix that meant
-  nothing anywhere else in the API.
+  and `Mutibs`.
 
-* Renamed `Mutibs.as_tibs` to `Mutibs.take_tibs`, and `Mutibs.as_raw_data` to
-  `Mutibs.take_raw_data`. Both empty the object they are called on, which `as_`
-  does not suggest to a Python reader - `numpy.asarray` and CPython's own
-  `PyBytes_AsString` leave their source intact.
+* Renamed `Mutibs.as_tibs` to `Mutibs.take_tibs` and `Mutibs.as_raw_data` to
+  `Mutibs.take_raw_data`, as both empty the object they are called on.
 
-* Removed `to_raw_data` from `Tibs` and `Mutibs`. It copied the storage bytes
-  and handed back the internal bit offset with them;
-  `to_padded_bytes()` with `len()` round-trips the same value without exposing
-  the layout, and `encode(Codec.Raw)` is the form to persist.
+* Removed `to_raw_data` from `Tibs` and `Mutibs`. Use `to_padded_bytes()` with
+  `len()` to round-trip the same value, or `encode(Codec.Raw)` to persist it.
 
 * `Mutibs.capacity` is now a property rather than a method.
 
-* A `Mutibs` now reports that it is not iterable through the protocol, rather
-  than only when iteration is attempted: `Mutibs.__iter__` is `None`, so
-  `isinstance(m, collections.abc.Iterable)` is `False` where it used to be
-  `True`. The `TypeError` from `iter(m)` is now CPython's generic wording.
+* `Mutibs.__iter__` is now `None`, so `isinstance(m, collections.abc.Iterable)`
+  is `False` where it used to be `True`.
 
-* Views now compare by the bits they present rather than by their whole source.
-  A `View` and a `MutableView` showing the same bits under the same layout are
-  now equal, matching `Tibs == Mutibs`; and two views are equal whenever their
-  selections land on the same values, where a `MutableView` used to require
-  that the bits *outside* the view matched too.
+* Views now compare by the bits they present rather than by their whole source,
+  so a `View` and a `MutableView` over the same bits and layout are now equal.
 
 Added
 
-* Added the `Reader` class for reading fields in
-  sequence. It wraps a `Tibs` or `Mutibs` with a bit position so that you don't have
-  to compute `start` and `end` for each field, or thread a position through a
-  search loop.
+* Added the `Reader` class, which wraps a `Tibs` or `Mutibs` with a bit position
+  for reading fields in sequence.
 
   ```python
   >>> r = Reader(Tibs('0x47ff10'))
@@ -67,12 +51,11 @@ Added
   8
   ```
 
-* Added `DtypeArray` and `DtypeTuple`, alongside the existing scalar dtype
-  (now `DtypeSingle`), so a single `Dtype` can describe a structured,
-  multi-field value: `Dtype("[u8; 4]")` for four repeated `u8` fields, and
-  `Dtype("(u8, u16_le, bool)")` for a fixed sequence of differently-typed
-  fields. Both nest to any depth, so an array can contain tuples and vice
-  versa.
+* Added `DtypeArray` and `DtypeTuple` alongside the scalar dtype (now
+  `DtypeSingle`), so that a single `Dtype` can describe a structured,
+  multi-field value: `Dtype("[u8; 4]")` for repeated fields and
+  `Dtype("(u8, u16_le, bool)")` for differently-typed ones. Both nest to any
+  depth.
 
   ```python
   >>> Dtype("(u8, [bool; 3])").pack((5, [True, False, True]))
@@ -80,8 +63,7 @@ Added
   ```
 
 * Added the `bf16` dtype for bfloat16, the non-IEEE 16-bit float that keeps the
-  8-bit exponent of an `f32` and truncates the mantissa to 7 bits, so its
-  encoding is exactly the top half of the `f32` one.
+  8-bit exponent of an `f32` and truncates the mantissa to 7 bits.
 
   ```python
   >>> Tibs.from_value("bf16", 1.0).hex
@@ -90,14 +72,13 @@ Added
   1.875
   ```
 
-* Added eleven fixed-width floating point dtypes: the draft P3109
-  `binary8p3` and `binary8p4` formats; OCP `ocp_e4m3` and `ocp_e5m2`
-  with separate `_saturate` and `_overflow` packing policies; `ocp_e3m2`,
-  `ocp_e2m3`, `ocp_e2m1`, `ocp_e8m0` and `ocp_int8`. Packing rounds directly
-  from Python binary64 with round-to-nearest, ties-to-even. The P3109 formats are
-  provisional and may be updated as the draft standard develops. These are
-  raw scalar encodings only; shared scales and MX block behaviour are not yet
-  included.
+* Added eleven fixed-width floating point dtypes: the draft P3109 `binary8p3`
+  and `binary8p4` formats; OCP `ocp_e4m3` and `ocp_e5m2`, each with separate
+  `_saturate` and `_overflow` packing policies; `ocp_e3m2`, `ocp_e2m3`,
+  `ocp_e2m1`, `ocp_e8m0` and `ocp_int8`. Packing rounds directly from Python
+  binary64, to nearest with ties to even. The P3109 formats are provisional and
+  may be updated as the draft standard develops. These are raw scalar encodings
+  only: shared scales and MX block behaviour are not yet included.
 
   ```python
   >>> Tibs.from_values("ocp_e2m1", [0.5, 1.0, 3.0, 6.0]).hex
@@ -117,12 +98,13 @@ Added
   DtypeSingle('ocp_e2m1')
   ```
 
-* Eight methods for comparing two containers without building an intermediate
-  object: `count_and`, `count_or`, `count_xor`, `count_andnot`, `intersects`,
-  `is_disjoint`, `is_subset_of` and `is_superset_of`. The counts are equivalent
-  to `(a & b).count(1)` and so on, and `count_xor` is the Hamming distance.
-  Both containers must be the same length, as for the `&`, `|` and `^`
-  operators.
+* Added eight methods for comparing two containers of the same length without
+  building an intermediate object: `count_and`, `count_or`, `count_xor`,
+  `count_andnot`, `intersects`, `is_disjoint`, `is_subset_of` and
+  `is_superset_of`. The counts are equivalent to `(a & b).count(1)` and so on,
+  and `count_xor` is the Hamming distance. Skipping the intermediate makes them
+  faster, increasingly so as the containers get longer, and the four predicates
+  stop as soon as they know the answer.
 
   ```python
   >>> a, b = Tibs('0b1100'), Tibs('0b1010')
@@ -130,39 +112,24 @@ Added
   2
   >>> Tibs('0b1010').is_subset_of('0b1011')
   True
-  >>> Tibs('0b1011').is_superset_of('0b1010')
-  True
   >>> Tibs('0b1100').is_disjoint('0b0011')
   True
   ```
 
-  Skipping the intermediate object makes the counts around 3x faster for short
-  containers and much more than that for long ones. The four predicates stop as
-  soon as they know the answer, so they can return almost immediately where
-  building `a & b` would have to do all the work.
-
 * The `value` parameter of `count` is now optional, and counts the set bits when
-  it's not given, so `t.count()` is the same as `t.count(1)`. This matches the
-  new `count_and` and friends, which are all counts of set bits.
+  it's not given, so `t.count()` is the same as `t.count(1)`.
 
-  ```python
-  >>> Tibs('0xef').count()
-  7
-  ```
-
-* `count` now takes a `byte_aligned` parameter, so a pattern can be counted on
-  byte boundaries only, matching `find` and `find_all`.
+* `count` now takes a `byte_aligned` parameter, so that a pattern can be counted
+  on byte boundaries only, matching `find` and `find_all`.
 
   ```python
   >>> Tibs('0x1f2e3f').count('0x0f', mask='0x0f', byte_aligned=True)
   2
   ```
 
-* Added `extracted` and `deposit` for reading and writing bit fields whose bits
-  are scattered through a container by a mask, rather than being contiguous like
-  the ones `field` handles. `extracted` reads the masked bits, packed together;
-  `deposit` (in place, on `Mutibs`) and `deposited` (returning a new container)
-  write them back, leaving the unmasked bits untouched. These are the bit-level
+* Added `extracted`, `deposit` and `deposited` for reading and writing bit
+  fields whose bits are scattered through a container by a mask, rather than
+  being contiguous like the ones `field` handles. These are the bit-level
   equivalents of the x86 PEXT and PDEP instructions.
 
   ```python
@@ -172,14 +139,12 @@ Added
   '11110110'
   ```
 
-* Searches can now take a `mask`, so that patterns can contain don't-care bits.
-  The mask must be the same length as the bits being searched for, and only the
-  bits set in it need to match, which makes it easy to pick out a field from a
-  fixed-width encoding. It's available on `find`, `rfind`, `find_all`,
-  `find_all_iter`, `rfind_all_iter`, `count`, `replace` and `replaced`, and
-  combines with `start`, `end`, `count` and `byte_aligned` as you'd expect. For
-  `replace` the mask affects only the matching — the whole of each match is
-  still replaced.
+* Searches can now take a `mask`, so that patterns can contain don't-care bits:
+  only the bits set in the mask need to match. It's available on `find`,
+  `rfind`, `find_all`, `find_all_iter`, `rfind_all_iter`, `count`, `replace` and
+  `replaced`, and combines with `start`, `end`, `count` and `byte_aligned` as
+  you'd expect. For `replace` the mask affects only the matching, and the whole
+  of each match is still replaced.
 
   ```python
   >>> Tibs('0x1f2e3f').find_all('0x0f', mask='0x0f', byte_aligned=True)
@@ -189,31 +154,18 @@ Added
 * The `u` and `i` interpretations no longer have a 128 bit limit. Any positive
   length now works, for `from_u` / `from_i`, the `u` and `i` properties and
   `to_u` / `to_i`, the `uN` / `iN` dtypes, views, and the `u` and `i` format
-  codes. The zero-length case is still an error, as there's nothing to interpret.
+  codes.
 
   ```python
   >>> Tibs.from_u(2 ** 200 - 1, 200).u == 2 ** 200 - 1
   True
   ```
-* Added `View.to_value`, `MutableView.to_value` and `MutableView.write_value`,
-  so any dtype is reachable through a view rather than only the nine
-  interpretations that have their own view property. The view's byte order and
-  bit order are applied first and the dtype then decodes the value the view
-  denotes, so `view.to_value(dtype, start, end)` is always
-  `view.to_tibs().to_value(dtype, start, end)`. `write_value` is the write
-  direction, and like the other view write methods it can't change the length of
-  its source.
 
-  Byte order is stated in one place only. A dtype that names a byte order is
-  refused by an `le`, `be` or `lsb0` view, at any nesting depth, because the
-  view's layout is applied first and the suffix would be a second byte order
-  rather than the only one — `t.le.to_value("u16_le")` would otherwise swap
-  twice and land back on the big-endian reading. Put the byte order on the view
-  or on the dtype, not both. The plain `view()` claims no layout and still
-  passes any dtype through. Byte order stays on `Dtype` because a view applies
-  one byte order to the whole view, so per-field records like
-  `"(u8, u16_le, bool)"` and runs like `Tibs.from_values("u16_le", ...)` have no
-  view equivalent; read those from the source `Tibs` or `Mutibs`.
+* Added `View.to_value`, `MutableView.to_value` and `MutableView.write_value`,
+  so that any dtype is reachable through a view rather than only the nine
+  interpretations that have their own view property. The view's byte order and
+  bit order are applied first, so `view.to_value(dtype, start, end)` is always
+  `view.to_tibs().to_value(dtype, start, end)`.
 
   ```python
   >>> m = Mutibs.from_bytes(bytes.fromhex("07 01 00 00 44 33 22 11"))
@@ -223,43 +175,35 @@ Added
   >>> m.hex
   '07010000efbeadde'
   ```
-* Added `__format__` to `Tibs`, `Mutibs`, `View` and `MutableView`, so they can be
-  used directly in f-strings and with `str.format()`. The type codes are `b`, `o`,
-  `x` and `X` for the bit representations (equivalent to the `bin`, `oct` and `hex`
-  properties, so leading zeros are kept), plus `u` and `i` for the unsigned and
-  signed integer interpretations and `e`, `f` and `g` (with their uppercase forms)
-  for the float one. The `#` flag adds a `0x` / `0X` / `0b` / `0o` prefix, and `_`
-  groups the digits — with the group size settable through the otherwise unused
-  precision field, so `f"{t:_.8b}"` groups binary by byte. Fill, alignment and
-  width work as they do elsewhere in Python.
+
+  Byte order is stated in one place only, so an `le`, `be` or `lsb0` view
+  refuses a dtype that names a byte order, at any nesting depth. The plain
+  `view()` claims no layout and still passes any dtype through.
+
+* Added `__format__` to `Tibs`, `Mutibs`, `View` and `MutableView`, so that they
+  can be used directly in f-strings and with `str.format()`. The type codes are
+  `b`, `o`, `x` and `X` for the bit representations (equivalent to the `bin`,
+  `oct` and `hex` properties, so leading zeros are kept), `u` and `i` for the
+  unsigned and signed integer interpretations, and `e`, `f` and `g` with their
+  uppercase forms for the float one, which needs a length of 16, 32 or 64. The
+  `#` flag adds a prefix, and `_` groups the digits, with the group size taken
+  from the otherwise unused precision field.
 
   ```python
   >>> f"{Tibs('0xac804f4b'):#_.2x}"
   '0xac_80_4f_4b'
-  ```
-
-  The integer codes follow `Dtype` rather than Python's `d`, because a `Tibs` has
-  both a signed and an unsigned reading and there's no sensible way to guess which
-  was meant. The float codes have no such problem, so they are Python's own: `f` is
-  fixed-point, `e` is scientific and `g` trims trailing zeros, and the precision
-  field means exactly what it does for a `float`. They read the bits as IEEE, so
-  the length must be 16, 32 or 64; the `bf16` interpretation has no format code.
-
-  ```python
   >>> pi = Tibs.from_f(3.14159, 32)
   >>> f"{pi:f}", f"{pi:.2f}", f"{pi:.3e}", f"{pi:g}"
   ('3.141590', '3.14', '3.142e+00', '3.14159')
   ```
 
-  Three things differ from integer formatting, because a `Tibs` is a sequence rather
-  than a number and its length is part of its value. Groups are counted from bit zero,
-  so it's the last group that comes up short rather than the first. Padding is never
-  itself grouped. And the fill character must not be one that could be mistaken for
-  the data, so zero padding is rejected for `b`, `o`, `x` and `X` — it would silently
-  change the apparent length of the value, where for an integer it changes nothing.
-  Pad with `<`, `>` or `^` and a non-digit fill instead, or use a numeric code.
+  Fill, alignment and width work as they do elsewhere in Python, except that
+  zero padding is rejected for `b`, `o`, `x` and `X`, as it would silently
+  change the apparent length of the value. Groups are counted from bit zero, so
+  it's the last group that comes up short rather than the first, and padding is
+  never itself grouped.
 
-* `Tibs` now exports the buffer protocol, so it can be passed straight to
+* `Tibs` now exports the buffer protocol, so that it can be passed straight to
   anything that takes a bytes-like object — `memoryview(t)`, `array.array`,
   `numpy.frombuffer`, a socket or file `write`, and so on — without copying its
   data first.
@@ -269,20 +213,17 @@ Added
   b'\xff\x00'
   ```
 
-  The buffer is read-only and covers whole bytes, so for a length that isn't a
-  multiple of 8 the last byte includes the padding bits, which are not masked to
-  zero. Exporting needs the underlying storage to start on a byte boundary; when
-  it doesn't (after slicing at a bit offset, say) a `BufferError` is raised, and
-  `to_bytes` or `to_padded_bytes` will give you an owned copy instead.
+  The buffer is read-only and covers whole bytes, so a final partial byte
+  includes its padding bits, unmasked. Exporting needs the underlying storage to
+  start on a byte boundary; when it doesn't, a `BufferError` is raised and
+  `to_bytes` or `to_padded_bytes` will give you an owned copy instead. This is
+  deliberately not offered on `Mutibs`, whose storage moves as it is edited.
 
-  This is deliberately not offered on `Mutibs`. Its storage moves as the
-  container is edited, so a borrowed view of it could not be kept valid.
-
-* `Tibs` and `Mutibs` can now be pickled, so they can be sent through
+* `Tibs` and `Mutibs` can now be pickled, so that they can be sent through
   `multiprocessing`, stored in a cache, or deep copied with `copy.deepcopy`,
   which previously raised a `TypeError`. The pickled state is the `Codec.Raw`
   encoding, so any bit length is restored exactly and pickling costs about what
-  copying costs — pickle the result of `encode()` yourself if you want the
+  copying costs; pickle the result of `encode()` yourself if you want the
   compression that `Codec.Auto` can give.
 
   ```python
@@ -297,41 +238,34 @@ Added
   built for it and the test suite run against them. Tibs declares that it does
   not need the global interpreter lock, so importing it doesn't switch the GIL
   back on, and work on separate containers runs on separate threads in parallel
-  rather than taking turns.
-
-  A `Tibs` is immutable and can be shared freely between threads, with no lock
-  taken at all. A `Mutibs` can be shared too: every method runs inside
-  CPython's per-object critical section, so two threads calling into the same
-  container queue up rather than one of them being refused. One call is atomic;
-  a sequence of calls is not, exactly as for a `list`, so a check-then-act
-  still needs your own lock. Nothing here changes on a normal build of Python,
-  where the locking compiles away and the GIL serializes the calls anyway.
-  There's a new appendix in the docs covering this in full.
+  rather than taking turns. A `Tibs` is immutable and can be shared freely, with
+  no lock taken at all. A `Mutibs` can be shared too: every method runs inside
+  CPython's per-object critical section, which makes a single call atomic but
+  not a sequence of calls, exactly as for a `list`. There's a new appendix in
+  the docs covering this in full.
 
 Changed
 
 * Inverting an empty `Tibs` or `Mutibs` with `~` now returns an empty container
-  instead of raising a `ValueError`. This matches what `Tibs.inverted` and
-  `Mutibs.invert` already did when there were no bits to invert.
+  instead of raising a `ValueError`, matching `Tibs.inverted` and
+  `Mutibs.invert`.
 
 Performance improvements
 
-* Compound dtype packing and unpacking now build a cached flat record layout
-  and take a bytewise fast path, bringing `DtypeTuple` operations equivalent to
-  a `struct` call (such as `"(i16_be, i16_be, i32_be)"` against `">hhl"`) to
-  around 1.5-1.8x the time of the handwritten `struct` code, down from roughly
-  10x slower when compound dtypes were first implemented.
-* Parsed dtype specs are now cached, so passing a string where a dtype is
+* Compound dtype packing and unpacking are much faster. A `DtypeTuple` operation
+  equivalent to a `struct` call (`"(i16_be, i16_be, i32_be)"` against `">hhl"`)
+  is now in the same ballpark as the handwritten `struct` code, where it was an
+  order of magnitude slower when compound dtypes were first implemented.
+* Parsed dtype specs are now cached, so that passing a string where a dtype is
   expected no longer re-parses it on every call. This mattered most for short
-  operations, where parsing could dominate: a scalar `to_value("u8")` went from
-  about 345 ns to 165 ns, against 105 ns when passing a prebuilt `Dtype`. Bulk
-  calls were never parse-bound and are unchanged.
+  operations, where parsing could dominate; passing a prebuilt `Dtype` is
+  quicker still. Bulk calls were never parse-bound and are unchanged.
 * A number of other operations — string/hex/oct/bin conversion, `from_values`,
   `Mutibs.reverse` and others — moved from bit-at-a-time to byte-at-a-time or
-  whole-buffer implementations. Across the local comparison suite (see
-  `tests/performance_comparison.py`), tibs is now a geometric-mean 3.2x faster
-  than bitarray (1.4x at the median) and 1.9x faster than equivalent standard
-  library code (1.5x at the median).
+  whole-buffer implementations. See `tests/performance_comparison.py` for how
+  tibs measures up against bitarray and against equivalent standard library
+  code.
+
 
 ### July 18th 2026: version 1.1
 

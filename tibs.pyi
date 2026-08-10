@@ -696,7 +696,9 @@ class Mutibs:
 
     def __eq__(self, other: Any) -> bool: ...
 
-    __hash__: ClassVar[None]
+    # The typeshed idiom for an unhashable class; pyright reports it as an
+    # incompatible override of object.__hash__ regardless.
+    __hash__: ClassVar[None]  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __bool__(self) -> bool: ...
 

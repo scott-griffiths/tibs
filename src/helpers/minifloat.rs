@@ -201,7 +201,10 @@ impl BinaryFormat {
 /// For four- and six-bit formats, `raw` must not contain bits above the field.
 /// Every in-range code point has a defined result, although that result may be
 /// a NaN or infinity for formats which provide those special values.
-#[inline]
+///
+/// An unpacker resolves [`narrow_float_decode_table`] once instead of calling
+/// this per value, so only the tests below reach it.
+#[cfg(test)]
 fn decode_narrow_float(raw: u8, format: NarrowFloatFormat) -> f64 {
     narrow_float_decode_table(format)[raw as usize]
 }
@@ -463,7 +466,7 @@ fn decode_e8m0(raw: u8) -> f64 {
     } else {
         // 2^(raw-127) rebiased into binary64: 0x00 gives 2^-127 and 0xfe gives
         // 2^127, both comfortably normal, so this is only an exponent field.
-        f64::from_bits(((raw as u64 + (1023 - 127)) << 52))
+        f64::from_bits((raw as u64 + (1023 - 127)) << 52)
     }
 }
 
@@ -888,4 +891,3 @@ mod tests {
         );
     }
 }
-

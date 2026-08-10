@@ -1,6 +1,6 @@
 [package]
 name = "tibs"
-version = "2.0.0-rc1"
+version = "2.0.0-rc2"
 edition = "2024"
 description = "A sleek Python library for binary data."
 license = "MIT"
@@ -21,6 +21,12 @@ sha2 = "~0.11"
 half = "~2.7"
 zstd = "~0.13"
 memchr = "~2.8"
+
+# The bit kernels take a haystack, a needle, a mask, a start, an end, a count
+# and a direction, and threading those through a struct would only move the
+# argument list somewhere else.
+[lints.clippy]
+too_many_arguments = "allow"
 
 [profile.release]
 lto = "fat"
