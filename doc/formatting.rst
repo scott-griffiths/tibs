@@ -154,11 +154,11 @@ padding is not available for ``b``, ``o``, ``x`` and ``X``::
     ...
     ValueError: Zero padding is not allowed with the 'x' format type, because the padding could not be told apart from the data and would change its apparent length. Align with '<', '>' or '^' to pad with spaces instead, or use the 'u', 'i' or 'f' type code for a numeric interpretation.
 
-Zero padding an integer is harmless, because leading zeros don't change what an integer
-is. Here they would: a 4-bit value padded to ``'0x000f'`` reads as a 16-bit one, and
-comes back as a 16-bit one if you feed it in again. The same goes for any other fill
-that is a valid digit for the type, such as ``f`` for hex or ``1`` for binary. Digits
-that can't appear in that base are fine, as is anything else::
+Leading zeros don't change what an integer is, but here they would: a 4-bit value
+padded to ``'0x000f'`` reads as a 16-bit one, and comes back as a 16-bit one if you feed
+it in again. The same goes for any other fill that is a valid digit for the type, such as
+``f`` for hex or ``1`` for binary. Digits that can't appear in that base are fine, as is
+anything else::
 
     >>> f"{Tibs('0xf'):*>6x}"
     '*****f'

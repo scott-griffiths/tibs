@@ -75,16 +75,11 @@ adds interpretation settings. A :class:`MutableView` created from a ``Mutibs``
 keeps a live reference to the ``Mutibs``, so later changes to the ``Mutibs`` are
 reflected in the view.
 
-The direct :class:`View` constructor is intentionally stricter than ``Tibs``.
-It accepts a ``Tibs`` or ``Mutibs`` object, but not other types that could be
-promoted.
-
-Passing a ``Mutibs`` to the direct :class:`View` constructor still creates an
-immutable snapshot. Use :class:`MutableView` or the ``Mutibs`` view helpers when
-you want live mutable behavior.
-
-Views are intended as interpretation wrappers rather than as another way
-to construct binary data.
+Views are interpretation wrappers rather than another way to construct binary
+data, so the :class:`View` constructor is stricter than ``Tibs``: it takes a
+``Tibs`` or ``Mutibs``, but not other types that could be promoted. Passing it a
+``Mutibs`` still gives an immutable snapshot — use :class:`MutableView` or the
+``Mutibs`` view properties when you want live mutable behaviour.
 
 Byte order
 ^^^^^^^^^^
@@ -178,21 +173,14 @@ f-string and the layout is applied for you (see :ref:`formatting`)::
 That combination of ``lsb0`` and ``le`` is worked through in full in
 :doc:`example_ebpf_instruction`.
 
-The one exception is an empty format spec, which still gives you the ``repr`` of the
-view rather than a value, because that's what ``str()`` of a view has always done.
+The one exception is an empty format spec, which gives the ``repr`` of the view
+rather than a value, matching ``str()``.
 
-For full-width multi-byte values, ``lsb0`` can therefore look like a
-little-endian value display: bit label 0 is the least significant bit of the
-whole value, so it appears on the RHS. Use the original ``Tibs`` or ``Mutibs``
-when you want ordinary source-order indexing and slicing; use ``field()`` when
-you want specification labels.
-
-The physical storage is still unchanged unless you write through a
-:class:`MutableView`. Combining ``lsb0`` and ``le`` is common for register and
-packet specifications that number bits from the least significant bit and store
-multi-byte fields little-endian. Setting bit label 0 in that view makes it
-appear on the RHS of the interpreted value, even though the source bit lives in
-the first stored byte::
+Combining ``lsb0`` and ``le`` is common for register and packet specifications
+that number bits from the least significant bit and store multi-byte fields
+little-endian. Setting bit label 0 in that view makes it appear on the right of
+the interpreted value, even though the source bit lives in the first stored
+byte::
 
     >>> m = Mutibs.from_zeros(32)
     >>> v = m.lsb0.le
@@ -202,10 +190,11 @@ the first stored byte::
     >>> m.hex
     '01000000'
 
-
-For ordinary Python indexing and slicing, use the ``Tibs`` or ``Mutibs`` directly.
-Views don't provide their own slicing interface, as that would make it too easy
-to confuse normal Python slices with specification field labels.
+The physical storage is unchanged unless you write through a
+:class:`MutableView`. For ordinary Python indexing and slicing, use the ``Tibs``
+or ``Mutibs`` directly; views don't provide their own slicing interface, as that
+would make it too easy to confuse normal Python slices with specification field
+labels.
 
 
 Mutable views
@@ -317,22 +306,13 @@ bit order to find the labelled bits, then returns those bits in field-value
 order. For LSB0 labels, label 0 is the least-significant bit of the field, so
 the extracted value is not bit-reversed.
 
-The ``message_id`` field is 16 bits long, so it keeps the little-endian byte
-order from the header. The selected field bytes are ``12 34``, and the integer
-interpretation is ``0x3412``::
+A field keeps the view's byte order if it is a whole number of bytes long, and
+drops it if not, because there are then no complete bytes to reorder::
 
     >>> header.field(31, 16)
     View(Tibs('0x1234'), ByteOrder.Little, BitOrder.Msb0)
-    >>> header.field(31, 16).u
-    13330
-
-If the extracted field is not a whole number of bytes, byte order no longer has a
-meaning and is dropped::
-
     >>> header.field(11, 0)
     View(Tibs('0x123'), ByteOrder.Unspecified, BitOrder.Msb0)
-    >>> header.field(11, 0).u
-    291
 
 Scattered fields
 ^^^^^^^^^^^^^^^^
@@ -370,7 +350,7 @@ Typed values through a view
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``u``, ``i``, ``f``, ``bin``, ``oct``, ``hex`` and ``bytes`` interpretations
-cover the common cases, but they are only nine of the dtypes described in
+cover the common cases, but they are only a few of the dtypes described in
 :doc:`typed_fields`. :meth:`View.to_value` takes any dtype, so array and tuple
 dtypes and explicit widths are reachable through a view too::
 
@@ -392,10 +372,10 @@ Byte order is stated in one place
 """""""""""""""""""""""""""""""""
 
 A dtype can name a byte order with an ``_le`` or ``_be`` suffix, and so can a
-view. Both are useful, but only one of them at a time: the view is applied
-first, so a suffixed dtype inside an ``le``, ``be`` or ``lsb0`` view would be a
-*second* byte order rather than the only one, and two little-endian steps cancel
-out. Rather than quietly swapping twice, that combination is an error::
+view. Both are useful, but only one at a time: the view is applied first, so a
+suffixed dtype inside an ``le``, ``be`` or ``lsb0`` view would be a *second* byte
+order, and two little-endian steps cancel out. Rather than swap twice, that
+combination is an error::
 
     >>> Tibs('0x0100').to_value("u16_le")      # byte order on the dtype
     1
@@ -413,18 +393,11 @@ claim about byte order, so it passes any dtype straight through::
     >>> Tibs('0x0100').view().to_value("u16_le")
     1
 
-Choosing between the two is mostly decided for you. A view applies its byte
-order to the whole view at once, so it can't describe a record whose fields
-differ, or a run of little-endian values - for those the byte order has to live
-on the dtype, and the source ``Tibs`` or ``Mutibs`` is where you read it::
-
-    >>> Tibs.from_values("u16_le", [0x1234, 0xabcd]).hex
-    '3412cdab'
-    >>> Tibs.from_value("(u8, u16_le)", (1, 0x0203)).hex
-    '010302'
-
-Where a whole view really does share one byte order, either place works, and the
-view form composes with ``field()`` and the other view conversions.
+Which one to use is mostly decided for you. A view applies its byte order to the
+whole view at once, so a record whose fields differ, or a run of little-endian
+values, has to state it on the dtype and read it from the source. Where a whole
+view really does share one byte order, either place works, and the view form
+composes with ``field()`` and the other view conversions.
 
 On a :class:`MutableView`, :meth:`MutableView.write_value` is the write
 direction. The value is encoded with the dtype and the result is written through

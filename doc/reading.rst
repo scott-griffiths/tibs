@@ -26,17 +26,17 @@ A :class:`Reader` holds that position for you. It wraps a ``Tibs`` or
     >>> r.pos
     16
 
-Nothing here is new capability — every dtype in tibs has a known bit length, so
-:attr:`Dtype.length` always says how far to advance. What the ``Reader`` removes
-is the bookkeeping, and the off-by-one errors that come with it.
+Every dtype has a known bit length, so the reader always knows how far to
+advance. What it removes is the bookkeeping, and the off-by-one errors that come
+with it.
 
 The source is not copied, and is always reachable::
 
     >>> r.source is frame
     True
 
-That matters because a ``Reader`` deliberately has no windowed queries. If you
-want to read something without disturbing the cursor, ask the source::
+That matters because no ``Reader`` method takes ``start`` or ``end``. For a
+query that shouldn't disturb the cursor, ask the source instead::
 
     >>> r.source.to_value('u8', 0, 8)
     71
@@ -47,8 +47,7 @@ want to read something without disturbing the cursor, ask the source::
 What each method returns
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-There is no bare ``read()``. Each method's name says what it gives back, so you
-can tell from the call site what you are holding:
+There is no bare ``read()``: each method's name says what it gives back.
 
 .. list-table::
    :header-rows: 1
@@ -77,9 +76,8 @@ exactly the same way: one value or many, a tuple or a list::
     [3, 4]
 
 With no count, :meth:`~Reader.read_values` reads as many whole values as fit and
-leaves any partial one under the cursor. This is the one place a ``Reader`` is
-more forgiving than :meth:`Tibs.to_values`, which raises rather than leaving a
-remainder it has nowhere to put::
+leaves any partial one under the cursor, where :meth:`Tibs.to_values` would
+raise::
 
     >>> r = Reader(Tibs('0b1111111111'))   # ten bits
     >>> r.read_values('u4')
@@ -101,10 +99,9 @@ bytes, and refuses to answer if the cursor is not byte aligned::
     (24, 16, False)
 
 A ``Reader`` has no length of its own: :attr:`~Reader.remaining` is what is left
-to read, and ``len(reader.source)`` is how long the whole thing is. There is no
-``len(reader)`` to confuse the two, and no falsy reader either — one that has
-been read to the end is still an object, so use :attr:`~Reader.at_end` rather
-than ``while reader``::
+to read, and ``len(reader.source)`` is how long the whole thing is. Test for the
+end with :attr:`~Reader.at_end` rather than ``while reader``, as a reader that
+has been read to the end is still a perfectly ordinary object::
 
     >>> r = Reader(Tibs('0xff'), 8)
     >>> r.at_end, r.remaining, len(r.source)
@@ -139,10 +136,9 @@ that turns out not to be there is a normal outcome::
     16
 
 ``to`` leaves the cursor at the start of the match; ``past`` leaves it just
-after. The distinction matters more than it looks: a needle already under the
-cursor is found where it is, so ``while r.seek_to(x)`` never gets anywhere.
-:meth:`~Reader.seek_past` is the one to loop on, because it always makes
-progress::
+after. That distinction decides which one you can loop on: a needle already under
+the cursor is found where it is, so ``while r.seek_to(x)`` never gets anywhere,
+while :meth:`~Reader.seek_past` always makes progress::
 
     >>> r = Reader(Tibs('0x00ff00ff00'))
     >>> starts = []
@@ -165,11 +161,8 @@ where the match begins, and :meth:`~Reader.read_past` swallows it::
     16
 
 All five take ``byte_aligned`` and ``mask``, exactly as :meth:`Tibs.find` does.
-
-There is no ``find`` on a ``Reader``. A method returning a position would make a
-match at bit 0 falsy, and a search taking its own ``start`` and ``end`` would
-immediately raise the question of what it does to the cursor. Use the seeks, or
-:meth:`Tibs.find` on the source.
+There is no ``find`` on a ``Reader``: use the seeks, or :meth:`Tibs.find` on the
+source.
 
 
 Looking ahead
@@ -226,8 +219,9 @@ two cursors move independently over the same bits::
 When things go wrong
 ^^^^^^^^^^^^^^^^^^^^
 
-Reads raise and searches return ``False``. Running out of bits is an error,
-because you asked for something specific and it was not there::
+Reads raise and searches return ``False``: running out of bits means the value
+you asked for was not there, while a search that finds nothing is a normal
+outcome::
 
     >>> r = Reader(Tibs('0x0f'), 4)
     >>> r.read_value('u8')
@@ -235,8 +229,8 @@ because you asked for something specific and it was not there::
         ...
     tibs.ReadError: Cannot read 8 bits at position 4: only 4 of the 8 bits are left.
 
-Whenever a method raises, the cursor is exactly where it was. A failed read
-never leaves you half way into a value, so there is nothing to unwind::
+Whenever a method raises, the cursor is exactly where it was, so there is nothing
+to unwind::
 
     >>> r.pos
     4
@@ -264,5 +258,4 @@ reader was built are there to be read::
 
 :attr:`~Reader.pos` is checked against the length the source has at the time it
 is assigned, so when you are writing ahead of the cursor, append first and then
-move. Reads always return a :class:`Tibs`, even from a ``Mutibs``: a read takes
-a value out of the stream, and there is nothing to write back through.
+move. Reads always return a :class:`Tibs`, even from a ``Mutibs``.

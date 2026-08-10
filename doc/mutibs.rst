@@ -19,11 +19,15 @@ To use these methods call :meth:`Mutibs.to_tibs` first to create an immutable co
 
 The Python protocol methods include most of those from ``Tibs``. Additions are:
 
-* ``[]`` can also assign to bits or slices.
+* ``[]`` can also assign to bits or slices, and ``del`` can remove them.
 * ``+=`` concatenates in place, e.g. ``m += '0b1'``.
 * ``*=`` repeats in place, e.g. ``m *= 6``.
 * ``<<=`` and ``>>=`` shift in place.
 * ``&=``, ``|=`` and ``^=`` perform in-place bitwise operations.
+
+A ``Mutibs`` is unhashable and does not export a buffer, both because its bits
+can change. It is otherwise interchangeable: it compares equal to a ``Tibs``
+holding the same bits, and pickles and copies as a ``Mutibs``.
 
 .. autoclass:: tibs.Mutibs
    :members:

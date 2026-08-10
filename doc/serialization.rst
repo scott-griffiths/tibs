@@ -36,3 +36,8 @@ compressing sparse data::
 The codec can be chosen explicitly via the :class:`Codec` enum; with the default
 ``Codec.Auto`` a suitable one is picked for you. The detailed byte format is
 described in :doc:`byte_format`.
+
+``Tibs`` and ``Mutibs`` also support ``pickle`` and ``copy.copy``, each keeping
+the exact bit length and returning the same class. Use :meth:`~Tibs.encode` when
+the bytes themselves matter, as ``pickle`` is neither compact nor readable by
+anything other than Python.

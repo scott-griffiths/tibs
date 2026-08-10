@@ -94,10 +94,8 @@ The four counting methods are :meth:`~Tibs.count_and`, :meth:`~Tibs.count_or`,
 and :meth:`~Tibs.is_superset_of`. Both containers must be the same length, as
 they must be for ``&``, ``|`` and ``^``.
 
-It helps to think of a container as the *set of positions where the bit is set* -
-so a ``1`` means "present" and a ``0`` means "absent", rather than being a second
-kind of value that could match. That is what makes the predicates asymmetric between
-``1`` and ``0``::
+Reading a ``1`` as "present" rather than as a second kind of value to match is
+what makes these asymmetric between ``1`` and ``0``::
 
     >>> a, b = Tibs('0b1100'), Tibs('0b1010')
     >>> a.count_and(b)     # only position 0 is set in both

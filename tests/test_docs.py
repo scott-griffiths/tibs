@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-"""Runs the ``>>>`` examples in ``doc/*.rst``.
+"""Runs the ``>>>`` examples in ``doc/*.rst`` and in the public docstrings.
 
-Sphinx does not check these - ``conf.py`` doesn't load ``sphinx.ext.doctest``,
-and pytest doesn't collect ``.rst`` by default - so the documentation could go
-stale silently. It had, in ``dtype.rst``: an example showing a ``repr`` the
-library has never produced.
+Neither is checked anywhere else: ``conf.py`` doesn't load
+``sphinx.ext.doctest``, and pytest collects neither ``.rst`` nor an extension
+module's docstrings by default, so both can go stale silently.
 
 The documentation is written for a reader, not for this harness, so where the
 two disagree the harness gives way. Two kinds of output vary for reasons that
@@ -13,9 +12,7 @@ here rather than by rewording the manual:
 
 * A ``set`` repr has no defined order, so it is compared as a set.
 * Output derived from an unseeded ``from_random`` cannot be predicted at all.
-  Those examples are still executed, but their output is not compared. Adding a
-  seed would make them checkable at the cost of putting an irrelevant argument
-  in an example that is about counting.
+  Those examples are still executed, but their output is not compared.
 
 The manual writes ``Tibs`` rather than ``tibs.Tibs``, as though the reader had
 done ``from tibs import *``, so the public names are injected as globals rather
@@ -153,6 +150,30 @@ def test_doc_examples(filename):
     assert failures == 0, (
         f"{failures} of {tries} examples in doc/{filename} failed "
         f"(the mismatches are printed above)"
+    )
+
+
+# The docstrings are the API reference, so their examples are documentation too.
+DOC_CLASSES = sorted(
+    name for name in tibs.__all__ if isinstance(getattr(tibs, name), type)
+)
+assert DOC_CLASSES, "no classes found to test"
+
+
+@pytest.mark.parametrize("classname", DOC_CLASSES)
+def test_docstring_examples(classname):
+    runner = doctest.DocTestRunner(
+        checker=DocOutputChecker(),
+        optionflags=doctest.ELLIPSIS | doctest.IGNORE_EXCEPTION_DETAIL,
+        verbose=False,
+    )
+    finder = doctest.DocTestFinder(exclude_empty=True)
+    for test in finder.find(getattr(tibs, classname), classname, globs=_globals()):
+        if test.examples:
+            runner.run(test)
+    assert runner.failures == 0, (
+        f"{runner.failures} of {runner.tries} examples in {classname} docstrings "
+        f"failed (the mismatches are printed above)"
     )
 
 

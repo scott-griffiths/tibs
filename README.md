@@ -78,8 +78,7 @@ no intermediate object built along the way. `Mutibs` can also be used as a large
 `&` `|` `^` `~` · `count_and` · `count_xor` · `intersects` · `is_subset_of` · `set` / `unset` · `all` / `any`
 
 
-And it's fast — usually significantly faster than similar libraries, 100% written in Rust
-and with a large emphasis on performance.
+And it's fast — usually significantly faster than similar libraries.
 
 
 ## A Taster

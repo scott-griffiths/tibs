@@ -167,13 +167,11 @@ for the combination of a scale and a block of E2M1 elements; the Tibs name
 Conversion
 ^^^^^^^^^^
 
-Ordinary conversions from Python floats use round-to-nearest, ties-to-even.
-Tibs rounds directly from the Python ``float`` value; it does not first reduce
-the input to ``f16``. Values immediately around a target midpoint therefore do
-not suffer a second rounding.
+Ordinary conversions from Python floats use round-to-nearest, ties-to-even, and
+round once: directly from the Python ``float`` value to the target format.
 
-OCP E4M3 and E5M2 accept Python NaNs and write the deterministic canonical
-code ``0xff``. Decoding accepts every NaN code defined by the format. The
+OCP E4M3 and E5M2 accept Python NaNs and write the canonical code ``0xff``.
+Decoding accepts every NaN code defined by the format. The
 smaller E2M1, E2M3 and E3M2 formats, and ``ocp_int8``, reject NaN because they
 have no NaN representation. They saturate infinities.
 

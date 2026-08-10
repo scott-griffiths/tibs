@@ -139,8 +139,11 @@ fn index_conversion_error(py: Python<'_>, error: PyErr, length: usize) -> PyErr 
 ///     * ``Mutibs.from_ones(length)`` - Initialise with ``length`` ``1`` bits.
 ///     * ``Mutibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
 ///     * ``Mutibs.from_joined(iterable)`` - Concatenate an iterable of objects.
+///     * ``Mutibs.from_value(dtype, value)`` / ``Mutibs.from_values(dtype, values)`` - Pack typed values.
 ///
-///     Using ``Mutibs(auto)`` will try to delegate to ``from_string``, ``from_bytes`` or ``from_bools``.
+///     Using ``Mutibs(auto)`` delegates to ``from_string`` or ``from_bytes``, and takes a
+///     list or tuple as a bit pattern directly. Only ``True``, ``False``, ``0`` and ``1``
+///     are accepted in one; use ``from_bools`` to convert other truthy values.
 ///
 ///     A ``Mutibs`` is not iterable, as the bits could change underneath an
 ///     iterator. Convert first with ``to_tibs()`` for a copy, or ``take_tibs()``
@@ -1452,7 +1455,7 @@ impl Mutibs {
     ///     >>> v = m.le
     ///     >>> v.write_u(2)
     ///     >>> m
-    ///     Mutibs('0x0002')
+    ///     Mutibs('0x0200')
     ///
     #[pyo3(signature = (byte_order = ByteOrder::Unspecified, bit_order = BitOrder::Msb0), text_signature = "($self, byte_order=None, bit_order=None)")]
     pub fn view(
@@ -2664,7 +2667,7 @@ impl Mutibs {
     /// .. code-block:: pycon
     ///
     ///      >>> Mutibs('0xc3e').find_all('0b1111')
-    ///      [6]
+    ///      [6, 7]
     ///
     #[pyo3(signature = (needle, /, start=None, end=None, byte_aligned=false, mask=None), text_signature = "($self, needle, /, start=None, end=None, byte_aligned=False, mask=None)")]
     pub fn find_all(

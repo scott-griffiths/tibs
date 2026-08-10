@@ -122,12 +122,12 @@ anything that takes a bytes-like object::
     >>> bytes(memoryview(t))
     b'\xff\x00'
 
-That covers ``memoryview``, ``array.array``, ``numpy.frombuffer``, and writing to
-a socket or a file, none of which then need a copy of the data. The buffer is
-read-only and always covers whole bytes, so for a length that isn't a multiple of
-8 the final byte includes the padding bits, which are not masked to zero. It also
-needs the underlying storage to start on a byte boundary, which isn't the case
-for every ``Tibs`` — one made by slicing at a bit offset, for example::
+That covers ``memoryview``, ``numpy.frombuffer``, and writing to a socket or a
+file. The buffer is read-only and always covers whole bytes, so for a length that
+isn't a multiple of 8 the final byte includes the padding bits, which are not
+masked to zero. It also needs the underlying storage to start on a byte boundary,
+which isn't the case for every ``Tibs`` — one made by slicing at a bit offset,
+for example::
 
     >>> memoryview(Tibs('0xffff')[3:])
     Traceback (most recent call last):
@@ -165,6 +165,13 @@ The matching interpretation methods decode values back from a bit sequence::
 
     >>> samples.to_values("u12")
     [0, 103, 2048, 4095]
+
+For a long sequence, :meth:`Tibs.to_values_iter` yields the values one at a time
+instead of building the whole list. Like the other iterator forms it is available
+on ``Tibs`` only (see :doc:`tibs_vs_mutibs`)::
+
+    >>> next(samples.to_values_iter("u12"))
+    0
 
 See :doc:`example_sensor_samples` for packing and unpacking a stream of samples,
 and :doc:`example_construct` for driving a whole header from a table of dtypes.
@@ -250,6 +257,17 @@ interpretations::
 
 The value must fit in the current length. Floating-point assignment uses the
 current length too, so it is only available for 16, 32 and 64-bit ``Mutibs``.
+
+The lossless representations have write methods and settable properties as well —
+:meth:`Mutibs.write_bin`, :meth:`~Mutibs.write_oct`, :meth:`~Mutibs.write_hex`
+and :meth:`~Mutibs.write_bytes`, and the ``bin``, ``oct``, ``hex`` and ``bytes``
+properties. These carry their own length, so unlike the numeric ones they
+replace it::
+
+    >>> m = Mutibs('0x0f')
+    >>> m.hex = 'abcd'
+    >>> m, len(m)
+    (Mutibs('0xabcd'), 16)
 
 For little-endian or LSB0 interpretations, assign through a mutable view instead::
 

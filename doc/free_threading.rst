@@ -15,9 +15,8 @@ Tibs supports that build. It declares that it does not need the GIL, so
 importing tibs doesn't silently switch the GIL back on for the whole process,
 and pre-built wheels are published for it.
 
-Nothing here asks you to write different code for the two builds. The
-guarantees below hold on both. On a GIL-enabled build most of them cost
-nothing, because the GIL was already providing them.
+Nothing here asks you to write different code for the two builds: the guarantees
+below hold on both.
 
 
 The two rules
@@ -187,18 +186,12 @@ The small print
 There is one way a call on a contended :class:`Mutibs` can still be refused,
 with ``RuntimeError: Already borrowed``.
 
-A search over a large container calls back into Python every 65,536 bits, so
-that :kbd:`Ctrl-C` interrupts a long scan instead of being ignored until it
-finishes. Running Python suspends the critical section, and a thread that
-enters it at that moment finds the object busy. The same can happen for a
-garbage collection pause. Nothing is corrupted — a refused call has not
-changed anything — and it costs one call, not a share of them. It cannot
-happen at all for searches under 65,536 bits.
-
-It's a real trade: prompt :kbd:`Ctrl-C` on a multi-megabit search is worth more
-than eliminating a rare refusal. If you have code that must never see one,
-either keep the searches off the shared object or hold your own lock across
-them.
+A search over a multi-megabit container checks for :kbd:`Ctrl-C` periodically
+rather than ignoring it until the scan finishes. Running Python suspends the
+critical section, and a thread entering it at that moment finds the object busy.
+Nothing is corrupted — a refused call has not changed anything — and it costs
+that one call. If you have code that must never see one, either keep the searches
+off the shared object or hold your own lock across them.
 
 Two more things that are contracts rather than bugs:
 
@@ -213,24 +206,18 @@ Two more things that are contracts rather than bugs:
 On a GIL-enabled build
 ^^^^^^^^^^^^^^^^^^^^^^
 
-The locking above compiles away to a direct call when the GIL is present, so
-none of it costs anything on a normal build, and the abi3 wheel that covers
-Python 3.11 onwards is unaffected. The free-threaded build is shipped as its
-own wheel, because abi3 doesn't yet extend to ``3.14t``.
+None of the locking above costs anything on a normal build, where the GIL was
+already providing it. The free-threaded build is shipped as its own wheel,
+because abi3 doesn't yet extend to ``3.14t``.
 
 
 How this is checked
 ^^^^^^^^^^^^^^^^^^^
 
 ``tests/test_concurrency.py`` in the repository is a stress test for all of the
-above, and is the place to look if you want the details rather than the
-summary. It runs several threads against one shared object and checks
-invariants that only hold if the guarantees do: that a container of all ones
-stays all ones through concurrent growing, shrinking, reordering and reading;
-that the length after a race equals the number of calls made, so that no update
-was lost or applied twice; that no public attribute of :class:`Mutibs` refuses
-a call; and that contention arrives as a normal Python exception rather than a
-panic. It runs on GIL-enabled builds too, where it is a cheap check for
-re-entrancy and deadlock, but it only really bites on ``3.14t``::
+above, and is the place to look if you want the details rather than the summary.
+It runs several threads against one shared object and checks invariants that only
+hold if the guarantees do. It runs on GIL-enabled builds too, but only really
+bites on ``3.14t``::
 
     python3.14t -m pytest tests/test_concurrency.py

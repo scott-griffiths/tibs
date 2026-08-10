@@ -48,10 +48,8 @@ extraction, see :doc:`byte_and_bit_order` and :doc:`views`.
 Each :class:`DtypeSingle` instance has a ``kind`` which controls how to create
 and interpret its scalar value. For example, ``DtypeKind.Float`` is used for
 IEEE floating-point data types, and ``DtypeKind.BFloat`` for the 16-bit
-bfloat16 format, which needs a kind of its own because a length alone cannot
-say which of the two 16-bit floats was meant. Array and tuple dtypes instead
-describe their children through :attr:`DtypeArray.dtype` and
-:attr:`DtypeTuple.dtypes`.
+bfloat16 format. Array and tuple dtypes instead describe their children through
+:attr:`DtypeArray.dtype` and :attr:`DtypeTuple.dtypes`.
 
 Unless you are creating or dealing with data types programmatically, you probably won't need to
 use this enum directly.

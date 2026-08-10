@@ -486,31 +486,6 @@ impl Tibs {
     }
 }
 
-///     An immutable container of binary data.
-///
-///     The constructor is a convenient way to delegate to the ``from_string``,
-///     ``from_bytes`` or ``from_bools`` builder methods, depending on the type of ``auto``.
-///
-///     * ``Tibs('0x13')`` - Equivalent to ``Tibs.from_string('0x13')``.
-///     * ``Tibs([1, 0])`` - Equivalent to ``Tibs.from_bools([1, 0])``.
-///     * ``Tibs(b'hello')`` - Equivalent to ``Tibs.from_bytes(b'hello')``.
-///
-///     Otherwise, to construct use a builder 'from' method:
-///
-///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
-///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
-///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
-///     * ``Tibs.from_u(u, length, [byte_order])`` - Create from an unsigned int to a given length.
-///     * ``Tibs.from_i(i, length, [byte_order])`` - Create from a signed int to a given length.
-///     * ``Tibs.from_f(f, length, [byte_order])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
-///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
-///     * ``Tibs.from_string(s)`` - Use a formatted string.
-///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
-///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.
-///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` ``1`` bits.
-///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
-///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
-///
 /// Small values live in the Python object itself, avoiding the separate
 /// `Arc` and `Vec` allocations that otherwise dominate scalar operations.
 /// Larger values retain shared storage so slicing them remains constant-time.
@@ -554,6 +529,33 @@ impl SharedBits {
     }
 }
 
+///     An immutable container of binary data.
+///
+///     The constructor is a convenient way to delegate to the ``from_string`` or
+///     ``from_bytes`` builder methods, depending on the type of ``auto``. A list
+///     or tuple is taken as a bit pattern directly, and only ``True``, ``False``,
+///     ``0`` and ``1`` are accepted in one.
+///
+///     * ``Tibs('0x13')`` - Equivalent to ``Tibs.from_string('0x13')``.
+///     * ``Tibs(b'hello')`` - Equivalent to ``Tibs.from_bytes(b'hello')``.
+///     * ``Tibs([1, 0])`` - A bit pattern given as a list or tuple.
+///
+///     Otherwise, to construct use a builder 'from' method:
+///
+///     * ``Tibs.from_bin(s)`` - Create from a binary string, optionally starting with '0b'.
+///     * ``Tibs.from_oct(s)`` - Create from an octal string, optionally starting with '0o'.
+///     * ``Tibs.from_hex(s)`` - Create from a hex string, optionally starting with '0x'.
+///     * ``Tibs.from_u(u, length, [byte_order])`` - Create from an unsigned int to a given length.
+///     * ``Tibs.from_i(i, length, [byte_order])`` - Create from a signed int to a given length.
+///     * ``Tibs.from_f(f, length, [byte_order])`` - Create from an IEEE float to a 16, 32 or 64 bit length.
+///     * ``Tibs.from_bytes(b)`` - Create directly from a ``bytes``, ``bytearray`` or ``memoryview`` object.
+///     * ``Tibs.from_string(s)`` - Use a formatted string.
+///     * ``Tibs.from_bools(iterable)`` - Convert each element in ``iterable`` to a bool.
+///     * ``Tibs.from_zeros(length)`` - Initialise with ``length`` ``0`` bits.
+///     * ``Tibs.from_ones(length)`` - Initialise with ``length`` ``1`` bits.
+///     * ``Tibs.from_random(length, [secure, seed])`` - Initialise with ``length`` randomly set bits.
+///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
+///     * ``Tibs.from_value(dtype, value)`` / ``Tibs.from_values(dtype, values)`` - Pack typed values.
 #[derive(Clone)]
 #[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
 pub struct Tibs {
@@ -2216,7 +2218,7 @@ impl Tibs {
     /// .. code-block:: pycon
     ///
     ///     >>> list(Tibs('0b1100111').rchunks_iter(3))
-    ///     [Tibs('0b111'), Tibs('0b100'), Tibs('0b11')]
+    ///     [Tibs('0b111'), Tibs('0b100'), Tibs('0b1')]
     ///
     #[pyo3(signature = (chunk_size, /, count = None), text_signature = "($self, chunk_size, /, count=None)")]
     pub fn rchunks_iter(

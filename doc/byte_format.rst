@@ -20,28 +20,24 @@ The compatibility contract has two parts:
 * Future versions of Tibs will continue to decode complete values written by any earlier stable version.
 * ``encode(Codec.Raw)`` is the canonical byte-for-byte representation of a logical bit sequence.
 
-Use ``Codec.Raw`` for persistent keys, serialized hashes, and protocols where the exact bytes are
-part of the contract. The default ``Codec.Auto`` chooses a valid encoding for compactness and may
-produce different bytes for the same bit sequence in a future release as heuristics or codec
-implementations improve. Explicit ``Codec.Rice`` and ``Codec.Zstd`` outputs are also valid encoded
-values, but compressed output is not the canonical key form. Forward compatibility is not
-guaranteed: older versions may reject encodings introduced later.
+So use ``Codec.Raw`` for persistent keys, serialized hashes, and protocols where the exact bytes are
+part of the contract. The default ``Codec.Auto`` picks whatever is most compact, and may produce
+different bytes for the same bit sequence in a future release. Forward compatibility is not
+guaranteed either way: older versions may reject encodings introduced later.
+
+Whether a value was a ``Tibs`` or a ``Mutibs`` is not part of the encoded data, and the same bytes
+can be decoded as either class.
 
 The compact inline forms do a good job at the smaller bit sequences that compression
 algorithms would be very inefficient at storing. For example, all bit sequences up
 to 6 bits long are encoded into a single byte by the default ``Codec.Auto`` path.
 For longer sequences the explicit raw codec overhead is still small.
 
-The choice between ``Tibs`` and ``Mutibs`` is not part of the encoded data. The same bytes can be
-decoded as either class, and the decoded objects have the same logical bits. For byte-for-byte
-stable keys, use the same explicit codec for both objects, normally ``Codec.Raw``.
-
 .. csv-table::
    :header: "Tibs length", "``encode(Codec.Raw)`` overhead"
 
    0 bits, +1 byte
-   1 to 64 bits, +2 bytes
-   65 to 1016 bits, +2 bytes
+   1 to 1016 bits, +2 bytes
    1017 to 131064 bits, +3 bytes
    ... , ...
    1 MiB, +4 bytes
@@ -326,4 +322,4 @@ Notes
 """""
 
 The public decoder expects a single complete encoded Tibs value. It raises
-``ValueError`` if additional bytes remain after that value.
+:exc:`DecodeError` if additional bytes remain after that value.

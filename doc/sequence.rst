@@ -105,17 +105,14 @@ The constructors that encode numeric and other typed values — :meth:`Tibs.from
 :meth:`Tibs.from_values` — are covered in :doc:`typed_fields`.
 
 Calling ``Tibs`` (or ``Mutibs``) directly promotes strings, bytes-like objects and
-strict list/tuple bit patterns for you, as described under :ref:`promotion`. A few
-finer points are worth knowing.
+strict list/tuple bit patterns for you, as described under :ref:`promotion`.
 
 The list and tuple shorthand is intentionally strict: only ``True``, ``False``,
 ``0`` and ``1`` are accepted. Use :meth:`Tibs.from_bools` when you want to convert
-arbitrary truthy values or an arbitrary iterator to bits. File-like objects such
-as ``io.BytesIO`` are not read implicitly; pass the bytes you want explicitly, for
-example ``Tibs.from_bytes(stream.getvalue())``, ``Tibs.from_bytes(stream.read())``
-or ``Tibs.from_bytes(stream.getbuffer())``. Similarly, pass ``memoryview(arr)`` to
-:meth:`Tibs.from_bytes` for an ``array.array`` only when that raw byte
-representation is intended.
+arbitrary truthy values or an arbitrary iterator to bits. Anything else has to be
+turned into bytes explicitly — a file or stream with ``Tibs.from_bytes(f.read())``,
+an ``array.array`` with ``Tibs.from_bytes(memoryview(arr))`` — so that reading it,
+and the byte representation you get, are both your decision.
 
 .. note::
 
@@ -238,13 +235,8 @@ front::
     5
 
 There is also :meth:`Tibs.rfind_all_iter`, which yields matches from right to
-left. When you want every match in reverse, reverse the list instead::
-
-    >>> t.find_all('0b101')[::-1]
-    [5, 0]
-
-Reversing the whole list can be quicker if you need more than just the first few
-results.
+left. It is for stopping early; if you want them all, reverse the list from
+:meth:`~Tibs.find_all` instead.
 
 Iterator forms are only available on ``Tibs``. If you have a ``Mutibs``,
 use :meth:`Mutibs.to_tibs` to make an immutable copy, or :meth:`Mutibs.take_tibs`
@@ -280,8 +272,7 @@ The ``mask`` argument works the same way on :meth:`~Tibs.find`,
 
 A mask with every bit set is just an ordinary search, and one with no bits set
 matches at every position. Masked searches can't use the byte-oriented fast paths
-that plain searches do, so they are slower - and for patterns longer than 64 bits
-with only a few bits masked in, considerably so.
+that plain searches do, so they are slower.
 
 starts_with / ends_with
 =======================
@@ -469,5 +460,5 @@ Stack-like operations and capacity
 
 :meth:`Mutibs.clear` removes all bits while keeping the object available for
 reuse. :meth:`Mutibs.reserve` asks for space for additional bits, and
-:meth:`Mutibs.capacity` reports the current allocated capacity. These capacity
-methods are only performance hints; normal code usually does not need them.
+:attr:`Mutibs.capacity` reports the current allocated capacity. These are only
+performance hints; normal code usually does not need them.

@@ -88,38 +88,21 @@ are packed consecutively in normal Tibs bit order.
 
 ``bf16`` is a second 16-bit float, and not an IEEE one. It spends 8 bits on the
 exponent and 7 on the mantissa, where ``f16`` spends 5 and 10, which makes it
-exactly the top half of the ``f32`` encoding::
+exactly the top half of the ``f32`` encoding — the whole ``f32`` range, traded
+against roughly two significant decimal digits instead of three. The two divide
+the same sixteen bits differently, so neither replaces the other and the same
+bits mean different numbers in each::
 
     >>> Tibs.from_value("f32", 1.0).hex
     '3f800000'
     >>> Tibs.from_value("bf16", 1.0).hex
     '3f80'
-    >>> Tibs.from_value("f16", 1.0).hex
-    '3c00'
-
-The two 16-bit formats divide the same sixteen bits differently, so neither
-replaces the other and the same bits mean different numbers in each::
-
-    >>> Tibs("0x3f80").to_value("bf16")
-    1.0
     >>> Tibs("0x3f80").to_value("f16")
     1.875
 
-``bf16`` keeps the whole ``f32`` range, reaching values that ``f16`` flushes to
-zero, and pays for it in precision: ``f16``'s roughly three significant decimal
-digits become roughly two::
-
-    >>> Tibs.from_value("bf16", 1e-8).to_value("bf16")
-    1.0011717677116394e-08
-    >>> Tibs.from_value("f16", 1e-8).to_value("f16")
-    0.0
-    >>> Tibs.from_value("bf16", 1.001).to_value("bf16")
-    1.0
-    >>> Tibs.from_value("f16", 1.001).to_value("f16")
-    1.0009765625
-
 Only ``bf16`` is accepted; there is no ``bf8`` or ``bf32``. It takes ``_le``
-and ``_be`` like the other numeric dtypes, and has its own kind::
+and ``_be`` like the other numeric dtypes, and has its own kind, because a
+length alone cannot say which of the two 16-bit floats was meant::
 
     >>> Dtype("bf16_le")
     DtypeSingle('bf16_le')

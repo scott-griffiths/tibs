@@ -5,7 +5,7 @@ import time
 
 from tibs import Tibs
 
-# Averaging 2.4 million 12-bit samples, split across a varying number of threads.
+# Adding up 2.4 million 12-bit samples, split across a varying number of threads.
 VALUES = 2_400_000
 data = Tibs.from_random(VALUES * 12, seed=b"tibs")
 

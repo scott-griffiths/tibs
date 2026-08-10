@@ -26,24 +26,15 @@ presenting the same bits under the same layout::
     >>> Tibs('0xff').view() == Mutibs('0xff').view()
     True
 
-Equality does *not* promote, though, and this is the one place in the library
-where that is true. Everywhere a bit sequence is accepted - concatenation,
-``in``, :meth:`~Tibs.find`, :meth:`~Tibs.count` and the rest - a ``str``,
-``bytes`` or list of bits is converted for you. ``==`` deliberately does not::
+Equality is the one place that does *not* promote, though. Everywhere else a bit
+sequence is accepted - concatenation, ``in``, :meth:`~Tibs.find`,
+:meth:`~Tibs.count` and the rest - a ``str``, ``bytes`` or list of bits is
+converted for you. ``==`` deliberately does not, because a hashable ``Tibs``
+cannot hash equal to both ``'0xff'`` and ``b'\xff'`` at once. This matches the
+standard library, where ``b'a' == 'a'`` is likewise ``False``::
 
     >>> Tibs('0b1010') == '0b1010'
     False
-    >>> Tibs('0xff') == b'\xff'
-    False
-
-The reason is hashing. A ``Tibs`` is hashable, so anything it compares equal to
-would have to hash equal to it, and ``hash(Tibs('0xff'))`` cannot agree with
-``hash('0xff')`` and ``hash(b'\xff')`` at the same time. Comparing equal to
-either one would put ``Tibs`` objects and strings in the same dictionary bucket
-while disagreeing about what is in it. This matches the standard library, where
-``b'a' == 'a'`` is likewise ``False``. Convert explicitly when you want the
-comparison::
-
     >>> Tibs('0b1010') == Tibs('0b1010')
     True
 
@@ -99,12 +90,10 @@ new mutable value without changing the original::
    ":meth:`~Mutibs.unset`", ":meth:`~Mutibs.with_unset`"
 
 
-The rule is that a copy-returning method takes the past participle of the
-mutating one, and that where the participle is spelled the same as the verb it
-takes a ``with_`` prefix instead. Only ``set`` and ``unset`` need the second
-half of that rule, which is why ``with_set()`` and ``with_unset()`` look
-different from the rest: ``m.set(3)`` changes ``m``, ``m.with_set(3)`` hands
-back a new object with bit 3 set and leaves ``m`` alone.
+The copy-returning name is the past participle of the mutating one, or takes a
+``with_`` prefix where the participle would be spelled the same as the verb. Only
+``set`` and ``unset`` need the second form, which is why ``with_set()`` and
+``with_unset()`` look different from the rest.
 
 Not all mutating methods have a copy equivalent - things like ``clear()`` don't make sense for a
 ``Tibs``, and you can use the ``+`` operator to do non-mutating extensions.
