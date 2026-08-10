@@ -173,19 +173,21 @@ Benchmarks are machine-dependent, but tibs is often almost unreasonably fast.
 
 ## Examples
 
-The runnable examples in [`examples/`](examples/) are small, but they are meant
-to look like real binary-data tasks. Some examples of the examples:
+The examples are small, but they are meant to look like real binary-data tasks.
+Each is walked through in the documentation, with the runnable code in
+[`examples/`](examples/). Some examples of the examples:
 
 
 | Example |  |
 | --- | --- |
-| [`record_stream.py`](examples/record_stream.py) | Read tagged, variable-length records with a `Reader`. |
-| [`ebpf_instruction.py`](examples/ebpf_instruction.py) | Decode a real eBPF instruction by chaining LSB0 and little-endian views. |
-| [`fingerprints.py`](examples/fingerprints.py) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
-| [`parallel_decode.py`](examples/parallel_decode.py) | Decode millions of samples across threads on a free-threaded build, with no copying and no locks. |
+| [Record stream](https://tibs.readthedocs.io/en/latest/example_record_stream.html) | Read tagged, variable-length records with a `Reader`. |
+| [eBPF instruction](https://tibs.readthedocs.io/en/latest/example_ebpf_instruction.html) | Decode a real eBPF instruction by chaining LSB0 and little-endian views. |
+| [Fingerprints](https://tibs.readthedocs.io/en/latest/example_fingerprints.html) | Compare items as sets of bits with `count_and`, `count_xor` and `is_subset_of`. |
+| [Parallel decode](https://tibs.readthedocs.io/en/latest/example_parallel_decode.html) | Decode millions of samples across threads on a free-threaded build, with no copying and no locks. |
 
-The rest of [`examples/`](examples/) covers stream scanning, in-place patching,
-structured headers, bulk sample packing and scattered register fields.
+The [rest of the examples](https://tibs.readthedocs.io/en/latest/examples.html)
+cover stream scanning, in-place patching, structured headers, bulk sample
+packing and scattered register fields.
 
 
 ## Project status
