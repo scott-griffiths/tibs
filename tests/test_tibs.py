@@ -331,14 +331,28 @@ def test_buffer_protocol_mid_byte_offset_raises():
         memoryview(b)
 
 
-def test_buffer_protocol_unaligned_length():
-    # A byte-aligned start but a length that isn't a whole number of bytes still
-    # exports a buffer; the trailing padding bits in the last byte are not
-    # masked to zero, matching bitarray's own buffer protocol behaviour.
+def test_buffer_protocol_unaligned_length_raises():
+    # A byte-aligned start isn't enough: a partial final byte can't be exported
+    # either, because the bits past the logical length belong to whatever the
+    # storage was sliced out of.
     a = Tibs('0b101')
-    mv = memoryview(a)
-    assert len(mv) == 1
-    assert bytes(mv) == b'\xa0'
+    with pytest.raises(BufferError):
+        memoryview(a)
+    assert a.to_padded_bytes() == b'\xa0'
+
+
+def test_buffer_protocol_bytes_do_not_depend_on_provenance():
+    # Equal values must present equal bytes, and unequal values unequal ones.
+    # Exporting a partial final byte broke both directions: Tibs('0xffff')[0:4]
+    # would have shown 0xff where Tibs('0b1111') showed 0xf0, and 0b1010 and
+    # 0b10100 would both have shown 0xa0.
+    sliced, literal = Tibs('0xffff')[0:4], Tibs('0b1111')
+    assert sliced == literal
+    for a in (sliced, literal, Tibs('0b1010'), Tibs('0b10100')):
+        with pytest.raises(BufferError):
+            memoryview(a)
+    # Whole bytes are unaffected, however the Tibs was made.
+    assert bytes(memoryview(Tibs('0xffff')[0:8])) == bytes(memoryview(Tibs('0xff')))
 
 
 def test_buffer_protocol_simple_consumer():
@@ -386,11 +400,11 @@ def test_from_bytes_offsets():
     assert a == Tibs('0xff00ee11')
     b = Tibs.from_bytes(x, None, 16)
     assert b == Tibs('0xff00')
-    c = Tibs.from_bytes(x, offset=16)
+    c = Tibs.from_bytes(x, bit_offset=16)
     assert c == Tibs('0xee11')
     d = Tibs.from_bytes(x, 4, 12)
     assert d == Tibs('0xf00')
-    e = Mutibs.from_bytes(x, length=4, offset=28)
+    e = Mutibs.from_bytes(x, bit_length=4, bit_offset=28)
     assert e == Tibs('0x1')
     f = Mutibs.from_bytes(x, 0, 32)
     assert f == a
@@ -429,15 +443,15 @@ def test_to_padded_bytes_unaligned_slices_match_reference():
 def test_from_bytes_errors():
     x = b'\xff\x00\xee\x11'
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, length=33)
+        _ = Tibs.from_bytes(x, bit_length=33)
     with pytest.raises(ValueError):
         _ = Tibs.from_bytes(x, None, -1)
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, offset=-1)
+        _ = Tibs.from_bytes(x, bit_offset=-1)
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, length=-1)
+        _ = Tibs.from_bytes(x, bit_length=-1)
     with pytest.raises(ValueError):
-        _ = Tibs.from_bytes(x, offset=28, length=5)
+        _ = Tibs.from_bytes(x, bit_offset=28, bit_length=5)
 
 
 def test_bit_ops_alignments():

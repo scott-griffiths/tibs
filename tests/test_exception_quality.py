@@ -200,7 +200,7 @@ def test_negative_reverse_chunk_count_message_states_that_zero_is_allowed():
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])
 def test_negative_from_bytes_offset_error_names_the_offset_parameter(cls):
     with pytest.raises(ValueError) as exc_info:
-        cls.from_bytes(b"\x00", offset=-1)
+        cls.from_bytes(b"\x00", bit_offset=-1)
 
     message = str(exc_info.value).lower()
     assert "offset" in message

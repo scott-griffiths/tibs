@@ -131,7 +131,7 @@ def test_optional_modifiers_stay_keyword_reachable():
     assert t.rotated_left(1, start=0, end=8).hex == "3e2e3f"
     assert t.to_u(start=0, end=8) == 0x1F
     assert Tibs.from_u(1, length=8).hex == "01"
-    assert Tibs.from_bytes(b"\xff", offset=4, length=4).bin == "1111"
+    assert Tibs.from_bytes(b"\xff", bit_offset=4, bit_length=4).bin == "1111"
     assert len(Tibs.from_random(8, secure=True)) == 8
     assert t.view(byte_order=ByteOrder.Unspecified, bit_order=BitOrder.Lsb0) is not None
     assert t.le.to_value("u8", start=0, end=8) == 0x3F

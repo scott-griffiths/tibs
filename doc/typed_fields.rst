@@ -123,19 +123,30 @@ anything that takes a bytes-like object::
     b'\xff\x00'
 
 That covers ``memoryview``, ``numpy.frombuffer``, and writing to a socket or a
-file. The buffer is read-only and always covers whole bytes, so for a length that
-isn't a multiple of 8 the final byte includes the padding bits, which are not
-masked to zero. It also needs the underlying storage to start on a byte boundary,
-which isn't the case for every ``Tibs`` — one made by slicing at a bit offset,
-for example::
+file. The buffer is read-only, and because it borrows the storage rather than
+copying it, it can only be exported for bits that are already exactly some whole
+bytes of that storage. Two things can stop that being true. The length may not
+be a multiple of 8::
 
-    >>> memoryview(Tibs('0xffff')[3:])
+    >>> memoryview(Tibs('0xff')[:4])
+    Traceback (most recent call last):
+    ...
+    BufferError: Cannot export a buffer for this Tibs: its length of 4 bits is not a multiple of 8. Use to_padded_bytes() to get an owned copy instead.
+
+or the data may not start on a byte boundary, which is the case for a ``Tibs``
+made by slicing at a bit offset, whole bytes of it or not::
+
+    >>> memoryview(Tibs('0xffff')[4:12])
     Traceback (most recent call last):
     ...
     BufferError: Cannot export a buffer for this Tibs: its data does not start on a byte boundary. Use to_bytes() or to_padded_bytes() to get an owned copy instead.
 
 Use :meth:`Tibs.to_bytes` or :meth:`Tibs.to_padded_bytes` for an owned copy when
-that happens.
+that happens. The padded copy is the one to reach for with a partial final byte:
+the buffer can't offer the same thing, because the bits it would have to put
+there are the neighbouring ones rather than zeros, which would make the bytes a
+consumer sees depend on where the ``Tibs`` was sliced from rather than on its
+value.
 
 ``Mutibs`` does not export a buffer. Its storage is reallocated and shifted as the
 container is edited, so a borrowed view of it could not be kept valid.

@@ -1876,11 +1876,12 @@ impl Tibs {
 
     /// Export a read-only buffer (the ``buffer protocol``), for e.g. ``memoryview(t)``.
     ///
-    /// This is only possible when the underlying storage starts on a byte
-    /// boundary; otherwise a :class:`BufferError` is raised, in which case
+    /// The buffer borrows the storage rather than copying it, so it can only be
+    /// exported for bits that are already exactly some whole bytes of that
+    /// storage: the length must be a multiple of 8 and the data must start on a
+    /// byte boundary. Otherwise a :class:`BufferError` is raised, in which case
     /// :meth:`~to_bytes` or :meth:`~to_padded_bytes` can be used to get an
-    /// owned copy instead. Bits beyond the logical length in the final byte are
-    /// not masked to zero.
+    /// owned copy instead.
     unsafe fn __getbuffer__(
         slf: Bound<'_, Self>,
         view: *mut ffi::Py_buffer,
@@ -1898,6 +1899,19 @@ impl Tibs {
             // Infallible: Tibs is a frozen pyclass, so it has no borrow flag
             // to contend for and this cannot fail on a free-threaded build.
             let bits = slf.borrow();
+            // A partial final byte would have to carry whatever the storage
+            // holds beyond the logical length, which for a slice is the
+            // neighbouring bits rather than padding. Exporting that would make
+            // the bytes a consumer sees depend on where the Tibs came from
+            // instead of on its value, so it is refused along with a mid-byte
+            // start.
+            let bit_length = BitCollection::len(&*bits);
+            if !bit_length.is_multiple_of(8) {
+                return Err(PyBufferError::new_err(format!(
+                    "Cannot export a buffer for this Tibs: its length of {bit_length} bits is not \
+                     a multiple of 8. Use to_padded_bytes() to get an owned copy instead."
+                )));
+            }
             let Some(bytes) = BitCollection::byte_aligned_raw_data(&*bits) else {
                 return Err(PyBufferError::new_err(
                     "Cannot export a buffer for this Tibs: its data does not start on a byte \
@@ -2933,9 +2947,12 @@ impl Tibs {
     /// Create a new instance from a bytes object.
     ///
     /// :param bytes | bytearray | memoryview data: The bytes, bytearray or memoryview object to convert to a :class:`Tibs`.
-    /// :param int | None offset: The bit offset from the start. Defaults to zero.
-    /// :param int | None length: The bit length to use. Defaults to the whole of the data.
+    /// :param int | None bit_offset: How many bits to skip from the start. Defaults to zero.
+    /// :param int | None bit_length: How many bits to use. Defaults to the whole of the data.
     /// :return: A newly constructed ``Tibs``.
+    ///
+    /// Both are counts of bits, not bytes, so to skip a four byte header use
+    /// ``bit_offset=32``.
     ///
     /// .. code-block:: python
     ///
@@ -2943,18 +2960,18 @@ impl Tibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
+    #[pyo3(signature = (data, /, bit_offset=None, bit_length=None), text_signature = "(cls, data, /, bit_offset=None, bit_length=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: &Bound<'_, PyAny>,
-        offset: Option<i64>,
-        length: Option<i64>,
+        bit_offset: Option<i64>,
+        bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = match length {
+        let length = match bit_length {
             Some(length) => Some(validate_length(length)?),
             None => None,
         };
-        let offset = match offset {
+        let offset = match bit_offset {
             Some(offset) => Some(validate_offset(offset)?),
             None => None,
         };

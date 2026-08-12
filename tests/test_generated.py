@@ -251,9 +251,9 @@ class TestErrorHandling:
 
     def test_from_bytes_errors(self):
         with pytest.raises(ValueError):
-            Tibs.from_bytes(b"abc", offset=30)
+            Tibs.from_bytes(b"abc", bit_offset=30)
         with pytest.raises(ValueError):
-            Tibs.from_bytes(b"abc", length=30)
+            Tibs.from_bytes(b"abc", bit_length=30)
 
     def test_adding_nonsense(self):
         with pytest.raises(ValueError):

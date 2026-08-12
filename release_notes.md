@@ -36,6 +36,22 @@ Backwardly incompatible changes
 * Views now compare by the bits they present rather than by their whole source,
   so a `View` and a `MutableView` over the same bits and layout are now equal.
 
+* The buffer protocol now needs a length that is a multiple of 8, and raises
+  `BufferError` otherwise. It used to export a partial final byte, whose bits
+  past the logical length are not padding but whatever the storage was sliced
+  out of, so `Tibs('0xffff')[0:4]` and `Tibs('0b1111')` presented different
+  bytes despite being equal. Use `to_padded_bytes()` for those.
+
+* The `offset` and `length` parameters of `Tibs.from_bytes` and
+  `Mutibs.from_bytes` are now `bit_offset` and `bit_length`. They always
+  counted bits, which the old names left to the reader to guess on a method
+  that takes bytes.
+
+* Assigning to a single index now takes only `True`, `False`, `0` or `1`, and
+  raises `TypeError` for anything else, rather than testing the value for
+  truthiness. This is the rule `append` and the implicit bit patterns already
+  followed. Use `bool(x)` at the call site to keep the old behaviour.
+
 Added
 
 * Added the `Reader` class, which wraps a `Tibs` or `Mutibs` with a bit position

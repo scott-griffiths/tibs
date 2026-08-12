@@ -88,6 +88,19 @@ def test_not_byte_aligned():
     assert a == Tibs('0x000')
 
 
+def test_index_assignment_takes_only_a_bit():
+    # The same rule as append() and the implicit bit patterns: a single index
+    # is not a truthiness test, so 2 is an error rather than a set bit.
+    a = Mutibs('0b000')
+    for value in (True, False, 0, 1):
+        a[0] = value
+    assert a == Tibs('0b100')
+    for value in (2, -1, 'x', None, 0.5, [], b'\x00'):
+        with pytest.raises(TypeError, match="Only True, False, 0 or 1"):
+            a[1] = value
+    assert a == Tibs('0b100')
+
+
 class TestSliceAssignment:
 
     def test_slice_assignment_single_bit_errors(self):
@@ -114,7 +127,9 @@ class TestSliceAssignment:
 
     def test_slice_assignment_multiple_bits_errors(self):
         a = Mutibs()
-        with pytest.raises(IndexError):
+        # A single index takes a bit, so a string of them is rejected on the
+        # value rather than reaching the range check on the index.
+        with pytest.raises(TypeError):
             a[0] = '0b00'
         a += '0b1'
         a[0:2] = '0b11'

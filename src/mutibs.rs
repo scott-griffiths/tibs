@@ -2297,9 +2297,12 @@ impl Mutibs {
     /// Create a new instance from a bytes object.
     ///
     /// :param bytes | bytearray | memoryview data: The bytes, bytearray or memoryview object to convert to a :class:`Mutibs`.
-    /// :param int | None offset: The bit offset from the start. Defaults to zero.
-    /// :param int | None length: The bit length to use. Defaults to the whole of the data.
+    /// :param int | None bit_offset: How many bits to skip from the start. Defaults to zero.
+    /// :param int | None bit_length: How many bits to use. Defaults to the whole of the data.
     /// :return: A newly constructed ``Mutibs``.
+    ///
+    /// Both are counts of bits, not bytes, so to skip a four byte header use
+    /// ``bit_offset=32``.
     ///
     /// .. code-block:: python
     ///
@@ -2307,18 +2310,18 @@ impl Mutibs {
     ///
     #[classmethod]
     #[inline]
-    #[pyo3(signature = (data, /, offset=None, length=None), text_signature = "(cls, data, /, offset=None, length=None)")]
+    #[pyo3(signature = (data, /, bit_offset=None, bit_length=None), text_signature = "(cls, data, /, bit_offset=None, bit_length=None)")]
     pub fn from_bytes(
         _cls: &Bound<'_, PyType>,
         data: &Bound<'_, PyAny>,
-        offset: Option<i64>,
-        length: Option<i64>,
+        bit_offset: Option<i64>,
+        bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = match length {
+        let length = match bit_length {
             Some(length) => Some(validate_length(length)?),
             None => None,
         };
-        let offset = match offset {
+        let offset = match bit_offset {
             Some(offset) => Some(validate_offset(offset)?),
             None => None,
         };
@@ -2493,7 +2496,7 @@ impl Mutibs {
     /// Set a bit or a slice of bits.
     ///
     /// :param int | slice key: The index or slice to set.
-    /// :param object value: For a single index, a boolean value. For a slice, anything that can be converted to Tibs.
+    /// :param object value: For a single index, ``0``, ``1``, ``True`` or ``False``. For a slice, anything that can be converted to Tibs.
     ///
     /// Slice assignment follows standard Python semantics:
     ///
@@ -2504,6 +2507,7 @@ impl Mutibs {
     ///
     /// :raises ValueError: If the slice step is 0, or if the length of the value doesn't match an extended slice.
     /// :raises IndexError: If the index is out of range.
+    /// :raises TypeError: If a single index is given a value that isn't ``0``, ``1``, ``True`` or ``False``.
     ///
     /// .. code-block:: pycon
     ///
@@ -2531,7 +2535,11 @@ impl Mutibs {
             _ => None,
         };
         let bit = match key {
-            ItemKey::Index(_) => Some(value.is_truthy()?),
+            // Strict, like `append` and the implicit bit patterns: a single
+            // index takes a bit, not anything with a truth value.
+            ItemKey::Index(_) => Some(helpers::convert_to_bool(value).ok_or_else(|| {
+                PyTypeError::new_err("Only True, False, 0 or 1 can be assigned to a single index.")
+            })?),
             _ => None,
         };
         with_locked_mut(slf, |m: &mut Self| m.set_key(py, key, bit, bits))
