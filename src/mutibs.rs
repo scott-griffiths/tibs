@@ -4031,6 +4031,9 @@ impl Mutibs {
     /// The ``mask`` affects only which bits have to match; the whole of each match is still
     /// replaced by ``new``.
     ///
+    /// Matches cannot overlap, since replacing one consumes the bits the next would have
+    /// matched, so this can make fewer replacements than :meth:`count` finds occurrences.
+    ///
     /// .. code-block:: pycon
     ///
     ///     >>> m = Mutibs('0b00010010')

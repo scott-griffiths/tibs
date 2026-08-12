@@ -3462,6 +3462,9 @@ impl Tibs {
     /// The ``mask`` affects only which bits have to match; the whole of each match is still
     /// replaced by ``new``.
     ///
+    /// Matches cannot overlap, since replacing one consumes the bits the next would have
+    /// matched, so fewer replacements can be made than :meth:`count` finds occurrences.
+    ///
     /// .. code-block:: pycon
     ///
     ///     >>> Tibs('0b00010010').replaced([0, 1], [1, 1, 1])
