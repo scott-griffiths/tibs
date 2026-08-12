@@ -1,8 +1,8 @@
 .. currentmodule:: tibs
 
 
-Scanning for an instruction pattern
------------------------------------
+Scanning for a pattern
+----------------------
 
 Instruction encodings are mostly fixed bits with a few variable fields punched
 through them, which makes them awkward to search for: the opcode you want is

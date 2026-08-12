@@ -1,8 +1,8 @@
 .. currentmodule:: tibs
 
 
-Decoding an eBPF instruction
-----------------------------
+Decoding LSB0 instructions
+--------------------------
 
 The Linux eBPF ISA documentation defines instruction fields using low-order bit
 labels and gives a concrete little-endian byte sequence for the instruction
