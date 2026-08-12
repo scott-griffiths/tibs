@@ -1,6 +1,6 @@
 [package]
 name = "tibs"
-version = "2.0.0-rc2"
+version = "2.0.0"
 edition = "2024"
 description = "A sleek Python library for binary data."
 license = "MIT"
