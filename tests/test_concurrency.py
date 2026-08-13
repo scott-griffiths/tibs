@@ -866,8 +866,22 @@ class TestFreeThreadedGaps:
         # calls - `field` refused over a thousand times in a two-second probe
         # before it was wrapped - while a suspended section costs one call of
         # whichever attribute happened to be running.
+        #
+        # Each share is measured against the calls that share actually received.
+        # The two writer threads run `write_bytes` once per round per reachable
+        # attribute, so it takes `len(reachable)` times the traffic the sweep
+        # gives anything else; holding it to the sweep's denominator failed it
+        # on a busy runner at an incidental rate the sweep would never notice.
         per_attribute = 2 * ROUNDS
-        worst = refusals.most_common(1)
+        write_calls = 2 * ROUNDS * len(reachable)
+        assert refusals["write_bytes"] <= write_calls // 4, (
+            f"write_bytes refused {refusals['write_bytes']} of its {write_calls} "
+            f"calls; all refusals: {dict(refusals)}"
+        )
+        swept = collections.Counter(
+            {name: count for name, count in refusals.items() if name != "write_bytes"}
+        )
+        worst = swept.most_common(1)
         assert not worst or worst[0][1] <= per_attribute // 4, (
             f"{worst[0][0]} refused {worst[0][1]} of its {per_attribute} calls; "
             f"all refusals: {dict(refusals)}"
