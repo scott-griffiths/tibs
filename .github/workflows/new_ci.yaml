@@ -22,6 +22,10 @@ jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      # One target failing should not discard the wheels the others already
+      # built: a flaky download or an emulated-arch segfault used to cancel
+      # jobs that had finished building and cascade into a wall of red.
+      fail-fast: false
       matrix:
         platform:
           - runner: ubuntu-22.04
@@ -95,6 +99,10 @@ jobs:
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      # One target failing should not discard the wheels the others already
+      # built: a flaky download or an emulated-arch segfault used to cancel
+      # jobs that had finished building and cascade into a wall of red.
+      fail-fast: false
       matrix:
         platform:
           - runner: ubuntu-22.04
@@ -161,6 +169,10 @@ jobs:
   windows:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      # One target failing should not discard the wheels the others already
+      # built: a flaky download or an emulated-arch segfault used to cancel
+      # jobs that had finished building and cascade into a wall of red.
+      fail-fast: false
       matrix:
         platform:
           - runner: windows-latest
@@ -205,6 +217,10 @@ jobs:
   windows-free-threaded:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      # One target failing should not discard the wheels the others already
+      # built: a flaky download or an emulated-arch segfault used to cancel
+      # jobs that had finished building and cascade into a wall of red.
+      fail-fast: false
       matrix:
         platform:
           - runner: windows-latest
@@ -253,6 +269,10 @@ jobs:
   macos:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      # One target failing should not discard the wheels the others already
+      # built: a flaky download or an emulated-arch segfault used to cancel
+      # jobs that had finished building and cascade into a wall of red.
+      fail-fast: false
       matrix:
         platform:
           - runner: macos-15-intel
