@@ -1,6 +1,6 @@
 # Release Notes
 
-### August 12th 2026: version 2.0.0
+### August 12th 2026: version 2.0.1
 
 Lots of new features added. A few caused some small backwardly incompatible
 changes, so as the user base is still small I just accepted the better API
