@@ -1,5 +1,7 @@
 use crate::codec as tibs_codec;
-use crate::core::{BitCollection, concatenate_bitcollections, read_split_positions};
+use crate::core::{
+    BitCollection, concatenate_bitcollections, read_split_positions, validate_chunk_args,
+};
 use crate::dtype::{Dtype, DtypeRepr, RecordField, RecordLayout, SingleDtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
@@ -308,11 +310,7 @@ impl Tibs {
 
     fn shifted_copy(&self, shift: usize, left: bool) -> Self {
         let Some(word) = self.padded_word() else {
-            return if left {
-                self.lshift(shift)
-            } else {
-                self.rshift(shift)
-            };
+            return self.shift_copy(shift, left);
         };
         if shift == 0 {
             return self.clone();
@@ -483,6 +481,29 @@ impl Tibs {
         let mut out = self.to_mutibs();
         f(&mut out)?;
         Ok(out.tibs_copy())
+    }
+
+    fn chunks_iterator(
+        slf: PyRef<'_, Self>,
+        chunk_size: i64,
+        count: Option<i64>,
+        is_reverse: bool,
+    ) -> PyResult<Py<ChunksIterator>> {
+        let (chunk_size, max_chunks) = validate_chunk_args(chunk_size, count, "generator")?;
+        let py = slf.py();
+        let bits_len = slf.len();
+        Py::new(
+            py,
+            ChunksIterator {
+                bits_object: slf.into(),
+                chunk_size,
+                max_chunks,
+                current_pos: if is_reverse { bits_len } else { 0 },
+                chunks_generated: 0,
+                bits_len,
+                is_reverse,
+            },
+        )
     }
 }
 
@@ -785,10 +806,10 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
     if let Some(single) = dtype.single() {
         return bv_from_single_value(single, value);
     }
-    if let Some(layout) = &dtype.record_layout {
-        if let Some(bv) = bv_from_value_record(layout, value)? {
-            return Ok(bv);
-        }
+    if let Some(layout) = &dtype.record_layout
+        && let Some(bv) = bv_from_value_record(layout, value)?
+    {
+        return Ok(bv);
     }
     let mut out = BV::with_capacity(dtype.length);
     append_dtype_value(value.py(), &dtype.repr, value, &mut out, "")?;
@@ -1218,10 +1239,10 @@ pub(crate) fn bv_from_values_iter(
 ) -> PyResult<BV> {
     let hint = iterable.len().ok();
 
-    if let Some(layout) = &dtype.record_layout {
-        if let Some(bv) = bv_from_values_iter_record(py, layout, iterable, hint)? {
-            return Ok(bv);
-        }
+    if let Some(layout) = &dtype.record_layout
+        && let Some(bv) = bv_from_values_iter_record(py, layout, iterable, hint)?
+    {
+        return Ok(bv);
     }
 
     let Some(single) = dtype.single() else {
@@ -2192,35 +2213,7 @@ impl Tibs {
         chunk_size: i64,
         count: Option<i64>,
     ) -> PyResult<Py<ChunksIterator>> {
-        if chunk_size <= 0 {
-            return Err(PyValueError::new_err(format!(
-                "Cannot create chunk generator - chunk_size of {chunk_size} given, but it must be > 0."
-            )));
-        }
-        let max_chunks = match count {
-            Some(c) => {
-                if c < 0 {
-                    return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk generator - count of {c} given, but it must be >= 0 if present."
-                    )));
-                }
-                c as usize
-            }
-            None => usize::MAX,
-        };
-
-        let py = slf.py();
-        let bits_len = slf.len();
-        let iter = ChunksIterator {
-            bits_object: slf.into(),
-            chunk_size: chunk_size as usize,
-            max_chunks,
-            current_pos: 0,
-            chunks_generated: 0,
-            bits_len,
-            is_reverse: false,
-        };
-        Py::new(py, iter)
+        Self::chunks_iterator(slf, chunk_size, count, false)
     }
 
     /// Return a reverse iterator by cutting into Tibs chunks, starting from the end.
@@ -2240,35 +2233,7 @@ impl Tibs {
         chunk_size: i64,
         count: Option<i64>,
     ) -> PyResult<Py<ChunksIterator>> {
-        if chunk_size <= 0 {
-            return Err(PyValueError::new_err(format!(
-                "Cannot create chunk generator - chunk_size of {chunk_size} given, but it must be > 0."
-            )));
-        }
-        let max_chunks = match count {
-            Some(c) => {
-                if c < 0 {
-                    return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk generator - count of {c} given, but it must be >= 0 if present."
-                    )));
-                }
-                c as usize
-            }
-            None => usize::MAX,
-        };
-
-        let py = slf.py();
-        let bits_len = slf.len();
-        let iter = ChunksIterator {
-            bits_object: slf.into(),
-            chunk_size: chunk_size as usize,
-            max_chunks,
-            current_pos: bits_len,
-            chunks_generated: 0,
-            bits_len,
-            is_reverse: true,
-        };
-        Py::new(py, iter)
+        Self::chunks_iterator(slf, chunk_size, count, true)
     }
 
     /// Return True if two Tibs have the same binary representation.
@@ -2967,14 +2932,8 @@ impl Tibs {
         bit_offset: Option<i64>,
         bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = match bit_length {
-            Some(length) => Some(validate_length(length)?),
-            None => None,
-        };
-        let offset = match bit_offset {
-            Some(offset) => Some(validate_offset(offset)?),
-            None => None,
-        };
+        let length = bit_length.map(validate_length).transpose()?;
+        let offset = bit_offset.map(validate_offset).transpose()?;
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }

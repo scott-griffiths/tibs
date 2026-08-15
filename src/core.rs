@@ -161,7 +161,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
     fn to_string(&self) -> String {
         if self.is_empty() {
-            return "".to_string();
+            return String::new();
         }
         const MAX_BITS_TO_PRINT: usize = 10000;
         const {
@@ -169,7 +169,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         if self.len() <= MAX_BITS_TO_PRINT {
             match self.to_hexadecimal() {
-                Ok(hex) => format!("0x{}", hex),
+                Ok(hex) => format!("0x{hex}"),
                 Err(_) => format!("0b{}", self.to_binary()),
             }
         } else {
@@ -307,41 +307,15 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     fn collect_chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
-        if chunk_size <= 0 {
-            return Err(PyValueError::new_err(format!(
-                "Cannot create chunk list - chunk_size of {chunk_size} given, but it must be > 0."
-            )));
-        }
-        let max_chunks = match count {
-            Some(c) => {
-                if c < 0 {
-                    return Err(PyValueError::new_err(format!(
-                        "Cannot create chunk list - count of {c} given, but it must be >= 0."
-                    )));
-                }
-                c as usize
-            }
-            None => usize::MAX,
-        };
-
-        let bits_len = self.len();
-        let chunk_size = chunk_size as usize;
-        let mut current_pos = 0;
-        let mut chunks_generated = 0;
-        let mut chunks = Vec::new();
-
-        while chunks_generated < max_chunks {
-            if current_pos >= bits_len {
-                break;
-            }
-            let take = std::cmp::min(chunk_size, bits_len - current_pos);
-            let start = current_pos;
-            chunks.push(self.get_slice_unchecked(start, take));
-            current_pos += take;
-            chunks_generated += 1;
-        }
-
-        Ok(chunks)
+        let (chunk_size, max_chunks) = validate_chunk_args(chunk_size, count, "list")?;
+        let chunk_count = self.len().div_ceil(chunk_size).min(max_chunks);
+        Ok((0..chunk_count)
+            .map(|index| {
+                let start = index * chunk_size;
+                let take = chunk_size.min(self.len() - start);
+                self.get_slice_unchecked(start, take)
+            })
+            .collect())
     }
 
     /// Split at already-read positions. Runs no Python.
@@ -372,7 +346,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         Ok(pieces)
     }
 
-    fn lshift(&self, n: usize) -> Self {
+    fn shift_copy(&self, n: usize, towards_start: bool) -> Self {
         if n == 0 {
             return self.clone();
         }
@@ -386,8 +360,12 @@ pub(crate) trait BitCollection: Sized + Clone {
         let byte_shift = n / 8;
         let bit_shift = n & 7;
         if bit_shift == 0 {
-            result[..data.len() - byte_shift].copy_from_slice(&data[byte_shift..]);
-        } else {
+            if towards_start {
+                result[..data.len() - byte_shift].copy_from_slice(&data[byte_shift..]);
+            } else {
+                result[byte_shift..].copy_from_slice(&data[..data.len() - byte_shift]);
+            }
+        } else if towards_start {
             let right_shift = 8 - bit_shift;
             let source = &data[byte_shift..];
             for (byte, pair) in result.iter_mut().zip(source.windows(2)) {
@@ -396,28 +374,6 @@ pub(crate) trait BitCollection: Sized + Clone {
             if let Some((&last, byte)) = source.last().zip(result.get_mut(source.len() - 1)) {
                 *byte = last << bit_shift;
             }
-        }
-        mask_padding_bits(&mut result, len);
-        let mut result = BV::from_vec(result);
-        result.truncate(len);
-        Self::from_bv(result)
-    }
-
-    fn rshift(&self, n: usize) -> Self {
-        if n == 0 {
-            return self.clone();
-        }
-        let len = self.len();
-        if n >= len {
-            return Self::from_bv(bv_from_zeros(len));
-        }
-
-        let data = self.padded_byte_data_cow();
-        let mut result = vec![0u8; data.len()];
-        let byte_shift = n / 8;
-        let bit_shift = n & 7;
-        if bit_shift == 0 {
-            result[byte_shift..].copy_from_slice(&data[..data.len() - byte_shift]);
         } else {
             let left_shift = 8 - bit_shift;
             let source = &data[..data.len() - byte_shift];
@@ -605,7 +561,7 @@ pub(crate) trait BitCollection: Sized + Clone {
                 mask_padding_bits(out, len_bits);
                 Ok(())
             })
-            .map(|bytes| bytes.unbind());
+            .map(Bound::unbind);
         }
         let (bytes, bit_offset, _) = self.raw_data_ref();
         debug_assert_ne!(bit_offset, 0);
@@ -613,7 +569,7 @@ pub(crate) trait BitCollection: Sized + Clone {
             copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
             Ok(())
         })
-        .map(|bytes| bytes.unbind())
+        .map(Bound::unbind)
     }
 
     #[inline]
@@ -757,6 +713,34 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         Ok(self.get_slice_unchecked(start_bit, length))
     }
+}
+
+/// Validate the arguments shared by eager and lazy chunking APIs.
+pub(crate) fn validate_chunk_args(
+    chunk_size: i64,
+    count: Option<i64>,
+    output: &str,
+) -> PyResult<(usize, usize)> {
+    if chunk_size <= 0 {
+        return Err(PyValueError::new_err(format!(
+            "Cannot create chunk {output} - chunk_size of {chunk_size} given, but it must be > 0."
+        )));
+    }
+    let max_chunks = match count {
+        Some(count) if count < 0 => {
+            return Err(PyValueError::new_err(format!(
+                "Cannot create chunk {output} - count of {count} given, but it must be >= 0{}.",
+                if output == "generator" {
+                    " if present"
+                } else {
+                    ""
+                }
+            )));
+        }
+        Some(count) => count as usize,
+        None => usize::MAX,
+    };
+    Ok((chunk_size as usize, max_chunks))
 }
 
 /// `count` copies of `bits`, laid end to end.

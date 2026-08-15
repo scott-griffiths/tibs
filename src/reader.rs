@@ -153,6 +153,28 @@ impl Reader {
         })
     }
 
+    fn read_window(&self, py: Python<'_>, length: usize) -> PyResult<Tibs> {
+        let start = self.position();
+        let end = end_of_read(start, length, self.source_len(py)?)?;
+        let window = self.window(py, start, length)?;
+        self.set_position(end);
+        Ok(window)
+    }
+
+    fn peek_window(&self, py: Python<'_>, length: usize) -> PyResult<Tibs> {
+        let start = self.position();
+        end_of_read(start, length, self.source_len(py)?)?;
+        self.window(py, start, length)
+    }
+
+    fn move_if_found(&self, found: Option<usize>, offset: usize) -> bool {
+        let Some(found) = found else {
+            return false;
+        };
+        self.set_position(found + offset);
+        true
+    }
+
     /// Search the source, shared by the seeking and reading-to methods.
     fn search(
         &self,
@@ -391,12 +413,7 @@ impl Reader {
         // `extract_dtype` parses a spec string and `py_from_value` builds the
         // result object; both are Python, so both stay outside the section.
         let dtype = extract_dtype(dtype)?;
-        let window = Self::with_reader(slf, |r| {
-            let end = end_of_read(r.position(), dtype.length, r.source_len(py)?)?;
-            let window = r.window(py, r.position(), dtype.length)?;
-            r.set_position(end);
-            Ok(window)
-        })?;
+        let window = Self::with_reader(slf, |r| r.read_window(py, dtype.length))?;
         py_from_value(py, &dtype, &window)
     }
 
@@ -477,12 +494,7 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn read_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        Self::with_reader(slf, |r| {
-            let end = end_of_read(r.position(), n, r.source_len(py)?)?;
-            let bits = r.window(py, r.position(), n)?;
-            r.set_position(end);
-            Ok(bits)
-        })
+        Self::with_reader(slf, |r| r.read_window(py, n))
     }
 
     /// Read up to the next occurrence of ``needle``, leaving the cursor on it.
@@ -581,10 +593,7 @@ impl Reader {
         dtype: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        let window = Self::with_reader(slf, |r| {
-            end_of_read(r.position(), dtype.length, r.source_len(py)?)?;
-            r.window(py, r.position(), dtype.length)
-        })?;
+        let window = Self::with_reader(slf, |r| r.peek_window(py, dtype.length))?;
         py_from_value(py, &dtype, &window)
     }
 
@@ -606,10 +615,7 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn peek_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        Self::with_reader(slf, |r| {
-            end_of_read(r.position(), n, r.source_len(py)?)?;
-            r.window(py, r.position(), n)
-        })
+        Self::with_reader(slf, |r| r.peek_window(py, n))
     }
 
     /// Return a context manager that restores the position on exit.
@@ -727,13 +733,7 @@ impl Reader {
         mask: Option<Tibs>,
     ) -> PyResult<bool> {
         Self::with_reader(slf, |r| {
-            match r.find_from_pos(py, needle, byte_aligned, mask)? {
-                Some(found) => {
-                    r.set_position(found);
-                    Ok(true)
-                }
-                None => Ok(false),
-            }
+            Ok(r.move_if_found(r.find_from_pos(py, needle, byte_aligned, mask)?, 0))
         })
     }
 
@@ -769,13 +769,7 @@ impl Reader {
     ) -> PyResult<bool> {
         let needle_len = needle.len();
         Self::with_reader(slf, |r| {
-            match r.find_from_pos(py, needle, byte_aligned, mask)? {
-                Some(found) => {
-                    r.set_position(found + needle_len);
-                    Ok(true)
-                }
-                None => Ok(false),
-            }
+            Ok(r.move_if_found(r.find_from_pos(py, needle, byte_aligned, mask)?, needle_len))
         })
     }
 
@@ -817,13 +811,7 @@ impl Reader {
                 byte_aligned,
                 mask,
             };
-            match r.search(py, needle, params, true)? {
-                Some(found) => {
-                    r.set_position(found);
-                    Ok(true)
-                }
-                None => Ok(false),
-            }
+            Ok(r.move_if_found(r.search(py, needle, params, true)?, 0))
         })
     }
 

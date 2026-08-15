@@ -332,7 +332,7 @@ fn encode_binary(
 
     let negative = value.is_sign_negative();
     if value.is_infinite() {
-        return encode_binary_overflow(negative, format, binary);
+        return Ok(encode_binary_overflow(negative, format, binary));
     }
 
     if value == 0.0 {
@@ -346,7 +346,7 @@ fn encode_binary(
     let magnitude = value.abs();
     let magnitude_code = rounded_positive_binary_code(magnitude, binary);
     if magnitude_code > binary.max_finite_code as u32 {
-        return encode_binary_overflow(negative, format, binary);
+        return Ok(encode_binary_overflow(negative, format, binary));
     }
 
     // A P3109 format has no negative zero: underflow from a negative input
@@ -358,25 +358,19 @@ fn encode_binary(
     Ok((magnitude_code as u8) | if negative { binary.sign_mask() } else { 0 })
 }
 
-fn encode_binary_overflow(
-    negative: bool,
-    format: NarrowFloatFormat,
-    binary: BinaryFormat,
-) -> Result<u8, NarrowFloatEncodeError> {
+fn encode_binary_overflow(negative: bool, format: NarrowFloatFormat, binary: BinaryFormat) -> u8 {
     let sign = if negative { binary.sign_mask() } else { 0 };
-    let code = match format {
+    match format {
         NarrowFloatFormat::Binary8P3 | NarrowFloatFormat::Binary8P4 => 0x7f | sign,
-        NarrowFloatFormat::OcpE4M3Saturate | NarrowFloatFormat::OcpE5M2Saturate => {
-            binary.max_finite_code | sign
-        }
+        NarrowFloatFormat::OcpE4M3Saturate
+        | NarrowFloatFormat::OcpE5M2Saturate
+        | NarrowFloatFormat::OcpE3M2
+        | NarrowFloatFormat::OcpE2M3
+        | NarrowFloatFormat::OcpE2M1 => binary.max_finite_code | sign,
         NarrowFloatFormat::OcpE4M3Overflow => 0xff,
         NarrowFloatFormat::OcpE5M2Overflow => 0x7c | sign,
-        NarrowFloatFormat::OcpE3M2 | NarrowFloatFormat::OcpE2M3 | NarrowFloatFormat::OcpE2M1 => {
-            binary.max_finite_code | sign
-        }
         NarrowFloatFormat::OcpE8M0 | NarrowFloatFormat::OcpInt8 => unreachable!(),
-    };
-    Ok(code)
+    }
 }
 
 /// Return the positive sign-magnitude code after direct binary64-to-target

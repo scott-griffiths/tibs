@@ -580,6 +580,13 @@ impl Mutibs {
         self.data = value;
     }
 
+    fn replace_locked(slf: &Bound<'_, Self>, value: BV) -> PyResult<()> {
+        with_locked_mut(slf, |m| {
+            m.replace_with_bv(value);
+            Ok(())
+        })
+    }
+
     fn apply_logical_op(&mut self, other: &Tibs, op: LogicalOp) -> PyResult<()> {
         let len = self.len();
         validate_logical_op_lengths(len, other.len())?;
@@ -597,18 +604,6 @@ impl Mutibs {
             op,
         );
         Ok(())
-    }
-
-    pub(crate) fn ixor(&mut self, other: &Tibs) -> PyResult<()> {
-        self.apply_logical_op(other, LogicalOp::Xor)
-    }
-
-    pub(crate) fn ior(&mut self, other: &Tibs) -> PyResult<()> {
-        self.apply_logical_op(other, LogicalOp::Or)
-    }
-
-    pub(crate) fn iand(&mut self, other: &Tibs) -> PyResult<()> {
-        self.apply_logical_op(other, LogicalOp::And)
     }
 
     pub(crate) fn set_from_sequence(&mut self, value: bool, indices: &[isize]) -> PyResult<()> {
@@ -1595,8 +1590,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)"
     )]
-    pub fn from_bin(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        let bv = bv_from_bin(&s)?;
+    pub fn from_bin(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        let bv = bv_from_bin(s)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1638,10 +1633,7 @@ impl Mutibs {
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_bin(slf: &Bound<'_, Self>, s: &str) -> PyResult<()> {
         let bv = bv_from_bin(s)?;
-        with_locked_mut(slf, |m| {
-            m.replace_with_bv(bv);
-            Ok(())
-        })
+        Self::replace_locked(slf, bv)
     }
 
     /// Property of the binary representation of the Mutibs.
@@ -1673,8 +1665,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)"
     )]
-    pub fn from_oct(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        let bv = bv_from_oct(&s)?;
+    pub fn from_oct(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        let bv = bv_from_oct(s)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1713,10 +1705,7 @@ impl Mutibs {
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_oct(slf: &Bound<'_, Self>, s: &str) -> PyResult<()> {
         let bv = bv_from_oct(s)?;
-        with_locked_mut(slf, |m| {
-            m.replace_with_bv(bv);
-            Ok(())
-        })
+        Self::replace_locked(slf, bv)
     }
 
     /// Property of the octal representation of the Mutibs.
@@ -1751,8 +1740,8 @@ impl Mutibs {
     #[classmethod]
     #[pyo3(signature = (s, /), text_signature = "(cls, s, /)"
     )]
-    pub fn from_hex(_cls: &Bound<'_, PyType>, s: String) -> PyResult<Self> {
-        let bv = bv_from_hex(&s)?;
+    pub fn from_hex(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        let bv = bv_from_hex(s)?;
         Ok(Mutibs::from_bv(bv))
     }
 
@@ -1791,10 +1780,7 @@ impl Mutibs {
     #[pyo3(signature = (s, /), text_signature = "($self, s, /)")]
     pub fn write_hex(slf: &Bound<'_, Self>, s: &str) -> PyResult<()> {
         let bv = bv_from_hex(s)?;
-        with_locked_mut(slf, |m| {
-            m.replace_with_bv(bv);
-            Ok(())
-        })
+        Self::replace_locked(slf, bv)
     }
 
     /// Property of the hexadecimal representation of the Mutibs.
@@ -1875,10 +1861,7 @@ impl Mutibs {
     pub fn write_bytes(slf: &Bound<'_, Self>, data: &Bound<'_, PyAny>) -> PyResult<()> {
         // `bytes_like_to_vec` goes through the buffer protocol, which is Python.
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, None, None)?;
-        with_locked_mut(slf, |m| {
-            m.replace_with_bv(bv);
-            Ok(())
-        })
+        Self::replace_locked(slf, bv)
     }
 
     /// Property of the ``bytes`` representation of the Mutibs.
@@ -2317,14 +2300,8 @@ impl Mutibs {
         bit_offset: Option<i64>,
         bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = match bit_length {
-            Some(length) => Some(validate_length(length)?),
-            None => None,
-        };
-        let offset = match bit_offset {
-            Some(offset) => Some(validate_offset(offset)?),
-            None => None,
-        };
+        let length = bit_length.map(validate_length).transpose()?;
+        let offset = bit_offset.map(validate_offset).transpose()?;
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }
@@ -3647,7 +3624,7 @@ impl Mutibs {
     pub fn __lshift__(slf: &Bound<'_, Self>, n: i64) -> PyResult<Self> {
         with_locked(slf, |m| {
             let shift = validate_shift(m, n)?;
-            Ok(m.lshift(shift))
+            Ok(m.shift_copy(shift, true))
         })
     }
 
@@ -3665,7 +3642,7 @@ impl Mutibs {
     pub fn __rshift__(slf: &Bound<'_, Self>, n: i64) -> PyResult<Self> {
         with_locked(slf, |m| {
             let shift = validate_shift(m, n)?;
-            Ok(m.rshift(shift))
+            Ok(m.shift_copy(shift, false))
         })
     }
 
@@ -4274,7 +4251,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __iand__(slf: &Bound<'_, Self>, other: Tibs) -> PyResult<()> {
-        with_locked_mut(slf, |m| m.iand(&other))
+        with_locked_mut(slf, |m| m.apply_logical_op(&other, LogicalOp::And))
     }
 
     /// In-place bit-wise 'or'.
@@ -4284,7 +4261,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __ior__(slf: &Bound<'_, Self>, other: Tibs) -> PyResult<()> {
-        with_locked_mut(slf, |m| m.ior(&other))
+        with_locked_mut(slf, |m| m.apply_logical_op(&other, LogicalOp::Or))
     }
 
     /// In-place bit-wise 'xor'.
@@ -4294,7 +4271,7 @@ impl Mutibs {
     /// :raises ValueError: if the two bit sequences have differing lengths.
     ///
     pub fn __ixor__(slf: &Bound<'_, Self>, other: Tibs) -> PyResult<()> {
-        with_locked_mut(slf, |m| m.ixor(&other))
+        with_locked_mut(slf, |m| m.apply_logical_op(&other, LogicalOp::Xor))
     }
 
     /// In-place multiplication by a non-negative integer.

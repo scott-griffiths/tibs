@@ -1,6 +1,5 @@
 use super::bits::{BS, BV};
 use bitvec::domain::Domain;
-use bitvec::prelude::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::borrow::Cow;
@@ -11,7 +10,7 @@ pub(crate) type ByteSearchPrep<'h, 'n> = (Cow<'h, [u8]>, Cow<'n, [u8]>, usize);
 pub(crate) fn bits_to_bytes(bits: &BS) -> Vec<u8> {
     debug_assert!(bits.len().is_multiple_of(8));
     bits.chunks_exact(8)
-        .map(|chunk| chunk.load_be::<u8>())
+        .map(bitvec::field::BitField::load_be::<u8>)
         .collect()
 }
 

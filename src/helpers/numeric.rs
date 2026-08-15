@@ -166,25 +166,25 @@ pub(crate) fn bv_from_int(
     if length == 0 {
         return Err(zero_length_error(true));
     }
-    if length <= FAST_INT_BITS {
-        if let Ok(value) = value.extract::<i64>() {
-            if length < FAST_INT_BITS {
-                let min_val = -(1i64 << (length - 1));
-                let max_val = (1i64 << (length - 1)) - 1;
-                if value < min_val || value > max_val {
-                    return Err(PyValueError::new_err(format!(
-                        "Value {value} does not fit in {length} signed bits."
-                    )));
-                }
+    if length <= FAST_INT_BITS
+        && let Ok(value) = value.extract::<i64>()
+    {
+        if length < FAST_INT_BITS {
+            let min_val = -(1i64 << (length - 1));
+            let max_val = (1i64 << (length - 1)) - 1;
+            if value < min_val || value > max_val {
+                return Err(PyValueError::new_err(format!(
+                    "Value {value} does not fit in {length} signed bits."
+                )));
             }
-            let mut bv = BV::repeat(value < 0, length);
-            if is_little_endian {
-                bv.store_le(value);
-            } else {
-                bv.store_be(value);
-            }
-            return Ok(bv);
         }
+        let mut bv = BV::repeat(value < 0, length);
+        if is_little_endian {
+            bv.store_le(value);
+        } else {
+            bv.store_be(value);
+        }
+        return Ok(bv);
     }
     bv_from_big_int(value, length, is_little_endian, true)
 }

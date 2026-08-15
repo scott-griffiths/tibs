@@ -429,17 +429,12 @@ impl MutableSelection {
     }
 
     fn len(&self, source_len: usize) -> PyResult<usize> {
-        match self {
-            MutableSelection::Whole => Ok(source_len),
-            MutableSelection::Run { len, .. } => {
-                self.validate(source_len)?;
-                Ok(*len)
-            }
-            MutableSelection::Field { indices } => {
-                self.validate(source_len)?;
-                Ok(indices.len())
-            }
-        }
+        self.validate(source_len)?;
+        Ok(match self {
+            MutableSelection::Whole => source_len,
+            MutableSelection::Run { len, .. } => *len,
+            MutableSelection::Field { indices } => indices.len(),
+        })
     }
 
     /// The contiguous source range this selection covers, when it has one.
@@ -486,8 +481,8 @@ impl MutableSelection {
             (Some(left), Some(right)) => left == right,
             (Some((start, len)), None) | (None, Some((start, len))) => {
                 let listed = match (self, other) {
-                    (MutableSelection::Field { indices }, _) => indices,
-                    (_, MutableSelection::Field { indices }) => indices,
+                    (MutableSelection::Field { indices }, _)
+                    | (_, MutableSelection::Field { indices }) => indices,
                     _ => unreachable!("only a Field has no run"),
                 };
                 listed.len() == len && listed.iter().copied().eq(start..start + len)
@@ -640,13 +635,7 @@ impl MutableView {
         let MutableSelection::Field { indices } = &self.selection else {
             unreachable!("only a Field has no run")
         };
-        self.selection.len(source.len())?;
-        let source_bits = source.as_bitslice();
-        let mut selected = BV::with_capacity(indices.len());
-        for &index in indices {
-            selected.push(source_bits[index]);
-        }
-        Ok(selected)
+        selected_source_bits(source.as_bitslice(), indices, "MutableView")
     }
 
     /// The bits this view presents, gathered from its source, or `None` when

@@ -320,11 +320,7 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
     }
 
     // Is it a bytes, bytearray or memoryview?
-    if (any.is_instance_of::<PyBytes>()
-        || any.is_instance_of::<PyByteArray>()
-        || any.is_instance_of::<PyMemoryView>())
-        && let Ok(any_bytes) = any.extract::<Vec<u8>>()
-    {
+    if let Ok(any_bytes) = bytes_like_to_vec(any) {
         return Ok(BV::from_vec(any_bytes));
     }
 
@@ -344,6 +340,6 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
         err.push_str("Use to_tibs() or to_mutibs() to take the bits as the view sees them.");
     } else {
         err.push_str("Use from_bytes(...) for bytes-like data, from_bools(...) for truthy iterables, or from_values(...) for typed numeric values.");
-    };
+    }
     Err(PyTypeError::new_err(err))
 }

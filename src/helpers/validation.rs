@@ -1,5 +1,5 @@
+use super::bits::BS;
 use crate::core::BitCollection;
-use crate::helpers::BS;
 use pyo3::exceptions::{PyIndexError, PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 

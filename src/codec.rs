@@ -567,10 +567,8 @@ pub(crate) fn encode<C: BitCollection>(bits: &C, codec: Option<Codec>) -> PyResu
                     if rice.encoded_bit_length() < short_raw_encoded_bit_length(bit_length) {
                         return Ok(encode_as_rice(sparse_bit, &rice));
                     }
-                    bv = short_encoded;
-                } else {
-                    bv = short_encoded;
                 }
+                bv = short_encoded;
             }
             65.. => {
                 let raw_bit_length = raw_encoded_bit_length(bit_length);

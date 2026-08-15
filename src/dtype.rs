@@ -32,6 +32,19 @@ const FIXED_FORMATS: [(&str, DtypeKind, usize); 11] = [
     ("ocp_int8", DtypeKind::OcpInt8, 8),
 ];
 
+/// Scalar kind prefixes whose bit length is written as a suffix.
+const LENGTH_SUFFIX_FORMATS: [(&str, DtypeKind, &str); 9] = [
+    ("bytes", DtypeKind::Bytes, "bytes16"),
+    ("bits", DtypeKind::Bits, "bits12"),
+    ("bf", DtypeKind::BFloat, "bf16"),
+    ("bin", DtypeKind::Bin, "bin12"),
+    ("oct", DtypeKind::Oct, "oct12"),
+    ("hex", DtypeKind::Hex, "hex12"),
+    ("u", DtypeKind::Uint, "u12"),
+    ("i", DtypeKind::Int, "i12"),
+    ("f", DtypeKind::Float, "f32"),
+];
+
 fn fixed_format_for_kind(kind: DtypeKind) -> Option<(&'static str, usize)> {
     FIXED_FORMATS
         .iter()
@@ -79,17 +92,9 @@ fn resolve_length(kind: DtypeKind, length: Option<i64>) -> PyResult<i64> {
 /// width with different prefixes. `None` for the kinds that fix their own
 /// length, which never reach here from [`resolve_length`].
 fn example_spec(kind: DtypeKind) -> Option<&'static str> {
-    match kind {
-        DtypeKind::Uint => Some("u12"),
-        DtypeKind::Int => Some("i12"),
-        DtypeKind::Float => Some("f32"),
-        DtypeKind::Bits => Some("bits12"),
-        DtypeKind::Bin => Some("bin12"),
-        DtypeKind::Oct => Some("oct12"),
-        DtypeKind::Hex => Some("hex12"),
-        DtypeKind::Bytes => Some("bytes16"),
-        _ => None,
-    }
+    LENGTH_SUFFIX_FORMATS
+        .iter()
+        .find_map(|&(_, candidate, example)| (candidate == kind).then_some(example))
 }
 
 /// Translate a numpy/struct style spec such as `"u4"` (four *bytes*) into the
@@ -149,7 +154,7 @@ impl SingleDtype {
             )));
         }
         let length = length as usize;
-        if let Some((_, required_length)) = fixed_format_for_kind(kind)
+        if let Some(required_length) = intrinsic_length(kind)
             && length != required_length
         {
             return Err(PyValueError::new_err(format!(
@@ -157,24 +162,10 @@ impl SingleDtype {
                 kind.repr_name()
             )));
         }
-        if kind == DtypeKind::Bool && length != 1 {
-            return Err(PyValueError::new_err(format!(
-                "A Dtype of kind {} must have length 1.",
-                kind.repr_name()
-            )));
-        }
         match kind {
             DtypeKind::Float if !matches!(length, 16 | 32 | 64) => {
                 return Err(PyValueError::new_err(format!(
                     "A Dtype of kind {} must have length 16, 32 or 64 bits. Received {length}.",
-                    kind.repr_name()
-                )));
-            }
-            // bfloat16 is one format, not a family of widths, so unlike Float
-            // there is nothing to choose between here.
-            DtypeKind::BFloat if length != 16 => {
-                return Err(PyValueError::new_err(format!(
-                    "A Dtype of kind {} must have length 16 bits. Received {length}.",
                     kind.repr_name()
                 )));
             }
@@ -295,27 +286,14 @@ impl SingleDtype {
             )));
         }
 
-        // No other kind starts with 'bf', so this one has no ordering
-        // constraint against the 'b' kinds below it.
-        let (kind, kind_name, length_text) = if let Some(length) = base.strip_prefix("bytes") {
-            (DtypeKind::Bytes, "bytes", length)
-        } else if let Some(length) = base.strip_prefix("bits") {
-            (DtypeKind::Bits, "bits", length)
-        } else if let Some(length) = base.strip_prefix("bf") {
-            (DtypeKind::BFloat, "bf", length)
-        } else if let Some(length) = base.strip_prefix("bin") {
-            (DtypeKind::Bin, "bin", length)
-        } else if let Some(length) = base.strip_prefix("oct") {
-            (DtypeKind::Oct, "oct", length)
-        } else if let Some(length) = base.strip_prefix("hex") {
-            (DtypeKind::Hex, "hex", length)
-        } else if let Some(length) = base.strip_prefix('u') {
-            (DtypeKind::Uint, "u", length)
-        } else if let Some(length) = base.strip_prefix('i') {
-            (DtypeKind::Int, "i", length)
-        } else if let Some(length) = base.strip_prefix('f') {
-            (DtypeKind::Float, "f", length)
-        } else {
+        let Some((kind, kind_name, length_text)) =
+            LENGTH_SUFFIX_FORMATS
+                .iter()
+                .find_map(|&(kind_name, kind, _)| {
+                    base.strip_prefix(kind_name)
+                        .map(|length| (kind, kind_name, length))
+                })
+        else {
             return Err(PyValueError::new_err(format!(
                 "Cannot parse Dtype spec '{spec}': {KIND_HINT}."
             )));
@@ -379,28 +357,21 @@ impl SingleDtype {
             ByteOrder::Little => "_le",
             ByteOrder::Big => "_be",
         };
+        if let Some((spec, _)) = fixed_format_for_kind(self.kind) {
+            return spec.to_string();
+        }
         match self.kind {
             DtypeKind::Uint => format!("u{}{byte_order}", self.length),
             DtypeKind::Int => format!("i{}{byte_order}", self.length),
             DtypeKind::Float => format!("f{}{byte_order}", self.length),
             DtypeKind::BFloat => format!("bf{}{byte_order}", self.length),
-            DtypeKind::Binary8P3 => "binary8p3".to_string(),
-            DtypeKind::Binary8P4 => "binary8p4".to_string(),
-            DtypeKind::OcpE4M3Saturate => "ocp_e4m3_saturate".to_string(),
-            DtypeKind::OcpE4M3Overflow => "ocp_e4m3_overflow".to_string(),
-            DtypeKind::OcpE5M2Saturate => "ocp_e5m2_saturate".to_string(),
-            DtypeKind::OcpE5M2Overflow => "ocp_e5m2_overflow".to_string(),
-            DtypeKind::OcpE3M2 => "ocp_e3m2".to_string(),
-            DtypeKind::OcpE2M3 => "ocp_e2m3".to_string(),
-            DtypeKind::OcpE2M1 => "ocp_e2m1".to_string(),
-            DtypeKind::OcpE8M0 => "ocp_e8m0".to_string(),
-            DtypeKind::OcpInt8 => "ocp_int8".to_string(),
             DtypeKind::Bool => "bool".to_string(),
             DtypeKind::Bits => format!("bits{}", self.length),
             DtypeKind::Bin => format!("bin{}", self.length),
             DtypeKind::Oct => format!("oct{}", self.length),
             DtypeKind::Hex => format!("hex{}", self.length),
             DtypeKind::Bytes => format!("bytes{}", self.length),
+            _ => unreachable!("fixed formats returned above"),
         }
     }
 }

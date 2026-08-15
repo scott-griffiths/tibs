@@ -138,10 +138,10 @@ impl BitAccumulator {
 #[inline]
 pub(crate) fn head_bit_offset(bits: &BS) -> usize {
     match bits.domain() {
-        bitvec::domain::Domain::Enclave(elem) => elem.head().into_inner() as usize,
-        bitvec::domain::Domain::Region {
+        bitvec::domain::Domain::Enclave(elem)
+        | bitvec::domain::Domain::Region {
             head: Some(elem), ..
         } => elem.head().into_inner() as usize,
-        _ => 0,
+        bitvec::domain::Domain::Region { .. } => 0,
     }
 }
