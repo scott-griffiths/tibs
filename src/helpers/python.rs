@@ -5,6 +5,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PyTuple};
 use pyo3::{PyErr, ffi};
+use std::ffi::c_char;
 
 /// One pre-built list of 8 bools for every byte value, so whole bytes can be
 /// converted to list items with a single C API call. The cached lists never
@@ -127,16 +128,52 @@ pub(crate) fn convert_to_bool(bit: &Bound<'_, PyAny>) -> Option<bool> {
 }
 
 pub(crate) fn bytes_like_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
-    if data.is_instance_of::<PyBytes>()
-        || data.is_instance_of::<PyByteArray>()
-        || data.is_instance_of::<PyMemoryView>()
-    {
+    if data.is_instance_of::<PyBytes>() || data.is_instance_of::<PyByteArray>() {
         data.extract::<Vec<u8>>()
+    } else if data.is_instance_of::<PyMemoryView>() {
+        buffer_to_vec(data)
     } else {
         Err(PyTypeError::new_err(
             "Expected a bytes-like object: bytes, bytearray or memoryview.",
         ))
     }
+}
+
+/// Copy the bytes of a buffer, giving exactly what `bytes(data)` would.
+///
+/// Extracting a `Vec<u8>` from a memoryview treats it as a sequence and
+/// converts each item to a `u8`, which is slow and only right for format 'B':
+/// an 'H' view loses half its bytes, and an item that does not fit in a byte,
+/// a float or 'c' format, or a second dimension raises. The buffer protocol
+/// sees the bytes themselves whatever the format, shape or strides.
+///
+/// These are the calls CPython's own `bytes(data)` makes, so the two agree by
+/// construction: one `memcpy` for a C-contiguous buffer, otherwise a copy in
+/// logical row-major order, so `memoryview(b'abcdef')[::2]` gives `b'ace'`.
+fn buffer_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+    let py = data.py();
+    // PYBUF_FULL_RO accepts any format, shape, strides and suboffsets, so the
+    // exporter only refuses for a reason of its own, such as a released
+    // memoryview. `view` is not moved until it is released, as an exporter may
+    // point its shape or strides into the struct itself.
+    let mut view = ffi::Py_buffer::new();
+    if unsafe { ffi::PyObject_GetBuffer(data.as_ptr(), &mut view, ffi::PyBUF_FULL_RO) } != 0 {
+        return Err(PyErr::fetch(py));
+    }
+    let len = view.len as usize;
+    let mut bytes = Vec::<u8>::with_capacity(len);
+    let copied = unsafe {
+        ffi::PyBuffer_ToContiguous(bytes.as_mut_ptr().cast(), &view, view.len, b'C' as c_char)
+    };
+    let result = if copied == 0 {
+        // Safety: on success all `len` bytes have been written.
+        unsafe { bytes.set_len(len) };
+        Ok(bytes)
+    } else {
+        Err(PyErr::fetch(py))
+    };
+    unsafe { ffi::PyBuffer_Release(&mut view) };
+    result
 }
 
 pub(crate) fn try_extract_index(index: &Bound<'_, PyAny>) -> PyResult<Option<isize>> {

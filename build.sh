@@ -34,4 +34,4 @@ uvx maturin develop --release
 
 # Run tests
 log "Running tests"
-uv run pytest --benchmark-skip
+uv run --no-sync pytest --benchmark-skip

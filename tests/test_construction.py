@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import array
 import io
+import struct
 import sys
 
 import pytest
@@ -160,6 +161,120 @@ def test_constructor_rejects_ambiguous_iterables():
         with pytest.raises(TypeError, match="from_bytes"):
             cls(byte_array)
         assert cls.from_bytes(memoryview(byte_array)) == Tibs("0x010203")
+
+
+# A memoryview is read as the bytes it covers, whatever its format or shape,
+# so the result is always bytes(mv). Reading it item by item instead, as tibs
+# 2.0.1 did, silently halved an 'H' view and raised for most other formats.
+# Multi-byte items are packed in native order, as the buffer holds them.
+MEMORYVIEW_FORMATS = {
+    "H": (lambda: memoryview(array.array("H", [1, 2])), struct.pack("=HH", 1, 2)),
+    "H_over_255": (lambda: memoryview(array.array("H", [1, 258])), struct.pack("=HH", 1, 258)),
+    "signed_b": (lambda: memoryview(array.array("b", [-1, 1])), b"\xff\x01"),
+    "cast_c": (lambda: memoryview(b"ab").cast("c"), b"ab"),
+    "two_dimensional": (lambda: memoryview(b"abcd").cast("B", (2, 2)), b"abcd"),
+    "double": (lambda: memoryview(array.array("d", [1.0])), struct.pack("=d", 1.0)),
+    "zero_dimensional": (lambda: memoryview(b"a").cast("B", ()), b"a"),
+}
+
+# bytes() copies a non-contiguous view in logical order, and so does tibs.
+MEMORYVIEW_NON_CONTIGUOUS = {
+    "step_2": (lambda: memoryview(b"abcdef")[::2], b"ace"),
+    "reversed": (lambda: memoryview(b"abcdef")[::-1], b"fedcba"),
+    "H_step_2": (lambda: memoryview(array.array("H", [1, 2, 3, 4]))[::2], struct.pack("=HH", 1, 3)),
+    "two_dimensional_rows": (
+        lambda: memoryview(bytearray(range(12))).cast("B", (3, 4))[::2],
+        bytes([0, 1, 2, 3, 8, 9, 10, 11]),
+    ),
+}
+
+MEMORYVIEW_CASES = {**MEMORYVIEW_FORMATS, **MEMORYVIEW_NON_CONTIGUOUS}
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+@pytest.mark.parametrize("make_view,expected", MEMORYVIEW_CASES.values(), ids=MEMORYVIEW_CASES.keys())
+def test_from_bytes_reads_a_memoryview_as_its_bytes(cls, make_view, expected):
+    view = make_view()
+    assert bytes(view) == expected
+    bits = cls.from_bytes(view)
+    assert type(bits) is cls
+    assert bits.to_bytes() == expected
+    # The buffer was released, or this would raise BufferError.
+    view.release()
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+@pytest.mark.parametrize("make_view,expected", MEMORYVIEW_CASES.values(), ids=MEMORYVIEW_CASES.keys())
+def test_constructor_promotes_a_memoryview_as_its_bytes(cls, make_view, expected):
+    assert cls(make_view()) == Tibs.from_bytes(expected)
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+@pytest.mark.parametrize("make_view,expected", MEMORYVIEW_CASES.values(), ids=MEMORYVIEW_CASES.keys())
+def test_from_bytes_offset_and_length_apply_to_a_memoryviews_bytes(cls, make_view, expected):
+    expected_bin = "".join(f"{byte:08b}" for byte in expected)
+    data_length = len(expected_bin)
+    for bit_offset, bit_length in ((0, data_length), (4, data_length - 4), (3, 10), (data_length, 0)):
+        if bit_offset + bit_length > data_length:
+            continue
+        bits = cls.from_bytes(make_view(), bit_offset, bit_length)
+        assert bits.to_bin() == expected_bin[bit_offset:bit_offset + bit_length]
+
+
+@given(
+    data=st.binary(max_size=48),
+    fmt=st.sampled_from("BbcHhIiLlQqfd?"),
+    step=st.sampled_from([1, 2, 3, -1, -2]),
+)
+def test_from_bytes_memoryview_matches_bytes_for_any_format_and_stride(data, fmt, step):
+    itemsize = struct.calcsize(fmt)
+    data = data[: len(data) - len(data) % itemsize]
+    view = memoryview(data).cast(fmt)[::step]
+    for cls in (Tibs, Mutibs):
+        assert cls.from_bytes(view).to_bytes() == bytes(view)
+
+
+def test_byte_memoryview_releases_its_buffer():
+    data = bytearray(b"\x01\x02\x03")
+    view = memoryview(data)
+    assert Tibs.from_bytes(view) == Tibs("0x010203")
+    assert Mutibs(view) == Tibs("0x010203")
+    view.release()
+    data.append(4)  # Resizing raises BufferError while any export is held.
+
+
+def test_released_memoryview_raises_like_bytes():
+    view = memoryview(b"ab")
+    view.release()
+    with pytest.raises(ValueError, match="released memoryview"):
+        bytes(view)
+    for cls in (Tibs, Mutibs):
+        with pytest.raises(ValueError, match="released memoryview"):
+            cls.from_bytes(view)
+
+
+def test_other_bytes_like_parameters_read_a_memoryview_as_its_bytes():
+    def h_view():
+        return memoryview(array.array("H", [1, 258]))
+
+    raw = struct.pack("=HH", 1, 258)
+
+    m = Mutibs()
+    m.write_bytes(h_view())
+    assert m.to_bytes() == raw
+    m.bytes = h_view()
+    assert m.to_bytes() == raw
+
+    m = Mutibs.from_zeros(32)
+    m.view().write_bytes(h_view())
+    assert m.to_bytes() == raw
+
+    assert Tibs.from_value("bytes32", h_view()).to_bytes() == raw
+    assert Tibs.from_random(256, seed=h_view()) == Tibs.from_random(256, seed=raw)
+
+    encoded = Tibs("0x0123456789")[3:].encode()
+    for cls in (Tibs, Mutibs):
+        assert cls.decode(memoryview(encoded).cast("c")) == cls.decode(encoded)
 
 
 def test_mul_by_zero():

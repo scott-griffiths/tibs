@@ -1,5 +1,11 @@
 # Release Notes
 
+### Unreleased
+
+* Reading a `memoryview` is now a single copy of its buffer, so it is as fast
+  as reading `bytes`.
+
+
 ### August 12th 2026: version 2.0.1
 
 Lots of new features added. A few caused some small backwardly incompatible

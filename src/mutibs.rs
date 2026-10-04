@@ -1859,7 +1859,9 @@ impl Mutibs {
     ///
     #[pyo3(signature = (data, /), text_signature = "($self, data, /)")]
     pub fn write_bytes(slf: &Bound<'_, Self>, data: &Bound<'_, PyAny>) -> PyResult<()> {
-        // `bytes_like_to_vec` goes through the buffer protocol, which is Python.
+        // Extract before taking the lock: a memoryview is read through the
+        // buffer protocol, and calls into Python must not run inside it (see
+        // `helpers/locking.rs`).
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, None, None)?;
         Self::replace_locked(slf, bv)
     }

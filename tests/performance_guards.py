@@ -116,6 +116,7 @@ assert ALIGNED_T == OFFSET_T and ALIGNED_OTHER == OFFSET_OTHER
 BIG_BYTES = BIG_T.to_bytes()
 OTHER_BYTES = OTHER_T.to_bytes()
 BIG_U = int.from_bytes(BIG_BYTES, "big")
+BIG_BYTES_H_VIEW = memoryview(BIG_BYTES).cast("H")
 RAW_ENCODED = BIG_T.encode(Codec.Raw)
 
 # Reusable mutation targets. Both sides of each pair repeatedly write the same
@@ -854,6 +855,18 @@ GUARDS: list[Guard] = [
         fast=lambda: ALL_ZEROS.find_all(ONE_BIT),
         limit=5.0,
         same_result=False,
+    ),
+    # ---- 31. reading a memoryview --------------------------------------
+    # The same bytes behind a memoryview should cost one buffer copy, as they
+    # do for bytes. Extracting the view as a sequence went item by item through
+    # Python, two hundred times slower and only correct for format 'B', which
+    # is why the view here is 'H'.
+    Guard(
+        name="from_bytes(memoryview) vs from_bytes(bytes)",
+        site="helpers/python.rs buffer_to_vec",
+        slow=lambda: Tibs.from_bytes(BIG_BYTES_H_VIEW),
+        fast=lambda: Tibs.from_bytes(BIG_BYTES),
+        limit=2.0,
     ),
 ]
 
