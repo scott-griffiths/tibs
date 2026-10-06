@@ -1,7 +1,10 @@
 # Release Notes
 
-### Unreleased
+### October 6th 2026: version 2.0.2
 
+* A `memoryview` is now read as its raw bytes, exactly as `bytes(mv)` gives
+  them. Views with a format other than `'B'` used to give the wrong bytes or
+  raise an exception.
 * Reading a `memoryview` is now a single copy of its buffer, so it is as fast
   as reading `bytes`.
 
