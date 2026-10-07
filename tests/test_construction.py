@@ -287,6 +287,34 @@ def test_mul_by_zero():
     assert b == a + a
 
 
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+@pytest.mark.parametrize("n", [2**62, 2**62 + 1, 2**63 - 1])
+def test_mul_result_too_long_raises(cls, n):
+    # The result length was multiplied unchecked, so it wrapped: 80 bits times
+    # 2**62 came back empty, and times 2**62 + 1 came back as the original.
+    a = cls("0x0123456789abcdef0123")
+    with pytest.raises(MemoryError):
+        a * n
+    with pytest.raises(MemoryError):
+        n * a
+
+
+@pytest.mark.parametrize("n", [2**62, 2**62 + 1, 2**63 - 1])
+def test_imul_result_too_long_raises_and_leaves_the_value(n):
+    a = Mutibs("0x0123456789abcdef0123")
+    with pytest.raises(MemoryError):
+        a *= n
+    assert a == Tibs("0x0123456789abcdef0123")
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+def test_mul_of_empty_by_huge_count_is_empty(cls):
+    assert cls() * (2**63 - 1) == Tibs()
+    a = cls()
+    a *= 2**63 - 1
+    assert a == Tibs()
+
+
 def test_from_ones():
     a = Tibs.from_ones(0)
     assert a == Tibs()

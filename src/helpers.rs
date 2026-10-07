@@ -49,5 +49,5 @@ pub(crate) use search::{
 pub(crate) use splice::{copy_bits, fill_bits, move_bits};
 pub(crate) use validation::{
     normalize_split_position, validate_index, validate_length, validate_logical_op_lengths,
-    validate_offset, validate_shift, validate_slice,
+    validate_offset, validate_repeat_count, validate_repeat_length, validate_shift, validate_slice,
 };

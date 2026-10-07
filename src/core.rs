@@ -4,7 +4,7 @@ use crate::helpers::{
     count_pair_bits, extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
     oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, try_extract_index,
-    validate_index, validate_slice,
+    validate_index, validate_repeat_length, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -302,8 +302,8 @@ pub(crate) trait BitCollection: Sized + Clone {
     }
 
     #[inline]
-    fn multiply(&self, n: usize) -> Self {
-        Self::from_bv(repeat_bitcollection(self, n))
+    fn multiply(&self, n: usize) -> PyResult<Self> {
+        Ok(Self::from_bv(repeat_bitcollection(self, n)?))
     }
 
     fn collect_chunks(&self, chunk_size: i64, count: Option<i64>) -> PyResult<Vec<Self>> {
@@ -748,15 +748,16 @@ pub(crate) fn validate_chunk_args(
 /// The first copy comes from the collection; subsequent copies grow by
 /// duplicating the completed prefix, so small patterns do not pay per-copy
 /// dispatch.
-pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> BV {
+pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> PyResult<BV> {
     let len = bits.len();
     if count == 0 || len == 0 {
-        return BV::new();
+        return Ok(BV::new());
     }
-    let mut out = BitConcat::with_bit_capacity(len * count);
+    let total = validate_repeat_length(len, count)?;
+    let mut out = BitConcat::with_bit_capacity(total);
     let (bytes, offset, _) = bits.raw_data_ref();
     out.push_repeated_run(bytes, offset, len, count);
-    out.into_bitvec()
+    Ok(out.into_bitvec())
 }
 
 /// Append every bit of `bits` to `out`, borrowing its raw storage.

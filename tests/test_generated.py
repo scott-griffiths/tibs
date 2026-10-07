@@ -1276,6 +1276,39 @@ class TestDecodeMalformedZstdPayload:
         with pytest.raises(DecodeError, match="could not be decoded"):
             cls.decode(_encoded(ZSTD, len(payload), payload))
 
+    @staticmethod
+    def _empty_frame_claiming(size_field):
+        # Single segment, so the header's content size is the whole claim, then
+        # one empty raw block marked last: the frame really holds nothing.
+        size_flag = {1: 0b00, 2: 0b01, 4: 0b10, 8: 0b11}[len(size_field)]
+        descriptor = bytes([(size_flag << 6) | 0b00100000])
+        return bytes.fromhex("28b52ffd") + descriptor + size_field + b"\x01\x00\x00"
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_frame_claiming_more_than_its_blocks_can_hold(self, cls):
+        # The claimed size used to be allocated up front, so these 18 bytes
+        # aborted the interpreter when the allocation failed.
+        payload = self._empty_frame_claiming((2**60).to_bytes(8, "little"))
+        with pytest.raises(DecodeError, match="claims to decompress to"):
+            cls.decode(_encoded(ZSTD, len(payload), payload))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_frame_claiming_more_than_it_decodes_to(self, cls):
+        # A claim small enough to be plausible is still checked against what
+        # the frame actually produces.
+        payload = self._empty_frame_claiming(bytes([100]))
+        with pytest.raises(DecodeError, match="could not be decoded"):
+            cls.decode(_encoded(ZSTD, len(payload), payload))
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_highly_compressible_payload_is_within_the_size_ceiling(self, cls):
+        # Zeros compress about as far as zstd can go, so this is the case the
+        # ceiling on a claimed size is most likely to wrongly refuse.
+        bits = cls.from_zeros(8 * 10**7)
+        encoded = bits.encode(Codec.Zstd)
+        assert len(encoded) * 1000 < len(bits) // 8
+        assert cls.decode(encoded) == bits
+
 
 # ---------------------------------------------------------------------------
 # Property-based fuzz tests (hypothesis).

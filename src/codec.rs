@@ -3,7 +3,7 @@ use crate::core::BitCollection;
 use crate::enums::Codec;
 use crate::helpers::{BS, BV, BitAccumulator};
 use bitvec::prelude::*;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
 fn raw_encoded_bit_length(bit_length: usize) -> usize {
@@ -384,8 +384,37 @@ fn decode_zstd_payload<C: BitCollection>(
             PyValueError::new_err("The zstd payload did not include its decompressed size.")
         })?;
 
-    let decompressed =
-        zstd::bulk::decompress(compressed, decompressed_size as usize).map_err(|e| {
+    // The size comes from the frame header, so it is only a claim until the
+    // payload has been decompressed, and the output is allocated before that.
+    // Taken on trust, an 18 byte input claiming 2^60 bytes aborts the process
+    // when the allocation fails. Every zstd block has a header of at least
+    // three bytes and decodes to at most `ZSTD_BLOCKSIZE_MAX` bytes, so the
+    // payload length caps what it can genuinely hold, and anything beyond that
+    // is corrupt.
+    let block_size_max = u64::from(zstd::zstd_safe::zstd_sys::ZSTD_BLOCKSIZE_MAX);
+    let ceiling = (compressed.len() as u64 / 3).saturating_mul(block_size_max);
+    if decompressed_size > ceiling || decompressed_size > (BS::MAX_BITS / 8) as u64 {
+        return Err(PyValueError::new_err(format!(
+            "The zstd payload claims to decompress to {decompressed_size} bytes, which is more \
+             than its {} bytes can hold.",
+            compressed.len()
+        )));
+    }
+    // A genuine size can still be more than is available. Reserving it here
+    // turns that into a MemoryError rather than an abort.
+    let mut decompressed = Vec::new();
+    decompressed
+        .try_reserve_exact(decompressed_size as usize)
+        .map_err(|_| {
+            PyMemoryError::new_err(format!(
+                "Not enough memory to decompress a zstd payload of {decompressed_size} bytes."
+            ))
+        })?;
+    zstd::bulk::Decompressor::new()
+        .and_then(|mut decompressor| {
+            decompressor.decompress_to_buffer(compressed, &mut decompressed)
+        })
+        .map_err(|e| {
             PyValueError::new_err(format!("The zstd payload could not be decoded: {e}"))
         })?;
 

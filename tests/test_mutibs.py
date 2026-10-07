@@ -484,6 +484,45 @@ def test_set_list_accepts_index_objects():
     assert a == Tibs('0b00100001')
 
 
+@pytest.mark.parametrize("length", [4, 10])  # the inline and heap paths
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda p: Mutibs.from_zeros(16).set(p),
+        lambda p: Mutibs.from_zeros(16).unset(p),
+        lambda p: Mutibs.from_zeros(16).invert(p),
+        lambda p: Tibs.from_zeros(16).with_set(p),
+        lambda p: Tibs.from_zeros(16).inverted(p),
+    ],
+)
+def test_positions_list_shrunk_by_index_stops_reading(length, call):
+    # The list length was read once up front, so an `__index__` that shortened
+    # the list sent a null item pointer onwards and crashed the interpreter.
+    positions = []
+
+    class Shrinker:
+        def __index__(self):
+            positions.clear()
+            return 0
+
+    positions.extend([Shrinker(), *range(1, length)])
+    call(positions)
+
+
+def test_positions_list_shrunk_by_index_keeps_what_was_read():
+    positions = []
+
+    class Shrinker:
+        def __index__(self):
+            del positions[2:]
+            return 6
+
+    positions.extend([1, Shrinker(), 3, 4, 5])
+    a = Mutibs.from_zeros(8)
+    a.set(positions)
+    assert a == Tibs('0b01000010')
+
+
 def test_set_long_list():
     a = Mutibs.from_zeros(24)
     a.set(list(range(20)))

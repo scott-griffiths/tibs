@@ -284,6 +284,10 @@ impl BitConcat {
     /// After writing the first copy, repeatedly duplicate the completed
     /// prefix. This keeps the number of moves logarithmic in `count` while
     /// moving each result byte only once overall.
+    ///
+    /// `len * count` must already be known to fit, which
+    /// [`validate_repeat_length`](super::validation::validate_repeat_length)
+    /// checks.
     pub(crate) fn push_repeated_run(
         &mut self,
         src: &[u8],

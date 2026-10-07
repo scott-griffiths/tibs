@@ -11,8 +11,8 @@ use crate::helpers::{
     bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
     head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
     rotate_bits_left, str_to_bv, try_extract_index, validate_index, validate_length,
-    validate_logical_op_lengths, validate_offset, validate_shift, validate_slice, with_locked,
-    with_locked_mut, with_locked_mut2, with_locked2,
+    validate_logical_op_lengths, validate_offset, validate_repeat_count, validate_shift,
+    validate_slice, with_locked, with_locked_mut, with_locked_mut2, with_locked2,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -312,7 +312,7 @@ impl Mutibs {
 
     pub(crate) fn joined_bv_from_iterable(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
         if let Ok(list) = iterable.cast::<PyList>()
-            && let Some(bv) = Self::joined_bv_from_repeated_list(list)
+            && let Some(bv) = Self::joined_bv_from_repeated_list(list)?
         {
             return Ok(bv);
         }
@@ -328,27 +328,27 @@ impl Mutibs {
         Ok(Self::join_parts(parts, total_len))
     }
 
-    fn joined_bv_from_repeated_list(list: &Bound<'_, PyList>) -> Option<BV> {
+    fn joined_bv_from_repeated_list(list: &Bound<'_, PyList>) -> PyResult<Option<BV>> {
         let count = list.len();
         if count == 0 {
-            return Some(BV::new());
+            return Ok(Some(BV::new()));
         }
 
         // All indices are in bounds, and list items remain valid while the GIL is held.
         let first = unsafe { ffi::PyList_GetItem(list.as_ptr(), 0) };
         for index in 1..count {
             if unsafe { ffi::PyList_GetItem(list.as_ptr(), index as ffi::Py_ssize_t) } != first {
-                return None;
+                return Ok(None);
             }
         }
 
         let item = unsafe { Bound::from_borrowed_ptr(list.py(), first) };
         if let Ok(tibs) = item.extract::<PyRef<Tibs>>() {
-            Some(repeat_bitcollection(&*tibs, count))
+            repeat_bitcollection(&*tibs, count).map(Some)
         } else if let Ok(mutibs) = item.extract::<PyRef<Mutibs>>() {
-            Some(repeat_bitcollection(&*mutibs, count))
+            repeat_bitcollection(&*mutibs, count).map(Some)
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -657,15 +657,20 @@ impl Mutibs {
         };
         if let Ok(list) = pos.cast::<PyList>() {
             let items = list.as_ptr();
-            return Self::read_sequence_items(list.py(), list.len(), |index| unsafe {
-                ffi::PyList_GetItem(items, index)
-            });
+            return Self::read_sequence_items(
+                list.py(),
+                || unsafe { ffi::PyList_Size(items) } as usize,
+                |index| unsafe { ffi::PyList_GetItem(items, index) },
+            );
         }
         if let Ok(tuple) = pos.cast::<PyTuple>() {
             let items = tuple.as_ptr();
-            return Self::read_sequence_items(tuple.py(), tuple.len(), |index| unsafe {
-                ffi::PyTuple_GetItem(items, index)
-            });
+            let count = tuple.len();
+            return Self::read_sequence_items(
+                tuple.py(),
+                || count,
+                |index| unsafe { ffi::PyTuple_GetItem(items, index) },
+            );
         }
         let index = match try_extract_index(pos) {
             Ok(index) => index,
@@ -703,39 +708,79 @@ impl Mutibs {
     /// extraction building its own `Vec`, which costs about a third more.
     fn read_sequence_items(
         py: Python<'_>,
-        count: usize,
+        len: impl Fn() -> usize,
         get: impl Fn(ffi::Py_ssize_t) -> *mut ffi::PyObject,
     ) -> PyResult<Positions> {
-        let read = |position: usize| -> PyResult<isize> {
+        let count = len();
+        if count <= INLINE_POSITIONS {
+            let mut buf = [0isize; INLINE_POSITIONS];
+            let read = Self::read_sequence_into(py, count, len, get, |position, value| {
+                buf[position] = value;
+            })?;
+            return Ok(Positions::Few { buf, count: read });
+        }
+        let mut indices = Vec::with_capacity(count);
+        Self::read_sequence_into(py, count, len, get, |_, value| indices.push(value))?;
+        Ok(Positions::Many(indices))
+    }
+
+    /// Pass each position in a sequence to `push`, returning how many there
+    /// were.
+    ///
+    /// `count` is the length when reading began, and `len` gives the current
+    /// one. They can differ because an item that is not an exact int is
+    /// converted by its `__index__`, which is Python code and can shorten a
+    /// list; `get` then returns null past the new end, and that used to be
+    /// dereferenced. So exact ints, which run no Python and are nearly always
+    /// what is passed, are read by a loop that never looks at the length again,
+    /// and the first item that is not one moves reading to a loop that rechecks
+    /// it after every conversion and stops where the list now ends, as
+    /// iterating it would.
+    #[inline(always)]
+    fn read_sequence_into(
+        py: Python<'_>,
+        mut count: usize,
+        len: impl Fn() -> usize,
+        get: impl Fn(ffi::Py_ssize_t) -> *mut ffi::PyObject,
+        mut push: impl FnMut(usize, isize),
+    ) -> PyResult<usize> {
+        let mut position = 0;
+        while position < count {
+            let item = get(position as ffi::Py_ssize_t);
+            if unsafe { ffi::PyLong_Check(item) } == 0 {
+                break;
+            }
+            let value = unsafe { ffi::PyLong_AsSsize_t(item) };
+            if value == -1 && unsafe { !ffi::PyErr_Occurred().is_null() } {
+                return Err(PyErr::fetch(py));
+            }
+            push(position, value);
+            position += 1;
+        }
+        while position < count {
             let item = get(position as ffi::Py_ssize_t);
             let value = if unsafe { ffi::PyLong_Check(item) } != 0 {
                 unsafe { ffi::PyLong_AsSsize_t(item) }
             } else {
-                let indexed = unsafe { ffi::PyNumber_Index(item) };
+                // Owned for the call, as `__index__` may drop the list's
+                // reference to the very item being converted.
+                let item = unsafe { Bound::from_borrowed_ptr(py, item) };
+                let indexed = unsafe { ffi::PyNumber_Index(item.as_ptr()) };
                 if indexed.is_null() {
                     return Err(PyErr::fetch(py));
                 }
                 let value = unsafe { ffi::PyLong_AsSsize_t(indexed) };
                 unsafe { ffi::Py_DECREF(indexed) };
+                count = count.min(len());
                 value
             };
             if value == -1 && unsafe { !ffi::PyErr_Occurred().is_null() } {
                 return Err(PyErr::fetch(py));
             }
-            Ok(value)
-        };
-        if count <= INLINE_POSITIONS {
-            let mut buf = [0isize; INLINE_POSITIONS];
-            for (position, slot) in buf[..count].iter_mut().enumerate() {
-                *slot = read(position)?;
-            }
-            return Ok(Positions::Few { buf, count });
+            push(position, value);
+            position += 1;
         }
-        let mut indices = Vec::with_capacity(count);
-        for position in 0..count {
-            indices.push(read(position)?);
-        }
-        Ok(Positions::Many(indices))
+        Ok(position)
     }
 
     /// Apply already-read positions. Runs no Python.
@@ -4219,6 +4264,7 @@ impl Mutibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: A new Mutibs.
     /// :raises ValueError: if n < 0.
+    /// :raises MemoryError: if the result would be longer than a container can hold.
     ///
     /// .. code-block:: pycon
     ///
@@ -4226,12 +4272,8 @@ impl Mutibs {
     ///     Mutibs('0b101010')
     ///
     pub fn __mul__(slf: &Bound<'_, Self>, n: i64) -> PyResult<Self> {
-        if n < 0 {
-            return Err(PyValueError::new_err(
-                "Cannot multiply by a negative integer.",
-            ));
-        }
-        with_locked(slf, |m| Ok(m.multiply(n as usize)))
+        let n = validate_repeat_count(n)?;
+        with_locked(slf, |m| m.multiply(n))
     }
 
     /// Return Mutibs consisting of n concatenations of self.
@@ -4241,6 +4283,7 @@ impl Mutibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: A new Mutibs.
     /// :raises ValueError: if n < 0.
+    /// :raises MemoryError: if the result would be longer than a container can hold.
     ///
     pub fn __rmul__(slf: &Bound<'_, Self>, n: i64) -> PyResult<Self> {
         Self::__mul__(slf, n)
@@ -4281,6 +4324,7 @@ impl Mutibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: None
     /// :raises ValueError: if n < 0.
+    /// :raises MemoryError: if the result would be longer than a container can hold.
     ///
     /// .. code-block:: pycon
     ///
@@ -4290,18 +4334,15 @@ impl Mutibs {
     ///     Mutibs('0b101010')
     ///
     pub fn __imul__(slf: &Bound<'_, Self>, n: i64) -> PyResult<()> {
+        let n = validate_repeat_count(n)?;
         with_locked_mut(slf, |m| match n {
-            i if i < 0 => Err(PyValueError::new_err(
-                "Cannot multiply by a negative integer.",
-            )),
             0 => {
                 m.data.clear();
                 Ok(())
             }
             1 => Ok(()),
-            i => {
-                let repeated = repeat_bitcollection(&*m, i as usize);
-                m.data = repeated;
+            n => {
+                m.data = repeat_bitcollection(&*m, n)?;
                 Ok(())
             }
         })

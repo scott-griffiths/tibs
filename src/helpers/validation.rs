@@ -37,6 +37,37 @@ pub(crate) fn validate_length(length: i64) -> PyResult<usize> {
     Ok(length as usize)
 }
 
+/// Check a repetition count from Python and narrow it to a `usize`.
+///
+/// A count too large for a `usize` saturates rather than failing, since it
+/// still means "more copies than can exist": [`validate_repeat_length`] then
+/// refuses it for anything but an empty run, which repeats to nothing anyway.
+pub(crate) fn validate_repeat_count(count: i64) -> PyResult<usize> {
+    if count < 0 {
+        return Err(PyValueError::new_err(
+            "Cannot multiply by a negative integer.",
+        ));
+    }
+    Ok(usize::try_from(count).unwrap_or(usize::MAX))
+}
+
+/// The bit length of `count` copies of a `len`-bit run, checked.
+///
+/// The multiplication has to be checked rather than trusted: release builds
+/// wrap on overflow, and a wrapped total quietly produces a short result, so
+/// `Tibs('0x0123456789abcdef0123') * 2**62` would come back empty.
+pub(crate) fn validate_repeat_length(len: usize, count: usize) -> PyResult<usize> {
+    match len.checked_mul(count) {
+        Some(total) if total <= BS::MAX_BITS => Ok(total),
+        _ => Err(PyMemoryError::new_err(format!(
+            "Cannot repeat {len} bits {count} times: this build of tibs supports at most {} \
+             bits ({} bytes) in one container.",
+            BS::MAX_BITS,
+            BS::MAX_BITS / 8
+        ))),
+    }
+}
+
 pub(crate) fn validate_offset(offset: i64) -> PyResult<usize> {
     if offset < 0 {
         return Err(PyValueError::new_err(format!(

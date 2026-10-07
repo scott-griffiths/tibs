@@ -342,10 +342,10 @@ impl Tibs {
         Self::from_bv(concatenate_bitcollections(self, other))
     }
 
-    fn repeated(&self, count: usize) -> Self {
+    fn repeated(&self, count: usize) -> PyResult<Self> {
         let length = self.len();
         if length == 0 || count == 0 {
-            return Self::from_inline_bytes([0; helpers::FAST_INT_BITS / 8], 0);
+            return Ok(Self::from_inline_bytes([0; helpers::FAST_INT_BITS / 8], 0));
         }
         if count <= helpers::FAST_INT_BITS / length {
             let word = self
@@ -355,7 +355,7 @@ impl Tibs {
             for index in 0..count {
                 repeated |= word >> (index * length);
             }
-            return Self::from_padded_word(repeated, length * count);
+            return Ok(Self::from_padded_word(repeated, length * count));
         }
         self.multiply(count)
     }
@@ -4002,6 +4002,7 @@ impl Tibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: A new Tibs.
     /// :raises ValueError: if n < 0.
+    /// :raises MemoryError: if the result would be longer than a container can hold.
     ///
     /// .. code-block:: pycon
     ///
@@ -4009,12 +4010,7 @@ impl Tibs {
     ///     Tibs('0b101010')
     ///
     pub fn __mul__(&self, n: i64) -> PyResult<Self> {
-        if n < 0 {
-            return Err(PyValueError::new_err(
-                "Cannot multiply by a negative integer.",
-            ));
-        }
-        Ok(self.repeated(n as usize))
+        self.repeated(helpers::validate_repeat_count(n)?)
     }
 
     /// Return Tibs consisting of n concatenations of self.
@@ -4024,6 +4020,7 @@ impl Tibs {
     /// :param int n: The number of concatenations. Must be >= 0.
     /// :return: A new Tibs.
     /// :raises ValueError: if n < 0.
+    /// :raises MemoryError: if the result would be longer than a container can hold.
     ///
     pub fn __rmul__(&self, n: i64) -> PyResult<Self> {
         self.__mul__(n)
