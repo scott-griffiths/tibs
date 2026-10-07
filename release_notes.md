@@ -1,5 +1,14 @@
 # Release Notes
 
+### Unreleased
+
+* Repeating with `*` or `*=` by a very large count could silently give a
+  wrong, truncated result. It now raises `MemoryError`.
+* `decode()` no longer crashes the interpreter on malformed zstd data, and
+  long runs in Rice-coded data decode much faster and can be interrupted.
+* Requests too large to allocate, such as `Tibs.from_zeros(2**60)` or
+  `Mutibs.reserve(2**60)`, now raise `MemoryError` instead of crashing.
+
 ### October 6th 2026: version 2.0.2
 
 * A `memoryview` is now read as its raw bytes, exactly as `bytes(mv)` gives
