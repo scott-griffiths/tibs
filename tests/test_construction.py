@@ -615,3 +615,76 @@ class TestCapacityLimit:
                 pytest.fail(f"the capacity limit itself was rejected: {e}")
             pytest.skip("not enough memory to allocate the limit")
         assert len(container) == self.CAP
+
+    def test_reserve_past_the_limit_raises(self):
+        # bitvec's own reserve panics here.
+        a = Mutibs("0x0123")
+        with pytest.raises(MemoryError, match="supports at most"):
+            a.reserve(self.CAP)
+        with pytest.raises(MemoryError, match="supports at most"):
+            a.reserve(2 * sys.maxsize + 1)  # usize::MAX, so len + additional overflows
+        assert a == Tibs("0x0123")
+
+
+@pytest.mark.skipif(sys.maxsize < 2**32, reason="2**60 bits is past the 32-bit limit")
+class TestAllocationFailure:
+    """A length within the limit that cannot be allocated must raise, not abort.
+
+    2**60 bits is under the 64-bit container limit but is 128 PiB, more than any
+    machine's address space, so its allocation always fails. An infallible Rust
+    allocation aborts the process when that happens, which no ``except`` can
+    catch; Python raises ``MemoryError`` for the same request.
+    """
+
+    LENGTH = 2**60
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    @pytest.mark.parametrize("name", ["from_zeros", "from_ones", "from_random"])
+    def test_length_constructors_raise(self, cls, name):
+        with pytest.raises(MemoryError, match="Not enough memory"):
+            getattr(cls, name)(self.LENGTH)
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    def test_repetition_raises(self, cls):
+        a = cls("0b" + "10" * 40)
+        with pytest.raises(MemoryError, match="Not enough memory"):
+            a * (self.LENGTH // 80)
+
+    def test_reserve_raises_and_keeps_the_value(self):
+        a = Mutibs("0x0123")
+        with pytest.raises(MemoryError, match="Not enough memory"):
+            a.reserve(self.LENGTH)
+        assert a == Tibs("0x0123")
+        a.append(1)
+        assert a == Tibs("0b00000001001000111")
+
+
+def test_reserve_keeps_bits_stored_from_mid_byte():
+    # A Mutibs whose storage starts part way into a byte is moved into place
+    # before reserving, and must still hold the same bits afterwards.
+    a = Mutibs("0b101" + "0110" * 20)
+    del a[:3]
+    a.reserve(10_000)
+    assert a.capacity >= len(a) + 10_000
+    assert a == Tibs("0b" + "0110" * 20)
+    a.extend("0b1")
+    assert a == Tibs("0b" + "0110" * 20 + "1")
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+@pytest.mark.parametrize(
+    "offset, length, match",
+    [
+        (2**63 - 1, None, "Offset of"),
+        (4, 2**63 - 1, "greater than the data length"),
+        (0, 25, "greater than the data length"),
+        (-1, None, "Negative bit offset"),
+        (0, -1, "Negative bit length"),
+    ],
+)
+def test_from_bytes_out_of_range_is_a_value_error(cls, offset, length, match):
+    # Offsets and lengths are bounded by the data, so a huge one is out of range
+    # of the data rather than out of memory. They used to go through the
+    # container size check and come back as MemoryError.
+    with pytest.raises(ValueError, match=match):
+        cls.from_bytes(b"abc", offset, length)

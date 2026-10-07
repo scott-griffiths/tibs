@@ -252,6 +252,13 @@ impl BitConcat {
         }
     }
 
+    /// Start in `bytes`, an empty buffer the caller has already reserved,
+    /// which lets that reservation be a fallible one.
+    pub(crate) fn with_buffer(bytes: Vec<u8>) -> Self {
+        debug_assert!(bytes.is_empty());
+        BitConcat { bytes, length: 0 }
+    }
+
     /// Append the `len` bits starting `offset` bits into `src`.
     pub(crate) fn push_run(&mut self, src: &[u8], offset: usize, len: usize) {
         if len == 0 {

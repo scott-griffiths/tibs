@@ -1,4 +1,7 @@
 use bitvec::prelude::*;
+use pyo3::exceptions::PyMemoryError;
+use pyo3::prelude::*;
+use std::collections::TryReserveError;
 
 pub(crate) type BV = BitVec<u8, Msb0>;
 pub(crate) type BS = BitSlice<u8, Msb0>;
@@ -7,8 +10,51 @@ pub(crate) fn bv_from_zeros(length: usize) -> BV {
     BV::repeat(false, length)
 }
 
-pub(crate) fn bv_from_ones(length: usize) -> BV {
-    BV::repeat(true, length)
+/// An empty byte buffer with room for `bit_length` bits.
+///
+/// For a length that a caller has asked for rather than one that already
+/// exists in memory. An infallible allocation aborts the process when it
+/// fails, and a `MemoryError` is what Python raises for the same request.
+pub(crate) fn try_byte_buffer(bit_length: usize) -> PyResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(bit_length.div_ceil(8))
+        .map_err(|_| memory_error(bit_length))?;
+    Ok(bytes)
+}
+
+/// `length` copies of `bit`, as [`bv_from_zeros`] gives for zeros, but
+/// raising a `MemoryError` rather than aborting when the space cannot be had.
+pub(crate) fn try_bv_filled(bit: bool, length: usize) -> PyResult<BV> {
+    let mut bytes = try_byte_buffer(length)?;
+    bytes.resize(length.div_ceil(8), if bit { 0xff } else { 0 });
+    let mut bv = BV::from_vec(bytes);
+    bv.truncate(length);
+    Ok(bv)
+}
+
+pub(crate) fn memory_error(bit_length: usize) -> PyErr {
+    PyMemoryError::new_err(format!("Not enough memory for {bit_length} bits."))
+}
+
+/// The most bits worth reserving up front on the strength of a claim about
+/// values still to come: a dtype's length, or a sequence's `len()`.
+///
+/// A value of the wrong shape is only found out while packing, so reserving
+/// the claimed size on trust let `Tibs.from_value('[u1; 2**60]', [])` abort
+/// the process allocating for a value it was about to reject. Past this a
+/// buffer grows as it fills, which costs little at that size. It is also below
+/// `BS::MAX_BITS` on a 32-bit build, where a larger `BV::with_capacity` panics.
+const MAX_RESERVE_BITS: usize = 1 << 27;
+
+/// Bits to reserve for a claimed `bits`, capped at [`MAX_RESERVE_BITS`].
+pub(crate) fn reserve_bits(bits: Option<usize>) -> usize {
+    bits.unwrap_or(0).min(MAX_RESERVE_BITS)
+}
+
+/// Bytes to reserve for a claimed `bytes`, capped at [`MAX_RESERVE_BITS`].
+pub(crate) fn reserve_bytes(bytes: Option<usize>) -> usize {
+    bytes.unwrap_or(0).min(MAX_RESERVE_BITS / 8)
 }
 
 /// The largest run of bits that [`BitAccumulator::push`] takes at once.
@@ -85,6 +131,40 @@ impl BitAccumulator {
         let low = count / 2;
         self.push(value >> low, count - low);
         self.push(value & ((1u64 << low) - 1), low);
+    }
+
+    /// Append `count` copies of `bit`.
+    ///
+    /// The whole bytes of a run are written as a fill rather than through the
+    /// carry, and their space is reserved first, so a run too long for memory
+    /// is an error here rather than an abort.
+    pub(crate) fn try_push_repeated(
+        &mut self,
+        bit: bool,
+        count: usize,
+    ) -> Result<(), TryReserveError> {
+        let fill = if bit { u64::MAX } else { 0 };
+        let run = |n: usize| if n == 0 { 0 } else { fill >> (64 - n) };
+        // Up to the next byte boundary through the carry, after which nothing
+        // is pending if any of the run is left.
+        let head = ((8 - self.pending) % 8).min(count);
+        self.push(run(head), head);
+        let rest = count - head;
+        let whole = rest / 8;
+        if whole > 0 {
+            debug_assert!(self.is_byte_aligned());
+            self.bytes.try_reserve(whole)?;
+            self.bytes.resize(self.bytes.len() + whole, fill as u8);
+            self.length += whole * 8;
+        }
+        let tail = rest % 8;
+        self.push(run(tail), tail);
+        Ok(())
+    }
+
+    /// The number of bits pushed so far.
+    pub(crate) fn len(&self) -> usize {
+        self.length
     }
 
     /// Whether the next push would start on a byte boundary, and so whether

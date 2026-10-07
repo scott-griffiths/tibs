@@ -13,7 +13,10 @@ mod search;
 mod splice;
 mod validation;
 
-pub(crate) use bits::{BS, BV, BitAccumulator, bv_from_ones, bv_from_zeros, head_bit_offset};
+pub(crate) use bits::{
+    BS, BV, BitAccumulator, bv_from_zeros, head_bit_offset, memory_error, reserve_bits,
+    reserve_bytes, try_bv_filled, try_byte_buffer,
+};
 pub(crate) use bitwise::{
     BitConcat, LogicalOp, any_pair_bits, contains_bit, copy_unaligned_padded_bytes, count_bitslice,
     count_pair_bits, deposit_masked_bytes, extract_masked_bytes, logical_op_assign_bytes,
@@ -48,6 +51,7 @@ pub(crate) use search::{
 };
 pub(crate) use splice::{copy_bits, fill_bits, move_bits};
 pub(crate) use validation::{
-    normalize_split_position, validate_index, validate_length, validate_logical_op_lengths,
-    validate_offset, validate_repeat_count, validate_repeat_length, validate_shift, validate_slice,
+    normalize_split_position, validate_data_bound, validate_index, validate_length,
+    validate_logical_op_lengths, validate_repeat_count, validate_repeat_length, validate_shift,
+    validate_slice,
 };

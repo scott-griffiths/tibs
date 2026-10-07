@@ -1310,6 +1310,59 @@ class TestDecodeMalformedZstdPayload:
         assert cls.decode(encoded) == bits
 
 
+def _rice_encoded(k, sparse_bit, final_bit, gaps):
+    """A Rice body built by hand, so the Rice parameter and gaps can be chosen."""
+    code = "".join(
+        "1" * (gap >> k) + "0" + (format(gap & ((1 << k) - 1), f"0{k}b") if k else "")
+        for gap in gaps
+    )
+    padding = -len(code) % 8
+    payload_bits = code + "0" * padding
+    payload = int(payload_bits, 2).to_bytes(len(payload_bits) // 8, "big")
+    header = "00" + format(RICE, "03b") + format(padding, "03b") + _varint_bits(len(payload))
+    config = format(k, "05b") + str(int(sparse_bit)) + str(int(final_bit)) + "0"
+    head = header + config
+    return int(head, 2).to_bytes(len(head) // 8, "big") + payload
+
+
+class TestDecodeRiceLongRuns:
+    # A Rice gap can be 2**31 times longer than the bits that code it. The
+    # decoder used to push those runs a bit at a time, which took seconds for a
+    # seven byte input and could not be interrupted; it now fills them a byte
+    # at a time, so these check the fill against a reference at every
+    # alignment the runs can start and end on.
+
+    @staticmethod
+    def _expected(sparse_bit, final_bit, gaps):
+        fill = Tibs.from_ones if not sparse_bit else Tibs.from_zeros
+        mark = Tibs.from_bools([sparse_bit])
+        expected = Tibs.from_joined(part for gap in gaps for part in (fill(gap), mark))
+        return expected[:-1] + Tibs.from_bools([final_bit])
+
+    @pytest.mark.parametrize("cls", [Tibs, Mutibs])
+    @pytest.mark.parametrize(
+        "k, sparse_bit, final_bit, gaps",
+        [
+            (24, True, True, [(1 << 24) + 5]),
+            (3, False, False, [0, 5, 13, 1, 70, 2, 0, 0, 9]),
+            (20, False, True, [3, 3 * (1 << 20) + 7, 9, 1 << 20]),
+            (0, True, False, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
+        ],
+    )
+    def test_long_runs_decode_to_the_reference(self, cls, k, sparse_bit, final_bit, gaps):
+        decoded = cls.decode(_rice_encoded(k, sparse_bit, final_bit, gaps))
+        assert isinstance(decoded, cls)
+        assert decoded == self._expected(sparse_bit, final_bit, gaps)
+
+    def test_rice_runs_round_trip_through_encode(self):
+        # Sparse enough that the encoder picks a large Rice parameter.
+        bits = Mutibs.from_zeros(3_000_000)
+        bits.set([5, 1_000_003, 2_999_999])
+        encoded = bits.encode(Codec.Rice)
+        assert len(encoded) < 20
+        assert Tibs.decode(encoded) == bits
+
+
 # ---------------------------------------------------------------------------
 # Property-based fuzz tests (hypothesis).
 #

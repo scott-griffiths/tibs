@@ -1,4 +1,4 @@
-use super::bits::BV;
+use super::bits::{BV, try_byte_buffer};
 use super::python::bytes_like_to_vec;
 use super::validation::validate_length;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
@@ -53,7 +53,8 @@ pub(crate) fn bv_from_random(
         return Ok(BV::new());
     }
     let num_bytes = length.div_ceil(8);
-    let mut data = vec![0u8; num_bytes];
+    let mut data = try_byte_buffer(length)?;
+    data.resize(num_bytes, 0);
     if secure {
         SysRng
             .try_fill_bytes(&mut data)

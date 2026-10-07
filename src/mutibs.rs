@@ -7,12 +7,12 @@ use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
-    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint,
-    bv_from_zeros, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
-    head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
-    rotate_bits_left, str_to_bv, try_extract_index, validate_index, validate_length,
-    validate_logical_op_lengths, validate_offset, validate_repeat_count, validate_shift,
-    validate_slice, with_locked, with_locked_mut, with_locked_mut2, with_locked2,
+    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_random, bv_from_uint,
+    bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec, head_bit_offset,
+    logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left,
+    str_to_bv, try_extract_index, validate_data_bound, validate_index, validate_length,
+    validate_logical_op_lengths, validate_repeat_count, validate_shift, validate_slice,
+    with_locked, with_locked_mut, with_locked_mut2, with_locked2,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -22,7 +22,7 @@ use crate::view::{MutableView, View};
 
 use crate::helpers;
 use pyo3::exceptions::{
-    PyAttributeError, PyIndexError, PyOverflowError, PyTypeError, PyValueError,
+    PyAttributeError, PyIndexError, PyMemoryError, PyOverflowError, PyTypeError, PyValueError,
 };
 use pyo3::ffi;
 use pyo3::prelude::*;
@@ -401,6 +401,38 @@ impl Mutibs {
         let index = validate_index(index, self.len())?;
         self.write_bits_raw(&[index], false);
         Ok(())
+    }
+
+    /// Make room for `additional` more bits, as `BitVec::reserve` does, but
+    /// with a `MemoryError` where that would panic or abort.
+    ///
+    /// bitvec panics past `BS::MAX_BITS` and has no fallible reserve, so the
+    /// limit is checked here and the space is reserved on the byte vector
+    /// underneath. That vector is only rebuilt into a bit vector unchanged if
+    /// the bits start at bit 0 of it, so storage with a head offset is first
+    /// copied into place, over bytes.
+    fn try_reserve(&mut self, additional: usize) -> PyResult<()> {
+        let len = self.len();
+        let total = len
+            .checked_add(additional)
+            .filter(|&total| total <= BS::MAX_BITS)
+            .ok_or_else(|| {
+                PyMemoryError::new_err(format!(
+                    "Cannot reserve {additional} more bits: this build of tibs supports at most \
+                     {} bits ({} bytes) in one container.",
+                    BS::MAX_BITS,
+                    BS::MAX_BITS / 8
+                ))
+            })?;
+        if self.storage_head_offset() != 0 {
+            self.data = self.to_bitvec();
+        }
+        let mut bytes = std::mem::take(&mut self.data).into_vec();
+        let reserved = bytes.try_reserve(total.div_ceil(8).saturating_sub(bytes.len()));
+        let mut data = BV::from_vec(bytes);
+        data.truncate(len);
+        self.data = data;
+        reserved.map_err(|_| helpers::memory_error(total))
     }
 
     /// The bit position within the underlying storage at which this Mutibs
@@ -2235,7 +2267,7 @@ impl Mutibs {
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         let length = validate_length(length)?;
-        Ok(Self::from_bv(bv_from_zeros(length)))
+        Ok(Self::from_bv(helpers::try_bv_filled(false, length)?))
     }
 
     /// Create a new instance with all bits set to one.
@@ -2252,7 +2284,7 @@ impl Mutibs {
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         let length = validate_length(length)?;
-        Ok(Mutibs::from_bv(bv_from_ones(length)))
+        Ok(Mutibs::from_bv(helpers::try_bv_filled(true, length)?))
     }
 
     /// Create a new instance from an iterable by converting each element to a bool.
@@ -2347,8 +2379,12 @@ impl Mutibs {
         bit_offset: Option<i64>,
         bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = bit_length.map(validate_length).transpose()?;
-        let offset = bit_offset.map(validate_offset).transpose()?;
+        let length = bit_length
+            .map(|length| validate_data_bound(length, "length"))
+            .transpose()?;
+        let offset = bit_offset
+            .map(|offset| validate_data_bound(offset, "offset"))
+            .transpose()?;
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }
@@ -3822,6 +3858,7 @@ impl Mutibs {
     ///
     /// :param int additional: The number of bits that can be appended without any further memory reallocations.
     /// :return: None.
+    /// :raises MemoryError: if the memory cannot be reserved.
     ///
     /// .. code-block:: python
     ///
@@ -3830,10 +3867,7 @@ impl Mutibs {
     ///
     #[pyo3(signature = (additional, /), text_signature = "($self, additional, /)")]
     pub fn reserve(slf: &Bound<'_, Self>, additional: usize) -> PyResult<()> {
-        with_locked_mut(slf, |m| {
-            m.as_mut_bitvec_ref().reserve(additional);
-            Ok(())
-        })
+        with_locked_mut(slf, |m| m.try_reserve(additional))
     }
 
     /// Concatenate Mutibs and return a new Mutibs.

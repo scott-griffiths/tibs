@@ -7,10 +7,10 @@ use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
     BS, BV, LogicalOp, bv_from_bin, bv_from_bools, bv_from_bytes_slice, bv_from_f64, bv_from_hex,
-    bv_from_int, bv_from_oct, bv_from_ones, bv_from_random, bv_from_uint, bv_from_zeros,
-    bytes_like_to_vec, find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv,
-    validate_index, validate_length, validate_logical_op_lengths, validate_offset, validate_shift,
-    validate_slice, with_locked,
+    bv_from_int, bv_from_oct, bv_from_random, bv_from_uint, bv_from_zeros, bytes_like_to_vec,
+    find_bitvec_aligned, promote_to_bv, rfind_bitvec_aligned, str_to_bv, validate_data_bound,
+    validate_index, validate_length, validate_logical_op_lengths, validate_shift, validate_slice,
+    with_locked,
 };
 use crate::iterator::{BoolIterator, ChunksIterator, FindAllIterator, ValuesIterator};
 use crate::mutibs::Mutibs;
@@ -811,7 +811,7 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
     {
         return Ok(bv);
     }
-    let mut out = BV::with_capacity(dtype.length);
+    let mut out = BV::with_capacity(helpers::reserve_bits(Some(dtype.length)));
     append_dtype_value(value.py(), &dtype.repr, value, &mut out, "")?;
     Ok(out)
 }
@@ -991,7 +991,7 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
                 return Ok(None);
             };
             let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
-            let mut bytes = Vec::with_capacity(record_byte_length);
+            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(record_byte_length)));
             push_record_fields(py, packers.into_iter(), value, "", &mut bytes)?;
             Ok(Some(BV::from_vec(bytes)))
         }
@@ -1001,7 +1001,8 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
             else {
                 return Ok(None);
             };
-            let mut bytes = Vec::with_capacity(packer.byte_length() * count);
+            let mut bytes =
+                Vec::with_capacity(helpers::reserve_bytes(Some(packer.byte_length() * count)));
             push_record_fields(
                 py,
                 std::iter::repeat_n(packer, *count),
@@ -1034,7 +1035,7 @@ fn bv_from_values_iter_record(
             };
             let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
             let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
-            let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
             let mut record_index = 0usize;
             // `plain` is deliberately a pointer no real object's type can
             // equal, so `for_each_value` always takes its owned (incref'd)
@@ -1058,7 +1059,7 @@ fn bv_from_values_iter_record(
             };
             let record_byte_length = packer.byte_length() * count;
             let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
-            let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
             let mut record_index = 0usize;
             for_each_value(py, iterable, ptr::null_mut(), |record| {
                 let path = format!("[{record_index}]");
@@ -1247,7 +1248,7 @@ pub(crate) fn bv_from_values_iter(
 
     let Some(single) = dtype.single() else {
         let capacity = hint.and_then(|len| len.checked_mul(dtype.length));
-        let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
+        let mut bv = BV::with_capacity(helpers::reserve_bits(capacity));
         let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
         for (index, item) in iterable.try_iter()?.enumerate() {
             if index >= check_at {
@@ -1266,7 +1267,7 @@ pub(crate) fn bv_from_values_iter(
     if let Some(packer) = BytewisePacker::for_dtype(single) {
         let byte_length = packer.byte_length();
         let capacity = hint.and_then(|len| len.checked_mul(byte_length));
-        let mut bytes = capacity.map_or_else(Vec::new, Vec::with_capacity);
+        let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
         let mut index = 0;
         for_each_value(py, iterable, packer.plain_type(), |item| {
             packer
@@ -1283,7 +1284,8 @@ pub(crate) fn bv_from_values_iter(
     // in a single conversion rather than a per-value allocate-and-append.
     if let Some(packer) = BitwisePacker::for_dtype(single) {
         let capacity = hint.and_then(|len| len.checked_mul(packer.length()));
-        let mut out = helpers::BitAccumulator::with_bit_capacity(capacity);
+        let mut out =
+            helpers::BitAccumulator::with_bit_capacity(Some(helpers::reserve_bits(capacity)));
         let mut index = 0;
         for_each_value(py, iterable, packer.plain_type(), |item| {
             packer
@@ -1296,7 +1298,7 @@ pub(crate) fn bv_from_values_iter(
     }
 
     let capacity = hint.and_then(|len| len.checked_mul(dtype.length));
-    let mut bv = capacity.map_or_else(BV::new, BV::with_capacity);
+    let mut bv = BV::with_capacity(helpers::reserve_bits(capacity));
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
     for (index, item) in iterable.try_iter()?.enumerate() {
         if index >= check_at {
@@ -2444,7 +2446,7 @@ impl Tibs {
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_zeros(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         let length = validate_length(length)?;
-        Ok(Self::from_bv(bv_from_zeros(length)))
+        Ok(Self::from_bv(helpers::try_bv_filled(false, length)?))
     }
 
     /// Create a new instance by encoding one Python value with a dtype.
@@ -2587,7 +2589,7 @@ impl Tibs {
     #[pyo3(signature = (length, /), text_signature = "(cls, length, /)")]
     pub fn from_ones(_cls: &Bound<'_, PyType>, length: i64) -> PyResult<Self> {
         let length = validate_length(length)?;
-        Ok(Tibs::from_bv(bv_from_ones(length)))
+        Ok(Tibs::from_bv(helpers::try_bv_filled(true, length)?))
     }
 
     /// Create a new instance from a formatted string.
@@ -2932,8 +2934,12 @@ impl Tibs {
         bit_offset: Option<i64>,
         bit_length: Option<i64>,
     ) -> PyResult<Self> {
-        let length = bit_length.map(validate_length).transpose()?;
-        let offset = bit_offset.map(validate_offset).transpose()?;
+        let length = bit_length
+            .map(|length| validate_data_bound(length, "length"))
+            .transpose()?;
+        let offset = bit_offset
+            .map(|offset| validate_data_bound(offset, "offset"))
+            .transpose()?;
         let bv = bv_from_bytes_slice(bytes_like_to_vec(data)?, offset, length)?;
         Ok(Self::from_bv(bv))
     }

@@ -68,13 +68,22 @@ pub(crate) fn validate_repeat_length(len: usize, count: usize) -> PyResult<usize
     }
 }
 
-pub(crate) fn validate_offset(offset: i64) -> PyResult<usize> {
-    if offset < 0 {
+/// Check a bit offset or length that is about to be bounded by some data, and
+/// narrow it to a `usize`.
+///
+/// There is no check against what a container can hold, unlike
+/// [`validate_length`]: the data is a tighter bound, and the one worth naming
+/// when the value is out of range, as a `ValueError`. Going through
+/// `validate_length` reported a large offset into three bytes as a
+/// `MemoryError`. A value too large for a `usize` saturates, since it is beyond
+/// any data either way.
+pub(crate) fn validate_data_bound(value: i64, name: &str) -> PyResult<usize> {
+    if value < 0 {
         return Err(PyValueError::new_err(format!(
-            "Negative bit offset given: {offset}."
+            "Negative bit {name} given: {value}."
         )));
     }
-    validate_length(offset)
+    Ok(usize::try_from(value).unwrap_or(usize::MAX))
 }
 
 pub(crate) fn validate_logical_op_lengths(a: usize, b: usize) -> PyResult<()> {

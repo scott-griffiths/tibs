@@ -1,7 +1,7 @@
 use crate::DecodeError;
 use crate::core::BitCollection;
 use crate::enums::Codec;
-use crate::helpers::{BS, BV, BitAccumulator};
+use crate::helpers::{BS, BV, BitAccumulator, memory_error};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
@@ -323,6 +323,7 @@ fn decode_raw_payload<C: BitCollection>(
 }
 
 fn decode_rice_payload<C: BitCollection>(
+    py: Python<'_>,
     bv: &BS,
     bit_padding: usize,
     data_start: usize,
@@ -348,21 +349,48 @@ fn decode_rice_payload<C: BitCollection>(
     let encoded_gaps_end = payload_end - bit_padding;
     let encoded_gaps = &bv[payload_start..encoded_gaps_end];
 
-    let mut decoded = BV::new();
+    // A gap can be up to 2^31 times the bits that code it, so a payload of a
+    // few bytes can legitimately ask for billions of bits. Each run is checked
+    // against what a container can hold before it is written, its space is
+    // reserved rather than assumed, and long output is broken up to look for
+    // Ctrl-C, so that asking for too much is an exception and not an abort or
+    // an uninterruptible hang.
+    const FILL_CHUNK_BITS: usize = 1 << 30;
+    let mut decoded = BitAccumulator::with_bit_capacity(None);
+    let mut check_at = FILL_CHUNK_BITS;
     let mut pos = 0usize;
     while pos < encoded_gaps.len() {
         let (gap, next_pos) = rice_decode_int(encoded_gaps, pos, k)?;
         pos = next_pos;
 
-        for _ in 0..gap {
-            decoded.push(!sparse_bit);
+        let too_large = || PyValueError::new_err("The encoded sequence is too large to decode.");
+        let end = decoded
+            .len()
+            .checked_add(gap)
+            .and_then(|end| end.checked_add(1))
+            .ok_or_else(too_large)?;
+        if end > BS::MAX_BITS {
+            return Err(too_large());
         }
-        decoded.push(sparse_bit);
+        let mut remaining = gap;
+        while remaining > 0 {
+            let run = remaining.min(FILL_CHUNK_BITS);
+            decoded
+                .try_push_repeated(!sparse_bit, run)
+                .map_err(|_| memory_error(end))?;
+            remaining -= run;
+            if decoded.len() >= check_at {
+                py.check_signals()?;
+                check_at = decoded.len().saturating_add(FILL_CHUNK_BITS);
+            }
+        }
+        decoded.push(u64::from(sparse_bit), 1);
     }
 
-    if decoded.is_empty() {
+    if decoded.len() == 0 {
         return Err(PyValueError::new_err("The encoded sequence is reserved."));
     }
+    let mut decoded = decoded.into_bitvec();
     let final_pos = decoded.len() - 1;
     decoded.set(final_pos, final_bit);
     Ok(C::from_bv(decoded))
@@ -489,7 +517,7 @@ fn decode_varint(bits: &BS) -> PyResult<(usize, usize)> {
     Ok((value, bits_consumed))
 }
 
-fn decode_bytes_inner<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
+fn decode_bytes_inner<C: BitCollection>(py: Python<'_>, b: Vec<u8>) -> PyResult<C> {
     if b.is_empty() {
         return Err(PyValueError::new_err(
             "Cannot decode an empty byte sequence.",
@@ -529,14 +557,14 @@ fn decode_bytes_inner<C: BitCollection>(b: Vec<u8>) -> PyResult<C> {
         .ok_or_else(|| PyValueError::new_err("The encoded sequence is too large to decode."))?;
     match codec {
         0b000 => decode_raw_payload(bv, bit_padding, data_start, data_bits),
-        0b001 => decode_rice_payload(&bv, bit_padding, data_start, data_bits),
+        0b001 => decode_rice_payload(py, &bv, bit_padding, data_start, data_bits),
         0b010 => decode_zstd_payload(&bv, bit_padding, data_start, data_bits),
         _ => Err(PyValueError::new_err("The codec value is reserved.")),
     }
 }
 
 pub(crate) fn decode_bytes<C: BitCollection>(py: Python<'_>, b: Vec<u8>) -> PyResult<C> {
-    decode_bytes_inner(b).map_err(|error| {
+    decode_bytes_inner(py, b).map_err(|error| {
         if error.is_instance_of::<PyValueError>(py) {
             DecodeError::new_err(error.value(py).to_string())
         } else {

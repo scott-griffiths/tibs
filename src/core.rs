@@ -3,8 +3,8 @@ use crate::helpers::{
     bv_from_zeros, byte_order_name, contains_bit, copy_unaligned_padded_bytes, count_bitslice,
     count_pair_bits, extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
     logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
-    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, try_extract_index,
-    validate_index, validate_repeat_length, validate_slice,
+    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, try_byte_buffer,
+    try_extract_index, validate_index, validate_repeat_length, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -754,7 +754,8 @@ pub(crate) fn repeat_bitcollection(bits: &impl BitCollection, count: usize) -> P
         return Ok(BV::new());
     }
     let total = validate_repeat_length(len, count)?;
-    let mut out = BitConcat::with_bit_capacity(total);
+    // A total asked for by number, so its space is reserved fallibly.
+    let mut out = BitConcat::with_buffer(try_byte_buffer(total)?);
     let (bytes, offset, _) = bits.raw_data_ref();
     out.push_repeated_run(bytes, offset, len, count);
     Ok(out.into_bitvec())

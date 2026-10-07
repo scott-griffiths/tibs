@@ -1,6 +1,6 @@
 use crate::core::BitCollection;
 use crate::enums::{ByteOrder, DtypeKind};
-use crate::helpers::validate_slice;
+use crate::helpers::{BS, validate_slice};
 use crate::iterator::ValuesIterator;
 use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -781,6 +781,15 @@ impl Hash for Dtype {
 impl Dtype {
     fn from_repr(repr: DtypeRepr) -> PyResult<Self> {
         let length = repr.length()?;
+        // Nothing this long could be packed or unpacked, since no container can
+        // hold it, so it is refused here rather than at its first use.
+        if length > BS::MAX_BITS {
+            return Err(PyValueError::new_err(format!(
+                "Dtype length of {length} bits is more than the {} bits this build of tibs \
+                 supports in one container.",
+                BS::MAX_BITS
+            )));
+        }
         let record_layout = build_record_layout(&repr).map(Arc::new);
         Ok(Self {
             repr,

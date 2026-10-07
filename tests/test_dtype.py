@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import math
 import re
+import sys
 
 import pytest
 from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind, DtypeSingle
@@ -1244,3 +1245,39 @@ def test_invalid_specs_keep_raising_when_repeated():
     for _ in range(3):
         with pytest.raises(ValueError, match="Cannot parse Dtype spec"):
             Dtype("nonsense9")
+
+
+# bitvec's limit on the bits in one container: 2**61 - 1 on a 64-bit build.
+_MAX_BITS = 2 ** (sys.maxsize.bit_length() - 2) - 1
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [f"[u1; {_MAX_BITS + 1}]", f"(u8, [u1; {_MAX_BITS - 7}])", f"bytes{(_MAX_BITS + 8) // 8 * 8}"],
+)
+def test_a_dtype_longer_than_any_container_is_refused(spec):
+    # Nothing that long can be packed or unpacked. Packing one used to panic
+    # reserving space for it before the value was even looked at.
+    with pytest.raises(ValueError, match="supports in one container"):
+        Dtype(spec)
+
+
+def test_a_dtype_at_the_container_limit_is_accepted():
+    assert Dtype(f"[u1; {_MAX_BITS}]").length == _MAX_BITS
+
+
+@pytest.mark.parametrize("count", [2**27, _MAX_BITS])
+def test_packing_a_value_of_the_wrong_shape_does_not_reserve_for_it(count):
+    # The count is checked while packing, so the space for `count` items must
+    # not be reserved on trust first: for the larger count that aborted the
+    # process, as the allocation could never succeed.
+    with pytest.raises(ValueError, match=f"expected {count} items"):
+        Tibs.from_value(f"[u1; {count}]", [])
+
+
+def test_packing_many_values_does_not_reserve_on_trust():
+    # len() times the dtype length is past what a container can hold, which
+    # panicked reserving for it before a single value had been checked.
+    dtype = Dtype(f"[u1; {_MAX_BITS // 8}]")
+    with pytest.raises(ValueError, match="expected"):
+        dtype.pack_values([[]] * 16)
