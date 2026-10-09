@@ -687,12 +687,19 @@ GUARDS: list[Guard] = [
         fast=lambda: Tibs.from_string(PARSE_SINGLE),
         limit=2.0,
     ),
+    # Ten digits a token leaves a prefix to check and a word that runs into
+    # the comma to throw away for every five bytes produced, which one long
+    # token never pays. The limit was 3 until hex digits started being decoded
+    # a word at a time: that took the single token from 83us to 37us and the
+    # tokens only from 200us to 113us, leaving the ratio just over 3 with both
+    # sides faster. Parsing each token into its own BV, which is what this is
+    # here to catch, measures above 20.
     Guard(
         name="parse 25000 hex tokens vs one token",
         site="helpers/parse.rs try_bv_from_hex_tokens",
         slow=lambda: Tibs.from_string(PARSE_TINY_MULTI),
         fast=lambda: Tibs.from_string(PARSE_TINY_SINGLE),
-        limit=3.0,
+        limit=4.0,
     ),
     # ---- 24. all/any early exit ----------------------------------------
     # The first bit decides each result. Running the same predicate on a

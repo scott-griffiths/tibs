@@ -76,9 +76,13 @@ pub(crate) struct BitAccumulator {
     bytes: Vec<u8>,
     /// The bits not yet written out, right-aligned in the low `pending` bits.
     /// Anything above them is stale and is masked off by the cast to `u8`.
+    ///
+    /// Every bit pushed is either in `bytes` or pending, so the length is
+    /// worked out from the two rather than kept as well. Keeping it was a
+    /// load, add and store on every push, which a loop pushing whole words
+    /// had to wait on from one push to the next.
     carry: u64,
     pending: usize,
-    length: usize,
 }
 
 impl BitAccumulator {
@@ -93,7 +97,6 @@ impl BitAccumulator {
             bytes,
             carry: 0,
             pending: 0,
-            length: 0,
         }
     }
 
@@ -107,7 +110,6 @@ impl BitAccumulator {
         debug_assert!(value >> count == 0, "value has bits above the field");
         self.carry = (self.carry << count) | value;
         self.pending += count;
-        self.length += count;
         while self.pending >= 8 {
             self.pending -= 8;
             self.bytes.push((self.carry >> self.pending) as u8);
@@ -155,7 +157,6 @@ impl BitAccumulator {
             debug_assert!(self.is_byte_aligned());
             self.bytes.try_reserve(whole)?;
             self.bytes.resize(self.bytes.len() + whole, fill as u8);
-            self.length += whole * 8;
         }
         let tail = rest % 8;
         self.push(run(tail), tail);
@@ -164,7 +165,7 @@ impl BitAccumulator {
 
     /// The number of bits pushed so far.
     pub(crate) fn len(&self) -> usize {
-        self.length
+        self.bytes.len() * 8 + self.pending
     }
 
     /// Whether the next push would start on a byte boundary, and so whether
@@ -185,7 +186,6 @@ impl BitAccumulator {
     pub(crate) fn push_aligned_bytes(&mut self, bytes: &[u8]) {
         debug_assert!(self.is_byte_aligned());
         self.bytes.extend_from_slice(bytes);
-        self.length += bytes.len() * 8;
     }
 
     /// Append every bit of `bits`, most significant first.
@@ -201,11 +201,12 @@ impl BitAccumulator {
     /// Finish, returning the packed bits. Any final part-byte is padded with
     /// zeros, then trimmed off by the truncation.
     pub(crate) fn into_bitvec(mut self) -> BV {
+        let length = self.len();
         if self.pending > 0 {
             self.bytes.push((self.carry << (8 - self.pending)) as u8);
         }
         let mut bv = BV::from_vec(self.bytes);
-        bv.truncate(self.length);
+        bv.truncate(length);
         bv
     }
 }
@@ -215,13 +216,28 @@ impl BitAccumulator {
 /// Storage does not have to begin on a byte boundary: slicing a `BitSlice`
 /// and calling `to_bitvec` keeps the original head index, so even an owned
 /// `BitVec` can start part way into its first byte.
+///
+/// Read straight off the bit pointer, where it is a mask and a shift. Going
+/// through `domain` gives the same answer but splits the whole slice into its
+/// partial and whole elements to do it, and this is called on every access to
+/// a `Mutibs`'s storage. An empty slice has no first live bit and reports zero,
+/// as `domain` does, whatever its pointer holds.
 #[inline]
 pub(crate) fn head_bit_offset(bits: &BS) -> usize {
-    match bits.domain() {
-        bitvec::domain::Domain::Enclave(elem)
-        | bitvec::domain::Domain::Region {
-            head: Some(elem), ..
-        } => elem.head().into_inner() as usize,
-        bitvec::domain::Domain::Region { .. } => 0,
-    }
+    let head = if bits.is_empty() {
+        0
+    } else {
+        bits.as_bitptr().bit().into_inner() as usize
+    };
+    debug_assert_eq!(
+        head,
+        match bits.domain() {
+            bitvec::domain::Domain::Enclave(elem)
+            | bitvec::domain::Domain::Region {
+                head: Some(elem), ..
+            } => elem.head().into_inner() as usize,
+            bitvec::domain::Domain::Region { .. } => 0,
+        }
+    );
+    head
 }

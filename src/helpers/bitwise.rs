@@ -308,6 +308,10 @@ impl BitConcat {
 
         let start = self.length;
         let total = len * count;
+        if start.is_multiple_of(8) {
+            self.push_repeated_run_from_boundary(src, offset, len, count);
+            return;
+        }
         self.push_run(src, offset, len);
         self.bytes.resize((start + total).div_ceil(8), 0);
 
@@ -320,6 +324,57 @@ impl BitConcat {
             move_bits(&mut self.bytes, start, start + completed, total - completed);
         }
         self.length = start + total;
+    }
+
+    /// [`Self::push_repeated_run`] for a buffer that ends on a byte boundary,
+    /// which is every repeat built from scratch.
+    ///
+    /// Enough copies of the run to fill a whole number of bytes are written
+    /// one at a time - at most eight, for a run of odd length - and from there
+    /// the result repeats every so many whole bytes. The rest is then copied
+    /// out of the finished prefix with `extend_from_within`, doubling each
+    /// time: a plain `memcpy` into space that is never zeroed first, rather
+    /// than a buffer zeroed up front and then filled by bit moves, which have
+    /// to shift every byte whenever a copy lands part way through one.
+    fn push_repeated_run_from_boundary(
+        &mut self,
+        src: &[u8],
+        offset: usize,
+        len: usize,
+        count: usize,
+    ) {
+        debug_assert!(self.length.is_multiple_of(8));
+        let start_byte = self.bytes.len();
+        let total = len * count;
+        // Copies of the run in the shortest prefix that is a whole number of
+        // bytes long: eight divided by the part of eight that `len` shares.
+        let copies_per_period = 8 >> len.trailing_zeros().min(3);
+        let first = copies_per_period.min(count);
+        for _ in 0..first {
+            self.push_run(src, offset, len);
+        }
+        if first == count {
+            return;
+        }
+
+        // From here every byte repeats the one `period` bytes before it, so a
+        // copy of any length taken from the start of the run carries on the
+        // pattern, provided it lands at a multiple of `period` - which each
+        // doubling does, and the final copy is the last one taken.
+        debug_assert_eq!(self.length, (start_byte + len * copies_per_period / 8) * 8);
+        let end_byte = start_byte + total / 8;
+        while self.bytes.len() < end_byte {
+            let done = self.bytes.len() - start_byte;
+            let take = done.min(end_byte - self.bytes.len());
+            self.bytes.extend_from_within(start_byte..start_byte + take);
+        }
+        let tail = total % 8;
+        if tail > 0 {
+            let period = len * copies_per_period / 8;
+            let next = self.bytes[start_byte + (total / 8) % period];
+            self.bytes.push(next & (!0u8 << (8 - tail)));
+        }
+        self.length = start_byte * 8 + total;
     }
 
     pub(crate) fn into_bitvec(self) -> BV {
@@ -415,32 +470,58 @@ fn worth_realigning(lhs_offset: usize, rhs_offset: usize, len: usize) -> bool {
     lhs_offset != rhs_offset && len >= REALIGN_MIN_BITS
 }
 
+/// The operation is dispatched here, once, rather than per byte inside the
+/// loop. A caller that inlines this with a constant `op` has the match folded
+/// away either way, but `logical_op_with_aligned_bytes` passes its `op` through
+/// at run time, and there a per-byte match left the loop unvectorised: `&` on
+/// two megabit operands at different offsets measured twenty times dearer than
+/// the same operands realigned, almost all of it here rather than in the
+/// realignment. See [`count_pair_bits_with_wide`] for why the widened copy is
+/// chosen inside each arm.
 #[inline]
 pub(crate) fn logical_op_with_matching_bytes(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    if use_wide(lhs.len() * 8) {
-        // SAFETY: `use_wide` reported the features this is compiled for.
-        return unsafe { logical_op_with_matching_bytes_wide(lhs, rhs, op) };
+    let wide = use_wide(lhs.len() * 8);
+    macro_rules! combined {
+        ($byte_op:expr) => {{
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            if wide {
+                // SAFETY: `use_wide` reported the features this is compiled for.
+                return unsafe { logical_op_with_matching_bytes_wide(lhs, rhs, $byte_op) };
+            }
+            logical_op_with_matching_bytes_with(lhs, rhs, $byte_op)
+        }};
     }
-    logical_op_with_matching_bytes_impl(lhs, rhs, op)
+    match op {
+        LogicalOp::Or => combined!(|a, b| a | b),
+        LogicalOp::And => combined!(|a, b| a & b),
+        LogicalOp::Xor => combined!(|a, b| a ^ b),
+        LogicalOp::AndNot => combined!(|a, b| a & !b),
+    }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "popcnt,avx2")]
-unsafe fn logical_op_with_matching_bytes_wide(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
-    logical_op_with_matching_bytes_impl(lhs, rhs, op)
+unsafe fn logical_op_with_matching_bytes_wide<F>(lhs: &[u8], rhs: &[u8], byte_op: F) -> Vec<u8>
+where
+    F: Fn(u8, u8) -> u8,
+{
+    logical_op_with_matching_bytes_with(lhs, rhs, byte_op)
 }
 
-/// `#[inline(always)]`, here and on every other `_impl` below, is what makes
+/// `#[inline(always)]`, here and on every other `_with` and `_impl` below, is what makes
 /// the second compilation worth anything: `#[target_feature]` widens only what
 /// is inlined into it, so a body left as an out-of-line call would be compiled
 /// once, at baseline, and both wrappers would reach the same narrow code.
 #[inline(always)]
-fn logical_op_with_matching_bytes_impl(lhs: &[u8], rhs: &[u8], op: LogicalOp) -> Vec<u8> {
+fn logical_op_with_matching_bytes_with<F>(lhs: &[u8], rhs: &[u8], byte_op: F) -> Vec<u8>
+where
+    F: Fn(u8, u8) -> u8,
+{
     debug_assert_eq!(lhs.len(), rhs.len());
     lhs.iter()
         .zip(rhs.iter())
-        .map(|(&left, &right)| op.byte(left, right))
+        .map(|(&left, &right)| byte_op(left, right))
         .collect()
 }
 
@@ -1459,6 +1540,41 @@ pub(crate) fn count_bitslice(slice: &BS, count_ones: bool) -> usize {
     if count_ones { ones } else { slice.len() - ones }
 }
 
+#[cfg(test)]
+mod repeat_tests {
+    use super::*;
+
+    /// A repeated run, built from scratch and from part way into a byte, against
+    /// the same run pushed once per copy. Covers every residue of the run length
+    /// modulo eight, runs starting at every bit of their source byte, and
+    /// counts either side of the number of copies a whole-byte period takes.
+    #[test]
+    fn repeated_runs_match_one_push_per_copy() {
+        let src = [0b1011_0010u8, 0b1110_0101, 0b0100_1101, 0b1001_1110];
+        for lead in [0usize, 3] {
+            for offset in 0..8 {
+                for len in 1..=(src.len() * 8 - offset) {
+                    for count in 0..=20 {
+                        let mut expected = BitConcat::with_bit_capacity(0);
+                        let mut actual = BitConcat::with_bit_capacity(lead + len * count);
+                        expected.push_run(&src, 0, lead);
+                        actual.push_run(&src, 0, lead);
+                        for _ in 0..count {
+                            expected.push_run(&src, offset, len);
+                        }
+                        actual.push_repeated_run(&src, offset, len, count);
+                        assert_eq!(
+                            (actual.length, &actual.bytes),
+                            (expected.length, &expected.bytes),
+                            "lead={lead} offset={offset} len={len} count={count}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The widened kernels are a second compilation of the same source, so they
 /// cannot disagree with the baseline over what the source says. What they can
 /// disagree over is the dispatch around them: a wrapper handed its arguments in
@@ -1532,6 +1648,15 @@ mod tests {
                                 )
                             };
                             assert_eq!(base, wide, "assign {} len={len} {lo} {ro}", $name);
+
+                            if lhs.len() == rhs.len() {
+                                let base = logical_op_with_matching_bytes_with(&lhs, &rhs, $assign);
+                                // SAFETY: guarded by `wide_simd` above.
+                                let wide = unsafe {
+                                    logical_op_with_matching_bytes_wide(&lhs, &rhs, $assign)
+                                };
+                                assert_eq!(base, wide, "matching {} len={len}", $name);
+                            }
                         }};
                     }
                     assert_agrees!(
@@ -1558,21 +1683,6 @@ mod tests {
                         |a: u8, b: u8| a & !b,
                         |a: u8, b: u8| a & !b
                     );
-
-                    if lhs.len() == rhs.len() {
-                        for op in [
-                            LogicalOp::Or,
-                            LogicalOp::And,
-                            LogicalOp::Xor,
-                            LogicalOp::AndNot,
-                        ] {
-                            let base = logical_op_with_matching_bytes_impl(&lhs, &rhs, op);
-                            // SAFETY: guarded by `wide_simd` above.
-                            let wide =
-                                unsafe { logical_op_with_matching_bytes_wide(&lhs, &rhs, op) };
-                            assert_eq!(base, wide, "logical_op_with_matching_bytes len={len}");
-                        }
-                    }
                 }
             }
             let bytes = pattern(len as u64, len.div_ceil(8));

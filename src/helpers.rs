@@ -30,13 +30,14 @@ pub(crate) use minifloat::{
     NarrowFloatEncodeError, NarrowFloatFormat, encode_narrow_float, narrow_float_decode_table,
 };
 pub(crate) use numeric::{
-    FAST_INT_BITS, bv_from_bf16, bv_from_f64, bv_from_int, bv_from_uint, byte_order_name,
-    push_bf16_bytes, push_f64_bytes, push_int_bits, push_int_bytes,
+    FAST_INT_BITS, PackedInt, bv_from_bf16, bv_from_f64, bv_from_int, bv_from_uint,
+    byte_order_name, pack_int, pack_uint, push_bf16_bytes, push_f64_bytes, push_int_bits,
+    push_int_bytes,
 };
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{
-    bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, convert_to_bool, promote_to_bv,
-    try_extract_index,
+    bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, convert_to_bool, is_int,
+    promote_to_bv, try_extract_index,
 };
 pub(crate) use random::bv_from_random;
 pub(crate) use raw_bytes::{

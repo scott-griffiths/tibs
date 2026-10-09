@@ -217,8 +217,8 @@ impl Tibs {
     #[inline]
     pub(crate) fn from_bv(bv: BV) -> Self {
         let length = bv.len();
+        let offset = helpers::head_bit_offset(bv.as_bitslice());
         if length <= helpers::FAST_INT_BITS {
-            let offset = helpers::head_bit_offset(bv.as_bitslice());
             let mut bytes = [0u8; helpers::FAST_INT_BITS / 8];
             let byte_length = length.div_ceil(8);
             if offset == 0 {
@@ -235,8 +235,8 @@ impl Tibs {
             return Self::from_inline_bytes(bytes, length);
         }
         Tibs {
-            data: TibsData::Shared(Arc::new(SharedBits::new(bv))),
-            offset: 0,
+            data: TibsData::Shared(Arc::new(SharedBits::new(bv.into_vec(), offset, length))),
+            offset,
             length,
         }
     }
@@ -279,6 +279,14 @@ impl Tibs {
     fn from_padded_word(word: u64, length: usize) -> Self {
         debug_assert!(length <= helpers::FAST_INT_BITS);
         Self::from_inline_bytes((word & Self::small_mask(length)).to_be_bytes(), length)
+    }
+
+    #[inline]
+    fn from_packed_int(packed: helpers::PackedInt, length: usize) -> Self {
+        match packed {
+            helpers::PackedInt::Word(word) => Self::from_padded_word(word, length),
+            helpers::PackedInt::Bits(bv) => Self::from_bv(bv),
+        }
     }
 
     /// Return a short run left-aligned in a word, with padding cleared.
@@ -418,14 +426,19 @@ impl Tibs {
         Ok(self.logical_op(other, op))
     }
 
+    /// Every byte of the backing store, of which `self.offset` and
+    /// `self.length` select the live bits.
+    #[inline(always)]
+    fn storage(&self) -> &[u8] {
+        match &self.data {
+            TibsData::Shared(data) => &data.bytes,
+            TibsData::Inline(bytes) => bytes,
+        }
+    }
+
     #[inline]
     pub(crate) fn as_bitslice(&self) -> &BS {
-        match &self.data {
-            TibsData::Shared(data) => &data.bits[self.offset..self.offset + self.length],
-            TibsData::Inline(bytes) => {
-                &BS::from_slice(bytes)[self.offset..self.offset + self.length]
-            }
-        }
+        &BS::from_slice(self.storage())[self.offset..self.offset + self.length]
     }
 
     /// Fast single-bit read that bypasses bitvec's per-access pointer decoding.
@@ -433,8 +446,6 @@ impl Tibs {
     /// SAFETY: `index` must be less than `self.length`.
     #[inline(always)]
     pub(crate) unsafe fn bit_at_unchecked(&self, index: usize) -> bool {
-        // The backing BitVec's storage may not start at bit 0 of its first
-        // byte (see raw_data_ref), so include its head offset.
         let (bytes, offset, _) = self.raw_data_ref();
         let abs = offset + index;
         let byte = unsafe { *bytes.get_unchecked(abs >> 3) };
@@ -451,30 +462,14 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn raw_data_ref(&self) -> (&[u8], usize, usize) {
-        match &self.data {
-            TibsData::Shared(data) => {
-                let physical_start =
-                    helpers::head_bit_offset(data.bits.as_bitslice()) + self.offset;
-                let byte_start = physical_start / 8;
-                let bit_offset = physical_start % 8;
-                let byte_len = (bit_offset + self.length).div_ceil(8);
-                (
-                    &data.bits.as_raw_slice()[byte_start..byte_start + byte_len],
-                    bit_offset,
-                    self.length,
-                )
-            }
-            TibsData::Inline(bytes) => {
-                let byte_start = self.offset / 8;
-                let bit_offset = self.offset % 8;
-                let byte_len = (bit_offset + self.length).div_ceil(8);
-                (
-                    &bytes[byte_start..byte_start + byte_len],
-                    bit_offset,
-                    self.length,
-                )
-            }
-        }
+        let byte_start = self.offset / 8;
+        let bit_offset = self.offset % 8;
+        let byte_len = (bit_offset + self.length).div_ceil(8);
+        (
+            &self.storage()[byte_start..byte_start + byte_len],
+            bit_offset,
+            self.length,
+        )
     }
 
     fn copy_with_mutation(&self, f: impl FnOnce(&mut Mutibs) -> PyResult<()>) -> PyResult<Self> {
@@ -536,17 +531,36 @@ const HASH_UNSET: isize = -1;
 /// throughout: two threads racing here compute the same number from the same
 /// immutable bits, so either store is correct and nothing is published through
 /// it. Same reasoning as `Reader::pos`.
+///
+/// The bits are kept as the plain bytes of the `BV` they arrived in, and a
+/// `Tibs` offset counts from the first of those bytes, so the place where the
+/// `BV` started part way into a byte is worked out once, here, rather than on
+/// every read. Decoding it through bitvec's `domain` was most of the cost of
+/// `raw_data_ref`, which nearly every operation calls at least once.
 struct SharedBits {
-    bits: BV,
+    bytes: Vec<u8>,
+    /// Where the bits this was built from start in `bytes`, and how many there
+    /// are. A `Tibs` with exactly this offset and length covers the whole
+    /// value, which is what decides whether it may use the hash cache.
+    head: usize,
+    len: usize,
     hash: AtomicIsize,
 }
 
 impl SharedBits {
-    fn new(bits: BV) -> Self {
+    fn new(bytes: Vec<u8>, head: usize, len: usize) -> Self {
         SharedBits {
-            bits,
+            bytes,
+            head,
+            len,
             hash: AtomicIsize::new(HASH_UNSET),
         }
+    }
+
+    /// Whether `tibs` covers every bit this holds, rather than a slice of them.
+    #[inline]
+    fn is_whole(&self, tibs: &Tibs) -> bool {
+        tibs.offset == self.head && tibs.length == self.len
     }
 }
 
@@ -949,32 +963,69 @@ fn classify_tuple_packers(fields: &[RecordField]) -> Option<Vec<BytewisePacker>>
 /// Pack one record's fields, in order, straight into `bytes` — no `BV`
 /// allocated per field, unlike the generic `append_dtype_value`/
 /// `append_dtype_items` path this replaces for [`RecordLayout::Tuple`].
+///
+/// `record_index` is where the record sits among several, for the path an
+/// error reports, or `None` for a record packed on its own. The path is only
+/// formatted once there is an error to put it in; formatting it up front was
+/// an allocation for every record packed.
 fn push_record_fields(
     py: Python<'_>,
     packers: impl ExactSizeIterator<Item = BytewisePacker>,
     record: &Bound<'_, PyAny>,
-    path: &str,
+    record_index: Option<usize>,
     bytes: &mut Vec<u8>,
 ) -> PyResult<()> {
+    let path = || record_index.map_or_else(String::new, |index| format!("[{index}]"));
     let expected = packers.len();
+    let too_few = |received: usize| {
+        PyValueError::new_err(format!(
+            "At value{}: expected {expected} items, but received {received}.",
+            path()
+        ))
+    };
+    let too_many = || {
+        PyValueError::new_err(format!(
+            "At value{}: expected exactly {expected} items.",
+            path()
+        ))
+    };
+    let push = |packer: BytewisePacker, bytes: &mut Vec<u8>, item: &Bound<'_, PyAny>, field| {
+        packer
+            .push(bytes, item)
+            .map_err(|error| add_value_path(py, error, &format!("{}[{field}]", path())))
+    };
+
+    // A tuple's items are read in place: it cannot change, so they outlive
+    // anything a field's conversion runs, and that saves building an iterator
+    // and taking a reference to each item. Only an exact tuple, since a
+    // subclass may iterate as something else. The checks fall in the same
+    // order as they do for the iterator below, so the errors are the same.
+    if let Ok(tuple) = record.cast_exact::<PyTuple>() {
+        let received = tuple.len();
+        for (field_index, packer) in packers.enumerate() {
+            if field_index == received {
+                return Err(too_few(field_index));
+            }
+            let item = tuple.get_borrowed_item(field_index)?;
+            push(packer, bytes, &item, field_index)?;
+        }
+        return if received > expected {
+            Err(too_many())
+        } else {
+            Ok(())
+        };
+    }
+
     let mut items = record
         .try_iter()
-        .map_err(|error| add_value_path(py, error, path))?;
+        .map_err(|error| add_value_path(py, error, &path()))?;
     for (field_index, packer) in packers.enumerate() {
-        let item = items.next().ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "At value{path}: expected {expected} items, but received {field_index}."
-            ))
-        })??;
-        packer
-            .push(bytes, &item)
-            .map_err(|error| add_value_path(py, error, &format!("{path}[{field_index}]")))?;
+        let item = items.next().ok_or_else(|| too_few(field_index))??;
+        push(packer, bytes, &item, field_index)?;
     }
     if let Some(item) = items.next() {
         item?;
-        return Err(PyValueError::new_err(format!(
-            "At value{path}: expected exactly {expected} items."
-        )));
+        return Err(too_many());
     }
     Ok(())
 }
@@ -987,12 +1038,21 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
     let py = value.py();
     match layout {
         RecordLayout::Tuple(fields) => {
-            let Some(packers) = classify_tuple_packers(fields) else {
-                return Ok(None);
+            // Classified twice over rather than collected, since for a single
+            // record the `Vec` that `classify_tuple_packers` builds costs more
+            // than working out each field's packer a second time.
+            let packer = |field: &RecordField| {
+                BytewisePacker::for_parts(field.kind, field.length, field.byte_order)
             };
-            let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
+            if !fields.iter().all(|field| packer(field).is_some()) {
+                return Ok(None);
+            }
+            let packers = fields
+                .iter()
+                .map(|field| packer(field).expect("every field was classified above"));
+            let record_byte_length: usize = packers.clone().map(|p| p.byte_length()).sum();
             let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(record_byte_length)));
-            push_record_fields(py, packers.into_iter(), value, "", &mut bytes)?;
+            push_record_fields(py, packers, value, None, &mut bytes)?;
             Ok(Some(BV::from_vec(bytes)))
         }
         RecordLayout::Array { element, count } => {
@@ -1007,7 +1067,7 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
                 py,
                 std::iter::repeat_n(packer, *count),
                 value,
-                "",
+                None,
                 &mut bytes,
             )?;
             Ok(Some(BV::from_vec(bytes)))
@@ -1044,8 +1104,13 @@ fn bv_from_values_iter_record(
             // non-exact-int field), which could otherwise invalidate a
             // borrowed reference to the record itself mid-visit.
             for_each_value(py, iterable, ptr::null_mut(), |record| {
-                let path = format!("[{record_index}]");
-                push_record_fields(py, packers.iter().copied(), record, &path, &mut bytes)?;
+                push_record_fields(
+                    py,
+                    packers.iter().copied(),
+                    record,
+                    Some(record_index),
+                    &mut bytes,
+                )?;
                 record_index += 1;
                 Ok(())
             })?;
@@ -1062,12 +1127,11 @@ fn bv_from_values_iter_record(
             let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
             let mut record_index = 0usize;
             for_each_value(py, iterable, ptr::null_mut(), |record| {
-                let path = format!("[{record_index}]");
                 push_record_fields(
                     py,
                     std::iter::repeat_n(packer, *count),
                     record,
-                    &path,
+                    Some(record_index),
                     &mut bytes,
                 )?;
                 record_index += 1;
@@ -1394,6 +1458,21 @@ impl BytewiseUnpacker {
     /// fields don't share one stride.
     #[inline]
     fn load_at(&self, bytes: &[u8], shift: u32, start: usize) -> u64 {
+        // Wherever a whole word can be read, read one and cut it down to the
+        // value. Copying `byte_length` bytes into a buffer instead is a call to
+        // `memcpy` for every value, since the length is only known at run time,
+        // and that was a tenth of unpacking a list of `u16`.
+        if shift == 0
+            && let Some(word) = bytes.get(start..start + 8)
+        {
+            let word: [u8; 8] = word.try_into().unwrap();
+            let unused = 64 - self.byte_length * 8;
+            return if self.is_little_endian {
+                u64::from_le_bytes(word) & (u64::MAX >> unused)
+            } else {
+                u64::from_be_bytes(word) >> unused
+            };
+        }
         let mut buf = [0u8; 8];
         // A big-endian value goes at the top of the buffer and a little-endian
         // one at the bottom, so that either `from_*_bytes` reads the untouched
@@ -1627,8 +1706,11 @@ pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyRe
     }
     if let Some(layout) = &dtype.record_layout {
         let (bytes, shift, _) = value.raw_data_ref();
-        if let Some(mut values) = py_values_from_range_record(py, layout, bytes, shift as u32, 1)? {
-            return Ok(values.pop().expect("count = 1 produces exactly one value"));
+        let mut record = None;
+        if for_each_record_value(py, layout, bytes, shift as u32, 1, |value| {
+            record = Some(value)
+        })? {
+            return Ok(record.expect("count = 1 emits exactly one value"));
         }
     }
     py_from_dtype_repr(py, &dtype.repr, value, 0)
@@ -1677,13 +1759,44 @@ fn py_from_dtype_repr(
 /// Returns `None` when some field doesn't qualify (a sub-byte length, or a
 /// `bits`/`bytes`/`hex`/`oct`/`bin` kind), so the caller falls back to the
 /// existing `py_from_dtype_repr` recursive walk unchanged.
-fn py_values_from_range_record(
+/// A tuple of `len` items, the item at each index produced by `item`.
+///
+/// Built in place rather than collected into a `Vec` for `PyTuple::new`, which
+/// is what a fallible item needs there. Unpacking records makes one of these
+/// per record, so that `Vec` was an allocation per record. An item that fails
+/// leaves the rest of the tuple empty, which its deallocation allows for.
+fn tuple_from_fn<'py>(
+    py: Python<'py>,
+    len: usize,
+    mut item: impl FnMut(usize) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    // SAFETY: `PyTuple_New` returns a new reference or null with an error set,
+    // and `PyTuple_SetItem` steals the reference to an in-range item of a
+    // tuple nothing else has seen yet.
+    unsafe {
+        let tuple = Bound::from_owned_ptr_or_err(py, ffi::PyTuple_New(len as ffi::Py_ssize_t))?
+            .cast_into_unchecked::<PyTuple>();
+        for index in 0..len {
+            let value = item(index)?;
+            ffi::PyTuple_SetItem(tuple.as_ptr(), index as ffi::Py_ssize_t, value.into_ptr());
+        }
+        Ok(tuple)
+    }
+}
+
+/// Pass each of `count` records to `emit`, as a tuple of its fields.
+///
+/// Returns `false`, having emitted nothing, when some field of the layout is
+/// not one [`BytewiseUnpacker`] reads. Emitting rather than returning a `Vec`
+/// lets a single record skip allocating a list of one.
+fn for_each_record_value(
     py: Python<'_>,
     layout: &RecordLayout,
     bytes: &[u8],
     shift: u32,
     count: usize,
-) -> PyResult<Option<Vec<Py<PyAny>>>> {
+    mut emit: impl FnMut(Py<PyAny>),
+) -> PyResult<bool> {
     match layout {
         RecordLayout::Tuple(fields) => {
             let mut unpackers = Vec::with_capacity(fields.len());
@@ -1691,7 +1804,7 @@ fn py_values_from_range_record(
                 let Some(unpacker) =
                     BytewiseUnpacker::for_parts(field.kind, field.length, field.byte_order)
                 else {
-                    return Ok(None);
+                    return Ok(false);
                 };
                 // Every field here is a whole number of bytes (a precondition
                 // of `BytewiseUnpacker` classification), so a prefix sum of
@@ -1699,7 +1812,6 @@ fn py_values_from_range_record(
                 unpackers.push((unpacker, field.bit_offset / 8));
             }
             let record_byte_length: usize = unpackers.iter().map(|(u, _)| u.byte_length).sum();
-            let mut values = Vec::with_capacity(count);
             let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
             for index in 0..count {
                 if index >= check_at {
@@ -1707,17 +1819,13 @@ fn py_values_from_range_record(
                     check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
                 }
                 let record_start = index * record_byte_length;
-                let mut fields_out = Vec::with_capacity(unpackers.len());
-                for (unpacker, field_byte_offset) in &unpackers {
-                    fields_out.push(
-                        unpacker
-                            .value_at(py, bytes, shift, record_start + field_byte_offset)?
-                            .unbind(),
-                    );
-                }
-                values.push(PyTuple::new(py, fields_out)?.into_any().unbind());
+                let record = tuple_from_fn(py, unpackers.len(), |field| {
+                    let (unpacker, field_byte_offset) = &unpackers[field];
+                    unpacker.value_at(py, bytes, shift, record_start + field_byte_offset)
+                })?;
+                emit(record.into_any().unbind());
             }
-            Ok(Some(values))
+            Ok(true)
         }
         RecordLayout::Array {
             element,
@@ -1726,10 +1834,9 @@ fn py_values_from_range_record(
             let Some(unpacker) =
                 BytewiseUnpacker::for_parts(element.kind, element.length, element.byte_order)
             else {
-                return Ok(None);
+                return Ok(false);
             };
             let record_byte_length = unpacker.byte_length * element_count;
-            let mut values = Vec::with_capacity(count);
             let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
             for index in 0..count {
                 if index >= check_at {
@@ -1737,14 +1844,13 @@ fn py_values_from_range_record(
                     check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
                 }
                 let record_start = index * record_byte_length;
-                let mut fields_out = Vec::with_capacity(*element_count);
-                for element_index in 0..*element_count {
+                let record = tuple_from_fn(py, *element_count, |element_index| {
                     let field_start = record_start + element_index * unpacker.byte_length;
-                    fields_out.push(unpacker.value_at(py, bytes, shift, field_start)?.unbind());
-                }
-                values.push(PyTuple::new(py, fields_out)?.into_any().unbind());
+                    unpacker.value_at(py, bytes, shift, field_start)
+                })?;
+                emit(record.into_any().unbind());
             }
-            Ok(Some(values))
+            Ok(true)
         }
     }
 }
@@ -1770,15 +1876,19 @@ pub(crate) fn py_values_from_range(
         return Ok(Vec::new());
     }
 
+    let mut values = Vec::with_capacity(count);
+    // A layout that does not qualify emits nothing, leaving `values` empty for
+    // the paths below.
     if let Some(layout) = &dtype.record_layout {
         let window = bits.get_slice_unchecked(start, selected_len);
         let (bytes, shift, _) = window.raw_data_ref();
-        if let Some(values) = py_values_from_range_record(py, layout, bytes, shift as u32, count)? {
+        if for_each_record_value(py, layout, bytes, shift as u32, count, |value| {
+            values.push(value)
+        })? {
             return Ok(values);
         }
     }
 
-    let mut values = Vec::with_capacity(count);
     let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
 
     // A dtype that reads out of whole bytes takes them from the backing store
@@ -2288,9 +2398,7 @@ impl Tibs {
         // the shape whose hash is expensive - a short one lives inline, where
         // hashing is a few nanoseconds and there is nothing worth keeping.
         let cache = match &self.data {
-            TibsData::Shared(shared) if self.offset == 0 && self.length == shared.bits.len() => {
-                Some(shared)
-            }
+            TibsData::Shared(shared) if shared.is_whole(self) => Some(shared),
             _ => None,
         };
         if let Some(shared) = cache {
@@ -2639,7 +2747,10 @@ impl Tibs {
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        Ok(Tibs::from_bv(bv_from_uint(u, length, is_little_endian)?))
+        Ok(Tibs::from_packed_int(
+            helpers::pack_uint(u, length, is_little_endian)?,
+            length,
+        ))
     }
 
     /// Return the unsigned integer representation of the Tibs.
@@ -2698,7 +2809,10 @@ impl Tibs {
     ) -> PyResult<Self> {
         let length = validate_length(length)?;
         let is_little_endian = ByteOrder::is_little_endian(byte_order, length)?;
-        Ok(Tibs::from_bv(bv_from_int(i, length, is_little_endian)?))
+        Ok(Tibs::from_packed_int(
+            helpers::pack_int(i, length, is_little_endian)?,
+            length,
+        ))
     }
 
     /// Return the signed integer representation of the Tibs.
@@ -2934,6 +3048,18 @@ impl Tibs {
         bit_offset: Option<i64>,
         bit_length: Option<i64>,
     ) -> PyResult<Self> {
+        // A few bytes taken whole fit inline, so they are copied straight there
+        // rather than into a `Vec` that would only be copied out of and freed.
+        if bit_offset.is_none()
+            && bit_length.is_none()
+            && let Ok(bytes) = data.cast::<PyBytes>()
+            && let bytes = bytes.as_bytes()
+            && bytes.len() <= helpers::FAST_INT_BITS / 8
+        {
+            let mut inline = [0u8; helpers::FAST_INT_BITS / 8];
+            inline[..bytes.len()].copy_from_slice(bytes);
+            return Ok(Self::from_inline_bytes(inline, bytes.len() * 8));
+        }
         let length = bit_length
             .map(|length| validate_data_bound(length, "length"))
             .transpose()?;
@@ -3155,7 +3281,7 @@ impl Tibs {
         // Codec::Raw rather than the Codec::Auto default of `encode`: pickling
         // and deep copying should cost about what copying costs, and Auto
         // measures the alternative codecs and compresses on every call.
-        let encoded = PyBytes::new(py, &self.encode(Some(Codec::Raw))?);
+        let encoded = tibs_codec::encode_raw_py_bytes(py, self)?;
         let decode = py.get_type::<Self>().getattr("decode")?;
         Ok((decode.unbind(), (encoded.unbind(),)))
     }
@@ -3497,7 +3623,7 @@ impl Tibs {
         // chosen by indexing, not branching: with random data an if/else here
         // mispredicts ~50% of the time, costing ~10ns per read.
         unsafe {
-            if ffi::PyLong_Check(key.as_ptr()) != 0 {
+            if helpers::is_int(key.as_ptr()) {
                 let index = ffi::PyLong_AsSsize_t(key.as_ptr());
                 if index == -1 && !ffi::PyErr_Occurred().is_null() {
                     let err = PyErr::fetch(py);
@@ -3543,7 +3669,7 @@ impl Tibs {
         }
 
         // Anything else that can still act as an index, such as a NumPy
-        // integer, which the `PyLong_Check` above does not accept.
+        // integer, which the `is_int` check above does not accept.
         if let Ok(index) = key.extract::<isize>() {
             let index = validate_index(index, self.length)?;
             // SAFETY: validate_index guarantees index < self.length.

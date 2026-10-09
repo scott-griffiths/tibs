@@ -93,7 +93,7 @@ fn read_item_key<'py>(key: &Bound<'py, PyAny>) -> ItemKey<'py> {
     // Exact ints first, then slices, and only then the general integer
     // extraction, which raises and discards a Python exception for a key it
     // cannot convert.
-    if unsafe { ffi::PyLong_Check(key.as_ptr()) } != 0 {
+    if unsafe { helpers::is_int(key.as_ptr()) } {
         let index = unsafe { ffi::PyLong_AsSsize_t(key.as_ptr()) };
         if index == -1 && unsafe { !ffi::PyErr_Occurred().is_null() } {
             return ItemKey::Failed(PyErr::fetch(key.py()));
@@ -169,7 +169,10 @@ impl Clone for Mutibs {
 enum JoinedPart<'py> {
     // Keep existing bit containers borrowed during a join. Promoted Python
     // values still need owned storage because their BitVec is created here.
-    Tibs(PyRef<'py, Tibs>),
+    // A Tibs is frozen, so it is read through the reference the iteration
+    // already handed over; a `PyRef` would take a second one, and with it an
+    // increment and a decrement that cost more than copying a short part.
+    Tibs(Bound<'py, Tibs>),
     Mutibs(PyRef<'py, Mutibs>),
     Owned(BV),
 }
@@ -357,10 +360,15 @@ impl Mutibs {
         total_len: &mut usize,
         obj: Bound<'py, PyAny>,
     ) -> PyResult<()> {
-        if let Ok(tibs) = obj.extract::<PyRef<Tibs>>() {
-            *total_len += tibs.len();
-            parts.push(JoinedPart::Tibs(tibs));
-        } else if let Ok(mutibs) = obj.extract::<PyRef<Mutibs>>() {
+        let obj = match obj.cast_into::<Tibs>() {
+            Ok(tibs) => {
+                *total_len += tibs.get().len();
+                parts.push(JoinedPart::Tibs(tibs));
+                return Ok(());
+            }
+            Err(error) => error.into_inner(),
+        };
+        if let Ok(mutibs) = obj.extract::<PyRef<Mutibs>>() {
             *total_len += mutibs.len();
             parts.push(JoinedPart::Mutibs(mutibs));
         } else {
@@ -377,7 +385,7 @@ impl Mutibs {
         let mut out = BitConcat::with_bit_capacity(total_len);
         for part in parts {
             match &part {
-                JoinedPart::Tibs(tibs) => push_collection_run(&mut out, &**tibs),
+                JoinedPart::Tibs(tibs) => push_collection_run(&mut out, tibs.get()),
                 JoinedPart::Mutibs(mutibs) => push_collection_run(&mut out, &**mutibs),
                 JoinedPart::Owned(bv) => out.push_run(
                     bv.as_raw_slice(),
@@ -779,7 +787,7 @@ impl Mutibs {
         let mut position = 0;
         while position < count {
             let item = get(position as ffi::Py_ssize_t);
-            if unsafe { ffi::PyLong_Check(item) } == 0 {
+            if unsafe { !helpers::is_int(item) } {
                 break;
             }
             let value = unsafe { ffi::PyLong_AsSsize_t(item) };
@@ -791,7 +799,7 @@ impl Mutibs {
         }
         while position < count {
             let item = get(position as ffi::Py_ssize_t);
-            let value = if unsafe { ffi::PyLong_Check(item) } != 0 {
+            let value = if unsafe { helpers::is_int(item) } {
                 unsafe { ffi::PyLong_AsSsize_t(item) }
             } else {
                 // Owned for the call, as `__index__` may drop the list's
@@ -3754,10 +3762,7 @@ impl Mutibs {
         // Codec::Raw rather than the Codec::Auto default of `encode`: pickling
         // and deep copying should cost about what copying costs, and Auto
         // measures the alternative codecs and compresses on every call.
-        let encoded = PyBytes::new(
-            py,
-            &with_locked(slf, |m| tibs_codec::encode(m, Some(Codec::Raw)))?,
-        );
+        let encoded = with_locked(slf, |m| tibs_codec::encode_raw_py_bytes(py, m))?;
         let decode = py.get_type::<Self>().getattr("decode")?;
         Ok((decode.unbind(), (encoded.unbind(),)))
     }

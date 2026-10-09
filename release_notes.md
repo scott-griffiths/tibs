@@ -8,6 +8,11 @@
   long runs in Rice-coded data decode much faster and can be interrupted.
 * Requests too large to allocate, such as `Tibs.from_zeros(2**60)` or
   `Mutibs.reserve(2**60)`, now raise `MemoryError` instead of crashing.
+* Performance improvements. Bitwise operations between values whose bits start
+  at different offsets, such as two slices, are up to seven times faster.
+  Packing many records with a tuple dtype is over three times faster, and hex
+  parsing, repetition, `from_joined`, pickling and unpacking values are all
+  faster, as are `from_u`, `from_i` and `from_bytes` for short values.
 
 ### October 6th 2026: version 2.0.2
 

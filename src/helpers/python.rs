@@ -176,6 +176,21 @@ fn buffer_to_vec(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
     result
 }
 
+/// Whether `obj` is an `int`, or an instance of a subclass of it such as `bool`.
+///
+/// The same answer as `PyLong_Check`, which under the limited API is a call
+/// into the interpreter for the type's flags. The exact type is one pointer
+/// comparison, and an exact int is nearly always what an index is, so that is
+/// tried first and the call is left for subclasses.
+///
+/// # Safety
+///
+/// `obj` must point to a live Python object.
+#[inline(always)]
+pub(crate) unsafe fn is_int(obj: *mut ffi::PyObject) -> bool {
+    unsafe { ffi::PyLong_CheckExact(obj) != 0 || ffi::PyLong_Check(obj) != 0 }
+}
+
 pub(crate) fn try_extract_index(index: &Bound<'_, PyAny>) -> PyResult<Option<isize>> {
     let py = index.py();
     let indexed = unsafe { ffi::PyNumber_Index(index.as_ptr()) };

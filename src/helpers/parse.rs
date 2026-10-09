@@ -105,6 +105,50 @@ fn decode_oct_group(group: &[u8; 8]) -> Option<[u8; 3]> {
     Some([high, middle, low])
 }
 
+/// `byte` in every byte of a word.
+const fn repeated_byte(byte: u8) -> u64 {
+    byte as u64 * 0x0101_0101_0101_0101
+}
+
+const HIGH_BITS: u64 = repeated_byte(0x80);
+
+/// The top bit of each byte of `word` that is at least `floor`.
+///
+/// Every byte of `word` must be below `0x80`. Adding `0x80 - floor` then sets
+/// a byte's top bit exactly when it reaches `floor`, and no byte can carry
+/// into the next.
+#[inline(always)]
+fn bytes_at_least(word: u64, floor: u8) -> u64 {
+    word.wrapping_add(repeated_byte(0x80 - floor)) & HIGH_BITS
+}
+
+/// Pack eight hex digits into the four bytes they spell out.
+///
+/// The digits are read as a little-endian word, so the first is the low byte,
+/// and every byte is checked and converted at once rather than through the
+/// lookup table a pair at a time.
+#[inline]
+fn decode_hex_word(digits: &[u8; 8]) -> Option<[u8; 4]> {
+    let word = u64::from_le_bytes(*digits);
+    if word & HIGH_BITS != 0 {
+        return None;
+    }
+    let is_digit = bytes_at_least(word, b'0') & !bytes_at_least(word, b'9' + 1);
+    // Setting 0x20 takes 'A' to 'F' onto 'a' to 'f', and only they land there.
+    let folded = word | repeated_byte(0x20);
+    let is_letter = bytes_at_least(folded, b'a') & !bytes_at_least(folded, b'f' + 1);
+    if is_digit | is_letter != HIGH_BITS {
+        return None;
+    }
+    // A digit's value is its low four bits, and a letter's is nine more.
+    let nibbles = (word & repeated_byte(0x0f)) + (is_letter >> 7) * 9;
+    // Each even byte takes its own nibble on top and the next byte's below,
+    // and then the even bytes are gathered together at the bottom.
+    let pairs = ((nibbles << 4) | (nibbles >> 8)) & 0x00ff_00ff_00ff_00ff;
+    let quads = (pairs | (pairs >> 8)) & 0x0000_ffff_0000_ffff;
+    Some((((quads | (quads >> 16)) & 0xffff_ffff) as u32).to_le_bytes())
+}
+
 /// Pack two hex digits into the byte they spell out.
 #[inline]
 fn decode_hex_group(group: &[u8; 2]) -> Option<[u8; 1]> {
@@ -177,6 +221,38 @@ pub(crate) fn bv_from_oct(octal_string: &str) -> PyResult<BV> {
     Ok(out.into_bitvec())
 }
 
+/// Append the hex digits from `source[index..]` to `out`, up to the first byte
+/// that is not one, and return where that is.
+///
+/// Inlined into both callers so that a caller handing over short runs one
+/// after another, as the comma-separated path does, sets up the word decode's
+/// constants once rather than once per run.
+#[inline(always)]
+fn push_hex_run(out: &mut BitAccumulator, source: &[u8], mut index: usize) -> usize {
+    while index < source.len() {
+        // A pair of digits is a whole byte, so runs of them go straight out,
+        // eight digits at a time and then in pairs for the rest. Barring
+        // separators, that is the whole string in one pass. Eight rather than
+        // more because a group that runs into a separator is thrown away and
+        // redone in pairs, which for short comma-separated tokens is most of
+        // them.
+        if out.is_byte_aligned() {
+            index += extend_groups(out, &source[index..], decode_hex_word);
+            index += extend_groups(out, &source[index..], decode_hex_group);
+            if index == source.len() {
+                break;
+            }
+        }
+        let digit = HEX_VALUES[source[index] as usize];
+        if digit == INVALID_HEX {
+            break;
+        }
+        out.push(u64::from(digit), 4);
+        index += 1;
+    }
+    index
+}
+
 pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
     // Ignore any leading '0x' or '0X'
     let s = hex
@@ -185,34 +261,26 @@ pub(crate) fn bv_from_hex(hex: &str) -> PyResult<BV> {
         .unwrap_or(hex);
     let source = s.as_bytes();
     let mut out = BitAccumulator::with_bit_capacity(Some(source.len() * 4));
-    let mut index = 0;
+    let mut index = push_hex_run(&mut out, source, 0);
     while index < source.len() {
-        // A pair of digits is a whole byte, so runs of them go straight out.
-        // Barring separators, that is the whole string in one pass.
-        if out.is_byte_aligned() {
-            index += extend_groups(&mut out, &source[index..], decode_hex_group);
-            if index == source.len() {
-                break;
-            }
-        }
-        let digit = HEX_VALUES[source[index] as usize];
-        if digit == INVALID_HEX {
-            index += skip_non_digit(s, index).map_err(|c| invalid_character("hex", hex, c))?;
-            continue;
-        }
-        out.push(u64::from(digit), 4);
-        index += 1;
+        index += skip_non_digit(s, index).map_err(|c| invalid_character("hex", hex, c))?;
+        index = push_hex_run(&mut out, source, index);
     }
     Ok(out.into_bitvec())
 }
 
-/// Whether every byte is a printable non-space ASCII character.
+/// Whether every byte is a printable non-space ASCII character, and whether
+/// any of them is a comma.
 ///
 /// Folded rather than short circuited so that it vectorizes: the answer is
 /// almost always yes, which means reading the whole string either way, and a
 /// bailing out loop is several times slower over the length of a long one.
-fn is_all_graphic(bytes: &[u8]) -> bool {
-    bytes.iter().fold(true, |ok, b| ok & b.is_ascii_graphic())
+/// The comma is looked for in the same pass because a string without one is a
+/// single token, and finding that out separately meant two more passes over it.
+fn scan_literal(bytes: &[u8]) -> (bool, bool) {
+    bytes.iter().fold((true, false), |(graphic, comma), &b| {
+        (graphic & b.is_ascii_graphic(), comma | (b == b','))
+    })
 }
 
 fn string_literal_to_bv(s: &str) -> PyResult<BV> {
@@ -229,26 +297,34 @@ fn string_literal_to_bv(s: &str) -> PyResult<BV> {
 /// Decode comma-separated hex literals without allocating per token.
 ///
 /// Removing the prefixes and commas leaves exactly the same hexadecimal bit
-/// stream, including when a token contains an odd number of digits. Invalid
-/// input returns `None` so the general path can reproduce its usual error.
+/// stream, including when a token contains an odd number of digits, so each
+/// token's digits go straight into one accumulator. Anything else - another
+/// base, an underscore, an invalid digit - returns `None`, so the general path
+/// can parse it or reproduce its usual error.
+///
+/// One pass over the bytes rather than a split into tokens: the tokens are
+/// typically a few digits long, which left splitting them out costing as much
+/// as decoding them.
 fn try_bv_from_hex_tokens(s: &str) -> Option<BV> {
-    for (prefix, separator) in [("0x", ",0x"), ("0X", ",0X")] {
-        if let Some(digits) = s.strip_prefix(prefix) {
-            let joined = digits.replace(separator, "");
-            if !joined.as_bytes().contains(&b',') {
-                return bv_from_hex(&joined).ok();
-            }
+    let source = s.as_bytes();
+    let mut out = BitAccumulator::with_bit_capacity(Some(source.len() * 4));
+    let mut index = 0;
+    while index < source.len() {
+        // An empty token, as between two adjacent commas, adds nothing.
+        if source[index] == b',' {
+            index += 1;
+            continue;
+        }
+        // Setting 0x20 takes 'X' to 'x', and nothing else there.
+        if source[index] != b'0' || source.get(index + 1).map(|c| c | 0x20) != Some(b'x') {
+            return None;
+        }
+        index = push_hex_run(&mut out, source, index + 2);
+        if index < source.len() && source[index] != b',' {
+            return None;
         }
     }
-
-    let mut joined = String::with_capacity(s.len());
-    for token in s.split(',').filter(|token| !token.is_empty()) {
-        let digits = token
-            .strip_prefix("0x")
-            .or_else(|| token.strip_prefix("0X"))?;
-        joined.push_str(digits);
-    }
-    bv_from_hex(&joined).ok()
+    Some(out.into_bitvec())
 }
 
 pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
@@ -256,20 +332,27 @@ pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
     // removing it means building a new string. Nearly every input is already
     // free of it, and a string of printable non-space characters can only be
     // ASCII, so one scan avoids the copy in the usual case.
+    let (graphic, has_comma) = scan_literal(s.as_bytes());
     let stripped;
-    let s = if is_all_graphic(s.as_bytes()) {
+    let s = if graphic {
         s
     } else {
         stripped = s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
         &stripped
     };
-    if s.as_bytes().contains(&b',')
-        && let Some(result) = try_bv_from_hex_tokens(s)
-    {
+    // Taking out whitespace leaves the commas alone, so the scan still holds.
+    if !has_comma {
+        return if s.is_empty() {
+            Ok(BV::new())
+        } else {
+            string_literal_to_bv(s)
+        };
+    }
+    if let Some(result) = try_bv_from_hex_tokens(s) {
         return Ok(result);
     }
-    // Nearly every string is a single token, so the first one is parsed into
-    // the result and any others are appended to it.
+    // The first token is parsed into the result and any others are appended
+    // to it.
     let mut tokens = s.split(',').filter(|token| !token.is_empty());
     let Some(first) = tokens.next() else {
         return Ok(BV::new());
@@ -287,4 +370,71 @@ pub(crate) fn str_to_bv(s: &str) -> PyResult<BV> {
         result.push_run(bits.as_raw_slice(), 0, bits.len());
     }
     Ok(result.into_bitvec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The pairwise table decode over the same eight digits, as the reference.
+    fn decode_by_pairs(digits: [u8; 8]) -> Option<[u8; 4]> {
+        let mut bytes = [0u8; 4];
+        for (byte, pair) in bytes.iter_mut().zip(digits.chunks_exact(2)) {
+            *byte = decode_hex_group(pair.try_into().unwrap())?[0];
+        }
+        Some(bytes)
+    }
+
+    #[test]
+    fn word_decode_agrees_with_the_table_for_every_byte_in_every_position() {
+        let valid = *b"0aF9b8C7";
+        for position in 0..8 {
+            for byte in 0..=255u8 {
+                let mut digits = valid;
+                digits[position] = byte;
+                assert_eq!(
+                    decode_hex_word(&digits),
+                    decode_by_pairs(digits),
+                    "{digits:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn word_decode_agrees_with_the_table_for_every_pair_of_digits() {
+        let digits = b"0123456789abcdefABCDEF";
+        for &high in digits {
+            for &low in digits {
+                for position in (0..8).step_by(2) {
+                    let mut word = *b"00000000";
+                    word[position] = high;
+                    word[position + 1] = low;
+                    assert_eq!(decode_hex_word(&word), decode_by_pairs(word), "{word:?}");
+                }
+            }
+        }
+    }
+
+    /// Hex digits with no prefix or separators, decoded without going through
+    /// anything that can build a Python error, which a test binary cannot link.
+    fn bv_from_digits(digits: &str) -> BV {
+        let mut out = BitAccumulator::with_bit_capacity(None);
+        assert_eq!(push_hex_run(&mut out, digits.as_bytes(), 0), digits.len());
+        out.into_bitvec()
+    }
+
+    #[test]
+    fn hex_tokens_match_the_single_literal() {
+        for (tokens, single) in [
+            ("0x1,0x23,0x456", "123456"),
+            ("0xabc,0X0,0x", "abc0"),
+            ("0x0123456789abcdef0,0xF", "0123456789abcdef0F"),
+        ] {
+            assert_eq!(try_bv_from_hex_tokens(tokens), Some(bv_from_digits(single)));
+        }
+        assert_eq!(try_bv_from_hex_tokens("0x12,0b1"), None);
+        assert_eq!(try_bv_from_hex_tokens("0x1_2,0x3"), None);
+        assert_eq!(try_bv_from_hex_tokens("0x12,0xg"), None);
+    }
 }

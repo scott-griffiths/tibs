@@ -126,12 +126,51 @@ fn bv_from_big_int(
     Ok(bits[pad..].to_bitvec())
 }
 
+/// An integer packed into a field, in whichever form suits the field's length.
+pub(crate) enum PackedInt {
+    /// A field of at most [`FAST_INT_BITS`] bits, left aligned in a word as it
+    /// sits in storage: the field's first bit is the word's top bit, and every
+    /// bit below the field is clear. A short `Tibs` holds exactly this inline,
+    /// so it can be built without the `BV` - and the heap allocation - that
+    /// would only be copied out of and freed.
+    Word(u64),
+    Bits(BV),
+}
+
+impl PackedInt {
+    pub(crate) fn into_bitvec(self, length: usize) -> BV {
+        match self {
+            PackedInt::Word(word) => {
+                let mut bv = BV::from_vec(word.to_be_bytes()[..length.div_ceil(8)].to_vec());
+                bv.truncate(length);
+                bv
+            }
+            PackedInt::Bits(bv) => bv,
+        }
+    }
+}
+
+/// The left aligned word for a little-endian field of `length` bits, a whole
+/// number of bytes: the low bytes of `value`, least significant first.
 #[inline]
-pub(crate) fn bv_from_uint(
+fn little_endian_word(value: u64, length: usize) -> u64 {
+    debug_assert!(length.is_multiple_of(8) && length <= FAST_INT_BITS);
+    (value & (u64::MAX >> (FAST_INT_BITS - length))).swap_bytes()
+}
+
+/// The left aligned word for a big-endian field of `length` bits: the low
+/// `length` bits of `value`, most significant first.
+#[inline]
+fn big_endian_word(value: u64, length: usize) -> u64 {
+    debug_assert!((1..=FAST_INT_BITS).contains(&length));
+    value << (FAST_INT_BITS - length)
+}
+
+pub(crate) fn pack_uint(
     value: &Bound<'_, PyAny>,
     length: usize,
     is_little_endian: bool,
-) -> PyResult<BV> {
+) -> PyResult<PackedInt> {
     if length == 0 {
         return Err(zero_length_error(false));
     }
@@ -145,24 +184,30 @@ pub(crate) fn bv_from_uint(
                     "Value {value} does not fit in {length} bits."
                 )));
             }
-            let mut bv = BV::repeat(false, length);
-            if is_little_endian {
-                bv.store_le(value);
+            return Ok(PackedInt::Word(if is_little_endian {
+                little_endian_word(value, length)
             } else {
-                bv.store_be(value);
-            }
-            return Ok(bv);
+                big_endian_word(value, length)
+            }));
         }
     }
-    bv_from_big_int(value, length, is_little_endian, false)
+    bv_from_big_int(value, length, is_little_endian, false).map(PackedInt::Bits)
 }
 
 #[inline]
-pub(crate) fn bv_from_int(
+pub(crate) fn bv_from_uint(
     value: &Bound<'_, PyAny>,
     length: usize,
     is_little_endian: bool,
 ) -> PyResult<BV> {
+    Ok(pack_uint(value, length, is_little_endian)?.into_bitvec(length))
+}
+
+pub(crate) fn pack_int(
+    value: &Bound<'_, PyAny>,
+    length: usize,
+    is_little_endian: bool,
+) -> PyResult<PackedInt> {
     if length == 0 {
         return Err(zero_length_error(true));
     }
@@ -178,15 +223,24 @@ pub(crate) fn bv_from_int(
                 )));
             }
         }
-        let mut bv = BV::repeat(value < 0, length);
-        if is_little_endian {
-            bv.store_le(value);
+        // Two's complement, so the field is the low bits of the same word.
+        let bits = value as u64;
+        return Ok(PackedInt::Word(if is_little_endian {
+            little_endian_word(bits, length)
         } else {
-            bv.store_be(value);
-        }
-        return Ok(bv);
+            big_endian_word(bits, length)
+        }));
     }
-    bv_from_big_int(value, length, is_little_endian, true)
+    bv_from_big_int(value, length, is_little_endian, true).map(PackedInt::Bits)
+}
+
+#[inline]
+pub(crate) fn bv_from_int(
+    value: &Bound<'_, PyAny>,
+    length: usize,
+    is_little_endian: bool,
+) -> PyResult<BV> {
+    Ok(pack_int(value, length, is_little_endian)?.into_bitvec(length))
 }
 
 /// Append `value` to `out` as the `byte_length` bytes of a byte-aligned int

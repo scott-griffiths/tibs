@@ -552,24 +552,38 @@ pub(crate) trait BitCollection: Sized + Clone {
             return Ok(PyBytes::new(py, &[]).unbind());
         }
         let len_bits = self.len();
-        if let Some(bytes) = self.byte_aligned_raw_data() {
-            if len_bits.is_multiple_of(8) {
-                return Ok(PyBytes::new(py, bytes).unbind());
-            }
-            return PyBytes::new_with(py, bytes.len(), |out| {
-                out.copy_from_slice(bytes);
-                mask_padding_bits(out, len_bits);
-                Ok(())
-            })
-            .map(Bound::unbind);
+        if len_bits.is_multiple_of(8)
+            && let Some(bytes) = self.byte_aligned_raw_data()
+        {
+            return Ok(PyBytes::new(py, bytes).unbind());
         }
-        let (bytes, bit_offset, _) = self.raw_data_ref();
-        debug_assert_ne!(bit_offset, 0);
         PyBytes::new_with(py, len_bits.div_ceil(8), |out| {
-            copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
+            self.write_padded_bytes(out);
             Ok(())
         })
         .map(Bound::unbind)
+    }
+
+    /// Write the bits into `out`, which is `len().div_ceil(8)` bytes long,
+    /// left aligned and with the padding after the last bit cleared.
+    ///
+    /// For a destination that already exists, such as a Python `bytes` being
+    /// filled in place, where [`to_padded_byte_data`](Self::to_padded_byte_data)
+    /// would build a `Vec` only for it to be copied again.
+    #[inline]
+    fn write_padded_bytes(&self, out: &mut [u8]) {
+        let len_bits = self.len();
+        debug_assert_eq!(out.len(), len_bits.div_ceil(8));
+        if len_bits == 0 {
+            return;
+        }
+        let (bytes, bit_offset, _) = self.raw_data_ref();
+        if bit_offset == 0 {
+            out.copy_from_slice(&bytes[..out.len()]);
+            mask_padding_bits(out, len_bits);
+        } else {
+            copy_unaligned_padded_bytes(bytes, bit_offset, len_bits, out);
+        }
     }
 
     #[inline]

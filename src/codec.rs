@@ -5,6 +5,7 @@ use crate::helpers::{BS, BV, BitAccumulator, memory_error};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 fn raw_encoded_bit_length(bit_length: usize) -> usize {
     let data_byte_length = bit_length.div_ceil(8);
@@ -570,6 +571,31 @@ pub(crate) fn decode_bytes<C: BitCollection>(py: Python<'_>, b: Vec<u8>) -> PyRe
         } else {
             error
         }
+    })
+}
+
+/// [`encode`] with [`Codec::Raw`], written straight into a new `bytes` object.
+///
+/// This is what pickling and deep copying use. Building the encoding as a
+/// `Vec` first, as `encode` does, cost them a second copy of the whole payload
+/// on its way into the `bytes`.
+pub(crate) fn encode_raw_py_bytes<'py, C: BitCollection>(
+    py: Python<'py>,
+    bits: &C,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let bit_length = bits.len();
+    if bit_length == 0 {
+        return Ok(PyBytes::new(py, &encode(bits, Some(Codec::Raw))?));
+    }
+    let data_byte_length = bit_length.div_ceil(8);
+    let bit_padding = data_byte_length * 8 - bit_length;
+    let varint = encode_varint_bytes(data_byte_length as u64);
+    let header_length = 1 + varint.len();
+    PyBytes::new_with(py, header_length + data_byte_length, |out| {
+        out[0] = body_header_byte(RAW_MARKER, bit_padding);
+        out[1..header_length].copy_from_slice(&varint);
+        bits.write_padded_bytes(&mut out[header_length..]);
+        Ok(())
     })
 }
 
