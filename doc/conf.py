@@ -31,6 +31,7 @@ add_function_parentheses = True
 
 html_show_sphinx = False
 html_static_path = ["_static"]
+html_extra_path = ["tibs.png"]
 html_css_files = ["custom.css"]
 html_favicon = 'favicon.png'
 
