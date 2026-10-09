@@ -39,7 +39,7 @@ html_sidebars = {
 }
 
 html_theme = "pydata_sphinx_theme"
-html_logo = "tibs.png"
+html_logo = "tibs_static.png"
 html_theme_options = {
     "content_footer_items": ["last-updated"],
     "show_toc_level": 2,
@@ -49,8 +49,8 @@ html_theme_options = {
     "collapse_navigation": False,
     "logo": {
         "text": f"v{release}",
-        "image_light": "tibs.png",
-        "image_dark": "tibs.png",
+        "image_light": "tibs_static.png",
+        "image_dark": "tibs_static.png",
     },
     "icon_links": [
         {

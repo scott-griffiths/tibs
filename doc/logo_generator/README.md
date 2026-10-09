@@ -6,15 +6,15 @@ your priorities should be. A bespoke animated logo with cat art is an important 
 
 # tibs transition
 
-This package contains an editable vector rebuild of the supplied animated PNG, starting with one solid block on the top side of each box before the boxes transition to `tibs`.
+This package contains an editable vector rebuild of the supplied animated PNG, simplified into a one-way transition from three boxes to `tibs`.
 
-The animation starts with a short hold on three solid stroke-width squares: one on the top side of each box, adjusted for any inside border. The outer boxes trace anticlockwise around the full perimeter while the middle box traces as a mirror image. After a short pause, the existing transition uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
+The animation opens on three hollow rounded boxes and holds there for `initial_delay_ms` (1 second by default). It then uses persistent stroke segments rather than fades: the first box becomes a three-stroke `t` plus the `i`, the `i` dot rises out of the top of its stem, the second box mostly holds position as the `b`, and the third box splits its vertical sides so the folded halves form the middle bar of the `s`.
 
 ## Outputs
 
-Run `logo_generator.py` to generate the animated PNG and browser preview.
+Run `logo_generator.py` to generate the animated PNG, a static PNG of the final frame, and a browser preview.
 
-The trace phase runs linearly, while the morph starts at full speed and eases out into the final frame. Both phases are sampled into 28 frames by default. The animated PNG and browser preview hold on the initial frame for `start_hold_ms`; if `initial_delay_ms` is greater than zero, they also pause on the hollow boxes before the morph starts. The animated PNG plays once and then holds on the final frame.
+The morph starts at full speed and eases out into the final frame, sampled into 28 frames by default. The animated PNG plays once and then holds on the final frame.
 
 The preview and rendered PNG support a configurable border inside the logo. Configure border size and border color in the preview controls. Increasing the border size does not change the logo's outer dimensions. Set border size to `0` to disable the border.
 
@@ -22,6 +22,7 @@ The preview and rendered PNG support a configurable border inside the logo. Conf
 
 - `tibs-transition-preview.html`: browser preview with live controls for stroke, radius, color, spacing, size, and duration.
 - `tibs-transition-preview.png`: non-editable animated PNG preview of the generated animation. It plays once and then holds on the final frame. Use this file in web pages with the normal `image/png` MIME type. The generator also copies this file to `doc/tibs.png`.
+- `tibs-final.png`: static PNG of the final `tibs` frame. The generator also copies this file to `doc/tibs_static.png`.
 
 
 ## Regenerate

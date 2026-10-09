@@ -12,18 +12,17 @@ from PIL import Image, ImageDraw
 ROOT = Path(".")
 OUT = ROOT / "outputs"
 ANIMATED_PREVIEW = "tibs-transition-preview.png"
+FINAL_FRAME = "tibs-final.png"
 DOC_LOGO = Path(__file__).resolve().parents[1] / "tibs.png"
+DOC_STATIC_LOGO = DOC_LOGO.with_name("tibs_static.png")
 
 # Edit this block, then run this script with no command-line arguments.
 CONFIG = {
     "width": 550,
     "height": 235,
     "frame_count": 28,
-    "trace_frame_count": 28,
-    "start_hold_ms": 600,
-    "trace_duration_ms": 1000,
+    "initial_delay_ms": 1000,
     "duration_ms": 500,
-    "initial_delay_ms": 0,
     "final_hold_ms": 3600000,
     "stroke_width": 40,
     "corner_radius": 8,
@@ -62,15 +61,7 @@ def border_enabled(config: dict = DEFAULTS) -> bool:
     return border_size(config) > 0 and not is_transparent(config.get("border_color", ""))
 
 
-def start_hold_millis(config: dict = DEFAULTS) -> float:
-    return float(config.get("start_hold_ms", 0))
-
-
-def trace_duration_millis(config: dict = DEFAULTS) -> float:
-    return float(config.get("trace_duration_ms", 0))
-
-
-def pause_duration_millis(config: dict = DEFAULTS) -> float:
+def initial_delay_millis(config: dict = DEFAULTS) -> float:
     return float(config.get("initial_delay_ms", 0))
 
 
@@ -79,47 +70,19 @@ def transition_duration_millis(config: dict = DEFAULTS) -> float:
 
 
 def total_duration_millis(config: dict = DEFAULTS) -> float:
-    return (
-        start_hold_millis(config)
-        + trace_duration_millis(config)
-        + pause_duration_millis(config)
-        + transition_duration_millis(config)
-    )
-
-
-def trace_frame_count(config: dict = DEFAULTS) -> int:
-    return max(2, int(config.get("trace_frame_count", config["frame_count"])))
+    return initial_delay_millis(config) + transition_duration_millis(config)
 
 
 def transition_frame_count(config: dict = DEFAULTS) -> int:
     return max(2, int(config["frame_count"]))
 
 
-def total_frame_count(config: dict = DEFAULTS) -> int:
-    return trace_frame_count(config) + transition_frame_count(config)
-
-
 def frame_times_millis(config: dict = DEFAULTS) -> list[float]:
-    trace_count = trace_frame_count(config)
-    transition_count = transition_frame_count(config)
-    start_hold = start_hold_millis(config)
-    trace_duration = trace_duration_millis(config)
-    pause_duration = pause_duration_millis(config)
-    transition_duration = transition_duration_millis(config)
-
-    trace_times = [0.0] + [
-        start_hold + i * trace_duration / (trace_count - 1) for i in range(1, trace_count)
-    ]
-    transition_start = start_hold + trace_duration + pause_duration
-    if pause_duration <= 0:
-        transition_times = [
-            transition_start + (i + 1) * transition_duration / transition_count for i in range(transition_count)
-        ]
-    else:
-        transition_times = [
-            transition_start + i * transition_duration / (transition_count - 1) for i in range(transition_count)
-        ]
-    return trace_times + transition_times
+    # The first frame shows the three boxes and is held for the initial delay.
+    count = transition_frame_count(config)
+    delay = initial_delay_millis(config)
+    duration = transition_duration_millis(config)
+    return [0.0] + [delay + i * duration / (count - 1) for i in range(1, count)]
 
 
 def frame_raw_t(index: int, config: dict = DEFAULTS) -> float:
@@ -250,25 +213,6 @@ def static_spec(
     }
 
 
-def rect_spec(
-    name: str,
-    cx: float,
-    cy: float,
-    size: float,
-    radius: float,
-    opacity: float = 1.0,
-) -> dict:
-    return {
-        "name": name,
-        "x": cx - size / 2,
-        "y": cy - size / 2,
-        "width": size,
-        "height": size,
-        "radius": min(radius, size / 2),
-        "opacity": opacity,
-    }
-
-
 def rotate_endpoint(
     pivot: tuple[float, float],
     length: float,
@@ -278,91 +222,6 @@ def rotate_endpoint(
 ) -> tuple[float, float]:
     angle = mix(start_angle, end_angle, progress)
     return (pivot[0] + math.cos(angle) * length, pivot[1] + math.sin(angle) * length)
-
-
-def trace_square_specs(
-    name: str,
-    x0: float,
-    y_top: float,
-    box: float,
-    progress: float,
-    config: dict = DEFAULTS,
-    reverse: bool = False,
-) -> tuple[list[dict], list[dict]]:
-    y_bot = y_top + box
-    x1 = x0 + box
-    block = float(config["stroke_width"])
-    offset = max(0.0, block - border_size(config) * 2)
-    if reverse:
-        points = [
-            (x0 + offset, y_top),
-            (x1, y_top),
-            (x1, y_bot),
-            (x0, y_bot),
-            (x0, y_top),
-        ]
-    else:
-        points = [
-            (x1 - offset, y_top),
-            (x0, y_top),
-            (x0, y_bot),
-            (x1, y_bot),
-            (x1, y_top),
-        ]
-    total_travel = sum(dist(start, end) for start, end in zip(points, points[1:]))
-    d = clamp(progress) * total_travel
-    paths: list[dict] = []
-
-    def add_segment(segment_name: str, start: tuple[float, float], end: tuple[float, float]) -> None:
-        if dist(start, end) > 0.01:
-            paths.append(static_spec(f"{name}-{segment_name}", [start, end], roundable=False))
-
-    head = points[0]
-    remaining = d
-    for index, (start, end) in enumerate(zip(points, points[1:])):
-        segment_length = dist(start, end)
-        if remaining <= 0:
-            break
-        head = end if remaining >= segment_length else point_toward(start, end, remaining)
-        add_segment(f"trace-{index}", start, head)
-        remaining -= segment_length
-
-    rects = [
-        rect_spec(
-            f"{name}-top-tracer",
-            head[0],
-            head[1],
-            block,
-            float(config["corner_radius"]),
-        )
-    ]
-    return paths, rects
-
-
-def trace_shapes(progress: float, config: dict = DEFAULTS) -> dict:
-    progress = clamp(progress)
-    if progress >= 0.999:
-        return transition_shapes(0.0, config)
-
-    box = float(config["box_size"])
-    gap = float(config["box_gap"])
-    y_top = float(config["origin_y"])
-    lx0 = float(config["origin_x"])
-    bx0 = lx0 + box + gap
-    sx0 = bx0 + box + gap
-
-    paths: list[dict] = []
-    rects: list[dict] = []
-    for name, x0, reverse in [("left-box", lx0, False), ("middle-box", bx0, True), ("right-box", sx0, False)]:
-        box_paths, box_rects = trace_square_specs(name, x0, y_top, box, progress, config, reverse)
-        paths.extend(box_paths)
-        rects.extend(box_rects)
-
-    return {
-        "paths": paths,
-        "rects": rects,
-        "dot": {"name": "i-dot", "cx": lx0 + box, "cy": y_top, "r": 0, "opacity": 0},
-    }
 
 
 def transition_shapes(raw_t: float, config: dict = DEFAULTS) -> dict:
@@ -430,7 +289,6 @@ def transition_shapes(raw_t: float, config: dict = DEFAULTS) -> dict:
     ]
     return {
         "paths": paths,
-        "rects": [],
         "dot": {
             "name": "i-dot",
             "cx": lx1,
@@ -442,24 +300,14 @@ def transition_shapes(raw_t: float, config: dict = DEFAULTS) -> dict:
 
 
 def frame_shapes(raw_t: float, config: dict = DEFAULTS) -> dict:
-    elapsed = clamp(raw_t) * total_duration_millis(config)
-    start_hold = start_hold_millis(config)
-    trace_duration = trace_duration_millis(config)
-    pause_duration = pause_duration_millis(config)
-
-    if elapsed < start_hold:
-        return trace_shapes(0.0, config)
-
-    elapsed -= start_hold
-    if trace_duration > 0 and elapsed < trace_duration:
-        return trace_shapes(elapsed / trace_duration, config)
-    if elapsed < trace_duration + pause_duration:
+    elapsed = clamp(raw_t) * total_duration_millis(config) - initial_delay_millis(config)
+    if elapsed < 0:
         return transition_shapes(0.0, config)
 
     transition_duration = transition_duration_millis(config)
     if transition_duration <= 0:
         return transition_shapes(1.0, config)
-    return transition_shapes((elapsed - trace_duration - pause_duration) / transition_duration, config)
+    return transition_shapes(elapsed / transition_duration, config)
 
 
 def svg_frame(raw_t: float, config: dict = DEFAULTS, include_background: bool = True) -> str:
@@ -506,20 +354,6 @@ def svg_shapes_group(
                 op,
                 inset_extension(item.get("extension"), inset),
             )
-        )
-    for item in shapes.get("rects", []):
-        op = item["opacity"]
-        if op <= 0.001:
-            continue
-        x = item["x"] + inset
-        y = item["y"] + inset
-        width = max(0.0, item["width"] - inset * 2)
-        height = max(0.0, item["height"] - inset * 2)
-        if width <= 0.001 or height <= 0.001:
-            continue
-        item_radius = max(0.0, item["radius"] - inset)
-        parts.append(
-            f'<rect id="{item["name"]}" x="{x:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}" rx="{item_radius:.2f}" opacity="{op:.3f}"/>'
         )
     dot = shapes["dot"]
     if dot["opacity"] > 0.001 and dot["r"] > 0.001:
@@ -582,11 +416,8 @@ const DEFAULTS = {
   width: 800,
   height: 360,
   frameCount: 28,
-  traceFrameCount: 28,
-  startHoldMs: 400,
-  traceDurationMs: 650,
+  initialDelayMs: 1000,
   durationMs: 1100,
-  initialDelayMs: 0,
   strokeWidth: 30,
   cornerRadius: 4,
   boxSize: 112,
@@ -626,15 +457,7 @@ function borderEnabled(config) {
   return borderSize(config) > 0 && !isTransparent(config.borderColor);
 }
 
-function startHoldMillis(config) {
-  return Number(config.startHoldMs || 0);
-}
-
-function traceDurationMillis(config) {
-  return Number(config.traceDurationMs || 0);
-}
-
-function pauseDurationMillis(config) {
+function initialDelayMillis(config) {
   return Number(config.initialDelayMs || 0);
 }
 
@@ -643,41 +466,20 @@ function transitionDurationMillis(config) {
 }
 
 function totalDurationMillis(config) {
-  return startHoldMillis(config) + traceDurationMillis(config) + pauseDurationMillis(config) + transitionDurationMillis(config);
-}
-
-function traceFrameCount(config) {
-  return Math.max(2, Math.round(Number(config.traceFrameCount) || Number(config.frameCount) || 2));
+  return initialDelayMillis(config) + transitionDurationMillis(config);
 }
 
 function transitionFrameCount(config) {
   return Math.max(2, Math.round(Number(config.frameCount) || 2));
 }
 
-function totalFrameCount(config) {
-  return traceFrameCount(config) + transitionFrameCount(config);
-}
-
 function frameTimesMillis(config) {
-  const traceCount = traceFrameCount(config);
-  const transitionCount = transitionFrameCount(config);
-  const startHold = startHoldMillis(config);
-  const traceDuration = traceDurationMillis(config);
-  const pauseDuration = pauseDurationMillis(config);
-  const transitionDuration = transitionDurationMillis(config);
+  const count = transitionFrameCount(config);
+  const delay = initialDelayMillis(config);
+  const duration = transitionDurationMillis(config);
   const times = [0];
-  for (let i = 1; i < traceCount; i++) {
-    times.push(startHold + (i * traceDuration) / (traceCount - 1));
-  }
-  const transitionStart = startHold + traceDuration + pauseDuration;
-  if (pauseDuration <= 0) {
-    for (let i = 0; i < transitionCount; i++) {
-      times.push(transitionStart + ((i + 1) * transitionDuration) / transitionCount);
-    }
-  } else {
-    for (let i = 0; i < transitionCount; i++) {
-      times.push(transitionStart + (i * transitionDuration) / (transitionCount - 1));
-    }
+  for (let i = 1; i < count; i++) {
+    times.push(delay + (i * duration) / (count - 1));
   }
   return times;
 }
@@ -787,18 +589,6 @@ function staticSpec(name, points, roundable = true, extension = null) {
   };
 }
 
-function rectSpec(name, cx, cy, size, radius, opacity = 1) {
-  return {
-    name,
-    x: cx - size / 2,
-    y: cy - size / 2,
-    width: size,
-    height: size,
-    radius: Math.min(radius, size / 2),
-    opacity
-  };
-}
-
 function rotateEndpoint(pivot, length, startAngle, endAngle, progress) {
   const angle = mix(startAngle, endAngle, progress);
   return [
@@ -845,7 +635,6 @@ function transitionShapes(rawT, config) {
   ];
   return {
     paths,
-    rects: [],
     dot: {
       name: 'i-dot',
       cx: lx1,
@@ -856,85 +645,12 @@ function transitionShapes(rawT, config) {
   };
 }
 
-function traceSquareSpecs(name, x0, yTop, box, progress, config, reverse = false) {
-  const yBot = yTop + box;
-  const x1 = x0 + box;
-  const block = Number(config.strokeWidth);
-  const offset = Math.max(0, block - borderSize(config) * 2);
-  const points = reverse
-    ? [[x0 + offset, yTop], [x1, yTop], [x1, yBot], [x0, yBot], [x0, yTop]]
-    : [[x1 - offset, yTop], [x0, yTop], [x0, yBot], [x1, yBot], [x1, yTop]];
-  const totalTravel = points.slice(0, -1).reduce((total, point, index) => total + dist(point, points[index + 1]), 0);
-  let remaining = clamp(progress) * totalTravel;
-  let head = points[0];
-  const paths = [];
-
-  function addSegment(segmentName, start, end) {
-    if (dist(start, end) > 0.01) {
-      paths.push(staticSpec(`${name}-${segmentName}`, [start, end], false));
-    }
-  }
-
-  for (let index = 0; index < points.length - 1; index++) {
-    const start = points[index];
-    const end = points[index + 1];
-    const segmentLength = dist(start, end);
-    if (remaining <= 0) break;
-    head = remaining >= segmentLength ? end : pointToward(start, end, remaining);
-    addSegment(`trace-${index}`, start, head);
-    remaining -= segmentLength;
-  }
-
-  return {
-    paths,
-    rects: [
-      rectSpec(`${name}-top-tracer`, head[0], head[1], block, Number(config.cornerRadius))
-    ]
-  };
-}
-
-function traceShapes(progress, config) {
-  progress = clamp(progress);
-  if (progress >= 0.999) return transitionShapes(0, config);
-
-  const box = Number(config.boxSize);
-  const gap = Number(config.boxGap);
-  const yTop = Number(config.originY);
-  const lx0 = Number(config.originX);
-  const bx0 = lx0 + box + gap;
-  const sx0 = bx0 + box + gap;
-  const paths = [];
-  const rects = [];
-  for (const [name, x0, reverse] of [['left-box', lx0, false], ['middle-box', bx0, true], ['right-box', sx0, false]]) {
-    const specs = traceSquareSpecs(name, x0, yTop, box, progress, config, reverse);
-    paths.push(...specs.paths);
-    rects.push(...specs.rects);
-  }
-  return {
-    paths,
-    rects,
-    dot: { name: 'i-dot', cx: lx0 + box, cy: yTop, r: 0, opacity: 0 }
-  };
-}
-
 function frameShapes(rawT, config) {
-  const elapsed = clamp(rawT) * totalDurationMillis(config);
-  const startHold = startHoldMillis(config);
-  const traceDuration = traceDurationMillis(config);
-  const pauseDuration = pauseDurationMillis(config);
-  if (elapsed < startHold) {
-    return traceShapes(0, config);
-  }
-  const activeElapsed = elapsed - startHold;
-  if (traceDuration > 0 && activeElapsed < traceDuration) {
-    return traceShapes(activeElapsed / traceDuration, config);
-  }
-  if (activeElapsed < traceDuration + pauseDuration) {
-    return transitionShapes(0, config);
-  }
+  const elapsed = clamp(rawT) * totalDurationMillis(config) - initialDelayMillis(config);
+  if (elapsed < 0) return transitionShapes(0, config);
   const transitionDuration = transitionDurationMillis(config);
   if (transitionDuration <= 0) return transitionShapes(1, config);
-  return transitionShapes((activeElapsed - traceDuration - pauseDuration) / transitionDuration, config);
+  return transitionShapes(elapsed / transitionDuration, config);
 }
 
 function svgFrame(rawT, config, includeBackground = true) {
@@ -960,16 +676,6 @@ function shapesGroupSvg(shapes, stroke, radius, fill, inset, groupId) {
   for (const item of shapes.paths) {
     if (item.opacity <= 0.001 || renderStroke <= 0.001) continue;
     parts.push(segmentRectSvg(item.name, item.points, renderStroke, renderRadius, item.opacity, insetExtension(item.extension, inset)));
-  }
-  for (const item of shapes.rects || []) {
-    if (item.opacity <= 0.001) continue;
-    const x = item.x + inset;
-    const y = item.y + inset;
-    const width = Math.max(0, item.width - inset * 2);
-    const height = Math.max(0, item.height - inset * 2);
-    if (width <= 0.001 || height <= 0.001) continue;
-    const itemRadius = Math.max(0, item.radius - inset);
-    parts.push(`<rect id="${item.name}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="${itemRadius.toFixed(2)}" opacity="${item.opacity.toFixed(3)}"/>`);
   }
   if (shapes.dot.opacity > 0.001 && shapes.dot.r > 0.001) {
     const size = Math.max(0, shapes.dot.r * 2 - inset * 2);
@@ -1093,11 +799,8 @@ PREVIEW_HTML = (
   <section class="controls">
     <label>Stroke<input id="strokeWidth" type="number" min="1" step="1" value="30"></label>
     <label>Radius<input id="cornerRadius" type="number" min="0" step="1" value="4"></label>
-    <label>Trace frames<input id="traceFrameCount" type="number" min="2" max="80" step="1" value="28"></label>
-    <label>Start hold<input id="startHoldMs" type="number" min="0" step="50" value="400"></label>
-    <label>Trace duration<input id="traceDurationMs" type="number" min="100" step="50" value="650"></label>
+    <label>Initial delay<input id="initialDelayMs" type="number" min="0" step="50" value="1000"></label>
     <label>Morph duration<input id="durationMs" type="number" min="100" step="50" value="1100"></label>
-    <label>Pause<input id="initialDelayMs" type="number" min="0" step="50" value="0"></label>
     <label>Box size<input id="boxSize" type="number" min="20" step="1" value="112"></label>
     <label>Spacing<input id="boxGap" type="number" min="0" step="1" value="38"></label>
     <label>X<input id="originX" type="number" step="1" value="155"></label>
@@ -1129,9 +832,6 @@ PREVIEW_HTML = (
         ...DEFAULTS,
         strokeWidth: Number(document.getElementById('strokeWidth').value) || DEFAULTS.strokeWidth,
         cornerRadius: Number(document.getElementById('cornerRadius').value) || DEFAULTS.cornerRadius,
-        traceFrameCount: Math.max(2, Math.round(numberOrDefault(document.getElementById('traceFrameCount').value, DEFAULTS.traceFrameCount))),
-        startHoldMs: Math.max(0, numberOrDefault(document.getElementById('startHoldMs').value, DEFAULTS.startHoldMs)),
-        traceDurationMs: Number(document.getElementById('traceDurationMs').value) || DEFAULTS.traceDurationMs,
         durationMs: Number(document.getElementById('durationMs').value) || DEFAULTS.durationMs,
         initialDelayMs: Math.max(0, numberOrDefault(document.getElementById('initialDelayMs').value, DEFAULTS.initialDelayMs)),
         boxSize: Number(document.getElementById('boxSize').value) || DEFAULTS.boxSize,
@@ -1165,10 +865,10 @@ PREVIEW_HTML = (
     }
 
     document.getElementById('replay').addEventListener('click', replay);
-    for (const id of ['strokeWidth', 'cornerRadius', 'traceFrameCount', 'startHoldMs', 'traceDurationMs', 'durationMs', 'initialDelayMs', 'boxSize', 'boxGap', 'originX', 'originY', 'tBarLeft', 'tBarRight', 'tFootRight', 'ascenderHeight', 'tAscenderHeight', 'iTopLeft', 'borderSize', 'borderColor', 'color', 'background']) {
+    for (const id of ['strokeWidth', 'cornerRadius', 'durationMs', 'initialDelayMs', 'boxSize', 'boxGap', 'originX', 'originY', 'tBarLeft', 'tBarRight', 'tFootRight', 'ascenderHeight', 'tAscenderHeight', 'iTopLeft', 'borderSize', 'borderColor', 'color', 'background']) {
       document.getElementById(id).addEventListener('change', replay);
       document.getElementById(id).addEventListener('input', () => {
-        if (!['startHoldMs', 'traceDurationMs', 'durationMs', 'initialDelayMs'].includes(id)) stage.innerHTML = svgFrame(1, readConfig(), true);
+        if (!['durationMs', 'initialDelayMs'].includes(id)) stage.innerHTML = svgFrame(1, readConfig(), true);
       });
     }
     replay();
@@ -1277,26 +977,6 @@ def draw_shapes_layer(
             radius,
             scaled_extension(item.get("extension"), scale, inset),
         )
-    for item in shapes.get("rects", []):
-        if item["opacity"] <= 0.001:
-            continue
-        width = max(0.0, item["width"] - inset * 2)
-        height = max(0.0, item["height"] - inset * 2)
-        if width <= 0.001 or height <= 0.001:
-            continue
-        item_layer = Image.new("RGBA", layer.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(item_layer)
-        draw.rounded_rectangle(
-            (
-                (item["x"] + inset) * scale,
-                (item["y"] + inset) * scale,
-                (item["x"] + inset + width) * scale,
-                (item["y"] + inset + height) * scale,
-            ),
-            radius=max(0.0, item["radius"] - inset) * scale,
-            fill=hex_to_rgba(fill_color, item["opacity"]),
-        )
-        layer.alpha_composite(item_layer)
     dot = shapes["dot"]
     if dot["opacity"] > 0.001 and dot["r"] > 0.001:
         dot_layer = Image.new("RGBA", layer.size, (0, 0, 0, 0))
@@ -1333,9 +1013,6 @@ def js_config(config: dict) -> dict:
         "width": config["width"],
         "height": config["height"],
         "frameCount": config["frame_count"],
-        "traceFrameCount": config["trace_frame_count"],
-        "startHoldMs": config["start_hold_ms"],
-        "traceDurationMs": config["trace_duration_ms"],
         "durationMs": config["duration_ms"],
         "initialDelayMs": config["initial_delay_ms"],
         "strokeWidth": config["stroke_width"],
@@ -1367,9 +1044,6 @@ def with_input_defaults(html: str, config: dict) -> str:
         "strokeWidth": config["stroke_width"],
         "cornerRadius": config["corner_radius"],
         "frameCount": config["frame_count"],
-        "traceFrameCount": config["trace_frame_count"],
-        "startHoldMs": config["start_hold_ms"],
-        "traceDurationMs": config["trace_duration_ms"],
         "durationMs": config["duration_ms"],
         "initialDelayMs": config["initial_delay_ms"],
         "boxSize": config["box_size"],
@@ -1403,7 +1077,7 @@ def write_outputs(config: dict) -> None:
     preview_html = preview_html.replace("aspect-ratio: 800 / 360;", f"aspect-ratio: {config['width']} / {config['height']};")
 
     (OUT / "tibs-transition-preview.html").write_text(preview_html, encoding="utf-8")
-    frames = [render_frame_png(frame_raw_t(i, config), config) for i in range(total_frame_count(config))]
+    frames = [render_frame_png(frame_raw_t(i, config), config) for i in range(transition_frame_count(config))]
     frame_times = frame_times_millis(config)
     durations = [max(1, round(frame_times[i + 1] - frame_times[i])) for i in range(len(frame_times) - 1)]
     final_hold_ms = int(config.get("final_hold_ms", 0))
@@ -1417,7 +1091,9 @@ def write_outputs(config: dict) -> None:
         loop=1,
     )
     shutil.copy2(animated_preview, DOC_LOGO)
-
+    final_frame = OUT / FINAL_FRAME
+    render_frame_png(1.0, config).save(final_frame)
+    shutil.copy2(final_frame, DOC_STATIC_LOGO)
 
 
 if __name__ == "__main__":
