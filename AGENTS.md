@@ -13,7 +13,7 @@ This file gives project-specific guidance for automated coding assistants and co
 ## Repository Layout
 
 - `src/`: Rust implementation and PyO3 bindings.
-- `tibs.pyi`: public typing surface. Keep this in sync with exposed Python API changes.
+- `tibs.pyi`: public typing surface. Keep the signatures in sync with exposed Python API changes by hand. Its docstrings are generated: the doc comments in `src/` are the only source, and `make stubs` (`scripts/stub_docstrings.py`) copies them from the built module into the stub. Never edit a docstring in `tibs.pyi` directly; `tests/test_stub_docstrings.py` fails if the stub is stale.
 - `tests/`: Python tests, including Hypothesis tests and benchmark tests.
 - `doc/`: Sphinx source documentation.
 - `examples/`: runnable examples that correspond to documentation examples.

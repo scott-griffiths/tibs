@@ -1,4 +1,4 @@
-.PHONY: test build build-fast coverage
+.PHONY: test build build-fast stubs coverage
 
 test:
 	.venv/bin/python -m pytest --benchmark-skip
@@ -12,6 +12,11 @@ build:
 # profile in Cargo.toml.
 build-fast:
 	.venv/bin/maturin develop --profile fastdev
+
+# Copy the docstrings of the built module into tibs.pyi. Run after changing a
+# doc comment in src/; tests/test_stub_docstrings.py fails until you do.
+stubs:
+	.venv/bin/python scripts/stub_docstrings.py
 
 coverage:
 	./coverage.sh

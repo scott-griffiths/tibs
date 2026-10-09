@@ -177,6 +177,21 @@ def test_docstring_examples(classname):
     )
 
 
+def test_module_docstring_examples():
+    runner = doctest.DocTestRunner(
+        checker=DocOutputChecker(),
+        optionflags=doctest.ELLIPSIS | doctest.IGNORE_EXCEPTION_DETAIL,
+        verbose=False,
+    )
+    test = doctest.DocTestParser().get_doctest(tibs.__doc__, {}, "tibs", None, 0)
+    assert test.examples, "the module docstring has no examples"
+    runner.run(test)
+    assert runner.failures == 0, (
+        f"{runner.failures} of {runner.tries} examples in the module docstring "
+        f"failed (the mismatches are printed above)"
+    )
+
+
 # pyo3 discards doc comments on the variants of a simple enum, and a variant is an
 # instance of its own class so it has nowhere to keep a __doc__ either. DtypeKind's
 # variants are therefore described by hand in other.rst, which these two checks keep
