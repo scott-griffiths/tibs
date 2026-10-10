@@ -4,9 +4,14 @@ build-backend = "maturin"
 
 [project]
 name = "tibs"
-description = "A sleek Python library for binary data."
+description = "A sleek Python library for binary data: fast bit arrays, bitfields and bitsets."
 dynamic = ["version"]
 readme = "README.md"
+keywords = [
+    "binary", "bits", "bit array", "bitarray", "bitstring", "bitfield",
+    "bitset", "bit vector", "bit manipulation", "binary parsing", "unaligned",
+    "packet", "register", "endianness", "struct", "Rust",
+]
 authors = [
     { name = "Scott Griffiths", email = "dr.scottgriffiths@gmail.com" }
 ]
@@ -80,3 +85,6 @@ features = ["pyo3/extension-module"]
 [project.urls]
 homepage = "https://github.com/scott-griffiths/tibs"
 documentation = "https://tibs.readthedocs.io/"
+source = "https://github.com/scott-griffiths/tibs"
+issues = "https://github.com/scott-griffiths/tibs/issues"
+changelog = "https://github.com/scott-griffiths/tibs/blob/main/release_notes.md"
