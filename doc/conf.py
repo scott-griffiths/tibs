@@ -18,7 +18,26 @@ extensions = [
     'enum_tools.autoenum',
     'sphinx_autodoc_typehints',
     'sphinxcontrib.mermaid',
+    'sphinx_llms_txt',
 ]
+
+# Read the Docs sets the canonical URL of the version being built. llms.txt links
+# are made absolute with it, so they work from /en/latest/ and from release builds.
+html_baseurl = os.environ.get("READTHEDOCS_CANONICAL_URL", "")
+
+# llms.txt is an index of the docs for language models, and llms-full.txt is the
+# whole manual in one file. Both are built from the .rst sources, which leaves
+# autodoc directives unexpanded, so the API reference comes from tibs.pyi instead:
+# it is appended to llms-full.txt and served next to it. Its docstrings are
+# generated from src/, so nothing here is written twice.
+llms_txt_summary = (
+    "tibs is a fast Python library for binary data, written in Rust. Tibs is an "
+    "immutable sequence of bits and Mutibs a mutable one, with bit positions and "
+    "lengths throughout, so fields need not be byte aligned. "
+    f"The API reference, with every signature and docstring, is {html_baseurl}tibs.pyi"
+)
+llms_txt_exclude = ["index"]
+llms_txt_code_files = ["+:../tibs.pyi"]
 
 add_module_names = False
 
@@ -31,7 +50,7 @@ add_function_parentheses = True
 
 html_show_sphinx = False
 html_static_path = ["_static"]
-html_extra_path = ["tibs.png"]
+html_extra_path = ["tibs.png", "../tibs.pyi"]
 html_css_files = ["custom.css"]
 html_favicon = 'favicon.png'
 
