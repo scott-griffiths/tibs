@@ -4,7 +4,7 @@
 //! this module knows about `Tibs`, `Mutibs` or Python; the collection-level
 //! logic that drives it lives in `core.rs`.
 
-use super::bits::{BS, BV, BitAccumulator, head_bit_offset};
+use super::bits::{BS, BV, BitAccumulator, bv_from_padded_bytes, head_bit_offset};
 use super::raw_bytes::{copy_shifted_bytes, mask_padding_bits, reverse_padded_bits};
 use super::splice::{copy_bits, move_bits};
 
@@ -189,9 +189,7 @@ pub(crate) fn reverse_bitvec_in_place(bits: &mut BV) {
     let mut bytes = vec![0u8; len.div_ceil(8)];
     copy_unaligned_padded_bytes(bits.as_raw_slice(), offset, len, &mut bytes);
     reverse_padded_bits(&mut bytes, len);
-    let mut reversed = BV::from_vec(bytes);
-    reversed.truncate(len);
-    *bits = reversed;
+    *bits = bv_from_padded_bytes(bytes, len);
 }
 
 /// Rotate the `len` bits starting `offset` bits into `bytes` left by `by`.
@@ -378,9 +376,7 @@ impl BitConcat {
     }
 
     pub(crate) fn into_bitvec(self) -> BV {
-        let mut bv = BV::from_vec(self.bytes);
-        bv.truncate(self.length);
-        bv
+        bv_from_padded_bytes(self.bytes, self.length)
     }
 }
 

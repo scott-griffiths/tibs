@@ -14,8 +14,8 @@ mod splice;
 mod validation;
 
 pub(crate) use bits::{
-    BS, BV, BitAccumulator, bv_from_zeros, head_bit_offset, memory_error, reserve_bits,
-    reserve_bytes, try_bv_filled, try_byte_buffer,
+    BS, BV, BitAccumulator, bv_from_padded_bytes, bv_from_zeros, head_bit_offset, memory_error,
+    reserve_bits, reserve_bytes, try_bv_filled, try_bv_from_bytes, try_byte_buffer,
 };
 pub(crate) use bitwise::{
     BitConcat, LogicalOp, any_pair_bits, contains_bit, copy_unaligned_padded_bytes, count_bitslice,

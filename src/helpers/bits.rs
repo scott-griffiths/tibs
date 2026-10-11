@@ -28,9 +28,61 @@ pub(crate) fn try_byte_buffer(bit_length: usize) -> PyResult<Vec<u8>> {
 pub(crate) fn try_bv_filled(bit: bool, length: usize) -> PyResult<BV> {
     let mut bytes = try_byte_buffer(length)?;
     bytes.resize(length.div_ceil(8), if bit { 0xff } else { 0 });
+    Ok(bv_from_padded_bytes(bytes, length))
+}
+
+/// The first `length` bits of `bytes`, which may run on past them.
+///
+/// `BV::from_vec` followed by a truncate is not enough on its own: it spans
+/// every bit of every byte first, and rounding a length up to whole bytes can
+/// carry it past `BS::MAX_BITS` when the length itself is within it. On a
+/// 32-bit build anything from 2^29 - 7 to 2^29 - 1 bits does this, and
+/// `from_vec` panics rather than fail.
+///
+/// `length` must be at most `bytes.len() * 8` and at most `BS::MAX_BITS`.
+#[inline]
+pub(crate) fn bv_from_padded_bytes(bytes: Vec<u8>, length: usize) -> BV {
+    debug_assert!(length <= BS::MAX_BITS);
+    debug_assert!(length.div_ceil(8) <= bytes.len());
+    // On a 64-bit build the buffer would need to be over 2^58 bytes, which no
+    // machine can allocate, so the check folds away there and costs nothing.
+    if usize::BITS < 64 && bytes.len() > BS::MAX_BITS / 8 {
+        return bv_from_overlong_bytes(bytes, length);
+    }
     let mut bv = BV::from_vec(bytes);
     bv.truncate(length);
-    Ok(bv)
+    bv
+}
+
+/// [`bv_from_padded_bytes`] for a buffer too long to view as bits in one go:
+/// take the whole bytes, then append the bits of the part byte. Growing back
+/// into the buffer's own capacity does not reallocate.
+#[cold]
+#[inline(never)]
+fn bv_from_overlong_bytes(mut bytes: Vec<u8>, length: usize) -> BV {
+    let whole = length / 8;
+    let tail = length % 8;
+    let last = bytes.get(whole).copied().unwrap_or(0);
+    bytes.truncate(whole);
+    let mut bv = BV::from_vec(bytes);
+    if tail > 0 {
+        bv.extend_from_bitslice(&last.view_bits::<Msb0>()[..tail]);
+    }
+    bv
+}
+
+/// All the bits of `bytes`, whose length came from outside rather than from
+/// a container that already exists, so may be more than one can hold.
+pub(crate) fn try_bv_from_bytes(bytes: Vec<u8>) -> PyResult<BV> {
+    BV::try_from_vec(bytes).map_err(|bytes| {
+        PyMemoryError::new_err(format!(
+            "Cannot create {} bytes of bits: this build of tibs supports at most {} bits \
+             ({} bytes) in one container.",
+            bytes.len(),
+            BS::MAX_BITS,
+            BS::MAX_BITS / 8
+        ))
+    })
 }
 
 pub(crate) fn memory_error(bit_length: usize) -> PyErr {
@@ -205,9 +257,7 @@ impl BitAccumulator {
         if self.pending > 0 {
             self.bytes.push((self.carry << (8 - self.pending)) as u8);
         }
-        let mut bv = BV::from_vec(self.bytes);
-        bv.truncate(length);
-        bv
+        bv_from_padded_bytes(self.bytes, length)
     }
 }
 
@@ -240,4 +290,24 @@ pub(crate) fn head_bit_offset(bits: &BS) -> usize {
         }
     );
     head
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The overlong path is only reached for real at 2^29 - 7 bits on a 32-bit
+    /// build, so check it against the plain one on lengths it can be given here.
+    #[test]
+    fn overlong_bytes_agree_with_from_vec_and_truncate() {
+        let bytes: Vec<u8> = (0u8..9).map(|i| i.wrapping_mul(0x9d) ^ 0x5a).collect();
+        for length in 0..=bytes.len() * 8 {
+            let mut expected = BV::from_vec(bytes.clone());
+            expected.truncate(length);
+            let mut padded = bytes.clone();
+            padded.truncate(length.div_ceil(8));
+            assert_eq!(bv_from_overlong_bytes(bytes.clone(), length), expected);
+            assert_eq!(bv_from_overlong_bytes(padded, length), expected);
+        }
+    }
 }

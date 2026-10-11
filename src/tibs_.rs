@@ -455,9 +455,10 @@ impl Tibs {
 
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
-        let mut result = BV::from_vec(<Self as BitCollection>::to_padded_byte_data(self));
-        result.truncate(self.length);
-        result
+        helpers::bv_from_padded_bytes(
+            <Self as BitCollection>::to_padded_byte_data(self),
+            self.length,
+        )
     }
 
     #[inline]
@@ -1053,7 +1054,7 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
             let record_byte_length: usize = packers.clone().map(|p| p.byte_length()).sum();
             let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(record_byte_length)));
             push_record_fields(py, packers, value, None, &mut bytes)?;
-            Ok(Some(BV::from_vec(bytes)))
+            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
         }
         RecordLayout::Array { element, count } => {
             let Some(packer) =
@@ -1070,7 +1071,7 @@ fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyRe
                 None,
                 &mut bytes,
             )?;
-            Ok(Some(BV::from_vec(bytes)))
+            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
         }
     }
 }
@@ -1114,7 +1115,7 @@ fn bv_from_values_iter_record(
                 record_index += 1;
                 Ok(())
             })?;
-            Ok(Some(BV::from_vec(bytes)))
+            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
         }
         RecordLayout::Array { element, count } => {
             let Some(packer) =
@@ -1137,7 +1138,7 @@ fn bv_from_values_iter_record(
                 record_index += 1;
                 Ok(())
             })?;
-            Ok(Some(BV::from_vec(bytes)))
+            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
         }
     }
 }
@@ -1340,7 +1341,7 @@ pub(crate) fn bv_from_values_iter(
             index += 1;
             Ok(())
         })?;
-        return Ok(BV::from_vec(bytes));
+        return helpers::try_bv_from_bytes(bytes);
     }
 
     // The same trick for a dtype that straddles byte boundaries: the values go

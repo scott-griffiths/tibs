@@ -7,12 +7,12 @@ use crate::dtype::extract_dtype;
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
-    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_random, bv_from_uint,
-    bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec, head_bit_offset,
-    logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv, rotate_bits_left,
-    str_to_bv, try_extract_index, validate_data_bound, validate_index, validate_length,
-    validate_logical_op_lengths, validate_repeat_count, validate_shift, validate_slice,
-    with_locked, with_locked_mut, with_locked_mut2, with_locked2,
+    bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct, bv_from_padded_bytes, bv_from_random,
+    bv_from_uint, bytes_like_to_vec, copy_bits, deposit_masked_bytes, fill_bits, find_bitvec,
+    head_bit_offset, logical_op_assign_bytes, move_bits, padded_bytes_from_offset, promote_to_bv,
+    rotate_bits_left, str_to_bv, try_extract_index, validate_data_bound, validate_index,
+    validate_length, validate_logical_op_lengths, validate_repeat_count, validate_shift,
+    validate_slice, with_locked, with_locked_mut, with_locked_mut2, with_locked2,
 };
 use crate::tibs_::{
     SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
@@ -213,9 +213,10 @@ impl Mutibs {
         // need not start on a byte boundary.
         let absolute = self.storage_head_offset() + start_bit;
         let bytes = &self.data.as_raw_slice()[absolute / 8..];
-        let mut result = BV::from_vec(padded_bytes_from_offset(bytes, absolute % 8, length));
-        result.truncate(length);
-        result
+        bv_from_padded_bytes(
+            padded_bytes_from_offset(bytes, absolute % 8, length),
+            length,
+        )
     }
 
     #[inline]
@@ -275,9 +276,7 @@ impl Mutibs {
         let mut bytes = std::mem::take(&mut self.data).into_vec();
         bytes.resize(new_len.div_ceil(8), 0);
         copy_bits(&mut bytes, old_len, src, offset, len);
-        let mut grown = BV::from_vec(bytes);
-        grown.truncate(new_len);
-        self.data = grown;
+        self.data = bv_from_padded_bytes(bytes, new_len);
     }
 
     /// Shift the value in place by `by` bits, zero filling the vacated end.
@@ -437,9 +436,7 @@ impl Mutibs {
         }
         let mut bytes = std::mem::take(&mut self.data).into_vec();
         let reserved = bytes.try_reserve(total.div_ceil(8).saturating_sub(bytes.len()));
-        let mut data = BV::from_vec(bytes);
-        data.truncate(len);
-        self.data = data;
+        self.data = bv_from_padded_bytes(bytes, len);
         reserved.map_err(|_| helpers::memory_error(total))
     }
 
@@ -473,9 +470,7 @@ impl Mutibs {
     #[inline]
     fn set_data_from_bytes(&mut self, mut bytes: Vec<u8>, length: usize) {
         bytes.truncate(length.div_ceil(8));
-        let mut data = BV::from_vec(bytes);
-        data.truncate(length);
-        self.data = data;
+        self.data = bv_from_padded_bytes(bytes, length);
     }
 
     /// Replace the bits in `[start, end)` with `value`.

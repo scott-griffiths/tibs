@@ -1,4 +1,4 @@
-use super::bits::{BS, BV};
+use super::bits::{BS, BV, bv_from_padded_bytes, try_bv_from_bytes};
 use bitvec::domain::Domain;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -102,7 +102,7 @@ pub(crate) fn bv_from_bytes_slice(
         )));
     };
     if offset == 0 && length == data_length {
-        return Ok(BV::from_vec(data));
+        return try_bv_from_bytes(data);
     }
     if length == 0 {
         return Ok(BV::new());
@@ -123,9 +123,7 @@ pub(crate) fn bv_from_bytes_slice(
     };
 
     mask_padding_bits(&mut bytes, length);
-    let mut bv = BV::from_vec(bytes);
-    bv.truncate(length);
-    Ok(bv)
+    Ok(bv_from_padded_bytes(bytes, length))
 }
 
 #[inline]

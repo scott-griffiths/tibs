@@ -1,7 +1,7 @@
 use crate::DecodeError;
 use crate::core::BitCollection;
 use crate::enums::Codec;
-use crate::helpers::{BS, BV, BitAccumulator, memory_error};
+use crate::helpers::{BS, BV, BitAccumulator, memory_error, try_bv_from_bytes};
 use bitvec::prelude::*;
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
@@ -524,7 +524,7 @@ fn decode_bytes_inner<C: BitCollection>(py: Python<'_>, b: Vec<u8>) -> PyResult<
             "Cannot decode an empty byte sequence.",
         ));
     }
-    let bv = BV::from_vec(b);
+    let bv = try_bv_from_bytes(b)?;
     let single_byte_flag = bv[0];
     if single_byte_flag {
         exact_payload_end(bv.len(), 0, 8)?;

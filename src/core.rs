@@ -1,10 +1,11 @@
 use crate::helpers::{
     BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
-    bv_from_zeros, byte_order_name, contains_bit, copy_unaligned_padded_bytes, count_bitslice,
-    count_pair_bits, extract_masked_bytes, hex_from_padded_bytes, logical_op_with_aligned_bytes,
-    logical_op_with_matching_bytes, mask_padding_bits, normalize_split_position,
-    oct_from_padded_bytes, reverse_byte_groups, reverse_padded_bits, try_byte_buffer,
-    try_extract_index, validate_index, validate_repeat_length, validate_slice,
+    bv_from_padded_bytes, bv_from_zeros, byte_order_name, contains_bit,
+    copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, extract_masked_bytes,
+    hex_from_padded_bytes, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
+    mask_padding_bits, normalize_split_position, oct_from_padded_bytes, reverse_byte_groups,
+    reverse_padded_bits, try_byte_buffer, try_extract_index, validate_index,
+    validate_repeat_length, validate_slice,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::Tibs;
@@ -88,9 +89,8 @@ pub(crate) trait BitCollection: Sized + Clone {
         } else {
             logical_op_with_aligned_bytes(lhs, lhs_offset, rhs, rhs_offset, self.len(), op)
         };
-        let mut result = BV::from_vec(data);
+        let result = bv_from_padded_bytes(data, lhs_offset + self.len());
         if lhs_offset == 0 {
-            result.truncate(self.len());
             Self::from_bv(result)
         } else {
             Self::from_bv(result).get_slice_unchecked(lhs_offset, self.len())
@@ -384,9 +384,7 @@ pub(crate) trait BitCollection: Sized + Clone {
             }
         }
         mask_padding_bits(&mut result, len);
-        let mut result = BV::from_vec(result);
-        result.truncate(len);
-        Self::from_bv(result)
+        Self::from_bv(bv_from_padded_bytes(result, len))
     }
 
     /// Return a bit reversed copy
@@ -397,9 +395,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         }
         let mut bytes = self.to_padded_byte_data();
         reverse_padded_bits(&mut bytes, len);
-        let mut bv = BV::from_vec(bytes);
-        bv.truncate(len);
-        Self::from_bv(bv)
+        Self::from_bv(bv_from_padded_bytes(bytes, len))
     }
 
     fn invert_copy(&self) -> Self {
@@ -407,9 +403,7 @@ pub(crate) trait BitCollection: Sized + Clone {
         let mut bytes = self.to_padded_byte_data();
         bytes.iter_mut().for_each(|byte| *byte = !*byte);
         mask_padding_bits(&mut bytes, len);
-        let mut result = BV::from_vec(bytes);
-        result.truncate(len);
-        Self::from_bv(result)
+        Self::from_bv(bv_from_padded_bytes(bytes, len))
     }
 
     /// Return a byte swapped copy
@@ -439,7 +433,7 @@ pub(crate) trait BitCollection: Sized + Clone {
 
         let mut bytes = self.to_byte_data()?;
         reverse_byte_groups(&mut bytes, byte_length);
-        Ok(BitCollection::from_bv(BV::from_vec(bytes)))
+        Ok(BitCollection::from_bv(bv_from_padded_bytes(bytes, len)))
     }
 
     #[inline]

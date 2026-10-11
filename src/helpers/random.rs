@@ -1,4 +1,4 @@
-use super::bits::{BV, try_byte_buffer};
+use super::bits::{BV, bv_from_padded_bytes, try_byte_buffer};
 use super::python::bytes_like_to_vec;
 use super::validation::validate_length;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
@@ -64,9 +64,5 @@ pub(crate) fn bv_from_random(
         let mut rng = StdRng::from_seed(seed_arr);
         rng.fill_bytes(&mut data);
     }
-    let mut bv = BV::from_vec(data);
-    if bv.len() > length {
-        bv.truncate(length);
-    }
-    Ok(bv)
+    Ok(bv_from_padded_bytes(data, length))
 }

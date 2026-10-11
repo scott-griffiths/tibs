@@ -1,4 +1,4 @@
-use super::bits::BV;
+use super::bits::{BV, bv_from_padded_bytes, try_bv_from_bytes};
 use super::parse::str_to_bv;
 use crate::view::{MutableView, View};
 use pyo3::exceptions::PyTypeError;
@@ -296,9 +296,7 @@ fn bv_from_py_list_items(
     }
 
     bytes.truncate(index.div_ceil(8));
-    let mut bv = BV::from_vec(bytes);
-    bv.truncate(index);
-    Ok(bv)
+    Ok(bv_from_padded_bytes(bytes, index))
 }
 
 unsafe fn bv_from_py_sequence_items(
@@ -329,9 +327,7 @@ unsafe fn bv_from_py_sequence_items(
             bytes[index / 8] |= 0x80 >> (index & 7);
         }
     }
-    let mut bv = BV::from_vec(bytes);
-    bv.truncate(len);
-    Ok(bv)
+    Ok(bv_from_padded_bytes(bytes, len))
 }
 
 fn py_truthy(py: Python<'_>, _index: usize, item: *mut ffi::PyObject) -> PyResult<bool> {
@@ -373,7 +369,7 @@ pub(crate) fn promote_to_bv(any: &Bound<'_, PyAny>) -> PyResult<BV> {
 
     // Is it a bytes, bytearray or memoryview?
     if let Ok(any_bytes) = bytes_like_to_vec(any) {
-        return Ok(BV::from_vec(any_bytes));
+        return try_bv_from_bytes(any_bytes);
     }
 
     // Is it an explicit bit pattern shorthand?
