@@ -1,11 +1,14 @@
 use crate::core::BitCollection;
 use crate::enums::{ByteOrder, DtypeKind};
-use crate::helpers::{BS, validate_slice};
+use crate::helpers::{BS, bv_from_bytes_slice, validate_slice};
 use crate::iterator::ValuesIterator;
-use crate::tibs_::{Tibs, bv_from_value, bv_from_values_iter, py_from_value, py_values_from_range};
+use crate::tibs_::{
+    Tibs, WordField, bv_from_value, bv_from_values_iter, py_from_raw_range, py_from_value,
+    py_values_from_range,
+};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAnyMethods, PyString, PyTuple, PyType};
+use pyo3::types::{PyAnyMethods, PyBytes, PyString, PyTuple, PyType};
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -452,9 +455,20 @@ pub(crate) struct RecordField {
 /// is as cheap to build as `Dtype("[u8; 4]")`. `Tuple` does flatten its fields
 /// literally, which is safe because that count is bounded by the dtype spec's
 /// own field arity, not by data volume.
+///
+/// Each shape also carries its fields as [`WordField`]s when every one of them
+/// fits in a word, which lets a record whose fields aren't all whole bytes skip
+/// the per-field `Tibs` and `BV` the recursive walk builds.
 pub(crate) enum RecordLayout {
-    Tuple(Vec<RecordField>),
-    Array { element: RecordField, count: usize },
+    Tuple {
+        fields: Vec<RecordField>,
+        words: Option<Box<[WordField]>>,
+    },
+    Array {
+        element: RecordField,
+        count: usize,
+        word: Option<WordField>,
+    },
 }
 
 fn build_record_layout(repr: &DtypeRepr) -> Option<RecordLayout> {
@@ -474,20 +488,23 @@ fn build_record_layout(repr: &DtypeRepr) -> Option<RecordLayout> {
                 });
                 bit_offset += single.length;
             }
-            Some(RecordLayout::Tuple(fields))
+            let words = fields.iter().map(WordField::for_field).collect();
+            Some(RecordLayout::Tuple { fields, words })
         }
         DtypeRepr::Array { dtype, count } => {
             let DtypeRepr::Single(single) = dtype.as_ref() else {
                 return None;
             };
+            let element = RecordField {
+                kind: single.kind,
+                length: single.length,
+                byte_order: single.byte_order,
+                bit_offset: 0,
+            };
             Some(RecordLayout::Array {
-                element: RecordField {
-                    kind: single.kind,
-                    length: single.length,
-                    byte_order: single.byte_order,
-                    bit_offset: 0,
-                },
+                element,
                 count: *count,
+                word: WordField::for_field(&element),
             })
         }
         DtypeRepr::Single(_) => None,
@@ -976,6 +993,28 @@ impl Dtype {
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<Py<PyAny>> {
+        // A `Tibs` or a `bytes` is read where it already is, rather than copied
+        // into a new `Tibs` first, which for a short record costs about as much
+        // as decoding it.
+        if let Ok(tibs) = bits.cast::<Tibs>() {
+            let tibs = tibs.get();
+            let (start, end) = validate_slice(tibs.len(), start, end)?;
+            let (bytes, shift, _) = tibs.raw_data_ref();
+            return py_from_raw_range(py, self, bytes, shift, start, end, || {
+                Ok(tibs.get_slice_unchecked(start, end - start))
+            });
+        }
+        if let Ok(data) = bits.cast_exact::<PyBytes>() {
+            let data = data.as_bytes();
+            let (start, end) = validate_slice(data.len() * 8, start, end)?;
+            // Only the bytes the range covers are copied, so reading a short
+            // field from a long buffer doesn't copy the whole buffer.
+            return py_from_raw_range(py, self, data, 0, start, end, || {
+                let covered = data[start / 8..end.div_ceil(8)].to_vec();
+                let bits = bv_from_bytes_slice(covered, Some(start % 8), Some(end - start))?;
+                Ok(Tibs::from_bv(bits))
+            });
+        }
         let bits = bits.extract::<Tibs>()?;
         let (start, end) = validate_slice(bits.len(), start, end)?;
         py_from_value(py, self, &bits.get_slice_unchecked(start, end - start))

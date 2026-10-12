@@ -942,6 +942,70 @@ def build_stdlib_cases(byte_count, value_count):
     scalar_record_bytes = record_struct.pack(*scalar_record)
     scalar_record_tibs = Tibs.from_bytes(scalar_record_bytes)
 
+    # A record with bit fields: an IPv4 header without options. struct reads
+    # its fields only to the nearest byte, so the standard library way is to
+    # unpack whole bytes and then shift and mask out the sub-byte fields, the
+    # way IP header parsers written in Python generally do it. The tibs dtype
+    # names every field at its own width instead.
+    header_struct = struct.Struct(">BBHHHBBHII")
+    header_dtype = Dtype(
+        "(u4, u4, u6, u2, u16, u16, bool, bool, bool, u13, u8, u8, u16, u32, u32)"
+    )
+    headers = [
+        (
+            4,
+            5,
+            rng.randrange(1 << 6),
+            rng.randrange(1 << 2),
+            rng.randrange(20, 1 << 16),
+            rng.randrange(1 << 16),
+            False,
+            rng.random() < 0.5,
+            rng.random() < 0.5,
+            rng.randrange(1 << 13),
+            rng.randrange(1, 256),
+            rng.choice((1, 6, 17)),
+            rng.randrange(1 << 16),
+            rng.randrange(1 << 32),
+            rng.randrange(1 << 32),
+        )
+        for _ in range(record_count)
+    ]
+
+    def header_fields_from_struct(vihl, tos, length, ident, flags, ttl, proto, checksum, src, dst):
+        return (
+            vihl >> 4,
+            vihl & 0xF,
+            tos >> 2,
+            tos & 0x3,
+            length,
+            ident,
+            bool(flags & 0x8000),
+            bool(flags & 0x4000),
+            bool(flags & 0x2000),
+            flags & 0x1FFF,
+            ttl,
+            proto,
+            checksum,
+            src,
+            dst,
+        )
+
+    def header_bytes_from_fields(header):
+        version, ihl, dscp, ecn, length, ident, reserved, df, mf, offset, *rest = header
+        return header_struct.pack(
+            version << 4 | ihl,
+            dscp << 2 | ecn,
+            length,
+            ident,
+            reserved << 15 | df << 14 | mf << 13 | offset,
+            *rest,
+        )
+
+    header_bytes = b"".join(header_bytes_from_fields(header) for header in headers)
+    scalar_header = headers[0]
+    scalar_header_bytes = header_bytes[: header_struct.size]
+
     # bytes.join and Tibs.from_joined both accept prepared pieces. Five bytes is
     # small enough for per-piece overhead to matter but is still a plausible
     # fixed-width field or short protocol fragment.
@@ -1023,6 +1087,34 @@ def build_stdlib_cases(byte_count, value_count):
 
     def tibs_unpack_scalar_record():
         return record_dtype.unpack(scalar_record_tibs)
+
+    def struct_pack_headers():
+        return b"".join(header_bytes_from_fields(header) for header in headers)
+
+    def tibs_pack_headers():
+        return Tibs.from_values(header_dtype, headers).to_bytes()
+
+    def struct_unpack_headers():
+        return [
+            header_fields_from_struct(*fields)
+            for fields in header_struct.iter_unpack(header_bytes)
+        ]
+
+    def tibs_unpack_headers():
+        return Tibs.from_bytes(header_bytes).to_values(header_dtype)
+
+    def struct_pack_scalar_header():
+        return header_bytes_from_fields(scalar_header)
+
+    def tibs_pack_scalar_header():
+        return header_dtype.pack(scalar_header).to_bytes()
+
+    def struct_unpack_scalar_header():
+        return header_fields_from_struct(*header_struct.unpack(scalar_header_bytes))
+
+    def tibs_unpack_scalar_header():
+        # Both sides start from the same bytes object.
+        return header_dtype.unpack(scalar_header_bytes)
 
     def struct_pack_u16():
         # struct docs: a format character may be preceded by a repeat count,
@@ -1210,6 +1302,24 @@ def build_stdlib_cases(byte_count, value_count):
             "struct: unpack one hhl",
             struct_unpack_scalar_record,
             tibs_unpack_scalar_record,
+        ),
+        ComparisonCase(
+            "struct: pack bit-field headers", struct_pack_headers, tibs_pack_headers
+        ),
+        ComparisonCase(
+            "struct: unpack bit-field headers",
+            struct_unpack_headers,
+            tibs_unpack_headers,
+        ),
+        ComparisonCase(
+            "struct: pack one bit-field header",
+            struct_pack_scalar_header,
+            tibs_pack_scalar_header,
+        ),
+        ComparisonCase(
+            "struct: unpack one bit-field header",
+            struct_unpack_scalar_header,
+            tibs_unpack_scalar_header,
         ),
         ComparisonCase("struct: pack u16", struct_pack_u16, tibs_pack_u16),
         ComparisonCase("struct: unpack u16", struct_unpack_u16, tibs_unpack_u16),

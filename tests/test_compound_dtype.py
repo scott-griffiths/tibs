@@ -1,6 +1,8 @@
+import math
 import struct
 
 import pytest
+from hypothesis import given, settings, strategies as st
 
 from tibs import (
     ByteOrder,
@@ -425,3 +427,115 @@ def test_flat_record_dtype_equality_and_hash_are_unaffected_by_the_cached_layout
     assert hash(a) == hash(b)
     assert {a, b} == {a}
     assert {a: "x"}[b] == "x"
+
+
+# Records whose fields aren't all whole bytes - a `u4`, a `bool`, a `u30` - are
+# read and written a word at a time rather than through a `Tibs` per field.
+# Every result has to match what each field gives on its own.
+
+_WORD_FIELD_SPECS = (
+    [f"u{n}" for n in (1, 3, 7, 9, 12, 13, 30, 33, 57, 63, 64)]
+    + [f"i{n}" for n in (2, 5, 8, 12, 27, 28, 31, 63, 64)]
+    + ["bool", "u8", "u16_le", "u24_be", "i32_le", "u64_le", "i64_le", "u48_le"]
+    + ["f16", "f32", "f64", "f32_le", "f64_le", "bf16", "bf16_le", "ocp_e2m1", "ocp_e4m3_saturate"]
+)
+
+
+def _comparable(values):
+    # NaN never equals itself, so compare it by its spelling.
+    return [repr(v) if isinstance(v, float) and math.isnan(v) else v for v in values]
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    fields=st.lists(st.sampled_from(_WORD_FIELD_SPECS), min_size=1, max_size=8),
+    seed=st.binary(min_size=72, max_size=72),
+    lead=st.integers(0, 15),
+)
+def test_word_field_records_match_their_fields_one_at_a_time(fields, seed, lead):
+    dtype = Dtype("(" + ", ".join(fields) + ",)")
+    singles = [Dtype(spec) for spec in fields]
+    bits = Tibs.from_bytes(seed)[lead : lead + dtype.length]
+
+    expected, position = [], 0
+    for single in singles:
+        value = single.unpack(bits, position, position + single.length)
+        # A scalar read straight out of a bytes object, part way into a byte.
+        from_bytes = single.unpack(seed, lead + position, lead + position + single.length)
+        assert _comparable([from_bytes]) == _comparable([value])
+        expected.append(value)
+        position += single.length
+
+    # From a Tibs, from bytes with a range that starts part way into a byte,
+    # and from a Mutibs, which takes the general route.
+    assert _comparable(dtype.unpack(bits)) == _comparable(expected)
+    assert _comparable(dtype.unpack(seed, lead, lead + dtype.length)) == _comparable(expected)
+    assert _comparable(dtype.unpack(Mutibs(bits))) == _comparable(expected)
+
+    values = [0.0 if isinstance(v, float) and math.isnan(v) else v for v in expected]
+    joined = Tibs.from_joined(single.pack(v) for single, v in zip(singles, values))
+    assert dtype.pack(values) == joined
+    assert dtype.pack_values([values, values]) == joined * 2
+    assert _comparable(dtype.unpack_values(joined * 3)) == _comparable([tuple(values)] * 3)
+
+
+@pytest.mark.parametrize("spec", ["[u12; 3]", "[bool; 5]", "[i7; 2]", "[u64_le; 2]"])
+def test_word_field_arrays_match_their_elements_one_at_a_time(spec):
+    dtype = Dtype(spec)
+    element = dtype.dtype
+    bits = Tibs.from_bytes(bytes(range(7, 7 + 32)))[3 : 3 + dtype.length]
+
+    values = tuple(element.unpack_values(bits))
+
+    assert dtype.unpack(bits) == values
+    assert dtype.pack(values) == bits
+    assert dtype.pack_values([values, values]) == bits * 2
+
+
+@pytest.mark.parametrize(
+    "spec, value, message",
+    [
+        ("(u4, u12)", (1, 5000), "At value[1]: ValueError: Value 5000 does not fit in 12 bits."),
+        (
+            "(u4, i12)",
+            (1, -2049),
+            "At value[1]: ValueError: Value -2049 does not fit in 12 signed bits.",
+        ),
+        ("(u4, u64)", (1, -1), "At value[1]: ValueError: Value -1 does not fit in 64 bits."),
+        ("(u4, u12)", (1,), "At value: expected 2 items, but received 1."),
+        ("(u4, u12)", (1, 2, 3), "At value: expected exactly 2 items."),
+    ],
+)
+def test_word_field_record_pack_errors_name_the_field(spec, value, message):
+    with pytest.raises(ValueError) as error:
+        Dtype(spec).pack(value)
+
+    assert str(error.value) == message
+
+
+def test_word_field_records_take_wide_ints_and_index_objects():
+    class Five:
+        def __index__(self):
+            return 5
+
+    dtype = Dtype("(u4, u64, i64, u12)")
+    values = (15, 2**64 - 1, -(2**63), Five())
+
+    packed = dtype.pack(values)
+
+    assert dtype.unpack(packed) == (15, 2**64 - 1, -(2**63), 5)
+    with pytest.raises(TypeError, match=r"At value\[0\]"):
+        Dtype("(bool, u7)").pack((2, 0))
+
+
+@pytest.mark.parametrize("spec", ["hex8", "bin3", "oct6", "bits5", "bytes16", "u65", "(u4, hex8)"])
+def test_unpacking_part_of_a_bytes_object_copies_only_that_part(spec):
+    # Dtypes the word codec doesn't cover go the general route, which builds a
+    # Tibs from just the bytes the range covers. The result must be the same as
+    # reading the same bits from a Tibs of the whole buffer.
+    dtype = Dtype(spec)
+    data = bytes(range(256)) * 64
+    whole = Tibs.from_bytes(data)
+    for start in (0, 3, 8, 8 * 1000 + 5, len(whole) - dtype.length):
+        end = start + dtype.length
+        assert dtype.unpack(data, start, end) == dtype.unpack(whole, start, end)

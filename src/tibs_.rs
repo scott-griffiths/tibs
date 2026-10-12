@@ -961,6 +961,74 @@ fn classify_tuple_packers(fields: &[RecordField]) -> Option<Vec<BytewisePacker>>
     Some(packers)
 }
 
+/// [`push_record_fields`] for a record whose fields are [`WordField`]s, pushed
+/// end to end into a bit accumulator.
+///
+/// The two read the record the same way and report the same errors. They are
+/// separate functions because making `push_record_fields` generic over what it
+/// writes, so that one walk served both, cost the whole-byte path a quarter of
+/// its time packing a list of records, measured under the release profile.
+fn push_record_words(
+    py: Python<'_>,
+    fields: impl ExactSizeIterator<Item = WordField>,
+    record: &Bound<'_, PyAny>,
+    record_index: Option<usize>,
+    out: &mut helpers::BitAccumulator,
+) -> PyResult<()> {
+    let path = || record_index.map_or_else(String::new, |index| format!("[{index}]"));
+    let expected = fields.len();
+    let too_few = |received: usize| {
+        PyValueError::new_err(format!(
+            "At value{}: expected {expected} items, but received {received}.",
+            path()
+        ))
+    };
+    let too_many = || {
+        PyValueError::new_err(format!(
+            "At value{}: expected exactly {expected} items.",
+            path()
+        ))
+    };
+    let push =
+        |field: WordField, out: &mut helpers::BitAccumulator, item: &Bound<'_, PyAny>, index| {
+            let raw = field
+                .raw_from_value(item)
+                .map_err(|error| add_value_path(py, error, &format!("{}[{index}]", path())))?;
+            out.push_wide(raw, field.length);
+            Ok::<_, PyErr>(())
+        };
+
+    // Read as in `push_record_fields`, which explains the tuple fast path.
+    if let Ok(tuple) = record.cast_exact::<PyTuple>() {
+        let received = tuple.len();
+        for (field_index, field) in fields.enumerate() {
+            if field_index == received {
+                return Err(too_few(field_index));
+            }
+            let item = tuple.get_borrowed_item(field_index)?;
+            push(field, out, &item, field_index)?;
+        }
+        return if received > expected {
+            Err(too_many())
+        } else {
+            Ok(())
+        };
+    }
+
+    let mut items = record
+        .try_iter()
+        .map_err(|error| add_value_path(py, error, &path()))?;
+    for (field_index, field) in fields.enumerate() {
+        let item = items.next().ok_or_else(|| too_few(field_index))??;
+        push(field, out, &item, field_index)?;
+    }
+    if let Some(item) = items.next() {
+        item?;
+        return Err(too_many());
+    }
+    Ok(())
+}
+
 /// Pack one record's fields, in order, straight into `bytes` — no `BV`
 /// allocated per field, unlike the generic `append_dtype_value`/
 /// `append_dtype_items` path this replaces for [`RecordLayout::Tuple`].
@@ -1031,116 +1099,176 @@ fn push_record_fields(
     Ok(())
 }
 
-/// Fast path for [`bv_from_value`] when `dtype` has a [`RecordLayout`] and
-/// every field qualifies for [`BytewisePacker`]. Returns `None` when some
-/// field doesn't (a sub-byte length, or a `bits`/`bytes`/`hex`/`oct`/`bin`
-/// kind), so the caller can fall back to `append_dtype_value` unchanged.
-fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
-    let py = value.py();
+/// The fields of a record layout as [`WordField`]s, or `None` when some field
+/// doesn't fit one.
+///
+/// Comes with the number of bits in one record and the number of fields in it.
+/// An array gives its element once, to be repeated that many times, rather
+/// than a field for every position.
+fn record_words(layout: &RecordLayout) -> Option<(&[WordField], usize, usize)> {
     match layout {
-        RecordLayout::Tuple(fields) => {
-            // Classified twice over rather than collected, since for a single
-            // record the `Vec` that `classify_tuple_packers` builds costs more
-            // than working out each field's packer a second time.
-            let packer = |field: &RecordField| {
-                BytewisePacker::for_parts(field.kind, field.length, field.byte_order)
-            };
-            if !fields.iter().all(|field| packer(field).is_some()) {
-                return Ok(None);
-            }
-            let packers = fields
-                .iter()
-                .map(|field| packer(field).expect("every field was classified above"));
-            let record_byte_length: usize = packers.clone().map(|p| p.byte_length()).sum();
-            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(record_byte_length)));
-            push_record_fields(py, packers, value, None, &mut bytes)?;
-            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
+        RecordLayout::Tuple {
+            words: Some(words), ..
+        } => {
+            let last = words.last().expect("a tuple dtype has at least one field");
+            Some((&words[..], last.bit_offset + last.length, words.len()))
         }
-        RecordLayout::Array { element, count } => {
-            let Some(packer) =
-                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)
-            else {
-                return Ok(None);
-            };
-            let mut bytes =
-                Vec::with_capacity(helpers::reserve_bytes(Some(packer.byte_length() * count)));
-            push_record_fields(
-                py,
-                std::iter::repeat_n(packer, *count),
-                value,
-                None,
-                &mut bytes,
-            )?;
-            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
-        }
+        RecordLayout::Array {
+            word: Some(word),
+            count,
+            ..
+        } => Some((std::slice::from_ref(word), word.length * count, *count)),
+        _ => None,
     }
 }
 
-/// Fast path for [`bv_from_values_iter`] when `dtype` has a [`RecordLayout`]
-/// and every field qualifies for [`BytewisePacker`] — the `struct`-`">hhl"`-
-/// style shape. Every record is written straight into one growing `Vec<u8>`,
-/// with no `BitAccumulator` and no per-field `BV` involved, mirroring what
-/// `BytewisePacker` already does for a homogeneous single-dtype sequence.
-/// Returns `None` when some field doesn't qualify, so the caller falls back
-/// to the existing generic per-record path unchanged.
+/// The word fields of one record, in order: an array's element repeated, or a
+/// tuple's fields.
+fn record_word_iter(
+    fields: &[WordField],
+    element_count: usize,
+) -> impl ExactSizeIterator<Item = WordField> + '_ {
+    (0..element_count).map(move |index| fields[if fields.len() == 1 { 0 } else { index }])
+}
+
+/// Fast path for [`bv_from_value`] when `dtype` has a [`RecordLayout`]: byte by
+/// byte when every field is a whole-byte numeric dtype, otherwise through a bit
+/// accumulator when every field fits a [`WordField`]. Returns `None` when
+/// neither applies (a `bits`/`bytes`/`hex`/`oct`/`bin` field, or an int wider
+/// than a word), so the caller can fall back to `append_dtype_value` unchanged.
+fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
+    let py = value.py();
+    match layout {
+        RecordLayout::Tuple { fields, .. }
+            if fields.iter().all(|field| {
+                BytewisePacker::for_parts(field.kind, field.length, field.byte_order).is_some()
+            }) =>
+        {
+            // Classified twice over rather than collected, since for a single
+            // record the `Vec` that `classify_tuple_packers` builds costs more
+            // than working out each field's packer a second time.
+            let packers = fields.iter().map(|field| {
+                BytewisePacker::for_parts(field.kind, field.length, field.byte_order)
+                    .expect("every field was classified above")
+            });
+            let record_byte_length: usize = packers.clone().map(|p| p.byte_length()).sum();
+            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(record_byte_length)));
+            push_record_fields(py, packers, value, None, &mut bytes)?;
+            return Ok(Some(helpers::try_bv_from_bytes(bytes)?));
+        }
+        RecordLayout::Array { element, count, .. } => {
+            if let Some(packer) =
+                BytewisePacker::for_parts(element.kind, element.length, element.byte_order)
+            {
+                let mut bytes =
+                    Vec::with_capacity(helpers::reserve_bytes(Some(packer.byte_length() * count)));
+                push_record_fields(
+                    py,
+                    std::iter::repeat_n(packer, *count),
+                    value,
+                    None,
+                    &mut bytes,
+                )?;
+                return Ok(Some(helpers::try_bv_from_bytes(bytes)?));
+            }
+        }
+        RecordLayout::Tuple { .. } => {}
+    }
+    let Some((fields, record_length, element_count)) = record_words(layout) else {
+        return Ok(None);
+    };
+    let mut out = helpers::BitAccumulator::with_bit_capacity(Some(helpers::reserve_bits(Some(
+        record_length,
+    ))));
+    push_record_words(
+        py,
+        record_word_iter(fields, element_count),
+        value,
+        None,
+        &mut out,
+    )?;
+    Ok(Some(out.into_bitvec()))
+}
+
+/// Pack every record of `iterable` byte by byte into one growing `Vec<u8>`,
+/// with `packers` giving each record's fields in order.
+fn bytewise_records<I: ExactSizeIterator<Item = BytewisePacker>>(
+    py: Python<'_>,
+    iterable: &Bound<'_, PyAny>,
+    hint: Option<usize>,
+    record_byte_length: usize,
+    packers: impl Fn() -> I,
+) -> PyResult<BV> {
+    let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
+    let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
+    let mut record_index = 0usize;
+    // `plain` is deliberately a pointer no real object's type can equal, so
+    // `for_each_value` always takes its owned (incref'd) branch here: unlike a
+    // bare scalar value, extracting a record's *fields* can run arbitrary
+    // Python code (e.g. `__index__` on a non-exact-int field), which could
+    // otherwise invalidate a borrowed reference to the record itself mid-visit.
+    for_each_value(py, iterable, ptr::null_mut(), |record| {
+        push_record_fields(py, packers(), record, Some(record_index), &mut bytes)?;
+        record_index += 1;
+        Ok(())
+    })?;
+    helpers::try_bv_from_bytes(bytes)
+}
+
+/// Fast path for [`bv_from_values_iter`] when `dtype` has a [`RecordLayout`].
+/// When every field qualifies for [`BytewisePacker`] - the `struct`-`">hhl"`-
+/// style shape - every record is written straight into one growing `Vec<u8>`,
+/// mirroring what `BytewisePacker` already does for a homogeneous single-dtype
+/// sequence. Otherwise, when every field fits a [`WordField`], the records go
+/// end to end through one bit accumulator. Returns `None` when neither applies,
+/// so the caller falls back to the existing generic per-record path unchanged.
 fn bv_from_values_iter_record(
     py: Python<'_>,
     layout: &RecordLayout,
     iterable: &Bound<'_, PyAny>,
     hint: Option<usize>,
 ) -> PyResult<Option<BV>> {
+    // The word path below hands `for_each_value` the same null `plain` as
+    // `bytewise_records`, for the reason given there.
     match layout {
-        RecordLayout::Tuple(fields) => {
-            let Some(packers) = classify_tuple_packers(fields) else {
-                return Ok(None);
-            };
-            let record_byte_length: usize = packers.iter().map(BytewisePacker::byte_length).sum();
-            let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
-            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
-            let mut record_index = 0usize;
-            // `plain` is deliberately a pointer no real object's type can
-            // equal, so `for_each_value` always takes its owned (incref'd)
-            // branch here: unlike a bare scalar value, extracting a record's
-            // *fields* can run arbitrary Python code (e.g. `__index__` on a
-            // non-exact-int field), which could otherwise invalidate a
-            // borrowed reference to the record itself mid-visit.
-            for_each_value(py, iterable, ptr::null_mut(), |record| {
-                push_record_fields(
-                    py,
-                    packers.iter().copied(),
-                    record,
-                    Some(record_index),
-                    &mut bytes,
-                )?;
-                record_index += 1;
-                Ok(())
-            })?;
-            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
+        RecordLayout::Tuple { fields, .. } => {
+            if let Some(packers) = classify_tuple_packers(fields) {
+                let record_byte_length = packers.iter().map(BytewisePacker::byte_length).sum();
+                return bytewise_records(py, iterable, hint, record_byte_length, || {
+                    packers.iter().copied()
+                })
+                .map(Some);
+            }
         }
-        RecordLayout::Array { element, count } => {
-            let Some(packer) =
+        RecordLayout::Array { element, count, .. } => {
+            if let Some(packer) =
                 BytewisePacker::for_parts(element.kind, element.length, element.byte_order)
-            else {
-                return Ok(None);
-            };
-            let record_byte_length = packer.byte_length() * count;
-            let capacity = hint.and_then(|len| len.checked_mul(record_byte_length));
-            let mut bytes = Vec::with_capacity(helpers::reserve_bytes(capacity));
-            let mut record_index = 0usize;
-            for_each_value(py, iterable, ptr::null_mut(), |record| {
-                push_record_fields(
-                    py,
-                    std::iter::repeat_n(packer, *count),
-                    record,
-                    Some(record_index),
-                    &mut bytes,
-                )?;
-                record_index += 1;
-                Ok(())
-            })?;
-            Ok(Some(helpers::try_bv_from_bytes(bytes)?))
+            {
+                return bytewise_records(py, iterable, hint, packer.byte_length() * count, || {
+                    std::iter::repeat_n(packer, *count)
+                })
+                .map(Some);
+            }
         }
     }
+    let Some((fields, record_length, element_count)) = record_words(layout) else {
+        return Ok(None);
+    };
+    let capacity = hint.and_then(|len| len.checked_mul(record_length));
+    let mut out = helpers::BitAccumulator::with_bit_capacity(Some(helpers::reserve_bits(capacity)));
+    let mut record_index = 0usize;
+    for_each_value(py, iterable, ptr::null_mut(), |record| {
+        push_record_words(
+            py,
+            record_word_iter(fields, element_count),
+            record,
+            Some(record_index),
+            &mut out,
+        )?;
+        record_index += 1;
+        Ok(())
+    })?;
+    Ok(Some(out.into_bitvec()))
 }
 
 /// How the bit-wise path in [`bv_from_values_iter`] packs one value.
@@ -1453,10 +1581,8 @@ impl BytewiseUnpacker {
     }
 
     /// The raw bits at absolute byte offset `start`, right-aligned in a
-    /// `u64`. [`Self::load`] is the homogeneous-repeated-value spelling of
-    /// this (`start = index * self.byte_length`); a [`RecordLayout`] field
-    /// needs an arbitrary offset instead, since a heterogeneous record's
-    /// fields don't share one stride.
+    /// `u64`. [`Self::load`] is the spelling of this for the value at an
+    /// index.
     #[inline]
     fn load_at(&self, bytes: &[u8], shift: u32, start: usize) -> u64 {
         // Wherever a whole word can be read, read one and cut it down to the
@@ -1543,19 +1669,6 @@ impl BytewiseUnpacker {
     ) -> PyResult<Bound<'py, PyAny>> {
         self.value_from_raw(py, self.load(bytes, shift, index))
     }
-
-    /// The value at absolute byte offset `start` as a Python object — the
-    /// [`RecordLayout`] field counterpart of [`Self::value`].
-    #[inline]
-    fn value_at<'py>(
-        &self,
-        py: Python<'py>,
-        bytes: &[u8],
-        shift: u32,
-        start: usize,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        self.value_from_raw(py, self.load_at(bytes, shift, start))
-    }
 }
 
 /// How a [`SubByteUnpacker`] interprets the raw field it extracts.
@@ -1636,6 +1749,173 @@ impl SubByteUnpacker {
     }
 }
 
+/// How a [`WordField`] turns its raw bits into a value and back.
+#[derive(Clone, Copy)]
+enum WordReading {
+    Uint,
+    Int,
+    Bool,
+    Float,
+    BFloat,
+    /// A narrow float, with its decode table resolved up front as in
+    /// [`NumericReading`].
+    NarrowFloat(helpers::NarrowFloatFormat, &'static [f64; 256]),
+}
+
+/// A scalar field of at most 64 bits at a fixed bit offset within a record.
+///
+/// [`BytewiseUnpacker`] and [`BytewisePacker`] need every field of a record to
+/// be a whole number of bytes, so a single `u4` or `bool` sent the whole record
+/// down the general route, which builds a `Tibs` or a `BV` for every field. Any
+/// field that fits in a word can instead be lifted straight out of the storage,
+/// or pushed into a [`helpers::BitAccumulator`], wherever it sits. Fields are
+/// classified once, when the dtype is built, and kept in its [`RecordLayout`].
+#[derive(Clone, Copy)]
+pub(crate) struct WordField {
+    reading: WordReading,
+    kind: DtypeKind,
+    length: usize,
+    byte_order: ByteOrder,
+    /// Whether the value's bytes are stored in reverse: a little-endian field
+    /// wider than one byte, which `Dtype` only allows for whole bytes.
+    swap: bool,
+    bit_offset: usize,
+}
+
+impl WordField {
+    /// The codec for `field`, or `None` for a field that doesn't fit in a word
+    /// or isn't numeric (`bits`, `bytes`, `bin`, `oct`, `hex`).
+    pub(crate) fn for_field(field: &RecordField) -> Option<Self> {
+        let reading = if let Some(format) = narrow_float_format(field.kind) {
+            WordReading::NarrowFloat(format, helpers::narrow_float_decode_table(format))
+        } else {
+            match field.kind {
+                DtypeKind::Uint if field.length <= helpers::FAST_INT_BITS => WordReading::Uint,
+                DtypeKind::Int if field.length <= helpers::FAST_INT_BITS => WordReading::Int,
+                DtypeKind::Bool => WordReading::Bool,
+                DtypeKind::Float => WordReading::Float,
+                DtypeKind::BFloat => WordReading::BFloat,
+                _ => return None,
+            }
+        };
+        Some(Self {
+            reading,
+            kind: field.kind,
+            length: field.length,
+            byte_order: field.byte_order,
+            swap: field.byte_order == ByteOrder::Little && field.length > 8,
+            bit_offset: field.bit_offset,
+        })
+    }
+
+    /// The codec for a scalar dtype read on its own, as a record's only field.
+    fn for_single(dtype: &SingleDtype) -> Option<Self> {
+        Self::for_field(&RecordField {
+            kind: dtype.kind,
+            length: dtype.length,
+            byte_order: dtype.byte_order,
+            bit_offset: 0,
+        })
+    }
+
+    /// The field of the record that starts `record_bit` bits into `bytes`.
+    #[inline]
+    fn value<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        record_bit: usize,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let mut raw = helpers::load_be_bits(bytes, record_bit + self.bit_offset, self.length);
+        if self.swap {
+            raw = raw.swap_bytes() >> (64 - self.length);
+        }
+        match self.reading {
+            WordReading::Uint if self.length == 64 => raw.into_bound_py_any(py),
+            // Anything narrower than 64 bits fits an `i64`, which is the
+            // cheaper of the two integer objects to build.
+            WordReading::Uint => (raw as i64).into_bound_py_any(py),
+            WordReading::Int => {
+                let pad = 64 - self.length;
+                (((raw << pad) as i64) >> pad).into_bound_py_any(py)
+            }
+            WordReading::Bool => (raw != 0).into_bound_py_any(py),
+            WordReading::Float => match self.length {
+                64 => f64::from_bits(raw),
+                32 => f64::from(f32::from_bits(raw as u32)),
+                _ => f16::from_bits(raw as u16).to_f64(),
+            }
+            .into_bound_py_any(py),
+            WordReading::BFloat => bf16::from_bits(raw as u16).to_f64().into_bound_py_any(py),
+            WordReading::NarrowFloat(_, table) => table[raw as usize].into_bound_py_any(py),
+        }
+    }
+
+    /// `value` as the field's raw bits, right-aligned, in the order they are
+    /// stored.
+    #[inline]
+    fn raw_from_value(&self, value: &Bound<'_, PyAny>) -> PyResult<u64> {
+        let length = self.length;
+        let raw = match self.reading {
+            // As in `push_int_bytes`, an `i64` extraction is the cheaper one,
+            // and whatever it can't take goes the general route below.
+            WordReading::Uint => value
+                .extract::<i64>()
+                .ok()
+                .filter(|&v| v >= 0 && (length == 64 || (v as u64) >> length == 0))
+                .map(|v| v as u64),
+            WordReading::Int => value
+                .extract::<i64>()
+                .ok()
+                .filter(|&v| {
+                    length == 64 || {
+                        let limit = 1i64 << (length - 1);
+                        v >= -limit && v < limit
+                    }
+                })
+                .map(|v| {
+                    if length == 64 {
+                        v as u64
+                    } else {
+                        v as u64 & ((1u64 << length) - 1)
+                    }
+                }),
+            WordReading::Bool => helpers::convert_to_bool(value).map(u64::from),
+            WordReading::Float => {
+                let v = value.extract::<f64>()?;
+                Some(match length {
+                    64 => v.to_bits(),
+                    32 => u64::from((v as f32).to_bits()),
+                    _ => u64::from(f16::from_f64(v).to_bits()),
+                })
+            }
+            WordReading::BFloat => {
+                Some(u64::from(bf16::from_f64(value.extract::<f64>()?).to_bits()))
+            }
+            WordReading::NarrowFloat(format, _) => Some(u64::from(encode_narrow_float(
+                value.extract::<f64>()?,
+                format,
+            )?)),
+        };
+        match raw {
+            Some(raw) if self.swap => Ok(raw.swap_bytes() >> (64 - length)),
+            Some(raw) => Ok(raw),
+            // An int out of range or beyond an `i64`, an object that is only an
+            // int through `__index__`, a bool field given `2`: the single value
+            // route accepts or rejects each of these with the message it gives
+            // everywhere else, so they are sent there rather than repeated here.
+            None => {
+                let dtype = SingleDtype {
+                    kind: self.kind,
+                    length,
+                    byte_order: self.byte_order,
+                };
+                Ok(bv_from_single_value(&dtype, value)?.load_be::<u64>())
+            }
+        }
+    }
+}
+
 pub(crate) fn py_from_value_parts(
     py: Python<'_>,
     dtype_kind: DtypeKind,
@@ -1694,6 +1974,46 @@ pub(crate) fn py_from_value_parts(
     }
 }
 
+/// Decode one value of `dtype` from bits `start..end` of the run that starts
+/// `shift` bits into `bytes`, reading the storage where it is.
+///
+/// This is [`py_from_value`] for a caller holding raw storage rather than a
+/// `Tibs`: a `bytes` argument, or a `Tibs` that doesn't need cloning. Building
+/// a `Tibs` first costs an allocation for anything longer than eight bytes, and
+/// a copy either way, which is a large share of decoding one short record.
+/// `owned` makes the selected bits into a `Tibs`, for the dtypes that need one.
+pub(crate) fn py_from_raw_range(
+    py: Python<'_>,
+    dtype: &Dtype,
+    bytes: &[u8],
+    shift: usize,
+    start: usize,
+    end: usize,
+    owned: impl FnOnce() -> PyResult<Tibs>,
+) -> PyResult<Py<PyAny>> {
+    let length = end - start;
+    if length != dtype.length {
+        return Err(PyValueError::new_err(format!(
+            "Cannot convert {length} bits using a dtype with length {} bits.",
+            dtype.length
+        )));
+    }
+    let first = shift + start;
+    let window = &bytes[first / 8..(first + length).div_ceil(8)];
+    let shift = first % 8;
+    if let Some(single) = dtype.single() {
+        if let Some(field) = WordField::for_single(single) {
+            return Ok(field.value(py, window, shift)?.unbind());
+        }
+    } else if let Some(layout) = &dtype.record_layout {
+        let mut record = None;
+        if for_each_record_value(py, layout, window, shift, 1, |value| record = Some(value))? {
+            return Ok(record.expect("count = 1 emits exactly one value"));
+        }
+    }
+    py_from_value(py, dtype, &owned()?)
+}
+
 pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyResult<Py<PyAny>> {
     if let Some(dtype) = dtype.single() {
         return py_from_value_parts(py, dtype.kind, dtype.length, dtype.byte_order, value);
@@ -1708,9 +2028,7 @@ pub(crate) fn py_from_value(py: Python<'_>, dtype: &Dtype, value: &Tibs) -> PyRe
     if let Some(layout) = &dtype.record_layout {
         let (bytes, shift, _) = value.raw_data_ref();
         let mut record = None;
-        if for_each_record_value(py, layout, bytes, shift as u32, 1, |value| {
-            record = Some(value)
-        })? {
+        if for_each_record_value(py, layout, bytes, shift, 1, |value| record = Some(value))? {
             return Ok(record.expect("count = 1 emits exactly one value"));
         }
     }
@@ -1753,13 +2071,6 @@ fn py_from_dtype_repr(
     }
 }
 
-/// Fast path for [`py_values_from_range`] (and, with `count = 1`,
-/// [`py_from_value`]) when `dtype` has a [`RecordLayout`] and every field
-/// qualifies for [`BytewiseUnpacker`]. `bytes`/`shift` are the raw backing
-/// store and its bit offset, fetched once by the caller via `raw_data_ref`.
-/// Returns `None` when some field doesn't qualify (a sub-byte length, or a
-/// `bits`/`bytes`/`hex`/`oct`/`bin` kind), so the caller falls back to the
-/// existing `py_from_dtype_repr` recursive walk unchanged.
 /// A tuple of `len` items, the item at each index produced by `item`.
 ///
 /// Built in place rather than collected into a `Vec` for `PyTuple::new`, which
@@ -1787,73 +2098,42 @@ fn tuple_from_fn<'py>(
 
 /// Pass each of `count` records to `emit`, as a tuple of its fields.
 ///
-/// Returns `false`, having emitted nothing, when some field of the layout is
-/// not one [`BytewiseUnpacker`] reads. Emitting rather than returning a `Vec`
+/// `bytes` holds the records end to end, the first starting `shift` bits into
+/// `bytes[0]`. Returns `false`, having emitted nothing, when some field of the
+/// layout doesn't fit a [`WordField`]. Emitting rather than returning a `Vec`
 /// lets a single record skip allocating a list of one.
 fn for_each_record_value(
     py: Python<'_>,
     layout: &RecordLayout,
     bytes: &[u8],
-    shift: u32,
+    shift: usize,
     count: usize,
     mut emit: impl FnMut(Py<PyAny>),
 ) -> PyResult<bool> {
-    match layout {
-        RecordLayout::Tuple(fields) => {
-            let mut unpackers = Vec::with_capacity(fields.len());
-            for field in fields {
-                let Some(unpacker) =
-                    BytewiseUnpacker::for_parts(field.kind, field.length, field.byte_order)
-                else {
-                    return Ok(false);
-                };
-                // Every field here is a whole number of bytes (a precondition
-                // of `BytewiseUnpacker` classification), so a prefix sum of
-                // them is too: `bit_offset` divides evenly by 8.
-                unpackers.push((unpacker, field.bit_offset / 8));
-            }
-            let record_byte_length: usize = unpackers.iter().map(|(u, _)| u.byte_length).sum();
-            let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
-            for index in 0..count {
-                if index >= check_at {
-                    py.check_signals()?;
-                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-                }
-                let record_start = index * record_byte_length;
-                let record = tuple_from_fn(py, unpackers.len(), |field| {
-                    let (unpacker, field_byte_offset) = &unpackers[field];
-                    unpacker.value_at(py, bytes, shift, record_start + field_byte_offset)
-                })?;
-                emit(record.into_any().unbind());
-            }
-            Ok(true)
+    let Some((fields, record_length, element_count)) = record_words(layout) else {
+        return Ok(false);
+    };
+    let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+    for index in 0..count {
+        if index >= check_at {
+            py.check_signals()?;
+            check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
         }
-        RecordLayout::Array {
-            element,
-            count: element_count,
-        } => {
-            let Some(unpacker) =
-                BytewiseUnpacker::for_parts(element.kind, element.length, element.byte_order)
-            else {
-                return Ok(false);
-            };
-            let record_byte_length = unpacker.byte_length * element_count;
-            let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
-            for index in 0..count {
-                if index >= check_at {
-                    py.check_signals()?;
-                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
-                }
-                let record_start = index * record_byte_length;
-                let record = tuple_from_fn(py, *element_count, |element_index| {
-                    let field_start = record_start + element_index * unpacker.byte_length;
-                    unpacker.value_at(py, bytes, shift, field_start)
-                })?;
-                emit(record.into_any().unbind());
-            }
-            Ok(true)
-        }
+        let record_bit = shift + index * record_length;
+        let record = if let [element] = fields
+            && element_count > 1
+        {
+            tuple_from_fn(py, element_count, |position| {
+                element.value(py, bytes, record_bit + position * element.length)
+            })?
+        } else {
+            tuple_from_fn(py, element_count, |field| {
+                fields[field].value(py, bytes, record_bit)
+            })?
+        };
+        emit(record.into_any().unbind());
     }
+    Ok(true)
 }
 
 pub(crate) fn py_values_from_range(
@@ -1883,9 +2163,7 @@ pub(crate) fn py_values_from_range(
     if let Some(layout) = &dtype.record_layout {
         let window = bits.get_slice_unchecked(start, selected_len);
         let (bytes, shift, _) = window.raw_data_ref();
-        if for_each_record_value(py, layout, bytes, shift as u32, count, |value| {
-            values.push(value)
-        })? {
+        if for_each_record_value(py, layout, bytes, shift, count, |value| values.push(value))? {
             return Ok(values);
         }
     }

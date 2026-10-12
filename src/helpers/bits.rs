@@ -261,6 +261,34 @@ impl BitAccumulator {
     }
 }
 
+/// The `length` bits starting `bit` bits into `bytes`, most significant first,
+/// right-aligned in a `u64`.
+///
+/// `length` is 1 to 64 and the bits must lie within `bytes`. A field that
+/// starts part way into a byte and runs to its full width spans nine bytes,
+/// which is the one case where a ninth byte is read after the word.
+#[inline]
+pub(crate) fn load_be_bits(bytes: &[u8], bit: usize, length: usize) -> u64 {
+    debug_assert!((1..=64).contains(&length));
+    debug_assert!(bit + length <= bytes.len() * 8);
+    let byte = bit / 8;
+    let offset = bit % 8;
+    let word = match bytes.get(byte..byte + 8) {
+        Some(word) => u64::from_be_bytes(word.try_into().unwrap()),
+        None => {
+            let mut buf = [0u8; 8];
+            let tail = &bytes[byte..];
+            buf[..tail.len()].copy_from_slice(tail);
+            u64::from_be_bytes(buf)
+        }
+    };
+    let mut aligned = word << offset;
+    if offset + length > 64 {
+        aligned |= u64::from(bytes[byte + 8]) >> (8 - offset);
+    }
+    aligned >> (64 - length)
+}
+
 /// The bit position within the first raw byte at which `bits` starts.
 ///
 /// Storage does not have to begin on a byte boundary: slicing a `BitSlice`
@@ -295,6 +323,22 @@ pub(crate) fn head_bit_offset(bits: &BS) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_be_bits_agrees_with_bitvec() {
+        let bytes: Vec<u8> = (0u8..11).map(|i| i.wrapping_mul(0x9d) ^ 0x5a).collect();
+        let bits = BS::from_slice(&bytes);
+        for length in 1..=64 {
+            for start in 0..=bits.len() - length {
+                let expected = bits[start..start + length].load_be::<u64>();
+                assert_eq!(
+                    load_be_bits(&bytes, start, length),
+                    expected,
+                    "{start} {length}"
+                );
+            }
+        }
+    }
 
     /// The overlong path is only reached for real at 2^29 - 7 bits on a 32-bit
     /// build, so check it against the plain one on lengths it can be given here.
