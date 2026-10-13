@@ -438,6 +438,7 @@ _WORD_FIELD_SPECS = (
     + [f"i{n}" for n in (2, 5, 8, 12, 27, 28, 31, 63, 64)]
     + ["bool", "u8", "u16_le", "u24_be", "i32_le", "u64_le", "i64_le", "u48_le"]
     + ["f16", "f32", "f64", "f32_le", "f64_le", "bf16", "bf16_le", "ocp_e2m1", "ocp_e4m3_saturate"]
+    + ["bytes8", "bytes24", "bytes72"]
 )
 
 
@@ -547,7 +548,7 @@ def test_unpacking_part_of_a_bytes_object_copies_only_that_part(spec):
 # route, so it serves as the reference: same values, and the same errors once
 # its extra `[0]` is taken out of the path.
 
-_MEMBER_SCALARS = _WORD_FIELD_SPECS + ["bytes16", "hex8", "bin3", "u65"]
+_MEMBER_SCALARS = _WORD_FIELD_SPECS + ["hex8", "bin3", "bits5", "u65"]
 
 
 def _member_specs():
@@ -570,8 +571,8 @@ def _without_nan(value):
 
 
 def _comparable_nested(value):
-    if isinstance(value, tuple):
-        return tuple(_comparable_nested(v) for v in value)
+    if isinstance(value, (tuple, list)):
+        return type(value)(_comparable_nested(v) for v in value)
     return repr(value) if isinstance(value, float) and math.isnan(value) else value
 
 
@@ -610,6 +611,18 @@ def _error(fn):
     return None
 
 
+def _assert_packs_as_reference(dtype, value):
+    """Pack value as dtype and as its reference: the same bits, or the same error."""
+    error = _error(lambda: dtype.pack(value))
+    expected = _error(lambda: _reference(dtype).pack((value,)))
+    if expected is None:
+        assert error is None
+        assert dtype.pack(value) == _reference(dtype).pack((value,))
+    else:
+        assert error == (expected[0], expected[1].replace("At value[0]", "At value", 1))
+    return error
+
+
 @pytest.mark.parametrize(
     "spec, value",
     [
@@ -629,16 +642,18 @@ def _error(fn):
         ("(u8, (u8, u16_le), [f32; 2])", (1, (2, 70000), (1.0, 2.0))),
         ("(u8, [bytes16; 2])", (1, (b"ab", b"c"))),
         ("(u8, [bytes16; 2])", (1, None)),
+        ("(u8, bytes16)", (1, b"abc")),
+        ("(u8, bytes16)", (1, "ab")),
+        ("(u8, bytes16)", (1, 5)),
+        ("(u4, bytes16, u4)", (1, b"a", 2)),
+        ("(u4, [bytes16; 2], u4)", (1, (b"ab", 5), 2)),
     ],
 )
 def test_tuples_with_array_and_tuple_items_report_errors_as_the_general_route(spec, value):
     dtype = Dtype(spec)
     reference = _reference(dtype)
 
-    error = _error(lambda: dtype.pack(value))
-    expected = _error(lambda: reference.pack((value,)))
-    assert error is not None
-    assert error == (expected[0], expected[1].replace("At value[0]", "At value", 1))
+    assert _assert_packs_as_reference(dtype, value) is not None
 
     error = _error(lambda: dtype.pack_values([value]))
     expected = _error(lambda: reference.pack_values([(value,)]))
@@ -660,3 +675,33 @@ def test_tuple_with_a_long_array_item_round_trips():
 
     assert dtype.unpack(packed) == value
     assert _reference(dtype).pack((value,)) == packed
+
+
+class _BytesSubclass(bytes):
+    pass
+
+
+@pytest.mark.parametrize("spec", ["(u8, bytes16)", "(u4, bytes16, u4)", "(u8, [bytes16; 2])"])
+@pytest.mark.parametrize(
+    "value",
+    [b"ab", bytearray(b"ab"), memoryview(b"ab"), _BytesSubclass(b"ab"), [97, 98], Tibs(b"ab")],
+)
+def test_bytes_fields_take_what_the_general_route_takes(spec, value):
+    dtype = Dtype(spec)
+    item = (value, value) if "[" in spec else value
+    record = (1, item, 2) if spec.count(",") == 2 and "[" not in spec else (1, item)
+
+    _assert_packs_as_reference(dtype, record)
+
+
+def test_bytes_dtype_pack_values_matches_packing_each_value():
+    dtype = Dtype("bytes16")
+    values = [b"ab", bytearray(b"cd"), memoryview(b"ef"), _BytesSubclass(b"gh")]
+
+    assert dtype.pack_values(values) == Tibs.from_joined(dtype.pack(v) for v in values)
+    with pytest.raises(ValueError) as error:
+        dtype.pack_values([b"ab", b"cde"])
+    with pytest.raises(ValueError) as single:
+        dtype.pack(b"cde")
+    assert str(error.value) == str(single.value)
+    assert error.value.__notes__ == ["At value[1]."]

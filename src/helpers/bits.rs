@@ -240,6 +240,18 @@ impl BitAccumulator {
         self.bytes.extend_from_slice(bytes);
     }
 
+    /// Append whole bytes, wherever the accumulator stands.
+    #[inline]
+    pub(crate) fn push_bytes(&mut self, bytes: &[u8]) {
+        if self.is_byte_aligned() {
+            self.push_aligned_bytes(bytes);
+        } else {
+            for &byte in bytes {
+                self.push(u64::from(byte), 8);
+            }
+        }
+    }
+
     /// Append every bit of `bits`, most significant first.
     ///
     /// The general-purpose entry point, for values that the caller could not

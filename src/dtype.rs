@@ -429,169 +429,118 @@ impl DtypeRepr {
     }
 }
 
-/// One field of a precomputed flat record layout: its kind/length/byte_order
-/// plus its bit offset within one record. See [`RecordLayout`].
-#[derive(Clone, Copy)]
-pub(crate) struct RecordField {
-    pub(crate) kind: DtypeKind,
+/// A precomputed layout for a record of scalar fields: a [`DtypeRepr::Tuple`]
+/// of [`DtypeRepr::Single`]s (`struct`'s `">hhl"`, or an MPEG-header-style
+/// fixed table), a [`DtypeRepr::Array`] of one, or a tuple whose items include
+/// arrays of a scalar or tuples of scalars, such as `(u8, [u8; 4], (u4, u4))`.
+/// It lets pack and unpack address each field directly instead of re-walking
+/// `DtypeRepr` and recomputing offsets on every record. Deeper nesting
+/// (array-of-tuple, a tuple inside a tuple inside a tuple, ...) has no layout,
+/// and pack/unpack walk `DtypeRepr` recursively for it.
+///
+/// An array stores one field however long it is, so `Dtype("[u8; 1_000_000]")`
+/// is as cheap to build as `Dtype("[u8; 4]")`, and a tuple stores one per
+/// scalar or array in its spec, a count bounded by the spec's own arity.
+pub(crate) struct RecordLayout {
+    pub(crate) shape: RecordShape,
+    /// The number of bits in one record.
     pub(crate) length: usize,
-    pub(crate) byte_order: ByteOrder,
-    pub(crate) bit_offset: usize,
+    /// The fields as [`BytewisePacker`]s, when every one is a whole-byte field
+    /// one can write.
+    pub(crate) packers: Option<Box<[BytewisePacker]>>,
+    /// The fields as [`WordField`]s, when every one is a field one can read and
+    /// write in place, which lets a record whose fields aren't all whole bytes
+    /// skip the per-field `Tibs` and `BV` the recursive walk builds.
+    pub(crate) words: Option<Box<[WordField]>>,
 }
 
-/// A precomputed flat layout for a [`DtypeRepr::Tuple`] whose fields are all
-/// [`DtypeRepr::Single`], or a [`DtypeRepr::Array`] whose element is
-/// [`DtypeRepr::Single`] — the "record of scalar fields" shape (e.g.
-/// `struct`'s `">hhl"`, or an MPEG-header-style fixed table). It lets pack and
-/// unpack address each field directly instead of re-walking `DtypeRepr` and
-/// recomputing offsets via `DtypeRepr::length()` on every single record.
-///
-/// A tuple may also hold arrays of a scalar and tuples of scalars one level
-/// down, such as `(u8, [u8; 4], (u4, u4))`; see [`RecordMembers`]. Deeper
-/// nesting (array-of-tuple, a tuple inside a tuple inside a tuple, ...) is
-/// never represented here: `Dtype::record_layout` is `None` for those, and
-/// pack/unpack keep walking `DtypeRepr` recursively exactly as before.
-///
-/// `Array` stores one element descriptor plus `count`, not `count` cloned
-/// entries, so a large array stays cheap to represent: `Dtype("[u8; 1_000_000]")`
-/// is as cheap to build as `Dtype("[u8; 4]")`. `Tuple` does flatten its fields
-/// literally, which is safe because that count is bounded by the dtype spec's
-/// own field arity, not by data volume.
-///
-/// Each shape also carries its fields as [`WordField`]s when every one of them
-/// fits in a word, which lets a record whose fields aren't all whole bytes skip
-/// the per-field `Tibs` and `BV` the recursive walk builds.
-pub(crate) enum RecordLayout {
-    Tuple {
-        fields: Vec<RecordField>,
-        words: Option<Box<[WordField]>>,
-        /// `None` when every item of the tuple is a scalar, so that `fields`
-        /// holds one entry per item, in order.
-        members: Option<Box<RecordMembers>>,
-    },
-    Array {
-        element: RecordField,
-        count: usize,
-        word: Option<WordField>,
-    },
+/// How the fields of a [`RecordLayout`] make up a record's value.
+pub(crate) enum RecordShape {
+    /// A tuple of scalars, one field per item.
+    Flat,
+    /// An array of a scalar: the one field, repeated this many times.
+    Array(usize),
+    /// A tuple whose items include arrays or tuples.
+    Members(Box<[RecordMember]>),
 }
 
-/// One item of a tuple record whose items aren't all scalars, addressing the
-/// record's `fields`.
+/// One item of a [`RecordShape::Members`] tuple, addressing the layout's fields.
 #[derive(Clone, Copy)]
 pub(crate) enum RecordMember {
-    /// A scalar, the entry of `fields` at this index.
+    /// A scalar, the field at this index.
     Field(usize),
-    /// A tuple of scalars, the `len` entries of `fields` from `start`.
+    /// A tuple of scalars, the `len` fields from `start`.
     Tuple { start: usize, len: usize },
-    /// An array of a scalar: the entry of `fields` at `field`, which is its
-    /// first element, repeated `count` times end to end.
+    /// An array of a scalar: the field at `field`, which is its first element,
+    /// repeated `count` times end to end.
     Array { field: usize, count: usize },
 }
 
-/// The shape of a tuple record with array or tuple items, kept beside its flat
-/// `fields` so that pack and unpack can address the fields directly, as they
-/// do for a tuple of scalars, and still take and give the nested values.
-///
-/// An array item is one entry of `fields` however long it is, so the cost of
-/// the layout is bounded by the spec's arity, as for a flat tuple.
-pub(crate) struct RecordMembers {
-    pub(crate) members: Box<[RecordMember]>,
-    /// The number of bits in one record.
-    pub(crate) length: usize,
-    /// One packer per entry of `fields`, when every one is a whole-byte
-    /// numeric field.
-    pub(crate) packers: Option<Box<[BytewisePacker]>>,
-}
-
-fn record_field(single: &SingleDtype, bit_offset: usize) -> RecordField {
-    RecordField {
-        kind: single.kind,
-        length: single.length,
-        byte_order: single.byte_order,
-        bit_offset,
+fn single(repr: &DtypeRepr) -> Option<&SingleDtype> {
+    match repr {
+        DtypeRepr::Single(single) => Some(single),
+        _ => None,
     }
 }
 
 fn build_record_layout(repr: &DtypeRepr) -> Option<RecordLayout> {
-    match repr {
-        DtypeRepr::Tuple(dtypes) => {
-            let mut fields = Vec::with_capacity(dtypes.len());
-            let mut members = Vec::with_capacity(dtypes.len());
-            let mut nested = false;
-            let mut bit_offset = 0;
-            for dtype in dtypes {
-                match dtype {
-                    DtypeRepr::Single(single) => {
-                        members.push(RecordMember::Field(fields.len()));
-                        fields.push(record_field(single, bit_offset));
-                        bit_offset += single.length;
-                    }
-                    DtypeRepr::Array { dtype, count } => {
-                        let DtypeRepr::Single(single) = dtype.as_ref() else {
-                            return None;
-                        };
-                        members.push(RecordMember::Array {
-                            field: fields.len(),
-                            count: *count,
-                        });
-                        fields.push(record_field(single, bit_offset));
-                        bit_offset += single.length * count;
-                        nested = true;
-                    }
-                    DtypeRepr::Tuple(inner) => {
-                        members.push(RecordMember::Tuple {
-                            start: fields.len(),
-                            len: inner.len(),
-                        });
-                        for dtype in inner {
-                            let DtypeRepr::Single(single) = dtype else {
-                                return None;
-                            };
-                            fields.push(record_field(single, bit_offset));
-                            bit_offset += single.length;
-                        }
-                        nested = true;
-                    }
-                }
-            }
-            let words = fields.iter().map(WordField::for_field).collect();
-            let members = nested.then(|| {
-                Box::new(RecordMembers {
-                    members: members.into_boxed_slice(),
-                    length: bit_offset,
-                    packers: fields
-                        .iter()
-                        .map(|field| {
-                            BytewisePacker::for_parts(field.kind, field.length, field.byte_order)
-                        })
-                        .collect(),
-                })
-            });
-            Some(RecordLayout::Tuple {
-                fields,
-                words,
-                members,
-            })
-        }
+    // Each field with the bit offset of its start within the record.
+    let mut fields: Vec<(SingleDtype, usize)> = Vec::new();
+    let mut length = 0;
+    let mut add = |single: &SingleDtype, count: usize, fields: &mut Vec<_>| {
+        fields.push((single.clone(), length));
+        length += single.length * count;
+        fields.len() - 1
+    };
+    let shape = match repr {
+        DtypeRepr::Single(_) => return None,
         DtypeRepr::Array { dtype, count } => {
-            let DtypeRepr::Single(single) = dtype.as_ref() else {
-                return None;
-            };
-            let element = RecordField {
-                kind: single.kind,
-                length: single.length,
-                byte_order: single.byte_order,
-                bit_offset: 0,
-            };
-            Some(RecordLayout::Array {
-                element,
-                count: *count,
-                word: WordField::for_field(&element),
-            })
+            add(single(dtype)?, *count, &mut fields);
+            RecordShape::Array(*count)
         }
-        DtypeRepr::Single(_) => None,
-    }
+        DtypeRepr::Tuple(dtypes) => {
+            let mut members = Vec::with_capacity(dtypes.len());
+            for dtype in dtypes {
+                members.push(match dtype {
+                    DtypeRepr::Single(single) => RecordMember::Field(add(single, 1, &mut fields)),
+                    DtypeRepr::Array { dtype, count } => RecordMember::Array {
+                        field: add(single(dtype)?, *count, &mut fields),
+                        count: *count,
+                    },
+                    DtypeRepr::Tuple(inner) => {
+                        let start = fields.len();
+                        for dtype in inner {
+                            add(single(dtype)?, 1, &mut fields);
+                        }
+                        RecordMember::Tuple {
+                            start,
+                            len: inner.len(),
+                        }
+                    }
+                });
+            }
+            if members
+                .iter()
+                .all(|member| matches!(member, RecordMember::Field(_)))
+            {
+                RecordShape::Flat
+            } else {
+                RecordShape::Members(members.into_boxed_slice())
+            }
+        }
+    };
+    Some(RecordLayout {
+        shape,
+        length,
+        packers: fields
+            .iter()
+            .map(|(single, _)| BytewisePacker::for_dtype(single))
+            .collect(),
+        words: fields
+            .iter()
+            .map(|(single, offset)| WordField::new(single, *offset))
+            .collect(),
+    })
 }
 
 struct DtypeParser<'a> {
