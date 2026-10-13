@@ -539,3 +539,124 @@ def test_unpacking_part_of_a_bytes_object_copies_only_that_part(spec):
     for start in (0, 3, 8, 8 * 1000 + 5, len(whole) - dtype.length):
         end = start + dtype.length
         assert dtype.unpack(data, start, end) == dtype.unpack(whole, start, end)
+
+
+# A tuple whose items include arrays of a scalar or tuples of scalars, such as
+# `(u8, [u8; 4], (u4, u4))`, is read and written field by field like a flat
+# record. Wrapping the same tuple in a one-element array still takes the general
+# route, so it serves as the reference: same values, and the same errors once
+# its extra `[0]` is taken out of the path.
+
+_MEMBER_SCALARS = _WORD_FIELD_SPECS + ["bytes16", "hex8", "bin3", "u65"]
+
+
+def _member_specs():
+    scalar = st.sampled_from(_MEMBER_SCALARS)
+    return st.one_of(
+        scalar,
+        st.tuples(scalar, st.integers(1, 5)).map(lambda a: f"[{a[0]}; {a[1]}]"),
+        st.lists(scalar, min_size=1, max_size=3).map(lambda xs: "(" + ", ".join(xs) + ",)"),
+    )
+
+
+def _reference(dtype):
+    return Dtype(f"[{dtype}; 1]")
+
+
+def _without_nan(value):
+    if isinstance(value, tuple):
+        return tuple(_without_nan(v) for v in value)
+    return 0.0 if isinstance(value, float) and math.isnan(value) else value
+
+
+def _comparable_nested(value):
+    if isinstance(value, tuple):
+        return tuple(_comparable_nested(v) for v in value)
+    return repr(value) if isinstance(value, float) and math.isnan(value) else value
+
+
+@settings(max_examples=400, deadline=None)
+@given(
+    members=st.lists(_member_specs(), min_size=1, max_size=6),
+    seed=st.binary(min_size=200, max_size=200),
+    lead=st.integers(0, 15),
+)
+def test_tuples_with_array_and_tuple_items_match_the_general_route(members, seed, lead):
+    dtype = Dtype("(" + ", ".join(members) + ",)")
+    reference = _reference(dtype)
+    bits = Tibs.from_bytes(seed)[lead : lead + dtype.length]
+
+    (expected,) = reference.unpack(bits)
+    assert _comparable_nested(dtype.unpack(bits)) == _comparable_nested(expected)
+    assert _comparable_nested(dtype.unpack(seed, lead, lead + dtype.length)) == _comparable_nested(expected)
+    assert _comparable_nested(dtype.unpack(Mutibs(bits))) == _comparable_nested(expected)
+    assert _comparable_nested(dtype.unpack_values(bits * 3)) == _comparable_nested([expected] * 3)
+
+    value = _without_nan(expected)
+    packed = reference.pack((value,))
+    assert dtype.pack(value) == packed
+    # Lists, tuples and generators are all taken for the items.
+    as_lists = [list(v) if isinstance(v, tuple) else v for v in value]
+    assert dtype.pack(as_lists) == packed
+    assert dtype.pack(iter(as_lists)) == packed
+    assert dtype.pack_values([value, as_lists]) == packed * 2
+
+
+def _error(fn):
+    try:
+        fn()
+    except Exception as error:
+        return type(error), str(error)
+    return None
+
+
+@pytest.mark.parametrize(
+    "spec, value",
+    [
+        ("(u8, [u8; 3])", (1, (1, 2, 300))),
+        ("(u8, [u8; 3])", (1, (1, 2))),
+        ("(u8, [u8; 3])", (1, (1, 2, 3, 4))),
+        ("(u8, [u8; 3])", (1, 5)),
+        ("(u8, [u8; 3])", (1,)),
+        ("(u8, [u8; 3])", (1, (1, 2, 3), 9)),
+        ("(u8, [u8; 3])", (1.5, (1, 2, 3))),
+        ("(u8, [u8; 3])", (1, (1, "x", 3))),
+        ("(u4, [u12; 2], bool)", (1, (1, 5000), True)),
+        ("(u4, [u12; 2], bool)", (1, [1], True)),
+        ("(u4, (u3, i3), u1)", (1, (5, -5), 0)),
+        ("(u4, (u3, i3), u1)", (1, (5,), 0)),
+        ("(u8, (u8, u16_le), [f32; 2])", (1, (2, 3), (1.0, "x"))),
+        ("(u8, (u8, u16_le), [f32; 2])", (1, (2, 70000), (1.0, 2.0))),
+        ("(u8, [bytes16; 2])", (1, (b"ab", b"c"))),
+        ("(u8, [bytes16; 2])", (1, None)),
+    ],
+)
+def test_tuples_with_array_and_tuple_items_report_errors_as_the_general_route(spec, value):
+    dtype = Dtype(spec)
+    reference = _reference(dtype)
+
+    error = _error(lambda: dtype.pack(value))
+    expected = _error(lambda: reference.pack((value,)))
+    assert error is not None
+    assert error == (expected[0], expected[1].replace("At value[0]", "At value", 1))
+
+    error = _error(lambda: dtype.pack_values([value]))
+    expected = _error(lambda: reference.pack_values([(value,)]))
+    assert error == (expected[0], expected[1].replace("At value[0][0]", "At value[0]", 1))
+
+
+def test_tuple_with_array_item_names_the_element_in_errors():
+    with pytest.raises(ValueError) as error:
+        Dtype("(u8, [u8; 3])").pack((1, (1, 2, 300)))
+
+    assert str(error.value) == "At value[1][2]: ValueError: Value 300 does not fit in 8 bits."
+
+
+def test_tuple_with_a_long_array_item_round_trips():
+    dtype = Dtype("(u16, [u4; 100001], bool)")
+    value = (7, tuple(i % 16 for i in range(100001)), True)
+
+    packed = dtype.pack(value)
+
+    assert dtype.unpack(packed) == value
+    assert _reference(dtype).pack((value,)) == packed

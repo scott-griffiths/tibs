@@ -3,8 +3,8 @@ use crate::enums::{ByteOrder, DtypeKind};
 use crate::helpers::{BS, bv_from_bytes_slice, validate_slice};
 use crate::iterator::ValuesIterator;
 use crate::tibs_::{
-    Tibs, WordField, bv_from_value, bv_from_values_iter, py_from_raw_range, py_from_value,
-    py_values_from_range,
+    BytewisePacker, Tibs, WordField, bv_from_value, bv_from_values_iter, py_from_raw_range,
+    py_from_value, py_values_from_range,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -446,9 +446,11 @@ pub(crate) struct RecordField {
 /// unpack address each field directly instead of re-walking `DtypeRepr` and
 /// recomputing offsets via `DtypeRepr::length()` on every single record.
 ///
-/// Deeper nesting (tuple-of-tuple, array-of-tuple, ...) is never represented
-/// here: `Dtype::record_layout` is `None` for those, and pack/unpack keep
-/// walking `DtypeRepr` recursively exactly as before.
+/// A tuple may also hold arrays of a scalar and tuples of scalars one level
+/// down, such as `(u8, [u8; 4], (u4, u4))`; see [`RecordMembers`]. Deeper
+/// nesting (array-of-tuple, a tuple inside a tuple inside a tuple, ...) is
+/// never represented here: `Dtype::record_layout` is `None` for those, and
+/// pack/unpack keep walking `DtypeRepr` recursively exactly as before.
 ///
 /// `Array` stores one element descriptor plus `count`, not `count` cloned
 /// entries, so a large array stays cheap to represent: `Dtype("[u8; 1_000_000]")`
@@ -463,6 +465,9 @@ pub(crate) enum RecordLayout {
     Tuple {
         fields: Vec<RecordField>,
         words: Option<Box<[WordField]>>,
+        /// `None` when every item of the tuple is a scalar, so that `fields`
+        /// holds one entry per item, in order.
+        members: Option<Box<RecordMembers>>,
     },
     Array {
         element: RecordField,
@@ -471,25 +476,103 @@ pub(crate) enum RecordLayout {
     },
 }
 
+/// One item of a tuple record whose items aren't all scalars, addressing the
+/// record's `fields`.
+#[derive(Clone, Copy)]
+pub(crate) enum RecordMember {
+    /// A scalar, the entry of `fields` at this index.
+    Field(usize),
+    /// A tuple of scalars, the `len` entries of `fields` from `start`.
+    Tuple { start: usize, len: usize },
+    /// An array of a scalar: the entry of `fields` at `field`, which is its
+    /// first element, repeated `count` times end to end.
+    Array { field: usize, count: usize },
+}
+
+/// The shape of a tuple record with array or tuple items, kept beside its flat
+/// `fields` so that pack and unpack can address the fields directly, as they
+/// do for a tuple of scalars, and still take and give the nested values.
+///
+/// An array item is one entry of `fields` however long it is, so the cost of
+/// the layout is bounded by the spec's arity, as for a flat tuple.
+pub(crate) struct RecordMembers {
+    pub(crate) members: Box<[RecordMember]>,
+    /// The number of bits in one record.
+    pub(crate) length: usize,
+    /// One packer per entry of `fields`, when every one is a whole-byte
+    /// numeric field.
+    pub(crate) packers: Option<Box<[BytewisePacker]>>,
+}
+
+fn record_field(single: &SingleDtype, bit_offset: usize) -> RecordField {
+    RecordField {
+        kind: single.kind,
+        length: single.length,
+        byte_order: single.byte_order,
+        bit_offset,
+    }
+}
+
 fn build_record_layout(repr: &DtypeRepr) -> Option<RecordLayout> {
     match repr {
         DtypeRepr::Tuple(dtypes) => {
             let mut fields = Vec::with_capacity(dtypes.len());
+            let mut members = Vec::with_capacity(dtypes.len());
+            let mut nested = false;
             let mut bit_offset = 0;
             for dtype in dtypes {
-                let DtypeRepr::Single(single) = dtype else {
-                    return None;
-                };
-                fields.push(RecordField {
-                    kind: single.kind,
-                    length: single.length,
-                    byte_order: single.byte_order,
-                    bit_offset,
-                });
-                bit_offset += single.length;
+                match dtype {
+                    DtypeRepr::Single(single) => {
+                        members.push(RecordMember::Field(fields.len()));
+                        fields.push(record_field(single, bit_offset));
+                        bit_offset += single.length;
+                    }
+                    DtypeRepr::Array { dtype, count } => {
+                        let DtypeRepr::Single(single) = dtype.as_ref() else {
+                            return None;
+                        };
+                        members.push(RecordMember::Array {
+                            field: fields.len(),
+                            count: *count,
+                        });
+                        fields.push(record_field(single, bit_offset));
+                        bit_offset += single.length * count;
+                        nested = true;
+                    }
+                    DtypeRepr::Tuple(inner) => {
+                        members.push(RecordMember::Tuple {
+                            start: fields.len(),
+                            len: inner.len(),
+                        });
+                        for dtype in inner {
+                            let DtypeRepr::Single(single) = dtype else {
+                                return None;
+                            };
+                            fields.push(record_field(single, bit_offset));
+                            bit_offset += single.length;
+                        }
+                        nested = true;
+                    }
+                }
             }
             let words = fields.iter().map(WordField::for_field).collect();
-            Some(RecordLayout::Tuple { fields, words })
+            let members = nested.then(|| {
+                Box::new(RecordMembers {
+                    members: members.into_boxed_slice(),
+                    length: bit_offset,
+                    packers: fields
+                        .iter()
+                        .map(|field| {
+                            BytewisePacker::for_parts(field.kind, field.length, field.byte_order)
+                        })
+                        .collect(),
+                })
+            });
+            Some(RecordLayout::Tuple {
+                fields,
+                words,
+                members,
+            })
         }
         DtypeRepr::Array { dtype, count } => {
             let DtypeRepr::Single(single) = dtype.as_ref() else {

@@ -2,7 +2,10 @@ use crate::codec as tibs_codec;
 use crate::core::{
     BitCollection, concatenate_bitcollections, read_split_positions, validate_chunk_args,
 };
-use crate::dtype::{Dtype, DtypeRepr, RecordField, RecordLayout, SingleDtype, extract_dtype};
+use crate::dtype::{
+    Dtype, DtypeRepr, RecordField, RecordLayout, RecordMember, RecordMembers, SingleDtype,
+    extract_dtype,
+};
 use crate::enums::{BitOrder, ByteOrder, Codec, DtypeKind};
 use crate::helpers;
 use crate::helpers::{
@@ -837,7 +840,7 @@ pub(crate) fn bv_from_value(dtype: &Dtype, value: &Bound<'_, PyAny>) -> PyResult
 /// byte order and the sign are settled once for the whole sequence rather than
 /// per value.
 #[derive(Clone, Copy)]
-enum BytewisePacker {
+pub(crate) enum BytewisePacker {
     Int {
         byte_length: usize,
         is_little_endian: bool,
@@ -859,7 +862,7 @@ impl BytewisePacker {
     /// Decide whether `dtype` qualifies, without touching the values. This has
     /// to be settled up front, because returning `None` after consuming part
     /// of a one-shot iterable would lose those items.
-    fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> Option<Self> {
+    pub(crate) fn for_parts(kind: DtypeKind, length: usize, byte_order: ByteOrder) -> Option<Self> {
         debug_assert!(length > 0);
         if let Some(format) = narrow_float_format(kind) {
             debug_assert_eq!(length, format.bit_length());
@@ -961,6 +964,59 @@ fn classify_tuple_packers(fields: &[RecordField]) -> Option<Vec<BytewisePacker>>
     Some(packers)
 }
 
+/// Where a record's items sit, for the path an error reports. Only rendered
+/// once there is an error to put it in.
+///
+/// A flat record is placed by its position among several, if there are
+/// several, as an `Option<usize>`. A record nested in an item of a tuple record
+/// is placed by a [`ValuePath`]. The walkers are generic over the two so that a
+/// flat record, the common case, keeps the one-word argument: passing the
+/// two-word `ValuePath` to every walk cost the bit-accumulator path a tenth of
+/// its time packing a list of records, measured under the release profile.
+trait RecordPath: Copy {
+    fn render(&self) -> String;
+}
+
+impl RecordPath for Option<usize> {
+    fn render(&self) -> String {
+        self.map_or_else(String::new, |index| format!("[{index}]"))
+    }
+}
+
+/// The record's position among several, if there are several, then the item
+/// of the tuple record holding it.
+#[derive(Clone, Copy)]
+struct ValuePath {
+    record: Option<usize>,
+    member: Option<usize>,
+}
+
+impl RecordPath for ValuePath {
+    fn render(&self) -> String {
+        let mut path = String::new();
+        for index in [self.record, self.member].into_iter().flatten() {
+            path.push_str(&format!("[{index}]"));
+        }
+        path
+    }
+}
+
+impl ValuePath {
+    fn record(record: Option<usize>) -> Self {
+        Self {
+            record,
+            member: None,
+        }
+    }
+
+    fn member(self, member: usize) -> Self {
+        Self {
+            member: Some(member),
+            ..self
+        }
+    }
+}
+
 /// [`push_record_fields`] for a record whose fields are [`WordField`]s, pushed
 /// end to end into a bit accumulator.
 ///
@@ -972,10 +1028,10 @@ fn push_record_words(
     py: Python<'_>,
     fields: impl ExactSizeIterator<Item = WordField>,
     record: &Bound<'_, PyAny>,
-    record_index: Option<usize>,
+    at: impl RecordPath,
     out: &mut helpers::BitAccumulator,
 ) -> PyResult<()> {
-    let path = || record_index.map_or_else(String::new, |index| format!("[{index}]"));
+    let path = || at.render();
     let expected = fields.len();
     let too_few = |received: usize| {
         PyValueError::new_err(format!(
@@ -1033,18 +1089,17 @@ fn push_record_words(
 /// allocated per field, unlike the generic `append_dtype_value`/
 /// `append_dtype_items` path this replaces for [`RecordLayout::Tuple`].
 ///
-/// `record_index` is where the record sits among several, for the path an
-/// error reports, or `None` for a record packed on its own. The path is only
-/// formatted once there is an error to put it in; formatting it up front was
-/// an allocation for every record packed.
+/// `at` is where the record sits, for the path an error reports: see
+/// [`RecordPath`]. The path is only formatted once there is an error to put it
+/// in; formatting it up front was an allocation for every record packed.
 fn push_record_fields(
     py: Python<'_>,
     packers: impl ExactSizeIterator<Item = BytewisePacker>,
     record: &Bound<'_, PyAny>,
-    record_index: Option<usize>,
+    at: impl RecordPath,
     bytes: &mut Vec<u8>,
 ) -> PyResult<()> {
-    let path = || record_index.map_or_else(String::new, |index| format!("[{index}]"));
+    let path = || at.render();
     let expected = packers.len();
     let too_few = |received: usize| {
         PyValueError::new_err(format!(
@@ -1099,6 +1154,135 @@ fn push_record_fields(
     Ok(())
 }
 
+/// Visit each item of a tuple record, which must have exactly `expected` items,
+/// reporting a wrong count the way [`push_record_fields`] does.
+fn for_each_record_item<'py>(
+    py: Python<'py>,
+    record: &Bound<'py, PyAny>,
+    expected: usize,
+    at: ValuePath,
+    mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> PyResult<()>,
+) -> PyResult<()> {
+    let too_few = |received: usize| {
+        PyValueError::new_err(format!(
+            "At value{}: expected {expected} items, but received {received}.",
+            at.render()
+        ))
+    };
+    let too_many = || {
+        PyValueError::new_err(format!(
+            "At value{}: expected exactly {expected} items.",
+            at.render()
+        ))
+    };
+    // Read in place for an exact tuple, as in `push_record_fields`.
+    if let Ok(tuple) = record.cast_exact::<PyTuple>() {
+        let received = tuple.len();
+        for index in 0..expected {
+            if index == received {
+                return Err(too_few(index));
+            }
+            let item = tuple.get_borrowed_item(index)?;
+            visit(index, &item)?;
+        }
+        return if received > expected {
+            Err(too_many())
+        } else {
+            Ok(())
+        };
+    }
+    let mut items = record
+        .try_iter()
+        .map_err(|error| add_value_path(py, error, &at.render()))?;
+    for index in 0..expected {
+        let item = items.next().ok_or_else(|| too_few(index))??;
+        visit(index, &item)?;
+    }
+    if let Some(item) = items.next() {
+        item?;
+        return Err(too_many());
+    }
+    Ok(())
+}
+
+/// [`push_record_fields`] for a tuple record with array or tuple items: each
+/// item is a scalar, or an iterable of the scalars of one of those.
+fn push_member_fields(
+    py: Python<'_>,
+    shape: &RecordMembers,
+    packers: &[BytewisePacker],
+    record: &Bound<'_, PyAny>,
+    at: ValuePath,
+    bytes: &mut Vec<u8>,
+) -> PyResult<()> {
+    for_each_record_item(
+        py,
+        record,
+        shape.members.len(),
+        at,
+        |index, item| match shape.members[index] {
+            RecordMember::Field(field) => packers[field]
+                .push(bytes, item)
+                .map_err(|error| add_value_path(py, error, &at.member(index).render())),
+            RecordMember::Tuple { start, len } => push_record_fields(
+                py,
+                packers[start..start + len].iter().copied(),
+                item,
+                at.member(index),
+                bytes,
+            ),
+            RecordMember::Array { field, count } => push_record_fields(
+                py,
+                std::iter::repeat_n(packers[field], count),
+                item,
+                at.member(index),
+                bytes,
+            ),
+        },
+    )
+}
+
+/// [`push_member_fields`] for fields that are [`WordField`]s.
+fn push_member_words(
+    py: Python<'_>,
+    shape: &RecordMembers,
+    words: &[WordField],
+    record: &Bound<'_, PyAny>,
+    at: ValuePath,
+    out: &mut helpers::BitAccumulator,
+) -> PyResult<()> {
+    for_each_record_item(
+        py,
+        record,
+        shape.members.len(),
+        at,
+        |index, item| match shape.members[index] {
+            RecordMember::Field(field) => {
+                let word = words[field];
+                let raw = word
+                    .raw_from_value(item)
+                    .map_err(|error| add_value_path(py, error, &at.member(index).render()))?;
+                out.push_wide(raw, word.length);
+                Ok(())
+            }
+            RecordMember::Tuple { start, len } => push_record_words(
+                py,
+                words[start..start + len].iter().copied(),
+                item,
+                at.member(index),
+                out,
+            ),
+            RecordMember::Array { field, count } => push_record_words(
+                py,
+                std::iter::repeat_n(words[field], count),
+                item,
+                at.member(index),
+                out,
+            ),
+        },
+    )
+}
+
 /// The fields of a record layout as [`WordField`]s, or `None` when some field
 /// doesn't fit one.
 ///
@@ -1108,7 +1292,9 @@ fn push_record_fields(
 fn record_words(layout: &RecordLayout) -> Option<(&[WordField], usize, usize)> {
     match layout {
         RecordLayout::Tuple {
-            words: Some(words), ..
+            words: Some(words),
+            members: None,
+            ..
         } => {
             let last = words.last().expect("a tuple dtype has at least one field");
             Some((&words[..], last.bit_offset + last.length, words.len()))
@@ -1139,6 +1325,26 @@ fn record_word_iter(
 fn bv_from_value_record(layout: &RecordLayout, value: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
     let py = value.py();
     match layout {
+        RecordLayout::Tuple {
+            members: Some(shape),
+            words,
+            ..
+        } => {
+            let at = ValuePath::record(None);
+            if let Some(packers) = &shape.packers {
+                let mut bytes = Vec::with_capacity(helpers::reserve_bytes(Some(shape.length / 8)));
+                push_member_fields(py, shape, packers, value, at, &mut bytes)?;
+                return Ok(Some(helpers::try_bv_from_bytes(bytes)?));
+            }
+            let Some(words) = words else {
+                return Ok(None);
+            };
+            let mut out = helpers::BitAccumulator::with_bit_capacity(Some(helpers::reserve_bits(
+                Some(shape.length),
+            )));
+            push_member_words(py, shape, words, value, at, &mut out)?;
+            return Ok(Some(out.into_bitvec()));
+        }
         RecordLayout::Tuple { fields, .. }
             if fields.iter().all(|field| {
                 BytewisePacker::for_parts(field.kind, field.length, field.byte_order).is_some()
@@ -1231,6 +1437,37 @@ fn bv_from_values_iter_record(
     // The word path below hands `for_each_value` the same null `plain` as
     // `bytewise_records`, for the reason given there.
     match layout {
+        RecordLayout::Tuple {
+            members: Some(shape),
+            words,
+            ..
+        } => {
+            let capacity = hint.and_then(|len| len.checked_mul(shape.length));
+            let mut record_index = 0usize;
+            if let Some(packers) = &shape.packers {
+                let mut bytes =
+                    Vec::with_capacity(helpers::reserve_bytes(capacity.map(|bits| bits / 8)));
+                for_each_value(py, iterable, ptr::null_mut(), |record| {
+                    let at = ValuePath::record(Some(record_index));
+                    push_member_fields(py, shape, packers, record, at, &mut bytes)?;
+                    record_index += 1;
+                    Ok(())
+                })?;
+                return Ok(Some(helpers::try_bv_from_bytes(bytes)?));
+            }
+            let Some(words) = words else {
+                return Ok(None);
+            };
+            let mut out =
+                helpers::BitAccumulator::with_bit_capacity(Some(helpers::reserve_bits(capacity)));
+            for_each_value(py, iterable, ptr::null_mut(), |record| {
+                let at = ValuePath::record(Some(record_index));
+                push_member_words(py, shape, words, record, at, &mut out)?;
+                record_index += 1;
+                Ok(())
+            })?;
+            return Ok(Some(out.into_bitvec()));
+        }
         RecordLayout::Tuple { fields, .. } => {
             if let Some(packers) = classify_tuple_packers(fields) {
                 let record_byte_length = packers.iter().map(BytewisePacker::byte_length).sum();
@@ -1853,7 +2090,7 @@ impl WordField {
 
     /// `value` as the field's raw bits, right-aligned, in the order they are
     /// stored.
-    #[inline]
+    #[inline(always)]
     fn raw_from_value(&self, value: &Bound<'_, PyAny>) -> PyResult<u64> {
         let length = self.length;
         let raw = match self.reading {
@@ -2110,6 +2347,42 @@ fn for_each_record_value(
     count: usize,
     mut emit: impl FnMut(Py<PyAny>),
 ) -> PyResult<bool> {
+    if let RecordLayout::Tuple {
+        members: Some(shape),
+        words,
+        ..
+    } = layout
+    {
+        let Some(words) = words else {
+            return Ok(false);
+        };
+        let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+        for index in 0..count {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+            }
+            let record_bit = shift + index * shape.length;
+            let record = tuple_from_fn(py, shape.members.len(), |member| {
+                Ok(match shape.members[member] {
+                    RecordMember::Field(field) => words[field].value(py, bytes, record_bit)?,
+                    RecordMember::Tuple { start, len } => tuple_from_fn(py, len, |field| {
+                        words[start + field].value(py, bytes, record_bit)
+                    })?
+                    .into_any(),
+                    RecordMember::Array { field, count } => {
+                        let element = &words[field];
+                        tuple_from_fn(py, count, |position| {
+                            element.value(py, bytes, record_bit + position * element.length)
+                        })?
+                        .into_any()
+                    }
+                })
+            })?;
+            emit(record.into_any().unbind());
+        }
+        return Ok(true);
+    }
     let Some((fields, record_length, element_count)) = record_words(layout) else {
         return Ok(false);
     };

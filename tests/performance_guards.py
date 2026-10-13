@@ -55,7 +55,7 @@ from typing import Callable
 
 import pytest
 
-from tibs import Codec, Mutibs, Tibs
+from tibs import Codec, Dtype, Mutibs, Tibs
 
 # 1M bits is 125 KB: far past the point where per-call overhead matters, and
 # small enough that a guard is a few milliseconds rather than a few seconds.
@@ -141,6 +141,16 @@ PARSE_SINGLE = "0x" + PARSE_HEX_PIECE * 100
 PARSE_TINY_HEX_PIECE = "ab" * 5
 PARSE_TINY_MULTI = ",".join(["0x" + PARSE_TINY_HEX_PIECE] * 25_000)
 PARSE_TINY_SINGLE = "0x" + PARSE_TINY_HEX_PIECE * 25_000
+
+# The same records spelled with an array item and flat. A tuple whose items
+# include an array of a scalar is laid out field by field like a flat one, so
+# the two pack to the same bits at about the same cost.
+NESTED_RECORD = Dtype("(u4, [u8; 4], bool, u3, [u16_le; 2])")
+FLAT_RECORD = Dtype("(u4, u8, u8, u8, u8, bool, u3, u16_le, u16_le)")
+NESTED_RECORDS = [(i % 16, (1, 2, 3, i % 256), True, 5, (i, 7)) for i in range(20_000)]
+FLAT_RECORDS = [(a, *b, c, d, *e) for a, b, c, d, e in NESTED_RECORDS]
+RECORD_BITS = NESTED_RECORD.pack_values(NESTED_RECORDS)
+assert FLAT_RECORD.pack_values(FLAT_RECORDS) == RECORD_BITS
 
 ONE_ZERO = Tibs("0b0")
 ONE_ONE = Tibs("0b1")
@@ -874,6 +884,26 @@ GUARDS: list[Guard] = [
         slow=lambda: Tibs.from_bytes(BIG_BYTES_H_VIEW),
         fast=lambda: Tibs.from_bytes(BIG_BYTES),
         limit=2.0,
+    ),
+    # ---- 32. records with an array item ----------------------------------
+    # A tuple with an array item went the general route, which builds a BitVec
+    # for every field: fifteen times the cost of the flat spelling to pack and
+    # three times to unpack. Unpacking still builds a tuple for each array item,
+    # which the flat spelling doesn't, hence the looser limit there.
+    Guard(
+        name="pack_values with array items vs flat",
+        site="dtype.rs build_record_layout - RecordMembers",
+        slow=lambda: NESTED_RECORD.pack_values(NESTED_RECORDS),
+        fast=lambda: FLAT_RECORD.pack_values(FLAT_RECORDS),
+        limit=2.0,
+    ),
+    Guard(
+        name="unpack_values with array items vs flat",
+        site="tibs_.rs for_each_record_value - RecordMembers",
+        slow=lambda: NESTED_RECORD.unpack_values(RECORD_BITS),
+        fast=lambda: FLAT_RECORD.unpack_values(RECORD_BITS),
+        limit=2.5,
+        same_result=False,
     ),
 ]
 
