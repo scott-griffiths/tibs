@@ -3,7 +3,7 @@ use crate::core::BitCollection;
 use crate::dtype::extract_dtype;
 use crate::mutibs::Mutibs;
 use crate::tibs_::{SearchParams, Tibs, find_in_bits, py_from_value, py_values_from_range};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::{with_critical_section, with_critical_section2};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -428,10 +428,13 @@ impl Reader {
     /// :meth:`Tibs.to_values`, which has no cursor to leave a remainder
     /// behind.
     ///
+    /// A dtype of length zero needs ``count``, since any number of its values
+    /// fit, and gives that many empty values without moving the position.
+    ///
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None count: The number of values to read, or ``None`` for as many as fit.
     /// :return: A list of decoded Python values.
-    /// :raises ValueError: if ``count`` is negative or too large to represent.
+    /// :raises ValueError: if ``count`` is negative or too large to represent, or is ``None`` with a dtype of length zero.
     /// :raises tibs.ReadError: if the requested values do not fit in the bits that remain, in which case the position does not move.
     ///
     /// .. code-block:: pycon
@@ -450,6 +453,9 @@ impl Reader {
         count: Option<i64>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
+        if count.is_none() && dtype.length == 0 {
+            return Err(dtype.zero_length_values_error());
+        }
         let window = Self::with_reader(slf, |r| {
             let len = r.source_len(py)?;
             let bits = match count {
@@ -471,6 +477,19 @@ impl Reader {
             r.set_position(end);
             Ok(window)
         })?;
+        if dtype.length == 0 {
+            // `count` is known here, and every value is the same immutable
+            // empty one, so a single object is shared rather than decoded
+            // `count` times.
+            let count = count.unwrap_or(0) as usize;
+            let value = py_from_value(py, &dtype, &window)?;
+            let mut values = Vec::new();
+            values.try_reserve_exact(count).map_err(|_| {
+                PyMemoryError::new_err(format!("Cannot allocate a list of {count} values."))
+            })?;
+            values.extend((0..count).map(|_| value.clone_ref(py)));
+            return Ok(values);
+        }
         py_values_from_range(py, &window, &dtype, None, None)
     }
 

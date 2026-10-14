@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from tibs import Bookmark, DtypeArray, Mutibs, ReadError, Reader, Tibs
+from tibs import Bookmark, Dtype, DtypeArray, Mutibs, ReadError, Reader, Tibs
 
 
 # --- construction and state ------------------------------------------------
@@ -704,4 +704,58 @@ def test_reading_the_whole_source_in_steps_reconstructs_it():
         parts.append(r.read_bits(7))
     parts.append(r.read_bits(r.remaining))
     assert Tibs.from_joined(parts) == t
+    assert r.at_end
+
+
+# --- zero-length dtypes ----------------------------------------------------
+
+
+@pytest.mark.parametrize("pos", [0, 5, 16])
+@pytest.mark.parametrize("source", [Tibs("0x0102"), Mutibs("0x0102")])
+def test_zero_length_values_read_anywhere_without_moving(source, pos):
+    r = Reader(source, pos)
+
+    assert r.read_value("[u8; 0]") == ()
+    assert r.read_value("bytes0") == b""
+    assert r.peek_value("bits0") == Tibs()
+    assert r.read_value("(hex0, [bool; 0])") == ("", ())
+    assert r.pos == pos
+
+
+def test_read_values_needs_a_count_for_a_zero_length_dtype():
+    r = Reader(Tibs("0x0102"), 3)
+    for dtype in ("bytes0", "[u8; 0]", "(bin0,)"):
+        with pytest.raises(ValueError, match="Can't tell how many zero-length values to read"):
+            r.read_values(dtype)
+    assert r.pos == 3
+
+
+def test_read_values_with_a_count_gives_that_many_empty_values():
+    r = Reader(Tibs("0x0102"), 3)
+
+    assert r.read_values("bytes0", 3) == [b"", b"", b""]
+    assert r.read_values("[u8; 0]", 2) == [(), ()]
+    assert r.read_values("(oct0, [u16; 0])", 1) == [("", ())]
+    assert r.read_values("bits0", 0) == []
+    assert r.pos == 3
+
+    r.pos = 16
+    assert r.read_values("hex0", 2) == ["", ""]
+    assert r.pos == 16
+    with pytest.raises(ValueError, match="negative number of values"):
+        r.read_values("hex0", -1)
+
+
+def test_read_values_of_a_zero_length_dtype_with_an_unallocatable_count():
+    with pytest.raises(MemoryError):
+        Reader(Tibs()).read_values("bits0", 2**62)
+
+
+def test_tuples_with_zero_length_fields_read_like_their_length():
+    t = Dtype("(u8, [u8; 0], bool)").pack_values([(1, (), True), (2, (), False)])
+    r = Reader(t)
+
+    assert r.read_value("(u8, [u8; 0], bool)") == (1, (), True)
+    assert r.pos == 9
+    assert r.read_values("(u8, [u8; 0], bool)") == [(2, (), False)]
     assert r.at_end

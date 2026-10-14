@@ -348,6 +348,10 @@ impl ValuesIterator {
     ) -> PyResult<Py<Self>> {
         let selected_len = end - start;
         let chunk_size = dtype.length;
+        // Stepping by zero bits would never reach the end.
+        if chunk_size == 0 {
+            return Err(dtype.zero_length_values_error());
+        }
         if !selected_len.is_multiple_of(chunk_size) {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Cannot create values iterator - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",

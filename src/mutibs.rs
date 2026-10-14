@@ -2467,8 +2467,10 @@ impl Mutibs {
 
     /// Return a list of values decoded with a dtype.
     ///
-    /// The selected range must be a whole number of dtype values. The values are
-    /// decoded from the current contents when the method is called.
+    /// The selected range must be a whole number of dtype values. A dtype of
+    /// length zero raises ``ValueError``, as any number of its values would fit.
+    /// The values are decoded from the current contents when the method is
+    /// called.
     ///
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None start: Start bit position. Defaults to 0.

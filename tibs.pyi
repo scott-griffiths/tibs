@@ -210,7 +210,8 @@ class Dtype:
         :param int | None start: Start bit position. Defaults to 0.
         :param int | None end: End bit position. Defaults to ``len(bits)``.
         :return: A list of decoded values.
-        :raises ValueError: if the selected range is not a multiple of :attr:`length`.
+        :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
+            if :attr:`length` is zero, as the number of values could then be anything.
         """
 
     def unpack_values_iter(self, bits: _TibsLike, /, start: int | None = None,
@@ -221,7 +222,8 @@ class Dtype:
         :param int | None start: Start bit position. Defaults to 0.
         :param int | None end: End bit position. Defaults to ``len(bits)``.
         :return: An iterator of decoded values.
-        :raises ValueError: if the selected range is not a multiple of :attr:`length`.
+        :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
+            if :attr:`length` is zero, as the number of values could then be anything.
         """
 
     def __eq__(self, other: Any) -> bool: ...
@@ -253,9 +255,10 @@ class DtypeSingle(Dtype):
         """Construct a scalar dtype from explicit parameters.
 
         :param DtypeKind kind: The scalar value kind.
-        :param int | None length: The positive bit length. May be omitted for a
-            kind that fixes its own length, such as ``DtypeKind.OcpE2M1`` or
-            ``DtypeKind.Bool``.
+        :param int | None length: The bit length. May be omitted for a kind that
+            fixes its own length, such as ``DtypeKind.OcpE2M1`` or
+            ``DtypeKind.Bool``. Only the ``Bits``, ``Bytes``, ``Bin``, ``Oct``
+            and ``Hex`` kinds can have a length of zero.
         :param ByteOrder | None byte_order: The byte order. Defaults to unspecified.
         :return: A scalar dtype.
 
@@ -277,10 +280,11 @@ class DtypeSingle(Dtype):
 
 
 class DtypeArray(Dtype):
-    """A fixed positive number of repetitions of another dtype.
+    """A fixed number of repetitions of another dtype.
 
     Array values pack from any iterable with exactly :attr:`count` items
-    and unpack to Python tuples.
+    and unpack to Python tuples. The count may be zero, giving a dtype of
+    length zero whose value is ``()``.
     """
 
     def __init__(self, spec: str, /) -> None: ...
@@ -290,7 +294,7 @@ class DtypeArray(Dtype):
         """Construct an array dtype from its element dtype and count.
 
         :param Dtype | str dtype: The element dtype.
-        :param int count: The positive number of elements.
+        :param int count: The number of elements, which may be zero.
         :return: An array dtype.
         """
 
@@ -1031,10 +1035,13 @@ class Reader:
         :meth:`Tibs.to_values`, which has no cursor to leave a remainder
         behind.
 
+        A dtype of length zero needs ``count``, since any number of its values
+        fit, and gives that many empty values without moving the position.
+
         :param Dtype | str dtype: The value encoding to use for each item.
         :param int | None count: The number of values to read, or ``None`` for as many as fit.
         :return: A list of decoded Python values.
-        :raises ValueError: if ``count`` is negative or too large to represent.
+        :raises ValueError: if ``count`` is negative or too large to represent, or is ``None`` with a dtype of length zero.
         :raises tibs.ReadError: if the requested values do not fit in the bits that remain, in which case the position does not move.
 
         .. code-block:: pycon
@@ -1739,7 +1746,8 @@ class Tibs:
         _DtypeValue]:
         """Return an iterator over values decoded with a dtype.
 
-        The selected range must be a whole number of dtype values.
+        The selected range must be a whole number of dtype values. A dtype of
+        length zero raises ``ValueError``, as any number of its values would fit.
 
         :param Dtype | str dtype: The value encoding to use for each yielded item.
         :param int | None start: Start bit position. Defaults to 0.
@@ -1756,7 +1764,8 @@ class Tibs:
         _DtypeValue]:
         """Return a list of values decoded with a dtype.
 
-        The selected range must be a whole number of dtype values.
+        The selected range must be a whole number of dtype values. A dtype of
+        length zero raises ``ValueError``, as any number of its values would fit.
 
         :param Dtype | str dtype: The value encoding to use for each item.
         :param int | None start: Start bit position. Defaults to 0.
@@ -3507,8 +3516,10 @@ class Mutibs:
         _DtypeValue]:
         """Return a list of values decoded with a dtype.
 
-        The selected range must be a whole number of dtype values. The values are
-        decoded from the current contents when the method is called.
+        The selected range must be a whole number of dtype values. A dtype of
+        length zero raises ``ValueError``, as any number of its values would fit.
+        The values are decoded from the current contents when the method is
+        called.
 
         :param Dtype | str dtype: The value encoding to use for each item.
         :param int | None start: Start bit position. Defaults to 0.

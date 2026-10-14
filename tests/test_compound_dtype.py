@@ -135,8 +135,8 @@ def test_concrete_reprs_round_trip_through_concrete_classes():
         "[]",
         "[u8]",
         "[u8;]",
-        "[u8; 0]",
         "[u8; -1]",
+        "[u0; 0]",
         "()",
         "(,)",
         "(u8, bool",
@@ -438,7 +438,7 @@ _WORD_FIELD_SPECS = (
     + [f"i{n}" for n in (2, 5, 8, 12, 27, 28, 31, 63, 64)]
     + ["bool", "u8", "u16_le", "u24_be", "i32_le", "u64_le", "i64_le", "u48_le"]
     + ["f16", "f32", "f64", "f32_le", "f64_le", "bf16", "bf16_le", "ocp_e2m1", "ocp_e4m3_saturate"]
-    + ["bytes8", "bytes24", "bytes72"]
+    + ["bytes0", "bytes8", "bytes24", "bytes72"]
 )
 
 
@@ -477,7 +477,12 @@ def test_word_field_records_match_their_fields_one_at_a_time(fields, seed, lead)
     joined = Tibs.from_joined(single.pack(v) for single, v in zip(singles, values))
     assert dtype.pack(values) == joined
     assert dtype.pack_values([values, values]) == joined * 2
-    assert _comparable(dtype.unpack_values(joined * 3)) == _comparable([tuple(values)] * 3)
+    if dtype.length == 0:
+        # Only `bytes0` fields, so there's no telling how many records there are.
+        with pytest.raises(ValueError, match="zero-length values"):
+            dtype.unpack_values(joined * 3)
+    else:
+        assert _comparable(dtype.unpack_values(joined * 3)) == _comparable([tuple(values)] * 3)
 
 
 @pytest.mark.parametrize("spec", ["[u12; 3]", "[bool; 5]", "[i7; 2]", "[u64_le; 2]"])
@@ -548,14 +553,14 @@ def test_unpacking_part_of_a_bytes_object_copies_only_that_part(spec):
 # route, so it serves as the reference: same values, and the same errors once
 # its extra `[0]` is taken out of the path.
 
-_MEMBER_SCALARS = _WORD_FIELD_SPECS + ["hex8", "bin3", "bits5", "u65"]
+_MEMBER_SCALARS = _WORD_FIELD_SPECS + ["hex8", "bin3", "bits5", "u65", "hex0"]
 
 
 def _member_specs():
     scalar = st.sampled_from(_MEMBER_SCALARS)
     return st.one_of(
         scalar,
-        st.tuples(scalar, st.integers(1, 5)).map(lambda a: f"[{a[0]}; {a[1]}]"),
+        st.tuples(scalar, st.integers(0, 5)).map(lambda a: f"[{a[0]}; {a[1]}]"),
         st.lists(scalar, min_size=1, max_size=3).map(lambda xs: "(" + ", ".join(xs) + ",)"),
     )
 
@@ -591,7 +596,11 @@ def test_tuples_with_array_and_tuple_items_match_the_general_route(members, seed
     assert _comparable_nested(dtype.unpack(bits)) == _comparable_nested(expected)
     assert _comparable_nested(dtype.unpack(seed, lead, lead + dtype.length)) == _comparable_nested(expected)
     assert _comparable_nested(dtype.unpack(Mutibs(bits))) == _comparable_nested(expected)
-    assert _comparable_nested(dtype.unpack_values(bits * 3)) == _comparable_nested([expected] * 3)
+    if dtype.length == 0:
+        with pytest.raises(ValueError, match="zero-length values"):
+            dtype.unpack_values(bits * 3)
+    else:
+        assert _comparable_nested(dtype.unpack_values(bits * 3)) == _comparable_nested([expected] * 3)
 
     value = _without_nan(expected)
     packed = reference.pack((value,))
@@ -647,6 +656,11 @@ def _assert_packs_as_reference(dtype, value):
         ("(u8, bytes16)", (1, 5)),
         ("(u4, bytes16, u4)", (1, b"a", 2)),
         ("(u4, [bytes16; 2], u4)", (1, (b"ab", 5), 2)),
+        ("(u8, [u8; 0])", (1, (1,))),
+        ("(u8, [u8; 0])", (1, 5)),
+        ("(u8, [u8; 0], bool)", (1, True)),
+        ("(u8, bytes0)", (1, b"a")),
+        ("(u4, bytes0, u4)", (1, None, 2)),
     ],
 )
 def test_tuples_with_array_and_tuple_items_report_errors_as_the_general_route(spec, value):
@@ -705,3 +719,120 @@ def test_bytes_dtype_pack_values_matches_packing_each_value():
         dtype.pack(b"cde")
     assert str(error.value) == str(single.value)
     assert error.value.__notes__ == ["At value[1]."]
+
+
+# --- zero-length arrays and tuples --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spec,element",
+    [
+        ("[u8; 0]", "u8"),
+        ("[u16_le; 0]", "u16_le"),
+        ("[bool; 0]", "bool"),
+        ("[bits3; 0]", "bits3"),
+        ("[bytes32; 0]", "bytes32"),
+        ("[(u8, bool); 0]", "(u8, bool)"),
+        ("[[u8; 2]; 0]", "[u8; 2]"),
+        ("[[u8; 0]; 0]", "[u8; 0]"),
+    ],
+)
+def test_zero_count_arrays(spec, element):
+    dtype = Dtype(spec)
+
+    assert type(dtype) is DtypeArray
+    assert dtype.length == 0
+    assert dtype.count == 0
+    assert dtype.dtype == Dtype(element)
+    assert dtype == DtypeArray.from_params(element, 0)
+    assert hash(dtype) == hash(DtypeArray.from_params(element, 0))
+    assert str(dtype) == spec
+    assert repr(dtype) == f"DtypeArray('{spec}')"
+    assert eval(repr(dtype), {"DtypeArray": DtypeArray}) == dtype
+
+    assert dtype.unpack(Tibs()) == ()
+    for empty in ([], (), iter(()), range(0)):
+        assert dtype.pack(empty) == Tibs()
+    assert dtype.pack_values([[], (), iter(())]) == Tibs()
+    assert Tibs.from_values(dtype, []) == Tibs()
+    assert Mutibs.from_value(dtype, ()) == Mutibs()
+
+
+@pytest.mark.parametrize("spec", ["[u8; 0]", "[bits3; 0]", "[(u8, bool); 0]"])
+def test_zero_count_array_refuses_items(spec):
+    with pytest.raises(ValueError, match="expected exactly 0 items"):
+        Dtype(spec).pack([1])
+    with pytest.raises(ValueError, match=r"At value\[1\]: expected exactly 0 items"):
+        Dtype(spec).pack_values([[], [1]])
+
+
+def test_zero_count_arrays_with_different_elements_are_different_dtypes():
+    assert Dtype("[u8; 0]") != Dtype("[u16; 0]")
+    assert Dtype("[u8; 0]") != Dtype("[u8_le; 0]")
+    assert Dtype("[u8; 0]") != Dtype("bits0")
+    assert len({Dtype("[u8; 0]"), Dtype("[u16; 0]"), Dtype("[(u8,); 0]"), Dtype("bytes0")}) == 4
+
+
+def test_an_array_of_zero_length_elements():
+    dtype = Dtype("[[u8; 0]; 3]")
+    assert dtype.length == 0
+    assert dtype.unpack(Tibs()) == ((), (), ())
+    assert dtype.pack([[], [], []]) == Tibs()
+    with pytest.raises(ValueError, match="expected 3 items, but received 2"):
+        dtype.pack([[], []])
+
+    assert Dtype("[bytes0; 2]").unpack(Tibs()) == (b"", b"")
+    assert Dtype("[hex0; 2]").pack(["", ""]) == Tibs()
+
+
+def test_dtype_array_from_params_rejects_a_negative_count():
+    with pytest.raises(ValueError, match="DtypeArray count can't be negative, but received -1."):
+        DtypeArray.from_params("u8", -1)
+
+
+@pytest.mark.parametrize(
+    "spec,value,packed",
+    [
+        ("(u8, [u8; 0], bool)", (5, (), True), Tibs("0x05") + Tibs("0b1")),
+        ("(u8, bytes0)", (5, b""), Tibs("0x05")),
+        ("(bytes0, u8)", (b"", 5), Tibs("0x05")),
+        ("(u4, bytes0, u4)", (1, b"", 2), Tibs("0x12")),
+        ("(bits0, u8)", (Tibs(), 5), Tibs("0x05")),
+        ("(u8, (bytes0, u8))", (5, (b"", 6)), Tibs("0x0506")),
+        ("([u16_le; 0], u8)", ((), 5), Tibs("0x05")),
+        ("(u8, [bits3; 0], hex0, u4)", (5, (), "", 3), Tibs("0x053")),
+        ("(u3, [(u8, bool); 0])", (5, ()), Tibs("0b101")),
+    ],
+)
+def test_zero_length_fields_inside_tuples(spec, value, packed):
+    dtype = Dtype(spec)
+
+    assert dtype.length == len(packed)
+    assert dtype.pack(value) == packed
+    assert dtype.unpack(packed) == value
+    assert eval(repr(dtype), {"DtypeTuple": DtypeTuple}) == dtype
+
+    # Repeated, at unaligned offsets, and read straight from bytes.
+    many = Tibs("0b1") + dtype.pack_values([value] * 3)
+    assert many[1:].to_values(dtype) == [value] * 3
+    assert list(many.to_values_iter(dtype, 1)) == [value] * 3
+    assert many.to_value(dtype, 1 + len(packed), 1 + 2 * len(packed)) == value
+    if len(packed) % 8 == 0:
+        assert dtype.unpack(packed.to_bytes(), 0, len(packed)) == value
+
+
+def test_tuples_of_only_zero_length_fields():
+    dtype = Dtype("(bytes0, [u8; 0])")
+    assert dtype.length == 0
+    assert dtype.unpack(Tibs()) == (b"", ())
+    assert dtype.pack((b"", [])) == Tibs()
+    assert DtypeTuple.from_params(["hex0"]).unpack(Tibs()) == ("",)
+    assert DtypeTuple.from_params(["u8", "[u8; 0]"]) == Dtype("(u8, [u8; 0])")
+
+
+def test_a_zero_length_field_still_needs_its_place_in_the_tuple():
+    dtype = Dtype("(u8, [u8; 0], bool)")
+    with pytest.raises(ValueError, match="expected 3 items, but received 1"):
+        dtype.pack((5,))
+    with pytest.raises(ValueError, match=r"At value\[1\]: expected exactly 0 items"):
+        dtype.pack((5, [1], True))

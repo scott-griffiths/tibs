@@ -4,7 +4,7 @@ Dtypes
 ------
 
 Data types describe how Python values are converted to fixed-width bit
-sequences and back again. Every dtype has a positive :attr:`Dtype.length`,
+sequences and back again. Every dtype has a fixed :attr:`Dtype.length`,
 measured in bits, and can therefore describe either one value or a repeated
 sequence of values.
 
@@ -181,8 +181,8 @@ takes the same two pieces::
 An array's own :attr:`~Dtype.length` is the total encoded length of all its
 elements, not of one element - for that, use ``array.dtype.length``.
 
-Counts must be greater than zero. An array unpacks to an immutable Python
-tuple, including when its input was a list or another iterable.
+A count may be zero - see `Zero-length dtypes`_ below. An array unpacks to an
+immutable Python tuple, including when its input was a list or another iterable.
 
 Tuple dtypes
 ^^^^^^^^^^^^
@@ -233,6 +233,42 @@ The selected range for :meth:`Tibs.to_value` or :meth:`Dtype.unpack` must have
 exactly the dtype length. Repeated decoding requires a whole number of dtype
 values. Empty input is valid for the repeated methods because it contains zero
 complete values.
+
+Zero-length dtypes
+^^^^^^^^^^^^^^^^^^
+
+Binary formats are full of empty fields: a count of zero followed by no items,
+or a payload whose length field says there isn't one. An array with a count of
+zero describes exactly that, whatever its element dtype, and so do the literal
+kinds with a length of zero, each of which has an obvious empty value::
+
+    >>> Dtype("[u8; 0]").unpack(Tibs())
+    ()
+    >>> Dtype("bytes0").unpack(Tibs())
+    b''
+    >>> Dtype("[u16_le; 0]").pack([])
+    Tibs()
+
+``bits0`` gives an empty :class:`Tibs`, and ``bin0``, ``oct0`` and ``hex0``
+give ``''``. The numeric kinds and ``bool`` have no zero-bit value, so ``u0``,
+``i0`` and ``f0`` are still errors.
+
+Inside a tuple, a zero-length field adds nothing to the length, but its value
+still takes its place::
+
+    >>> message = Dtype("(u8, [u8; 0], bool)")
+    >>> message.length
+    9
+    >>> message.unpack(message.pack((5, [], True)))
+    (5, (), True)
+
+A zero-length value can be read anywhere, including at the very end, and
+reading one never moves a :class:`Reader`. What can't be done is reading
+"as many as fit", since any number of them fit in any number of bits. So
+:meth:`Tibs.to_values`, :meth:`Dtype.unpack_values` and
+:meth:`Reader.read_values` without a ``count`` raise ``ValueError`` for a
+zero-length dtype. Given a ``count``, :meth:`Reader.read_values` returns that
+many empty values, and packing repeated values works as usual.
 
 Relationship to ``struct``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

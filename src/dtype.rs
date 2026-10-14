@@ -151,9 +151,9 @@ pub(crate) struct SingleDtype {
 
 impl SingleDtype {
     fn from_parts(kind: DtypeKind, length: i64, byte_order: ByteOrder) -> PyResult<Self> {
-        if length <= 0 {
+        if length < 0 {
             return Err(PyValueError::new_err(format!(
-                "Dtype length must be greater than zero, but received {length}."
+                "Dtype length can't be negative, but received {length}."
             )));
         }
         let length = length as usize;
@@ -165,7 +165,17 @@ impl SingleDtype {
                 kind.repr_name()
             )));
         }
+        // The literal kinds have an obvious empty value (`b''`, `''`, an empty
+        // `Tibs`), so they may be zero bits long. An integer has no zero-bit
+        // value, and every other kind is caught by its own length rule.
         match kind {
+            DtypeKind::Uint | DtypeKind::Int if length == 0 => {
+                let prefix = if kind == DtypeKind::Uint { "u" } else { "i" };
+                return Err(PyValueError::new_err(format!(
+                    "A Dtype of kind {} ('{prefix}') needs a length of at least 1 bit. Received 0.",
+                    kind.repr_name()
+                )));
+            }
             DtypeKind::Float if !matches!(length, 16 | 32 | 64) => {
                 return Err(PyValueError::new_err(format!(
                     "A Dtype of kind {} must have length 16, 32 or 64 bits. Received {length}.",
@@ -682,7 +692,7 @@ impl<'a> DtypeParser<'a> {
             self.pos += 1;
         }
         if start == self.pos {
-            return self.error("expected a positive array count");
+            return self.error("expected an array count");
         }
         let count = self.spec[start..self.pos].parse::<usize>().map_err(|_| {
             PyValueError::new_err(format!(
@@ -690,9 +700,6 @@ impl<'a> DtypeParser<'a> {
                 self.spec
             ))
         })?;
-        if count == 0 {
-            return self.error("array count must be greater than zero");
-        }
         self.skip_whitespace();
         if self.peek().is_none() {
             return self.error("unterminated array dtype: expected ']'");
@@ -886,6 +893,17 @@ impl Dtype {
         self.repr.has_explicit_byte_order()
     }
 
+    /// The error for reading values of this dtype until the bits run out when
+    /// it is zero bits long, as any number of them fit in any length.
+    #[cold]
+    pub(crate) fn zero_length_values_error(&self) -> PyErr {
+        PyValueError::new_err(format!(
+            "Can't tell how many zero-length values to read: the dtype '{}' has length 0, \
+             so any number of its values fit in any number of bits.",
+            self.spec()
+        ))
+    }
+
     fn class_name(&self) -> &'static str {
         match self.repr {
             DtypeRepr::Single(_) => "DtypeSingle",
@@ -968,7 +986,7 @@ impl Dtype {
     ///
     /// :param str spec: The dtype specification.
     /// :return: A concrete dtype instance.
-    /// :raises ValueError: if the specification is invalid or does not have a positive fixed length.
+    /// :raises ValueError: if the specification is invalid.
     #[new]
     #[pyo3(signature = (spec, /), text_signature = "(spec, /)")]
     fn py_new(py: Python<'_>, spec: &str) -> PyResult<Py<PyAny>> {
@@ -1058,7 +1076,8 @@ impl Dtype {
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to ``len(bits)``.
     /// :return: A list of decoded values.
-    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`.
+    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
+    ///     if :attr:`length` is zero, as the number of values could then be anything.
     #[pyo3(signature = (bits, /, start = None, end = None), text_signature = "($self, bits, /, start=None, end=None)")]
     fn unpack_values(
         &self,
@@ -1077,7 +1096,8 @@ impl Dtype {
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to ``len(bits)``.
     /// :return: An iterator of decoded values.
-    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`.
+    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
+    ///     if :attr:`length` is zero, as the number of values could then be anything.
     #[pyo3(signature = (bits, /, start = None, end = None), text_signature = "($self, bits, /, start=None, end=None)")]
     fn unpack_values_iter(
         &self,
@@ -1143,9 +1163,10 @@ impl DtypeSingle {
     /// Construct a scalar dtype from explicit parameters.
     ///
     /// :param DtypeKind kind: The scalar value kind.
-    /// :param int | None length: The positive bit length. May be omitted for a
-    ///     kind that fixes its own length, such as ``DtypeKind.OcpE2M1`` or
-    ///     ``DtypeKind.Bool``.
+    /// :param int | None length: The bit length. May be omitted for a kind that
+    ///     fixes its own length, such as ``DtypeKind.OcpE2M1`` or
+    ///     ``DtypeKind.Bool``. Only the ``Bits``, ``Bytes``, ``Bin``, ``Oct``
+    ///     and ``Hex`` kinds can have a length of zero.
     /// :param ByteOrder | None byte_order: The byte order. Defaults to unspecified.
     /// :return: A scalar dtype.
     ///
@@ -1187,10 +1208,11 @@ impl DtypeSingle {
     }
 }
 
-///     A fixed positive number of repetitions of another dtype.
+///     A fixed number of repetitions of another dtype.
 ///
 ///     Array values pack from any iterable with exactly :attr:`count` items
-///     and unpack to Python tuples.
+///     and unpack to Python tuples. The count may be zero, giving a dtype of
+///     length zero whose value is ``()``.
 ///
 #[pyclass(module = "tibs", frozen, extends = Dtype, skip_from_py_object)]
 pub struct DtypeArray;
@@ -1216,7 +1238,7 @@ impl DtypeArray {
     /// Construct an array dtype from its element dtype and count.
     ///
     /// :param Dtype | str dtype: The element dtype.
-    /// :param int count: The positive number of elements.
+    /// :param int count: The number of elements, which may be zero.
     /// :return: An array dtype.
     #[classmethod]
     #[pyo3(signature = (dtype, count, /), text_signature = "(cls, dtype, count, /)")]
@@ -1226,10 +1248,10 @@ impl DtypeArray {
         dtype: &Bound<'_, PyAny>,
         count: i64,
     ) -> PyResult<Py<Self>> {
-        if count <= 0 {
-            return Err(PyValueError::new_err(
-                "DtypeArray count must be greater than zero.",
-            ));
+        if count < 0 {
+            return Err(PyValueError::new_err(format!(
+                "DtypeArray count can't be negative, but received {count}."
+            )));
         }
         let dtype = extract_dtype(dtype)?;
         let repr = DtypeRepr::Array {

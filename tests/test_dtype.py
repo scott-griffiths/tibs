@@ -4,7 +4,7 @@ import re
 import sys
 
 import pytest
-from tibs import Tibs, Mutibs, ByteOrder, Dtype, DtypeKind, DtypeSingle
+from tibs import Tibs, Mutibs, MutableView, ByteOrder, Dtype, DtypeKind, DtypeSingle
 
 def test_creation():
     d = Dtype("u8")
@@ -105,12 +105,14 @@ def test_dtype_equality_and_hashing_are_by_value():
         "hex8_le",
         "u7_le",
         "u0",
+        "i0",
+        "f0",
         "bool1",
         "bool0",
         "bool_le",
         "bits",
-        "bits0",
         "bits8_le",
+        "bytes0_le",
         "bf",
         "bf16_xe",
         "bf0",
@@ -866,8 +868,8 @@ def test_dtype_unpack_values_iter_snapshots_mutibs():
 
 
 def test_to_values_iter_rejects_zero_length_dtype():
-    with pytest.raises(ValueError, match="greater than zero"):
-        Dtype("bin0")
+    with pytest.raises(ValueError, match="Can't tell how many zero-length values"):
+        Tibs.from_bin("1010").to_values_iter(Dtype("bin0"))
 
 
 def test_to_values_iter_requires_multiple_of_dtype_length():
@@ -1281,3 +1283,152 @@ def test_packing_many_values_does_not_reserve_on_trust():
     dtype = Dtype(f"[u1; {_MAX_BITS // 8}]")
     with pytest.raises(ValueError, match="expected"):
         dtype.pack_values([[]] * 16)
+
+
+# --- zero-length dtypes ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spec,kind,empty",
+    [
+        ("bits0", DtypeKind.Bits, Tibs()),
+        ("bytes0", DtypeKind.Bytes, b""),
+        ("bin0", DtypeKind.Bin, ""),
+        ("oct0", DtypeKind.Oct, ""),
+        ("hex0", DtypeKind.Hex, ""),
+    ],
+)
+def test_zero_length_literal_dtypes(spec, kind, empty):
+    d = Dtype(spec)
+    assert type(d) is DtypeSingle
+    assert d.length == 0
+    assert d == DtypeSingle.from_params(kind, 0)
+    assert str(d) == spec
+    assert repr(d) == f"DtypeSingle('{spec}')"
+    assert eval(repr(d), {"DtypeSingle": DtypeSingle}) == d
+
+    value = d.unpack(Tibs())
+    assert value == empty
+    assert type(value) is type(empty)
+    assert d.pack(empty) == Tibs()
+    assert d.pack_values([empty, empty, empty]) == Tibs()
+    assert Tibs.from_value(d, empty) == Tibs()
+    assert Mutibs.from_values(d, []) == Mutibs()
+
+
+@pytest.mark.parametrize(
+    "spec,non_empty",
+    [("bits0", Tibs("0b1")), ("bytes0", b"\x00"), ("bin0", "1"), ("oct0", "7"), ("hex0", "f")],
+)
+def test_zero_length_literal_dtypes_refuse_a_non_empty_value(spec, non_empty):
+    with pytest.raises(ValueError, match="Dtype length is 0 bits"):
+        Dtype(spec).pack(non_empty)
+    with pytest.raises(ValueError):
+        Dtype(spec).pack_values([b"" if spec == "bytes0" else "", non_empty])
+
+
+@pytest.mark.parametrize("spec", ["bits0", "bytes0", "hex0", "[u8; 0]", "(bin0, [bool; 0])"])
+def test_zero_length_to_value_at_any_position(spec):
+    d = Dtype(spec)
+    expected = d.unpack(Tibs())
+    t = Tibs("0x0102")
+    for pos in (0, 3, 8, 16):
+        assert t.to_value(d, pos, pos) == expected
+        assert Mutibs(t).to_value(d, pos, pos) == expected
+        assert d.unpack(t, pos, pos) == expected
+        assert d.unpack(t.to_bytes(), pos, pos) == expected
+        assert t.view().to_value(d, pos, pos) == expected
+    # An unaligned slice of a longer Tibs, read at its very end.
+    assert t[3:].to_value(d, 13, 13) == expected
+    with pytest.raises(ValueError, match="Cannot convert 1 bits using a dtype with length 0 bits"):
+        t.to_value(d, 3, 4)
+    with pytest.raises(ValueError, match="Cannot convert 16 bits"):
+        t.to_value(d)
+
+
+@pytest.mark.parametrize("view", ["le", "be", "lsb0"])
+def test_zero_length_dtypes_through_byte_order_views(view):
+    t = Tibs("0x0102")
+    assert getattr(t, view).to_value("[u16; 0]", 16, 16) == ()
+    assert getattr(t, view).to_value("bytes0", 8, 8) == b""
+    assert getattr(Mutibs(t), view).to_value("bits0", 0, 0) == Tibs()
+    # A byte order on the element still counts as the dtype naming one.
+    with pytest.raises(ValueError, match="specifies its own byte order"):
+        getattr(t, view).to_value("[u16_le; 0]", 0, 0)
+
+
+def test_zero_length_write_value_through_a_mutable_view():
+    m = Mutibs("0x0102")
+    empty_view = MutableView.from_indices(m, [])
+    empty_view.write_value("bytes0", b"")
+    empty_view.write_value("[u8; 0]", [])
+    empty_view.write_value("(hex0, [bool; 0])", ("", ()))
+    assert m == Mutibs("0x0102")
+    assert empty_view.to_value("bits0") == Tibs()
+
+    e = Mutibs()
+    e.le.write_value("[u16; 0]", ())
+    e.lsb0.write_value("bits0", Tibs())
+    assert e == Mutibs()
+
+    # A MutableView never changes length, so a non-empty one can't take it.
+    with pytest.raises(ValueError, match="Cannot change the length of a MutableView"):
+        m.view().write_value("bytes0", b"")
+
+
+@pytest.mark.parametrize("spec", ["bits0", "bytes0", "oct0", "[u8; 0]", "(hex0,)", "[[u8; 0]; 3]"])
+def test_multi_value_reads_refuse_a_zero_length_dtype(spec):
+    d = Dtype(spec)
+    match = "Can't tell how many zero-length values to read"
+    for bits in (Tibs(), Tibs("0x01")):
+        with pytest.raises(ValueError, match=match):
+            d.unpack_values(bits)
+        with pytest.raises(ValueError, match=match):
+            d.unpack_values_iter(bits)
+        with pytest.raises(ValueError, match=match):
+            bits.to_values(d)
+        with pytest.raises(ValueError, match=match):
+            bits.to_values_iter(d)
+        with pytest.raises(ValueError, match=match):
+            Mutibs(bits).to_values(d)
+
+
+@pytest.mark.parametrize(
+    "spec,message",
+    [
+        ("u0", r"DtypeKind.Uint \('u'\) needs a length of at least 1 bit"),
+        ("i0", r"DtypeKind.Int \('i'\) needs a length of at least 1 bit"),
+        ("u0_le", r"DtypeKind.Uint \('u'\) needs a length of at least 1 bit"),
+        ("[u0; 0]", r"DtypeKind.Uint \('u'\) needs a length of at least 1 bit"),
+        ("(u8, i0)", r"DtypeKind.Int \('i'\) needs a length of at least 1 bit"),
+        ("f0", "DtypeKind.Float must have length 16, 32 or 64 bits. Received 0."),
+        ("bf0", "DtypeKind.BFloat must have length 16 bits. Received 0."),
+        ("bytes0_le", "A byte order cannot be specified for a Dtype of kind DtypeKind.Bytes"),
+    ],
+)
+def test_kinds_with_no_zero_length_value_are_still_rejected(spec, message):
+    with pytest.raises(ValueError, match=message):
+        Dtype(spec)
+
+
+@pytest.mark.parametrize(
+    "kind,message",
+    [
+        (DtypeKind.Uint, r"DtypeKind.Uint \('u'\) needs a length of at least 1 bit"),
+        (DtypeKind.Int, r"DtypeKind.Int \('i'\) needs a length of at least 1 bit"),
+        (DtypeKind.Float, "must have length 16, 32 or 64 bits. Received 0."),
+        (DtypeKind.BFloat, "must have length 16 bits. Received 0."),
+        (DtypeKind.Bool, "DtypeKind.Bool must have length 1 bits. Received 0."),
+        (DtypeKind.OcpE2M1, "DtypeKind.OcpE2M1 must have length 4 bits. Received 0."),
+        (DtypeKind.Binary8P3, "DtypeKind.Binary8P3 must have length 8 bits. Received 0."),
+    ],
+)
+def test_from_params_rejects_zero_length_for_kinds_without_an_empty_value(kind, message):
+    with pytest.raises(ValueError, match=message):
+        DtypeSingle.from_params(kind, 0)
+
+
+@pytest.mark.parametrize("kind", [DtypeKind.Bits, DtypeKind.Bytes, DtypeKind.Uint, DtypeKind.Bool])
+def test_from_params_rejects_a_negative_length(kind):
+    with pytest.raises(ValueError, match="Dtype length can't be negative, but received -8."):
+        DtypeSingle.from_params(kind, -8)

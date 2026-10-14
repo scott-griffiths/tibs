@@ -6,7 +6,19 @@ are expected to fail until the corresponding exception paths are fixed.
 
 import pytest
 
-from tibs import DecodeError, Dtype, Mutibs, MutableView, ReadError, Reader, Tibs, View
+from tibs import (
+    DecodeError,
+    Dtype,
+    DtypeArray,
+    DtypeKind,
+    DtypeSingle,
+    Mutibs,
+    MutableView,
+    ReadError,
+    Reader,
+    Tibs,
+    View,
+)
 
 
 OVERSIZED_INDEX = 2**100
@@ -221,3 +233,42 @@ def test_integer_constructor_docstring_names_value_error(cls, method_name):
     docstring = getattr(cls, method_name).__doc__
 
     assert ":raises ValueError:" in docstring
+
+
+@pytest.mark.parametrize(
+    "spec,kind_name",
+    [("u0", "DtypeKind.Uint ('u')"), ("i0", "DtypeKind.Int ('i')")],
+)
+def test_zero_length_integer_dtype_message_names_the_kind(spec, kind_name):
+    with pytest.raises(ValueError) as exc_info:
+        Dtype(spec)
+    message = str(exc_info.value)
+    assert kind_name in message
+    assert "at least 1 bit" in message
+    assert "greater than zero" not in message
+
+
+def test_negative_lengths_and_counts_are_reported_as_negative():
+    with pytest.raises(ValueError, match="can't be negative, but received -1"):
+        DtypeSingle.from_params(DtypeKind.Bytes, -1)
+    with pytest.raises(ValueError, match="can't be negative, but received -1"):
+        DtypeArray.from_params("u8", -1)
+
+
+def test_a_missing_array_count_is_not_described_as_needing_to_be_positive():
+    with pytest.raises(ValueError, match="expected an array count") as exc_info:
+        Dtype("[u8; -1]")
+    assert "positive" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "read",
+    [
+        lambda: Tibs("0x01").to_values("bytes0"),
+        lambda: Dtype("[u8; 0]").unpack_values(Tibs()),
+        lambda: Reader(Tibs("0x01")).read_values("hex0"),
+    ],
+)
+def test_reading_an_unknown_number_of_zero_length_values_says_why(read):
+    with pytest.raises(ValueError, match="has length 0, so any number of its values fit"):
+        read()

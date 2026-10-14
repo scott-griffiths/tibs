@@ -1,7 +1,13 @@
 # Release Notes
 
-### Unreleased
+### Unreleased: version 2.1.0
 
+* Zero-length dtypes are now allowed. An array may have a count of zero, such as
+  `'[u8; 0]'`, which unpacks to `()`, and `bits0`, `bytes0`, `bin0`, `oct0` and
+  `hex0` unpack to `Tibs()`, `b''` and `''`. They can be used inside tuples, as
+  in `'(u8, [u8; 0], bool)'`. Kinds with no empty value, such as `u0` or `f0`,
+  are still errors. Reading as many zero-length values as fit raises
+  `ValueError`, as there is no telling how many that is.
 * Repeating with `*` or `*=` by a very large count could silently give a
   wrong, truncated result. It now raises `MemoryError`.
 * `decode()` no longer crashes the interpreter on malformed zstd data, and

@@ -871,7 +871,6 @@ impl BytewisePacker {
     /// of a one-shot iterable would lose those items.
     pub(crate) fn for_dtype(dtype: &SingleDtype) -> Option<Self> {
         let (kind, length, byte_order) = (dtype.kind, dtype.length, dtype.byte_order);
-        debug_assert!(length > 0);
         if let Some(format) = narrow_float_format(kind) {
             debug_assert_eq!(length, format.bit_length());
             return (length == 8).then_some(BytewisePacker::NarrowFloat { format });
@@ -1258,7 +1257,6 @@ impl BitwisePacker {
         if dtype.kind == DtypeKind::Bool {
             return Some(BitwisePacker::Bool);
         }
-        debug_assert!(dtype.length > 0);
         if dtype.length.is_multiple_of(8) {
             return None;
         }
@@ -1504,7 +1502,6 @@ impl BytewiseUnpacker {
         dtype_length: usize,
         byte_order: ByteOrder,
     ) -> Option<Self> {
-        debug_assert!(dtype_length > 0);
         if dtype_length > helpers::FAST_INT_BITS || !dtype_length.is_multiple_of(8) {
             return None;
         }
@@ -1654,7 +1651,6 @@ struct SubByteUnpacker {
 
 impl SubByteUnpacker {
     fn for_parts(dtype_kind: DtypeKind, dtype_length: usize) -> Option<Self> {
-        debug_assert!(dtype_length > 0);
         if dtype_length >= 8 {
             return None;
         }
@@ -2161,6 +2157,9 @@ pub(crate) fn py_values_from_range(
 ) -> PyResult<Vec<Py<PyAny>>> {
     let (start, end) = validate_slice(bits.len(), start, end)?;
     let selected_len = end - start;
+    if dtype.length == 0 {
+        return Err(dtype.zero_length_values_error());
+    }
     if !selected_len.is_multiple_of(dtype.length) {
         return Err(PyValueError::new_err(format!(
             "Cannot convert to values - selected length of {selected_len} bits is not a multiple of dtype length {} bits.",
@@ -2899,7 +2898,8 @@ impl Tibs {
 
     /// Return an iterator over values decoded with a dtype.
     ///
-    /// The selected range must be a whole number of dtype values.
+    /// The selected range must be a whole number of dtype values. A dtype of
+    /// length zero raises ``ValueError``, as any number of its values would fit.
     ///
     /// :param Dtype | str dtype: The value encoding to use for each yielded item.
     /// :param int | None start: Start bit position. Defaults to 0.
@@ -2926,7 +2926,8 @@ impl Tibs {
 
     /// Return a list of values decoded with a dtype.
     ///
-    /// The selected range must be a whole number of dtype values.
+    /// The selected range must be a whole number of dtype values. A dtype of
+    /// length zero raises ``ValueError``, as any number of its values would fit.
     ///
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None start: Start bit position. Defaults to 0.
