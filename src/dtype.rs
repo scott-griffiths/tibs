@@ -933,7 +933,7 @@ static SPEC_CACHE: LazyLock<RwLock<HashMap<String, Dtype>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Parse a dtype spec, going through [`SPEC_CACHE`].
-fn parse_spec_cached(spec: &str) -> PyResult<Dtype> {
+pub(crate) fn parse_spec_cached(spec: &str) -> PyResult<Dtype> {
     if let Ok(cache) = SPEC_CACHE.read()
         && let Some(dtype) = cache.get(spec)
     {
@@ -960,6 +960,35 @@ fn dtype_from_kind(kind: DtypeKind) -> PyResult<Dtype> {
         length,
         ByteOrder::Unspecified,
     )?))
+}
+
+/// Build a scalar dtype of `kind` and `length`, with the same checks as
+/// parsing its spec.
+pub(crate) fn dtype_from_kind_and_length(kind: DtypeKind, length: usize) -> PyResult<Dtype> {
+    let length = i64::try_from(length)
+        .map_err(|_| PyValueError::new_err("Dtype length is too large to represent."))?;
+    Dtype::from_repr(DtypeRepr::Single(SingleDtype::from_parts(
+        kind,
+        length,
+        ByteOrder::Unspecified,
+    )?))
+}
+
+/// The kind named by a length-suffix prefix written without its length, such
+/// as `'hex'` or `'u'`, for callers that supply the length themselves.
+pub(crate) fn kind_from_prefix(prefix: &str) -> Option<DtypeKind> {
+    LENGTH_SUFFIX_FORMATS.iter().find_map(|&(name, kind, _)| {
+        (name == prefix && intrinsic_length(kind).is_none()).then_some(kind)
+    })
+}
+
+/// The prefix that names `kind` in a spec, for a kind whose length has to be
+/// written after it.
+pub(crate) fn prefix_for_kind(kind: DtypeKind) -> Option<&'static str> {
+    LENGTH_SUFFIX_FORMATS
+        .iter()
+        .find_map(|&(name, candidate, _)| (candidate == kind).then_some(name))
+        .filter(|_| intrinsic_length(kind).is_none())
 }
 
 pub(crate) fn extract_dtype(obj: &Bound<'_, PyAny>) -> PyResult<Dtype> {

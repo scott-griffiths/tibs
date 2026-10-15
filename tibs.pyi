@@ -46,7 +46,7 @@ The full documentation is at https://tibs.readthedocs.io/.
 
 from __future__ import annotations
 from contextlib import AbstractContextManager
-from typing import Any, Callable, ClassVar, overload, Iterable, Iterator, SupportsIndex, Union
+from typing import Any, Callable, ClassVar, Literal, overload, Iterable, Iterator, SupportsIndex, TextIO, Union
 
 __version__: str
 __author__: str
@@ -2454,6 +2454,68 @@ class Tibs:
             True
         """
 
+    def pp(self, *dtypes: _DtypeLike, width: int = 120, sep: str = ' ',
+           show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
+           color: bool | None = None, groups: int | None = None, squeeze: bool = True,
+           max_lines: int | None = None) -> None:
+        """Pretty-print the bits, in one or more formats side by side.
+
+        The bits are split into groups, and each line shows the same groups in every
+        format, with the offset of the line first. The number of groups on a line is
+        the largest power of two that fits in ``width`` characters, which keeps the
+        offsets round numbers. Bits at the end that don't make a whole group are shown
+        on a line of their own, except that ``'bin'``, ``'oct'``, ``'hex'`` and
+        ``'bytes'`` written without a length also show a short final group, as far as
+        it is whole characters.
+
+        Each format is a dtype, or one of ``'bin'``, ``'oct'``, ``'hex'``, ``'bytes'``,
+        ``'bits'``, ``'u'``, ``'i'`` or ``'f'`` without a length, which can also be
+        given as its :class:`DtypeKind`. A format's length is the number of bits in
+        each group. Formats without one take it from the others, or default to 8 bits
+        for ``'bin'`` and ``'hex'``, 12 for ``'oct'`` and 32 for ``'bytes'``. In
+        ``'bytes'``, each byte that isn't printable ASCII is shown as ``.``.
+
+        :param Dtype | DtypeKind | str dtypes: The formats to show. Defaults to ``'bin'``
+            and ``'hex'`` for a whole number of bytes, otherwise ``'bin'``.
+        :param int width: The maximum line length in characters. Each line shows at
+            least one group, however long it is. Defaults to 120.
+        :param str sep: The separator between groups. Use ``''`` to show the groups
+            without gaps. Defaults to a single space.
+        :param bool | str show_offset: ``True`` to start each line with its offset, in
+            bytes for a whole number of bytes and otherwise in bits. ``'bytes'`` or
+            ``'bits'`` chooses one, and ``False`` leaves the offsets out. Byte offsets
+            are in hex, and put a whole number of bytes on each line. Defaults to
+            ``True``.
+        :param TextIO | None stream: Where to write the output, which needs a ``write``
+            method. Defaults to ``sys.stdout``.
+        :param bool | None color: Whether to use ANSI colour codes. Defaults to using
+            them only when the stream is a terminal and the ``NO_COLOR`` environment
+            variable is unset or empty.
+        :param int | None groups: The number of groups on each line, used instead of
+            fitting as many as ``width`` allows.
+        :param bool squeeze: If ``True``, each run of lines that repeat the line before
+            them is shown as a single ``*`` line. The last line is always shown.
+            Defaults to ``True``.
+        :param int | None max_lines: Stop after this many lines, not counting the
+            header, with a final ``...`` line if there was more to show. Defaults to
+            no limit.
+        :return: None
+        :raises ValueError: if a format is invalid or has no length it can use, or
+            the formats have different lengths.
+        :raises TypeError: if a format isn't a dtype, kind or string.
+
+        .. code-block:: pycon
+
+            >>> t = Tibs('0x7469627300010203')
+            >>> t.pp()
+            Tibs, 64 bits, bin : hex
+            00: 01110100 01101001 01100010 01110011 00000000 00000001 00000010 00000011 : 74 69 62 73 00 01 02 03
+            >>> t.pp('u8', 'hex', 'bytes', groups=4)
+            Tibs, 64 bits, u8 : hex : bytes
+            00: 116 105  98 115 : 74 69 62 73 : t i b s
+            04:   0   1   2   3 : 00 01 02 03 : . . . .
+        """
+
     def with_set(self, pos: SupportsIndex | Iterable[SupportsIndex] | range, /) -> Tibs:
         """Return a new Tibs with one or many bits set to 1.
 
@@ -4038,6 +4100,68 @@ class Mutibs:
             False
             >>> Mutibs('0b1000').any()
             True
+        """
+
+    def pp(self, *dtypes: _DtypeLike, width: int = 120, sep: str = ' ',
+           show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
+           color: bool | None = None, groups: int | None = None, squeeze: bool = True,
+           max_lines: int | None = None) -> None:
+        """Pretty-print the bits, in one or more formats side by side.
+
+        The bits are split into groups, and each line shows the same groups in every
+        format, with the offset of the line first. The number of groups on a line is
+        the largest power of two that fits in ``width`` characters, which keeps the
+        offsets round numbers. Bits at the end that don't make a whole group are shown
+        on a line of their own, except that ``'bin'``, ``'oct'``, ``'hex'`` and
+        ``'bytes'`` written without a length also show a short final group, as far as
+        it is whole characters.
+
+        Each format is a dtype, or one of ``'bin'``, ``'oct'``, ``'hex'``, ``'bytes'``,
+        ``'bits'``, ``'u'``, ``'i'`` or ``'f'`` without a length, which can also be
+        given as its :class:`DtypeKind`. A format's length is the number of bits in
+        each group. Formats without one take it from the others, or default to 8 bits
+        for ``'bin'`` and ``'hex'``, 12 for ``'oct'`` and 32 for ``'bytes'``. In
+        ``'bytes'``, each byte that isn't printable ASCII is shown as ``.``.
+
+        :param Dtype | DtypeKind | str dtypes: The formats to show. Defaults to ``'bin'``
+            and ``'hex'`` for a whole number of bytes, otherwise ``'bin'``.
+        :param int width: The maximum line length in characters. Each line shows at
+            least one group, however long it is. Defaults to 120.
+        :param str sep: The separator between groups. Use ``''`` to show the groups
+            without gaps. Defaults to a single space.
+        :param bool | str show_offset: ``True`` to start each line with its offset, in
+            bytes for a whole number of bytes and otherwise in bits. ``'bytes'`` or
+            ``'bits'`` chooses one, and ``False`` leaves the offsets out. Byte offsets
+            are in hex, and put a whole number of bytes on each line. Defaults to
+            ``True``.
+        :param TextIO | None stream: Where to write the output, which needs a ``write``
+            method. Defaults to ``sys.stdout``.
+        :param bool | None color: Whether to use ANSI colour codes. Defaults to using
+            them only when the stream is a terminal and the ``NO_COLOR`` environment
+            variable is unset or empty.
+        :param int | None groups: The number of groups on each line, used instead of
+            fitting as many as ``width`` allows.
+        :param bool squeeze: If ``True``, each run of lines that repeat the line before
+            them is shown as a single ``*`` line. The last line is always shown.
+            Defaults to ``True``.
+        :param int | None max_lines: Stop after this many lines, not counting the
+            header, with a final ``...`` line if there was more to show. Defaults to
+            no limit.
+        :return: None
+        :raises ValueError: if a format is invalid or has no length it can use, or
+            the formats have different lengths.
+        :raises TypeError: if a format isn't a dtype, kind or string.
+
+        .. code-block:: pycon
+
+            >>> t = Mutibs('0x7469627300010203')
+            >>> t.pp()
+            Mutibs, 64 bits, bin : hex
+            00: 01110100 01101001 01100010 01110011 00000000 00000001 00000010 00000011 : 74 69 62 73 00 01 02 03
+            >>> t.pp('u8', 'hex', 'bytes', groups=4)
+            Mutibs, 64 bits, u8 : hex : bytes
+            00: 116 105  98 115 : 74 69 62 73 : t i b s
+            04:   0   1   2   3 : 00 01 02 03 : . . . .
         """
 
     def rfind(self, needle: _TibsLike, /, start: int | None = None, end: int | None = None,

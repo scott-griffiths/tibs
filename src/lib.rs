@@ -5,6 +5,7 @@ mod enums;
 mod helpers;
 mod iterator;
 mod mutibs;
+mod pretty;
 mod reader;
 mod tibs_;
 mod view;

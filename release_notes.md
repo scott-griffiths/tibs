@@ -2,6 +2,13 @@
 
 ### Unreleased: version 2.1.0
 
+* New `pp()` method on `Tibs` and `Mutibs` to pretty-print the bits in
+  any number of formats side by side, such as `t.pp('u8', 'hex', 'bytes')`.
+  Any dtype can be used, including tuples and arrays. Each line has a power
+  of two number of groups, offsets are in hex bytes or decimal bits, and
+  repeated lines are squeezed into a single `*` line. `max_lines` limits the
+  output, and Ctrl-C stops it. The output is colourised only when writing to
+  a terminal.
 * Zero-length dtypes are now allowed. An array may have a count of zero, such as
   `'[u8; 0]'`, which unpacks to `()`, and `bits0`, `bytes0`, `bin0`, `oct0` and
   `hex0` unpack to `Tibs()`, `b''` and `''`. They can be used inside tuples, as

@@ -184,3 +184,77 @@ never truncates::
     True
     >>> len(f"{t:b}")
     50000
+
+Pretty printing
+^^^^^^^^^^^^^^^
+
+Once data is more than a few bytes long, one long string stops being easy to read.
+:meth:`Tibs.pp` prints it as a table instead, split into groups, with the offset of each
+line down the left. With no arguments you get binary and hex side by side::
+
+    >>> packet = Tibs('0x4500003c1c4640004006b1e6ac100a63ac100a0c')
+    >>> packet.pp(width=70)
+    Tibs, 160 bits, bin : hex
+    00: 01000101 00000000 00000000 00111100 : 45 00 00 3c
+    04: 00011100 01000110 01000000 00000000 : 1c 46 40 00
+    08: 01000000 00000110 10110001 11100110 : 40 06 b1 e6
+    0c: 10101100 00010000 00001010 01100011 : ac 10 0a 63
+    10: 10101100 00010000 00001010 00001100 : ac 10 0a 0c
+
+Each line has a power of two number of groups, as many as fit in the width, so the
+offsets stay round numbers. They're in hex bytes when the data is a whole number of bytes
+long, and in decimal bits when it isn't. ``show_offset='bits'`` or ``'bytes'`` picks one,
+and ``show_offset=False`` leaves them out.
+
+To see something else, give the formats you want. A format can be any dtype, and its
+length is the size of each group::
+
+    >>> packet.pp('u8', 'hex', width=60)
+    Tibs, 160 bits, u8 : hex
+    00:  69   0   0  60 : 45 00 00 3c
+    04:  28  70  64   0 : 1c 46 40 00
+    08:  64   6 177 230 : 40 06 b1 e6
+    0c: 172  16  10  99 : ac 10 0a 63
+    10: 172  16  10  12 : ac 10 0a 0c
+
+A tuple dtype prints a record in each group, which is useful when the fields don't fall
+on byte boundaries::
+
+    >>> packet.pp('(u4, u4, u8, u16)', groups=1)
+    Tibs, 160 bits, (u4, u4, u8, u16)
+    00: ( 4,  5,   0,    60)
+    04: ( 1, 12,  70, 16384)
+    08: ( 4,  0,   6, 45542)
+    0c: (10, 12,  16,  2659)
+    10: (10, 12,  16,  2572)
+
+``'bin'``, ``'oct'``, ``'hex'`` and ``'bytes'`` can be written without a length, giving
+groups of 8, 12, 8 and 32 bits. A format without a length can also take its length from
+the others, so ``pp('u', 'hex12')`` shows 12-bit groups as numbers and as hex. Any bits at
+the end that don't make up a whole group are shown on a line of their own::
+
+    >>> Tibs('0b1011001110').pp('oct')
+    Tibs, 10 bits, oct
+    0: 547
+    9: 0b0
+
+Runs of repeated lines are replaced by a single ``*``, as ``hexdump`` does, which keeps
+large and mostly empty data readable. With ``sep=''`` to join up the groups, ``'hex'``
+and ``'bytes'`` together look much like a hex dump. In ``'bytes'``, each byte that isn't
+printable ASCII is shown as a ``.``::
+
+    >>> disk = Tibs.from_bytes(b'MAGIC header' + bytes(100) + b'end')
+    >>> disk.pp('hex', 'bytes', sep='', width=80)
+    Tibs, 920 bits, hex : bytes
+    00: 4d414749432068656164657200000000 : MAGIC header....
+    10: 00000000000000000000000000000000 : ................
+    *
+    70: 656e64                           : end
+
+Pass ``squeeze=False`` to see every line, and ``max_lines`` to stop after a number of
+lines. Ctrl-C stops the output part way through.
+
+Output goes to ``sys.stdout`` unless you pass a ``stream``, which can be anything with a
+``write`` method, such as an ``io.StringIO`` to collect the output as a string. It is
+colourised when the stream is a terminal, unless the ``NO_COLOR`` environment variable is
+set, and the ``color`` argument overrides both.
