@@ -239,8 +239,8 @@ the end that don't make up a whole group are shown on a line of their own::
     0: 547
     9: 0b0
 
-Runs of repeated lines are replaced by a single ``*``, as ``hexdump`` does, which keeps
-large and mostly empty data readable. With ``sep=''`` to join up the groups, ``'hex'``
+Runs of repeated lines are replaced by a single line saying how much is hidden, much as
+``hexdump`` does, which keeps large and mostly empty data readable. With ``sep=''`` to join up the groups, ``'hex'``
 and ``'bytes'`` together look much like a hex dump. In ``'bytes'``, each byte that isn't
 printable ASCII is shown as a ``.``::
 
@@ -249,11 +249,19 @@ printable ASCII is shown as a ``.``::
     Tibs, 920 bits, hex : bytes
     00: 4d414749432068656164657200000000 : MAGIC header....
     10: 00000000000000000000000000000000 : ................
-    *
+    ... x5 identical lines, 80 bytes
     70: 656e64                           : end
 
-Pass ``squeeze=False`` to see every line, and ``max_lines`` to stop after a number of
-lines. Ctrl-C stops the output part way through.
+Pass ``squeeze=False`` to see every line. To see just the start of a large value, use
+``max_lines``, which ends the output with a line saying how much more there was::
+
+    >>> Tibs.from_bytes(bytes(range(256))).pp('hex', groups=16, max_lines=2)
+    Tibs, 2,048 bits, hex
+    00: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f
+    10: 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+    ... max_lines=2, 224 bytes not shown
+
+Ctrl-C also stops the output part way through.
 
 Output goes to ``sys.stdout`` unless you pass a ``stream``, which can be anything with a
 ``write`` method, such as an ``io.StringIO`` to collect the output as a string. It is

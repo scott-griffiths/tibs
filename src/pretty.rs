@@ -29,10 +29,8 @@ const OFF: &str = "\x1b[0m";
 
 /// Put between the formats on each line, and between their names in the header.
 const FORMAT_SEP: &str = " : ";
-/// Replaces a run of lines that repeat the line before them.
-const SQUEEZED: &str = "*";
-/// Ends the output early when `max_lines` is reached.
-const TRUNCATED: &str = "...";
+/// Starts each line that describes output rather than showing it.
+const NOTE_MARKER: &str = "...";
 /// Output is passed to the stream in pieces of about this many bytes, so a
 /// large `Tibs` isn't rendered into one enormous string first.
 const FLUSH_BYTES: usize = 1 << 16;
@@ -461,6 +459,25 @@ fn default_width(py: Python<'_>, stream: &Bound<'_, PyAny>, terminal: bool) -> u
     columns.filter(|&c| c > 1).map_or(DEFAULT_WIDTH, |c| c - 1)
 }
 
+/// `n` with commas between each group of three digits.
+fn with_commas(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// `n` followed by `unit`, made plural unless `n` is 1.
+fn plural(n: usize, unit: &str) -> String {
+    let s = if n == 1 { "" } else { "s" };
+    format!("{} {unit}{s}", with_commas(n))
+}
+
 /// Check that an optional count is at least 1.
 fn positive(value: Option<isize>, name: &str) -> PyResult<Option<usize>> {
     match value {
@@ -539,7 +556,6 @@ struct Printer {
     stage: Stage,
     line_start: usize,
     lines_written: usize,
-    squeezing: bool,
     lines_visited: usize,
 }
 
@@ -677,9 +693,8 @@ impl Printer {
             .map(|(f, token)| format!("{}{}{}", f.color, token.label(), paint(OFF)))
             .collect::<Vec<_>>()
             .join(FORMAT_SEP);
-        let plural = if length == 1 { "" } else { "s" };
         Ok(Self {
-            header: format!("{class_name}, {length} bit{plural}, {labels}"),
+            header: format!("{class_name}, {}, {labels}", plural(length, "bit")),
             bits,
             formats,
             group_length,
@@ -694,7 +709,6 @@ impl Printer {
             stage: Stage::Header,
             line_start: 0,
             lines_written: 0,
-            squeezing: false,
             lines_visited: 0,
         })
     }
@@ -715,19 +729,18 @@ impl Printer {
                     if self.lines_visited.is_multiple_of(SIGNAL_CHECK_LINES) {
                         py.check_signals()?;
                     }
-                    let line_length = self.line_bits.min(self.data_length - self.line_start);
-                    if self.is_repeat(line_length) {
-                        self.line_start += line_length;
-                        if self.squeezing {
-                            continue;
-                        }
-                        self.squeezing = true;
-                        return Ok(Some(self.counted(SQUEEZED.to_string())));
-                    }
-                    self.squeezing = false;
                     if self.max_lines == Some(self.lines_written) {
                         return Ok(Some(self.truncate()));
                     }
+                    // A run of one is shown as itself, as describing it would
+                    // take a line anyway.
+                    let run = self.repeat_run(py)?;
+                    if run > 1 {
+                        let line = self.squeezed_line(run);
+                        self.line_start += run * self.line_bits;
+                        return Ok(Some(self.counted(line)));
+                    }
+                    let line_length = self.line_bits.min(self.data_length - self.line_start);
                     let line = self.render_line(py, line_length)?;
                     self.line_start += line_length;
                     return Ok(Some(self.counted(line)));
@@ -755,36 +768,80 @@ impl Printer {
         }
     }
 
-    /// Whether the line at `line_start` should be squeezed out. The last line
-    /// is always shown, so it's clear where the data ends.
-    fn is_repeat(&self, line_length: usize) -> bool {
-        self.squeeze
-            && self.line_start > 0
-            && line_length == self.line_bits
-            && self.line_start + line_length < self.data_length
+    /// Whether the line at `start` repeats the line before it. The last line
+    /// never counts, so it's always shown and it's clear where the data ends.
+    fn is_repeat(&self, start: usize) -> bool {
+        let n = self.line_bits;
+        start > 0
+            && start + n < self.data_length
             && self
                 .bits
-                .get_slice_unchecked(self.line_start, line_length)
-                .bits_equal(
-                    &self
-                        .bits
-                        .get_slice_unchecked(self.line_start - line_length, line_length),
-                )
+                .get_slice_unchecked(start, n)
+                .bits_equal(&self.bits.get_slice_unchecked(start - n, n))
     }
 
-    /// Count `line` against `max_lines`, or replace it with the truncation
-    /// marker if the limit has been reached.
-    fn counted(&mut self, line: String) -> String {
-        if self.max_lines == Some(self.lines_written) {
-            return self.truncate();
+    /// How many lines from `line_start` on repeat the line before them.
+    fn repeat_run(&mut self, py: Python<'_>) -> PyResult<usize> {
+        if !self.squeeze {
+            return Ok(0);
         }
+        let mut run = 0;
+        while self.is_repeat(self.line_start + run * self.line_bits) {
+            run += 1;
+            self.lines_visited += 1;
+            if self.lines_visited.is_multiple_of(SIGNAL_CHECK_LINES) {
+                py.check_signals()?;
+            }
+        }
+        Ok(run)
+    }
+
+    /// The line that stands in for `run` hidden lines, indented to where the
+    /// data starts.
+    fn squeezed_line(&self, run: usize) -> String {
+        let (n, unit) = self.size(run * self.line_bits);
+        self.note(&format!(
+            "x{} identical lines, {}",
+            with_commas(run),
+            plural(n, unit)
+        ))
+    }
+
+    /// A line that describes output rather than showing it. It starts with
+    /// `...` in the offset column, so that the text lines up with the data
+    /// where there is room.
+    fn note(&self, text: &str) -> String {
+        let column = self.offsets.width().max(NOTE_MARKER.len() + 1);
+        format!("{}{NOTE_MARKER:<column$}{text}{}", self.faint, self.off)
+    }
+
+    /// `bits` in the unit the offsets use, or in bytes when there are no
+    /// offsets and it's a whole number of them.
+    fn size(&self, bits: usize) -> (usize, &'static str) {
+        match self.offsets {
+            OffsetColumn::Bits(_) => (bits, "bit"),
+            _ if bits.is_multiple_of(8) => (bits / 8, "byte"),
+            _ => (bits, "bit"),
+        }
+    }
+
+    /// Count `line` against `max_lines`, which the caller has checked.
+    fn counted(&mut self, line: String) -> String {
         self.lines_written += 1;
         line
     }
 
+    /// End the output at `line_start`, with a line saying why and how much
+    /// isn't shown.
     fn truncate(&mut self) -> String {
         self.stage = Stage::Done;
-        TRUNCATED.to_string()
+        let max_lines = self.max_lines.expect("only truncated when there's a limit");
+        let (n, unit) = self.size(self.bits.len() - self.line_start);
+        let s = if n == 1 { "" } else { "s" };
+        self.note(&format!(
+            "max_lines={max_lines}, {} {unit}{s} not shown",
+            with_commas(n)
+        ))
     }
 
     fn render_line(&mut self, py: Python<'_>, line_length: usize) -> PyResult<String> {

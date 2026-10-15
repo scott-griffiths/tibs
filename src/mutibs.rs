@@ -3532,12 +3532,13 @@ impl Mutibs {
     ///     variable is unset or empty.
     /// :param int | None groups: The number of groups on each line, used instead of
     ///     fitting as many as ``width`` allows.
-    /// :param bool squeeze: If ``True``, each run of lines that repeat the line before
-    ///     them is shown as a single ``*`` line. The last line is always shown.
+    /// :param bool squeeze: If ``True``, each run of two or more lines that repeat the
+    ///     line before them is replaced by one line, starting ``...``, that says how
+    ///     many lines and bits or bytes are hidden. The last line is always shown.
     ///     Defaults to ``True``.
     /// :param int | None max_lines: Stop after this many lines, not counting the
-    ///     header, with a final ``...`` line if there was more to show. Defaults to
-    ///     no limit.
+    ///     header, with a final line saying how much isn't shown if there was more.
+    ///     Defaults to no limit.
     /// :return: None
     /// :raises ValueError: if a format is invalid or has no length it can use, or
     ///     the formats have different lengths.
