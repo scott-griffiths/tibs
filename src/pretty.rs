@@ -36,6 +36,8 @@ const TRUNCATED: &str = "...";
 /// Output is passed to the stream in pieces of about this many bytes, so a
 /// large `Tibs` isn't rendered into one enormous string first.
 const FLUSH_BYTES: usize = 1 << 16;
+/// The line width when none is given and the output isn't a terminal.
+const DEFAULT_WIDTH: usize = 120;
 /// Ctrl-C is checked for every this many lines. The stream can't be relied on
 /// to do it: a file or terminal checks when written to, but `io.StringIO`
 /// doesn't, and squeezed lines write nothing at all.
@@ -82,7 +84,6 @@ impl Offsets {
 /// Everything `pp` takes apart from the bits and where the output goes.
 pub(crate) struct PpOptions<'py> {
     pub(crate) dtypes: Bound<'py, PyTuple>,
-    pub(crate) width: isize,
     pub(crate) sep: String,
     pub(crate) offsets: Offsets,
     pub(crate) groups: Option<isize>,
@@ -421,18 +422,43 @@ fn push_value(py: Python<'_>, out: &mut String, repr: &DtypeRepr, bits: &Tibs) -
     Ok(())
 }
 
-/// Whether `pp` should colour its output for `stream`.
-fn use_color(color: Option<bool>, stream: &Bound<'_, PyAny>) -> bool {
-    if let Some(color) = color {
-        return color;
-    }
-    if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
-        return false;
-    }
+fn is_terminal(stream: &Bound<'_, PyAny>) -> bool {
     stream
         .call_method0("isatty")
         .and_then(|tty| tty.is_truthy())
         .unwrap_or(false)
+}
+
+/// Whether `pp` should colour its output.
+fn use_color(color: Option<bool>, terminal: bool) -> bool {
+    if let Some(color) = color {
+        return color;
+    }
+    let no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
+    terminal && !no_color
+}
+
+/// The line width when none is given: the terminal's, when writing to one.
+/// As for `shutil.get_terminal_size`, the `COLUMNS` environment variable
+/// comes first. The last column is left free, as some terminals start a new
+/// line as soon as it's written to.
+fn default_width(py: Python<'_>, stream: &Bound<'_, PyAny>, terminal: bool) -> usize {
+    if !terminal {
+        return DEFAULT_WIDTH;
+    }
+    let from_environment = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|columns| columns.trim().parse::<usize>().ok());
+    let columns = from_environment.filter(|&c| c > 0).or_else(|| {
+        let fd = stream.call_method0("fileno").ok()?.extract::<i32>().ok()?;
+        let size = py
+            .import("os")
+            .ok()?
+            .call_method1("get_terminal_size", (fd,))
+            .ok()?;
+        size.getattr("columns").ok()?.extract::<usize>().ok()
+    });
+    columns.filter(|&c| c > 1).map_or(DEFAULT_WIDTH, |c| c - 1)
 }
 
 /// Check that an optional count is at least 1.
@@ -523,6 +549,7 @@ impl Printer {
         bits: Tibs,
         class_name: &str,
         options: PpOptions<'_>,
+        width: usize,
         color: bool,
     ) -> PyResult<Self> {
         let length = bits.len();
@@ -633,7 +660,6 @@ impl Printer {
                 // Every group after the first adds its characters plus a
                 // separator in each format.
                 let per_group = widths + options.sep.chars().count() * formats.len();
-                let width = usize::try_from(options.width).unwrap_or(0);
                 let fit = 1 + width.saturating_sub(fixed) / per_group.max(1);
                 // A power of two keeps the offsets round numbers.
                 let groups = power_of_two_at_most(fit);
@@ -816,6 +842,7 @@ pub(crate) fn pp(
     bits: Tibs,
     class_name: &str,
     options: PpOptions<'_>,
+    width: Option<isize>,
     stream: Option<Bound<'_, PyAny>>,
     color: Option<bool>,
 ) -> PyResult<()> {
@@ -823,8 +850,13 @@ pub(crate) fn pp(
         Some(stream) => stream,
         None => py.import("sys")?.getattr("stdout")?,
     };
-    let color = use_color(color, &stream);
-    let mut printer = Printer::new(py, bits, class_name, options, color)?;
+    let terminal = is_terminal(&stream);
+    let width = match width {
+        Some(width) => usize::try_from(width).unwrap_or(0),
+        None => default_width(py, &stream, terminal),
+    };
+    let color = use_color(color, terminal);
+    let mut printer = Printer::new(py, bits, class_name, options, width, color)?;
     let mut buffer = String::new();
     while let Some(line) = printer.next_line(py)? {
         buffer.push_str(&line);

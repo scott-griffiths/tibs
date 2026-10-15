@@ -3515,8 +3515,9 @@ impl Mutibs {
     ///
     /// :param Dtype | DtypeKind | str dtypes: The formats to show. Defaults to ``'bin'``
     ///     and ``'hex'`` for a whole number of bytes, otherwise ``'bin'``.
-    /// :param int width: The maximum line length in characters. Each line shows at
-    ///     least one group, however long it is. Defaults to 120.
+    /// :param int | None width: The maximum line length in characters. Each line shows
+    ///     at least one group, however long it is. Defaults to the width of the
+    ///     terminal when writing to one, otherwise 120.
     /// :param str sep: The separator between groups. Use ``''`` to show the groups
     ///     without gaps. Defaults to a single space.
     /// :param bool | str show_offset: ``True`` to start each line with its offset, in
@@ -3554,15 +3555,15 @@ impl Mutibs {
     ///     04:   0   1   2   3 : 00 01 02 03 : . . . .
     ///
     #[pyo3(
-        signature = (*dtypes, width = 120, sep = " ".to_string(), show_offset = None, stream = None, color = None, groups = None, squeeze = true, max_lines = None),
-        text_signature = "($self, *dtypes, width=120, sep=' ', show_offset=True, stream=None, color=None, groups=None, squeeze=True, max_lines=None)"
+        signature = (*dtypes, width = None, sep = " ".to_string(), show_offset = None, stream = None, color = None, groups = None, squeeze = true, max_lines = None),
+        text_signature = "($self, *dtypes, width=None, sep=' ', show_offset=True, stream=None, color=None, groups=None, squeeze=True, max_lines=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     pub fn pp(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
         dtypes: &Bound<'_, PyTuple>,
-        width: isize,
+        width: Option<isize>,
         sep: String,
         show_offset: Option<&Bound<'_, PyAny>>,
         stream: Option<Bound<'_, PyAny>>,
@@ -3573,7 +3574,6 @@ impl Mutibs {
     ) -> PyResult<()> {
         let options = pretty::PpOptions {
             dtypes: dtypes.clone(),
-            width,
             sep,
             offsets: pretty::Offsets::extract(show_offset)?,
             groups,
@@ -3582,7 +3582,7 @@ impl Mutibs {
         };
         // A snapshot, as writing to the stream runs Python that could change the bits.
         let bits = with_locked(slf, |m| Ok(m.window(0, m.len())))?;
-        pretty::pp(py, bits, "Mutibs", options, stream, color)
+        pretty::pp(py, bits, "Mutibs", options, width, stream, color)
     }
 
     /// Find last occurrence of a bit sequence.

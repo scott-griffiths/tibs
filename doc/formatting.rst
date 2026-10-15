@@ -202,7 +202,8 @@ line down the left. With no arguments you get binary and hex side by side::
     10: 10101100 00010000 00001010 00001100 : ac 10 0a 0c
 
 Each line has a power of two number of groups, as many as fit in the width, so the
-offsets stay round numbers. They're in hex bytes when the data is a whole number of bytes
+offsets stay round numbers. The width is the terminal's when printing to one, and 120
+characters otherwise. They're in hex bytes when the data is a whole number of bytes
 long, and in decimal bits when it isn't. ``show_offset='bits'`` or ``'bytes'`` picks one,
 and ``show_offset=False`` leaves them out.
 

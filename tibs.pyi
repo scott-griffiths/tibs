@@ -2454,7 +2454,7 @@ class Tibs:
             True
         """
 
-    def pp(self, *dtypes: _DtypeLike, width: int = 120, sep: str = ' ',
+    def pp(self, *dtypes: _DtypeLike, width: int | None = None, sep: str = ' ',
            show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
            color: bool | None = None, groups: int | None = None, squeeze: bool = True,
            max_lines: int | None = None) -> None:
@@ -2477,8 +2477,9 @@ class Tibs:
 
         :param Dtype | DtypeKind | str dtypes: The formats to show. Defaults to ``'bin'``
             and ``'hex'`` for a whole number of bytes, otherwise ``'bin'``.
-        :param int width: The maximum line length in characters. Each line shows at
-            least one group, however long it is. Defaults to 120.
+        :param int | None width: The maximum line length in characters. Each line shows
+            at least one group, however long it is. Defaults to the width of the
+            terminal when writing to one, otherwise 120.
         :param str sep: The separator between groups. Use ``''`` to show the groups
             without gaps. Defaults to a single space.
         :param bool | str show_offset: ``True`` to start each line with its offset, in
@@ -4102,7 +4103,7 @@ class Mutibs:
             True
         """
 
-    def pp(self, *dtypes: _DtypeLike, width: int = 120, sep: str = ' ',
+    def pp(self, *dtypes: _DtypeLike, width: int | None = None, sep: str = ' ',
            show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
            color: bool | None = None, groups: int | None = None, squeeze: bool = True,
            max_lines: int | None = None) -> None:
@@ -4125,8 +4126,9 @@ class Mutibs:
 
         :param Dtype | DtypeKind | str dtypes: The formats to show. Defaults to ``'bin'``
             and ``'hex'`` for a whole number of bytes, otherwise ``'bin'``.
-        :param int width: The maximum line length in characters. Each line shows at
-            least one group, however long it is. Defaults to 120.
+        :param int | None width: The maximum line length in characters. Each line shows
+            at least one group, however long it is. Defaults to the width of the
+            terminal when writing to one, otherwise 120.
         :param str sep: The separator between groups. Use ``''`` to show the groups
             without gaps. Defaults to a single space.
         :param bool | str show_offset: ``True`` to start each line with its offset, in
