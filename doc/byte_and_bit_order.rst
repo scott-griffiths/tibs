@@ -190,3 +190,55 @@ byte. That is why ``.hex`` returns ``'3412'`` and ``.u`` returns ``13330``::
 The view does not mutate the original data. It supplies the interpretation
 needed for labelled fields and whole-byte values. For practical details and
 mutable views, see :doc:`views`.
+
+
+.. _lsb0-values:
+
+Values packed least significant bit first
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Bit order also decides how a run of values is packed. Most formats pack MSB
+first, which is how ``Tibs`` reads by default: each value starts with its most
+significant bit, and fills bytes from the left. Plenty of others pack LSB first
+instead. Each byte fills from its least significant bit, and each value goes in
+least significant bit first, so a 12-bit value takes all of one byte and the
+low half of the next. FAT12 cluster maps, the little-endian ``Mono12Packed``
+camera format, 1- and 2-bit pixel formats such as Qt's ``MonoLSB``, and 4-bit
+tensor formats all work like this.
+
+In LSB0 labels the rule is simple: an ``n``-bit value at label ``L`` is
+``field(L + n - 1, L)``. One value can be read that way through a view, but for
+many of them the :class:`Dtype` pack and unpack methods take a ``bit_order``,
+and so does :class:`Reader`::
+
+    >>> data = bytes.fromhex('21436587a9cb')
+    >>> [hex(x) for x in Dtype('u12').unpack_values(data, bit_order=BitOrder.Lsb0)]
+    ['0x321', '0x654', '0x987', '0xcba']
+    >>> Dtype('u12').pack_values([0x321, 0x654, 0x987, 0xcba], bit_order=BitOrder.Lsb0).hex
+    '21436587a9cb'
+
+Here ``start`` and ``end`` are labels too, so reading entry ``k`` of a FAT12 table
+doesn't need the whole table decoded first::
+
+    >>> k = 2
+    >>> hex(Dtype('u12').unpack(data, start=12 * k, end=12 * k + 12, bit_order=BitOrder.Lsb0))
+    '0x987'
+
+A few things follow from the rule:
+
+* Every value kind works, because each value's bits are found first and decoded
+  after. An LSB-first ``u16`` or ``f32`` that starts on a byte boundary is the
+  same as ``u16_le`` or ``f32_le``. For that reason a dtype that names a byte
+  order, such as ``'u16_le'``, is refused with ``BitOrder.Lsb0``: the byte order
+  would be stated twice.
+* An array or tuple dtype applies the rule to each of its fields in turn, so
+  ``'(u12, u4)'`` is a 12-bit value then a 4-bit one, each LSB first.
+* The values are read in significance order, just as ``field`` reads them. For
+  ``bytes``, ``hex`` and the other text kinds that means the last byte comes
+  first: ``Dtype('bytes16').unpack(b'\x01\x02', bit_order=BitOrder.Lsb0)`` is
+  ``b'\x02\x01'``.
+* LSB0 labels only exist in whole bytes, so the bits read must be a whole number
+  of bytes long, and :meth:`~Dtype.pack` and :meth:`~Dtype.pack_values` pad what
+  they produce with zero bits up to the next byte. The padding takes the
+  highest labels, so it falls at the end, where it does in the formats
+  themselves.

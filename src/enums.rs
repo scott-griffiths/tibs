@@ -46,12 +46,17 @@ impl ByteOrder {
     }
 }
 
-///     How bit labels are mapped within each byte by a :class:`View`.
+///     How bit labels are mapped within each byte.
 ///
 ///     ``Msb0`` is the default, and matches ordinary indexing: label 0 is the most
 ///     significant bit of the byte. ``Lsb0`` numbers from the least significant bit
 ///     instead, as many hardware manuals do. Only the labels differ, never the
 ///     stored data.
+///
+///     A :class:`View` uses the labels for :meth:`View.field`. The
+///     :class:`Dtype` pack and unpack methods and :class:`Reader` use them to
+///     read and write values packed least significant bit first, where each
+///     value starts at a label and runs up through the higher ones.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BitOrder {

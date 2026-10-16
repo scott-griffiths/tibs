@@ -80,12 +80,17 @@ class ByteOrder:
 
 
 class BitOrder:
-    """How bit labels are mapped within each byte by a :class:`View`.
+    """How bit labels are mapped within each byte.
 
     ``Msb0`` is the default, and matches ordinary indexing: label 0 is the most
     significant bit of the byte. ``Lsb0`` numbers from the least significant bit
     instead, as many hardware manuals do. Only the labels differ, never the
     stored data.
+
+    A :class:`View` uses the labels for :meth:`View.field`. The
+    :class:`Dtype` pack and unpack methods and :class:`Reader` use them to
+    read and write values packed least significant bit first, where each
+    value starts at a label and runs up through the higher ones.
     """
 
     Msb0: ClassVar[BitOrder]
@@ -166,64 +171,126 @@ class Dtype:
     def length(self) -> int:
         """The number of bits used by one complete value."""
 
-    def pack(self, value: Any, /) -> Tibs:
+    def pack(self, value: Any, /, bit_order: BitOrder = BitOrder.Msb0) -> Tibs:
         """Encode one Python value as a :class:`Tibs`.
 
+        With ``bit_order=BitOrder.Lsb0`` the value is written least significant
+        bit first, from the least significant bit of the first byte, as
+        :meth:`unpack` reads it with the same option. The result is then padded
+        with zero bits to a whole number of bytes, the padding taking the
+        highest labels.
+
         :param object value: A scalar or structured value matching this dtype.
+        :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
         :return: The encoded bits.
-        :raises ValueError: if a structured value has the wrong number of items.
+        :raises ValueError: if a structured value has the wrong number of items, or if
+            ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
 
         .. code-block:: pycon
 
             >>> Dtype("(u8, bool)").pack((15, True))
             Tibs('0b000011111')
+            >>> Dtype("u12").pack(0x321, bit_order=BitOrder.Lsb0)
+            Tibs('0x2103')
         """
 
-    def pack_values(self, iterable: Iterable[Any], /) -> Tibs:
+    def pack_values(self, iterable: Iterable[Any], /,
+                    bit_order: BitOrder = BitOrder.Msb0) -> Tibs:
         """Encode and concatenate Python values as a :class:`Tibs`.
 
+        With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
+        bit first, filling each byte from its least significant bit, as
+        :meth:`unpack_values` reads them with the same option. The result is
+        then padded with zero bits to a whole number of bytes, the padding
+        taking the highest labels.
+
         :param Iterable iterable: Values matching this dtype.
+        :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
         :return: The concatenated encoded bits.
+        :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
 
         .. code-block:: pycon
 
             >>> Dtype("u8").pack_values([1, 2, 3])
             Tibs('0x010203')
+            >>> Dtype("u12").pack_values([0x321, 0x654], bit_order=BitOrder.Lsb0)
+            Tibs('0x214365')
         """
 
     def unpack(self, bits: _TibsLike, /, start: int | None = None,
-               end: int | None = None) -> _DtypeValue:
-        """Decode one complete value from a bit sequence.
+               end: int | None = None, bit_order: BitOrder = BitOrder.Msb0) -> _DtypeValue:
+        r"""Decode one complete value from a bit sequence.
+
+        With ``bit_order=BitOrder.Lsb0``, ``start`` and ``end`` are LSB0 bit
+        labels, counted from the least significant bit of each byte, and the
+        value is read with ``start`` as its least significant bit. That is the
+        value ``bits.lsb0.field(end - 1, start)`` gives, and ``bits`` must be a
+        whole number of bytes long.
 
         :param object bits: Anything promotable to :class:`Tibs`.
         :param int | None start: Start bit position. Defaults to 0.
         :param int | None end: End bit position. Defaults to ``len(bits)``.
+        :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
         :return: One scalar value, or a tuple for an array or tuple dtype.
-        :raises ValueError: if the selected range is not exactly :attr:`length` bits.
+        :raises ValueError: if the selected range is not exactly :attr:`length` bits, or if
+            ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+            ``bits`` is not a whole number of bytes long.
+
+        .. code-block:: pycon
+
+            >>> Dtype("u12").unpack(b'\x21\x43', end=12, bit_order=BitOrder.Lsb0) == 0x321
+            True
         """
 
     def unpack_values(self, bits: _TibsLike, /, start: int | None = None,
-                      end: int | None = None) -> list[_DtypeValue]:
-        """Decode a list of complete values from a bit sequence.
+                      end: int | None = None,
+                      bit_order: BitOrder = BitOrder.Msb0) -> list[_DtypeValue]:
+        r"""Decode a list of complete values from a bit sequence.
+
+        With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
+        bit first, filling each byte from its least significant bit, as in
+        FAT12 tables or 1-bit pixel formats such as Qt's ``MonoLSB``. Value
+        ``i`` of an ``n``-bit dtype is then ``bits.lsb0.field(start + i*n + n-1,
+        start + i*n)``, ``start`` and ``end`` are LSB0 bit labels, and ``bits``
+        must be a whole number of bytes long. An array or tuple dtype applies
+        the same rule to each of its fields in turn.
 
         :param object bits: Anything promotable to :class:`Tibs`.
         :param int | None start: Start bit position. Defaults to 0.
         :param int | None end: End bit position. Defaults to ``len(bits)``.
+        :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
         :return: A list of decoded values.
-        :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
-            if :attr:`length` is zero, as the number of values could then be anything.
+        :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
+            :attr:`length` is zero, as the number of values could then be anything, or if
+            ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+            ``bits`` is not a whole number of bytes long.
+
+        .. code-block:: pycon
+
+            >>> Dtype("u2").unpack_values(b'\xe4', bit_order=BitOrder.Lsb0)
+            [0, 1, 2, 3]
+            >>> [hex(x) for x in Dtype("u12").unpack_values(b'\x21\x43\x65', bit_order=BitOrder.Lsb0)]
+            ['0x321', '0x654']
         """
 
     def unpack_values_iter(self, bits: _TibsLike, /, start: int | None = None,
-                           end: int | None = None) -> Iterator[_DtypeValue]:
+                           end: int | None = None,
+                           bit_order: BitOrder = BitOrder.Msb0) -> Iterator[_DtypeValue]:
         """Lazily decode complete values from a bit sequence.
+
+        ``bit_order`` has the same meaning as for :meth:`unpack_values`. With
+        ``BitOrder.Lsb0`` the selected bits are rearranged once, up front, and
+        the values are then decoded lazily from that.
 
         :param object bits: Anything promotable to :class:`Tibs`.
         :param int | None start: Start bit position. Defaults to 0.
         :param int | None end: End bit position. Defaults to ``len(bits)``.
+        :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
         :return: An iterator of decoded values.
-        :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
-            if :attr:`length` is zero, as the number of values could then be anything.
+        :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
+            :attr:`length` is zero, as the number of values could then be anything, or if
+            ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+            ``bits`` is not a whole number of bytes long.
         """
 
     def __eq__(self, other: Any) -> bool: ...
@@ -944,7 +1011,8 @@ class Reader:
         8
     """
 
-    def __init__(self, source: _TibsLike, /, pos: int = 0) -> None: ...
+    def __init__(self, source: _TibsLike, /, pos: int = 0,
+                 bit_order: BitOrder = BitOrder.Msb0) -> None: ...
 
     @property
     def source(self) -> Tibs | Mutibs:
@@ -961,6 +1029,10 @@ class Reader:
             >>> Reader(t).source is t
             True
         """
+
+    @property
+    def bit_order(self) -> BitOrder:
+        """The order values are laid out in, as given to the constructor."""
 
     @property
     def pos(self) -> int:
@@ -1059,6 +1131,10 @@ class Reader:
         The result is always a :class:`Tibs`, including when reading from a
         :class:`Mutibs`: a read takes a value out of the stream, and there is
         nothing to write back through.
+
+        For a reader with ``BitOrder.Lsb0`` the bits are labels ``pos`` to
+        ``pos + n - 1``, returned most significant first, as
+        ``source.lsb0.field(pos + n - 1, pos)`` selects them.
 
         :param int n: The number of bits to read.
         :return: The bits read.

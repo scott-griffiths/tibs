@@ -1,6 +1,7 @@
 use crate::ReadError;
 use crate::core::BitCollection;
-use crate::dtype::extract_dtype;
+use crate::dtype::{Dtype, dtype_from_kind_and_length, extract_dtype, validate_lsb0_length};
+use crate::enums::{BitOrder, DtypeKind};
 use crate::mutibs::Mutibs;
 use crate::tibs_::{SearchParams, Tibs, find_in_bits, py_from_value, py_values_from_range};
 use pyo3::exceptions::{PyMemoryError, PyValueError};
@@ -120,6 +121,9 @@ pub struct Reader {
     /// already inside the reader's critical section, which is what makes a
     /// whole method atomic, so `Relaxed` is all the ordering needed.
     pos: AtomicUsize,
+    /// How values are laid out in the source. Fixed at construction, so read
+    /// without the section.
+    bit_order: BitOrder,
 }
 
 impl Reader {
@@ -153,18 +157,57 @@ impl Reader {
         })
     }
 
-    fn read_window(&self, py: Python<'_>, length: usize) -> PyResult<Tibs> {
-        let start = self.position();
-        let end = end_of_read(start, length, self.source_len(py)?)?;
-        let window = self.window(py, start, length)?;
-        self.set_position(end);
-        Ok(window)
+    /// What a read of `length` bits at `start` takes from the source.
+    ///
+    /// An MSB0 reader takes the bits themselves, through [`Self::window`]. An
+    /// LSB0 reader takes the whole bytes that cover labels `start..start +
+    /// length`, which is O(1) for a `Tibs` source just as the window is, and
+    /// the bits are found within them once the section is released.
+    fn take(&self, py: Python<'_>, start: usize, length: usize) -> PyResult<Taken> {
+        match self.bit_order {
+            BitOrder::Msb0 => Ok(Taken::Bits(self.window(py, start, length)?)),
+            BitOrder::Lsb0 => {
+                validate_lsb0_length(self.source_len(py)?)?;
+                let first = start / 8 * 8;
+                let last = (start + length).div_ceil(8) * 8;
+                Ok(Taken::Lsb0 {
+                    bytes: self.window(py, first, last - first)?,
+                    start: start - first,
+                    end: start + length - first,
+                })
+            }
+        }
     }
 
-    fn peek_window(&self, py: Python<'_>, length: usize) -> PyResult<Tibs> {
+    fn read_window(&self, py: Python<'_>, length: usize) -> PyResult<Taken> {
+        let start = self.position();
+        let end = end_of_read(start, length, self.source_len(py)?)?;
+        let taken = self.take(py, start, length)?;
+        self.set_position(end);
+        Ok(taken)
+    }
+
+    fn peek_window(&self, py: Python<'_>, length: usize) -> PyResult<Taken> {
         let start = self.position();
         end_of_read(start, length, self.source_len(py)?)?;
-        self.window(py, start, length)
+        self.take(py, start, length)
+    }
+
+    /// Refuse a search on an LSB0 reader.
+    ///
+    /// A needle has no single meaning in an LSB-first stream: matching it bit
+    /// for bit against the source is what an MSB0 reader already does, and
+    /// matching it against what `read_bits` would return at each label is a
+    /// search of a rearranged copy of the source on every call.
+    fn require_msb0_for_search(&self) -> PyResult<()> {
+        if self.bit_order == BitOrder::Lsb0 {
+            return Err(PyValueError::new_err(
+                "A Reader with BitOrder.Lsb0 can't search. A whole-byte needle found with \
+                 byte_aligned=True is at the same position in either bit order, so search \
+                 r.source and set r.pos to the result.",
+            ));
+        }
+        Ok(())
     }
 
     fn move_if_found(&self, found: Option<usize>, offset: usize) -> bool {
@@ -183,6 +226,7 @@ impl Reader {
         params: SearchParams,
         reverse: bool,
     ) -> PyResult<Option<usize>> {
+        self.require_msb0_for_search()?;
         match &self.source {
             ReaderSource::Immutable(tibs) => {
                 find_in_bits(py, tibs.get().as_bitslice(), &needle, params, reverse)
@@ -273,23 +317,46 @@ impl Reader {
     /// yourself. Byte order for a single field is part of the dtype, as in
     /// ``read_value('u16_le')``.
     ///
+    /// ``bit_order=BitOrder.Lsb0`` reads a stream packed least significant bit
+    /// first, in which each byte fills from its least significant bit. The
+    /// position is then an LSB0 bit label, and each value read has the label
+    /// at the position as its least significant bit, exactly as
+    /// :meth:`Dtype.unpack_values` reads with the same option. Positions on a
+    /// byte boundary are the same in either order. The source must be a whole
+    /// number of bytes long, an LSB0 reader can't search, and a dtype that
+    /// names a byte order is refused, as LSB0 order already decides it.
+    ///
     /// :param object source: The bits to read. A :class:`Tibs` or :class:`Mutibs` is used directly; anything else promotable to ``Tibs`` is converted.
     /// :param int pos: The initial bit position. Defaults to 0.
-    /// :raises ValueError: if ``pos`` is negative or beyond the end of ``source``.
+    /// :param BitOrder bit_order: The order values are laid out in. Defaults to ``BitOrder.Msb0``.
+    /// :raises ValueError: if ``pos`` is negative or beyond the end of ``source``, or if
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and ``source`` is not a whole number of bytes long.
     /// :raises TypeError: if ``source`` cannot be promoted to a ``Tibs``.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Reader(Tibs('0x0123'), 8).read_value('u8')
     ///     35
+    ///     >>> r = Reader(b'\x21\x43\x65', bit_order=BitOrder.Lsb0)
+    ///     >>> hex(r.read_value('u12')), hex(r.read_value('u12'))
+    ///     ('0x321', '0x654')
     ///
     #[new]
-    #[pyo3(signature = (source, /, pos = 0), text_signature = "(source, /, pos=0)")]
-    pub fn py_new(source: &Bound<'_, PyAny>, pos: i64) -> PyResult<Self> {
+    #[pyo3(signature = (source, /, pos = 0, bit_order = BitOrder::Msb0), text_signature = "(source, /, pos=0, bit_order=None)")]
+    pub fn py_new(
+        source: &Bound<'_, PyAny>,
+        pos: i64,
+        bit_order: Option<BitOrder>,
+    ) -> PyResult<Self> {
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
         let (source, len) = ReaderSource::from_object(source)?;
+        if bit_order == BitOrder::Lsb0 {
+            validate_lsb0_length(len)?;
+        }
         Ok(Reader {
             source,
             pos: AtomicUsize::new(validate_pos(pos, len)?),
+            bit_order,
         })
     }
 
@@ -314,6 +381,12 @@ impl Reader {
             ReaderSource::Immutable(tibs) => tibs.clone_ref(py).into_any(),
             ReaderSource::Mutable(mutibs) => mutibs.clone_ref(py).into_any(),
         }
+    }
+
+    /// The order values are laid out in, as given to the constructor.
+    #[getter]
+    pub fn bit_order(slf: &Bound<'_, Self>) -> BitOrder {
+        slf.get().bit_order
     }
 
     /// The current bit position.
@@ -413,8 +486,9 @@ impl Reader {
         // `extract_dtype` parses a spec string and `py_from_value` builds the
         // result object; both are Python, so both stay outside the section.
         let dtype = extract_dtype(dtype)?;
-        let window = Self::with_reader(slf, |r| r.read_window(py, dtype.length))?;
-        py_from_value(py, &dtype, &window)
+        dtype.check_bit_order(slf.get().bit_order)?;
+        let taken = Self::with_reader(slf, |r| r.read_window(py, dtype.length))?;
+        taken.value(py, &dtype)
     }
 
     /// Read a list of values of one dtype, advancing past all of them.
@@ -453,10 +527,11 @@ impl Reader {
         count: Option<i64>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
+        dtype.check_bit_order(slf.get().bit_order)?;
         if count.is_none() && dtype.length == 0 {
             return Err(dtype.zero_length_values_error());
         }
-        let window = Self::with_reader(slf, |r| {
+        let taken = Self::with_reader(slf, |r| {
             let len = r.source_len(py)?;
             let bits = match count {
             None => remaining_bits(r.position(), len) / dtype.length * dtype.length,
@@ -473,16 +548,16 @@ impl Reader {
             })?,
         };
             let end = end_of_read(r.position(), bits, len)?;
-            let window = r.window(py, r.position(), bits)?;
+            let taken = r.take(py, r.position(), bits)?;
             r.set_position(end);
-            Ok(window)
+            Ok(taken)
         })?;
         if dtype.length == 0 {
             // `count` is known here, and every value is the same immutable
             // empty one, so a single object is shared rather than decoded
             // `count` times.
             let count = count.unwrap_or(0) as usize;
-            let value = py_from_value(py, &dtype, &window)?;
+            let value = taken.value(py, &dtype)?;
             let mut values = Vec::new();
             values.try_reserve_exact(count).map_err(|_| {
                 PyMemoryError::new_err(format!("Cannot allocate a list of {count} values."))
@@ -490,7 +565,7 @@ impl Reader {
             values.extend((0..count).map(|_| value.clone_ref(py)));
             return Ok(values);
         }
-        py_values_from_range(py, &window, &dtype, None, None)
+        taken.values(py, &dtype)
     }
 
     /// Read the next ``n`` bits, advancing by ``n``.
@@ -498,6 +573,10 @@ impl Reader {
     /// The result is always a :class:`Tibs`, including when reading from a
     /// :class:`Mutibs`: a read takes a value out of the stream, and there is
     /// nothing to write back through.
+    ///
+    /// For a reader with ``BitOrder.Lsb0`` the bits are labels ``pos`` to
+    /// ``pos + n - 1``, returned most significant first, as
+    /// ``source.lsb0.field(pos + n - 1, pos)`` selects them.
     ///
     /// :param int n: The number of bits to read.
     /// :return: The bits read.
@@ -513,7 +592,7 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn read_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        Self::with_reader(slf, |r| r.read_window(py, n))
+        Self::with_reader(slf, |r| r.read_window(py, n))?.bits()
     }
 
     /// Read up to the next occurrence of ``needle``, leaving the cursor on it.
@@ -612,8 +691,9 @@ impl Reader {
         dtype: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        let window = Self::with_reader(slf, |r| r.peek_window(py, dtype.length))?;
-        py_from_value(py, &dtype, &window)
+        dtype.check_bit_order(slf.get().bit_order)?;
+        let taken = Self::with_reader(slf, |r| r.peek_window(py, dtype.length))?;
+        taken.value(py, &dtype)
     }
 
     /// Read the next ``n`` bits without moving the cursor.
@@ -634,7 +714,7 @@ impl Reader {
     #[pyo3(signature = (n, /), text_signature = "($self, n, /)")]
     pub fn peek_bits(slf: &Bound<'_, Self>, py: Python<'_>, n: i64) -> PyResult<Tibs> {
         let n = validate_read_length(n)?;
-        Self::with_reader(slf, |r| r.peek_window(py, n))
+        Self::with_reader(slf, |r| r.peek_window(py, n))?.bits()
     }
 
     /// Return a context manager that restores the position on exit.
@@ -858,6 +938,7 @@ impl Reader {
             Ok(Reader {
                 source: r.source.clone_ref(py),
                 pos: AtomicUsize::new(r.position()),
+                bit_order: r.bit_order,
             })
         })
     }
@@ -888,6 +969,7 @@ impl Reader {
         Ok(Reader {
             source,
             pos: AtomicUsize::new(Self::with_reader(slf, |r| Ok(r.position()))?),
+            bit_order: slf.get().bit_order,
         })
     }
 
@@ -902,7 +984,14 @@ impl Reader {
                 ReaderSource::Immutable(tibs) => tibs.get().__repr__(),
                 ReaderSource::Mutable(mutibs) => mutibs.try_borrow(py)?.repr_string(),
             };
-            Ok(format!("Reader({source}, {})", r.position()))
+            Ok(match r.bit_order {
+                BitOrder::Msb0 => format!("Reader({source}, {})", r.position()),
+                BitOrder::Lsb0 => format!(
+                    "Reader({source}, {}, bit_order={})",
+                    r.position(),
+                    r.bit_order.repr_name()
+                ),
+            })
         })
     }
 }
@@ -920,6 +1009,52 @@ impl Reader {
                 self.position()
             ))
         })
+    }
+}
+
+/// The bits a read took from a [`Reader`]'s source, decoded once the reader's
+/// section has been released.
+enum Taken {
+    /// The bits read, from an MSB0 reader.
+    Bits(Tibs),
+    /// From an LSB0 reader, the whole bytes covering the read, of which the
+    /// read is labels `start..end`.
+    Lsb0 {
+        bytes: Tibs,
+        start: usize,
+        end: usize,
+    },
+}
+
+impl Taken {
+    fn value(self, py: Python<'_>, dtype: &Dtype) -> PyResult<Py<PyAny>> {
+        match self {
+            Taken::Bits(bits) => py_from_value(py, dtype, &bits),
+            Taken::Lsb0 { bytes, start, end } => {
+                dtype.py_value_lsb0(py, bytes.as_bitslice(), start, end)
+            }
+        }
+    }
+
+    fn values(self, py: Python<'_>, dtype: &Dtype) -> PyResult<Vec<Py<PyAny>>> {
+        match self {
+            Taken::Bits(bits) => py_values_from_range(py, &bits, dtype, None, None),
+            Taken::Lsb0 { bytes, start, end } => {
+                dtype.py_values_lsb0(py, bytes.as_bitslice(), start, end)
+            }
+        }
+    }
+
+    /// The bits read, most significant first for an LSB0 reader, as a
+    /// `bits` dtype of their length would give them.
+    fn bits(self) -> PyResult<Tibs> {
+        match self {
+            Taken::Bits(bits) => Ok(bits),
+            Taken::Lsb0 { bytes, start, end } => {
+                let dtype = dtype_from_kind_and_length(DtypeKind::Bits, end - start)?;
+                Ok(dtype.lsb0_to_msb0(bytes.as_bitslice(), start, end))
+            }
+        }
     }
 }
 

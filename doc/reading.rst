@@ -259,3 +259,23 @@ reader was built are there to be read::
 :attr:`~Reader.pos` is checked against the length the source has at the time it
 is assigned, so when you are writing ahead of the cursor, append first and then
 move. Reads always return a :class:`Tibs`, even from a ``Mutibs``.
+
+
+Streams packed least significant bit first
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some formats fill each byte from its least significant bit, so that a value
+can start part way up one byte and finish in the next. Give the reader
+``bit_order=BitOrder.Lsb0`` and it reads that layout directly, which here is
+the start of a FAT12 table::
+
+    >>> r = Reader(bytes.fromhex('21436587a9cb'), bit_order=BitOrder.Lsb0)
+    >>> [hex(x) for x in r.read_values('u12', 2)]
+    ['0x321', '0x654']
+    >>> r.pos
+    24
+
+The position is then an LSB0 bit label, and positions on a byte boundary are
+the same in either order. The source has to be a whole number of bytes long,
+and an LSB0 reader doesn't search. See :ref:`lsb0-values` for exactly which
+bits each value is read from.

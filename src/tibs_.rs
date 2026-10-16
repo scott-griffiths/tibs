@@ -1784,6 +1784,15 @@ impl WordField {
         if self.swap {
             raw = raw.swap_bytes() >> (64 - self.length);
         }
+        self.raw_value(py, raw)
+    }
+
+    /// The value whose bits are `raw`, right-aligned, for any reading but
+    /// `Bytes`. Split out of [`Self::value`] for LSB-first streams, which find
+    /// the bits differently, and always inlined so that `value` compiles as it
+    /// did before.
+    #[inline(always)]
+    fn raw_value<'py>(&self, py: Python<'py>, raw: u64) -> PyResult<Bound<'py, PyAny>> {
         match self.reading {
             WordReading::Uint if self.length == 64 => raw.into_bound_py_any(py),
             // Anything narrower than 64 bits fits an `i64`, which is the
@@ -1804,6 +1813,18 @@ impl WordField {
             WordReading::NarrowFloat(_, table) => table[raw as usize].into_bound_py_any(py),
             WordReading::Bytes => unreachable!("bytes fields are read above"),
         }
+    }
+
+    /// The field for a scalar dtype read straight out of an LSB-first stream,
+    /// or `None` when there is no such route and the stream has to be
+    /// rearranged for the ordinary decoders first.
+    ///
+    /// Only a field whose value is a word qualifies: a `bytes` field is copied
+    /// out of the storage as it stands, which in an LSB-first stream is not the
+    /// value.
+    fn for_lsb0(dtype: &Dtype) -> Option<Self> {
+        let field = Self::new(dtype.single()?, 0)?;
+        (!matches!(field.reading, WordReading::Bytes) && !field.swap).then_some(field)
     }
 
     /// [`Self::value`] for a `bytes` field, kept out of line and cold so that
@@ -2218,6 +2239,26 @@ pub(crate) fn py_values_from_range(
         return Ok(values);
     }
 
+    // Any other scalar a word holds - an integer of an odd width up to 64
+    // bits, a `bool`, a narrow float wider than a byte - is lifted out of the
+    // backing store a word at a time, rather than through a `Tibs` per value.
+    if let Some(field) = dtype.single().and_then(|single| WordField::new(single, 0)) {
+        let window = bits.get_slice_unchecked(start, selected_len);
+        let (bytes, shift, _) = window.raw_data_ref();
+        for index in 0..count {
+            if index >= check_at {
+                py.check_signals()?;
+                check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+            }
+            values.push(
+                field
+                    .value(py, bytes, shift + index * field.length)?
+                    .unbind(),
+            );
+        }
+        return Ok(values);
+    }
+
     // One window is reused for the whole sequence, with only its offset moving
     // between values. Taking a fresh slice each time would clone the `Arc` once
     // per value for a read that never outlives the loop.
@@ -2232,6 +2273,66 @@ pub(crate) fn py_values_from_range(
         values.push(py_from_value(py, dtype, &window)?);
     }
     Ok(values)
+}
+
+/// Decode one value of a scalar dtype straight out of the LSB-first stream
+/// `bits`, labels `start..end` holding it least significant bit first, or
+/// `None` if the dtype has no such route. See [`WordField::for_lsb0`].
+///
+/// `bits` must be a whole number of bytes long and `start..end` within it.
+pub(crate) fn py_value_from_lsb0(
+    py: Python<'_>,
+    dtype: &Dtype,
+    bits: &BS,
+    start: usize,
+    end: usize,
+) -> PyResult<Option<Py<PyAny>>> {
+    let Some(field) = WordField::for_lsb0(dtype) else {
+        return Ok(None);
+    };
+    if end - start != field.length {
+        return Ok(None);
+    }
+    let first = start / 8;
+    let bytes = helpers::whole_bytes(&bits[first * 8..end.div_ceil(8) * 8]);
+    let raw = helpers::load_lsb0_bits(&bytes, start - first * 8, field.length);
+    Ok(Some(field.raw_value(py, raw)?.unbind()))
+}
+
+/// [`py_value_from_lsb0`] for every value in `start..end`, value `i` having
+/// label `start + i * length` as its least significant bit.
+///
+/// `None` as well when `start..end` isn't a whole number of values, so that the
+/// caller's general route reports it.
+pub(crate) fn py_values_from_lsb0(
+    py: Python<'_>,
+    dtype: &Dtype,
+    bits: &BS,
+    start: usize,
+    end: usize,
+) -> PyResult<Option<Vec<Py<PyAny>>>> {
+    let Some(field) = WordField::for_lsb0(dtype) else {
+        return Ok(None);
+    };
+    let length = field.length;
+    if !(end - start).is_multiple_of(length) {
+        return Ok(None);
+    }
+    let count = (end - start) / length;
+    let first = start / 8;
+    let bytes = helpers::whole_bytes(&bits[first * 8..end.div_ceil(8) * 8]);
+    let base = start - first * 8;
+    let mut values = Vec::with_capacity(count);
+    let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+    for index in 0..count {
+        if index >= check_at {
+            py.check_signals()?;
+            check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+        }
+        let raw = helpers::load_lsb0_bits(&bytes, base + index * length, length);
+        values.push(field.raw_value(py, raw)?.unbind());
+    }
+    Ok(Some(values))
 }
 
 /// Public Python-facing methods.

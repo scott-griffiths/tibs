@@ -3,6 +3,7 @@ mod bitwise;
 mod digits;
 mod format;
 mod locking;
+mod lsb0;
 mod minifloat;
 mod numeric;
 mod parse;
@@ -26,6 +27,7 @@ pub(crate) use bitwise::{
 pub(crate) use digits::{bin_from_padded_bytes, hex_from_padded_bytes, oct_from_padded_bytes};
 pub(crate) use format::format_bit_collection;
 pub(crate) use locking::{with_locked, with_locked_mut, with_locked_mut2, with_locked2};
+pub(crate) use lsb0::{load_lsb0_bits, push_lsb0_field, store_msb0_field_as_lsb0, whole_bytes};
 pub(crate) use minifloat::{
     NarrowFloatEncodeError, NarrowFloatFormat, encode_narrow_float, narrow_float_decode_table,
 };

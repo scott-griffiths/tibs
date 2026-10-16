@@ -1,10 +1,13 @@
 use crate::core::BitCollection;
-use crate::enums::{ByteOrder, DtypeKind};
-use crate::helpers::{BS, bv_from_bytes_slice, validate_slice};
+use crate::enums::{BitOrder, ByteOrder, DtypeKind};
+use crate::helpers::{
+    BS, BV, BitAccumulator, bv_from_bytes_slice, head_bit_offset, push_lsb0_field,
+    store_msb0_field_as_lsb0, try_bv_from_bytes, try_byte_buffer, validate_slice, whole_bytes,
+};
 use crate::iterator::ValuesIterator;
 use crate::tibs_::{
     BytewisePacker, Tibs, WordField, bv_from_value, bv_from_values_iter, py_from_raw_range,
-    py_from_value, py_values_from_range,
+    py_from_value, py_value_from_lsb0, py_values_from_lsb0, py_values_from_range,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -421,6 +424,29 @@ impl DtypeRepr {
             Self::Single(dtype) => dtype.byte_order != ByteOrder::Unspecified,
             Self::Array { dtype, .. } => dtype.has_explicit_byte_order(),
             Self::Tuple(dtypes) => dtypes.iter().any(Self::has_explicit_byte_order),
+        }
+    }
+
+    /// Call `f` with the bit offset and length of each scalar field in turn,
+    /// the first starting at `offset`, returning the offset just past the last.
+    ///
+    /// An array of zero-length items is skipped whole, so that a huge count of
+    /// them costs nothing.
+    fn for_each_field<F: FnMut(usize, usize)>(&self, offset: usize, f: &mut F) -> usize {
+        match self {
+            Self::Single(dtype) => {
+                f(offset, dtype.length);
+                offset + dtype.length
+            }
+            Self::Array { dtype, count } => {
+                if dtype.length().unwrap_or(0) == 0 {
+                    return offset;
+                }
+                (0..*count).fold(offset, |offset, _| dtype.for_each_field(offset, f))
+            }
+            Self::Tuple(dtypes) => dtypes
+                .iter()
+                .fold(offset, |offset, dtype| dtype.for_each_field(offset, f)),
         }
     }
 
@@ -893,6 +919,158 @@ impl Dtype {
         self.repr.has_explicit_byte_order()
     }
 
+    /// Refuse a dtype that names its own byte order when the values are in
+    /// LSB-first order, which already decides it.
+    ///
+    /// Under [`BitOrder::Lsb0`] every value is read least significant bit
+    /// first, so a whole-byte value is little-endian by construction. A `_le`
+    /// or `_be` dtype would state the byte order a second time, as it would
+    /// through an `lsb0` view, and is refused for the same reason.
+    pub(crate) fn check_bit_order(&self, bit_order: BitOrder) -> PyResult<()> {
+        if bit_order == BitOrder::Lsb0 && self.has_explicit_byte_order() {
+            return Err(PyValueError::new_err(format!(
+                "Cannot use the dtype '{}' with BitOrder.Lsb0. LSB0 order reads each value \
+                 least significant bit first, which already decides the byte order, so a '_le' \
+                 or '_be' dtype would state it a second time. Remove the byte order from the dtype.",
+                self.spec()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Bits `start..end` of the LSB-first stream `bits`, rearranged into the
+    /// order the ordinary decoders read: each field of each value in turn,
+    /// most significant bit first.
+    ///
+    /// Value `i` of an `n`-bit scalar dtype is labels `start + i*n` (its least
+    /// significant bit) to `start + i*n + n - 1`, which is what
+    /// `bits.lsb0.field(start + i*n + n - 1, start + i*n)` selects. An array or
+    /// tuple applies the same rule to each of its scalar fields.
+    ///
+    /// `bits` must be a whole number of bytes long, which
+    /// [`validate_lsb0_length`] checks, and `start..end` must lie within it.
+    /// Any bits after the last whole value are passed on as one more field, so
+    /// that a range that isn't a whole number of values reaches the decoder at
+    /// its true length and is refused with the usual message.
+    pub(crate) fn lsb0_to_msb0(&self, bits: &BS, start: usize, end: usize) -> Tibs {
+        debug_assert!(bits.len().is_multiple_of(8) && start <= end && end <= bits.len());
+        let first = start / 8;
+        let bytes = whole_bytes(&bits[first * 8..end.div_ceil(8) * 8]);
+        let base = start - first * 8;
+        let total = end - start;
+        let records = total.checked_div(self.length).unwrap_or(0);
+        let mut out = BitAccumulator::with_bit_capacity(Some(total));
+        match self.single() {
+            Some(single) => {
+                let length = single.length;
+                for index in 0..records {
+                    push_lsb0_field(&mut out, &bytes, base + index * length, length);
+                }
+            }
+            None => {
+                let mut push = |label, length| push_lsb0_field(&mut out, &bytes, label, length);
+                for index in 0..records {
+                    self.repr
+                        .for_each_field(base + index * self.length, &mut push);
+                }
+            }
+        }
+        let done = records * self.length;
+        push_lsb0_field(&mut out, &bytes, base + done, total - done);
+        Tibs::from_bv(out.into_bitvec())
+    }
+
+    /// Decode one value from labels `start..end` of the LSB-first stream
+    /// `bits`, as [`Self::lsb0_to_msb0`] lays it out.
+    ///
+    /// A scalar whose value is a word is read straight out of the stream;
+    /// anything else is rearranged for the ordinary decoder first.
+    pub(crate) fn py_value_lsb0(
+        &self,
+        py: Python<'_>,
+        bits: &BS,
+        start: usize,
+        end: usize,
+    ) -> PyResult<Py<PyAny>> {
+        if let Some(value) = py_value_from_lsb0(py, self, bits, start, end)? {
+            return Ok(value);
+        }
+        py_from_value(py, self, &self.lsb0_to_msb0(bits, start, end))
+    }
+
+    /// [`Self::py_value_lsb0`] for every value in `start..end`.
+    pub(crate) fn py_values_lsb0(
+        &self,
+        py: Python<'_>,
+        bits: &BS,
+        start: usize,
+        end: usize,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        if let Some(values) = py_values_from_lsb0(py, self, bits, start, end)? {
+            return Ok(values);
+        }
+        py_values_from_range(py, &self.lsb0_to_msb0(bits, start, end), self, None, None)
+    }
+
+    /// Whole values of this dtype packed MSB-first, as the encoders write
+    /// them, rearranged into an LSB-first stream: the inverse of
+    /// [`Self::lsb0_to_msb0`].
+    ///
+    /// The stream is padded with zeros to a whole number of bytes, the padding
+    /// taking the highest labels, as LSB0 labels only exist in whole bytes.
+    pub(crate) fn msb0_to_lsb0(&self, packed: &BV) -> PyResult<Tibs> {
+        let total = packed.len();
+        let mut out = try_byte_buffer(total)?;
+        out.resize(total.div_ceil(8), 0);
+        let raw = packed.as_raw_slice();
+        let offset = head_bit_offset(packed.as_bitslice());
+        let records = total.checked_div(self.length).unwrap_or(0);
+        debug_assert_eq!(records * self.length, total);
+        match self.single() {
+            Some(single) => {
+                let length = single.length;
+                for index in 0..records {
+                    store_msb0_field_as_lsb0(&mut out, raw, offset, index * length, length);
+                }
+            }
+            None => {
+                let mut store =
+                    |bit, length| store_msb0_field_as_lsb0(&mut out, raw, offset, bit, length);
+                for index in 0..records {
+                    self.repr.for_each_field(index * self.length, &mut store);
+                }
+            }
+        }
+        Ok(Tibs::from_bv(try_bv_from_bytes(out)?))
+    }
+
+    /// Run `read` over `bits`, an LSB-first stream, with the range
+    /// `start..end` resolved, after the checks that reading with
+    /// [`BitOrder::Lsb0`] needs.
+    ///
+    /// A `Tibs` or a `bytes` is read where it is rather than copied first.
+    fn with_lsb0_range<R>(
+        &self,
+        bits: &Bound<'_, PyAny>,
+        start: Option<isize>,
+        end: Option<isize>,
+        read: impl FnOnce(&BS, usize, usize) -> PyResult<R>,
+    ) -> PyResult<R> {
+        self.check_bit_order(BitOrder::Lsb0)?;
+        let checked = |bits: &BS| {
+            validate_lsb0_length(bits.len())?;
+            let (start, end) = validate_slice(bits.len(), start, end)?;
+            read(bits, start, end)
+        };
+        if let Ok(tibs) = bits.cast::<Tibs>() {
+            return checked(tibs.get().as_bitslice());
+        }
+        if let Ok(data) = bits.cast_exact::<PyBytes>() {
+            return checked(BS::from_slice(data.as_bytes()));
+        }
+        checked(bits.extract::<Tibs>()?.as_bitslice())
+    }
+
     /// The error for reading values of this dtype until the bits run out when
     /// it is zero bits long, as any number of them fit in any length.
     #[cold]
@@ -911,6 +1089,21 @@ impl Dtype {
             DtypeRepr::Tuple(_) => "DtypeTuple",
         }
     }
+}
+
+/// Refuse a run that isn't a whole number of bytes as an LSB-first stream.
+///
+/// LSB0 labels count from the least significant bit of each byte, so a final
+/// part-byte has no labels for its bits, just as an `lsb0` view needs whole
+/// bytes.
+pub(crate) fn validate_lsb0_length(len: usize) -> PyResult<()> {
+    if !len.is_multiple_of(8) {
+        return Err(PyValueError::new_err(format!(
+            "Cannot read {len} bits with BitOrder.Lsb0. LSB0 labels count from the least \
+             significant bit of each byte, so the bits must be a whole number of bytes long."
+        )));
+    }
+    Ok(())
 }
 
 /// Upper bound on the number of parsed specs kept in [`SPEC_CACHE`].
@@ -1030,48 +1223,105 @@ impl Dtype {
 
     /// Encode one Python value as a :class:`Tibs`.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the value is written least significant
+    /// bit first, from the least significant bit of the first byte, as
+    /// :meth:`unpack` reads it with the same option. The result is then padded
+    /// with zero bits to a whole number of bytes, the padding taking the
+    /// highest labels.
+    ///
     /// :param object value: A scalar or structured value matching this dtype.
+    /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: The encoded bits.
-    /// :raises ValueError: if a structured value has the wrong number of items.
+    /// :raises ValueError: if a structured value has the wrong number of items, or if
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Dtype("(u8, bool)").pack((15, True))
     ///     Tibs('0b000011111')
-    #[pyo3(signature = (value, /), text_signature = "($self, value, /)")]
-    fn pack(&self, value: &Bound<'_, PyAny>) -> PyResult<Tibs> {
-        Ok(Tibs::from_bv(bv_from_value(self, value)?))
+    ///     >>> Dtype("u12").pack(0x321, bit_order=BitOrder.Lsb0)
+    ///     Tibs('0x2103')
+    #[pyo3(signature = (value, /, bit_order = BitOrder::Msb0), text_signature = "($self, value, /, bit_order=None)")]
+    fn pack(&self, value: &Bound<'_, PyAny>, bit_order: Option<BitOrder>) -> PyResult<Tibs> {
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        self.check_bit_order(bit_order)?;
+        let packed = bv_from_value(self, value)?;
+        match bit_order {
+            BitOrder::Msb0 => Ok(Tibs::from_bv(packed)),
+            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
+        }
     }
 
     /// Encode and concatenate Python values as a :class:`Tibs`.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
+    /// bit first, filling each byte from its least significant bit, as
+    /// :meth:`unpack_values` reads them with the same option. The result is
+    /// then padded with zero bits to a whole number of bytes, the padding
+    /// taking the highest labels.
+    ///
     /// :param Iterable iterable: Values matching this dtype.
+    /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: The concatenated encoded bits.
+    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Dtype("u8").pack_values([1, 2, 3])
     ///     Tibs('0x010203')
-    #[pyo3(signature = (iterable, /), text_signature = "($self, iterable, /)")]
-    fn pack_values(&self, py: Python<'_>, iterable: &Bound<'_, PyAny>) -> PyResult<Tibs> {
-        Ok(Tibs::from_bv(bv_from_values_iter(py, self, iterable)?))
+    ///     >>> Dtype("u12").pack_values([0x321, 0x654], bit_order=BitOrder.Lsb0)
+    ///     Tibs('0x214365')
+    #[pyo3(signature = (iterable, /, bit_order = BitOrder::Msb0), text_signature = "($self, iterable, /, bit_order=None)")]
+    fn pack_values(
+        &self,
+        py: Python<'_>,
+        iterable: &Bound<'_, PyAny>,
+        bit_order: Option<BitOrder>,
+    ) -> PyResult<Tibs> {
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        self.check_bit_order(bit_order)?;
+        let packed = bv_from_values_iter(py, self, iterable)?;
+        match bit_order {
+            BitOrder::Msb0 => Ok(Tibs::from_bv(packed)),
+            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
+        }
     }
 
     /// Decode one complete value from a bit sequence.
     ///
+    /// With ``bit_order=BitOrder.Lsb0``, ``start`` and ``end`` are LSB0 bit
+    /// labels, counted from the least significant bit of each byte, and the
+    /// value is read with ``start`` as its least significant bit. That is the
+    /// value ``bits.lsb0.field(end - 1, start)`` gives, and ``bits`` must be a
+    /// whole number of bytes long.
+    ///
     /// :param object bits: Anything promotable to :class:`Tibs`.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to ``len(bits)``.
+    /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: One scalar value, or a tuple for an array or tuple dtype.
-    /// :raises ValueError: if the selected range is not exactly :attr:`length` bits.
-    #[pyo3(signature = (bits, /, start = None, end = None), text_signature = "($self, bits, /, start=None, end=None)")]
+    /// :raises ValueError: if the selected range is not exactly :attr:`length` bits, or if
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+    ///     ``bits`` is not a whole number of bytes long.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Dtype("u12").unpack(b'\x21\x43', end=12, bit_order=BitOrder.Lsb0) == 0x321
+    ///     True
+    #[pyo3(signature = (bits, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, bits, /, start=None, end=None, bit_order=None)")]
     fn unpack(
         &self,
         py: Python<'_>,
         bits: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Py<PyAny>> {
+        if bit_order == Some(BitOrder::Lsb0) {
+            return self.with_lsb0_range(bits, start, end, |bits, start, end| {
+                self.py_value_lsb0(py, bits, start, end)
+            });
+        }
         // A `Tibs` or a `bytes` is read where it already is, rather than copied
         // into a new `Tibs` first, which for a short record costs about as much
         // as decoding it.
@@ -1101,42 +1351,83 @@ impl Dtype {
 
     /// Decode a list of complete values from a bit sequence.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
+    /// bit first, filling each byte from its least significant bit, as in
+    /// FAT12 tables or 1-bit pixel formats such as Qt's ``MonoLSB``. Value
+    /// ``i`` of an ``n``-bit dtype is then ``bits.lsb0.field(start + i*n + n-1,
+    /// start + i*n)``, ``start`` and ``end`` are LSB0 bit labels, and ``bits``
+    /// must be a whole number of bytes long. An array or tuple dtype applies
+    /// the same rule to each of its fields in turn.
+    ///
     /// :param object bits: Anything promotable to :class:`Tibs`.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to ``len(bits)``.
+    /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: A list of decoded values.
-    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
-    ///     if :attr:`length` is zero, as the number of values could then be anything.
-    #[pyo3(signature = (bits, /, start = None, end = None), text_signature = "($self, bits, /, start=None, end=None)")]
+    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
+    ///     :attr:`length` is zero, as the number of values could then be anything, or if
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+    ///     ``bits`` is not a whole number of bytes long.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> Dtype("u2").unpack_values(b'\xe4', bit_order=BitOrder.Lsb0)
+    ///     [0, 1, 2, 3]
+    ///     >>> [hex(x) for x in Dtype("u12").unpack_values(b'\x21\x43\x65', bit_order=BitOrder.Lsb0)]
+    ///     ['0x321', '0x654']
+    #[pyo3(signature = (bits, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, bits, /, start=None, end=None, bit_order=None)")]
     fn unpack_values(
         &self,
         py: Python<'_>,
         bits: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Vec<Py<PyAny>>> {
+        if bit_order == Some(BitOrder::Lsb0) {
+            return self.with_lsb0_range(bits, start, end, |bits, start, end| {
+                self.py_values_lsb0(py, bits, start, end)
+            });
+        }
         let bits = bits.extract::<Tibs>()?;
         py_values_from_range(py, &bits, self, start, end)
     }
 
     /// Lazily decode complete values from a bit sequence.
     ///
+    /// ``bit_order`` has the same meaning as for :meth:`unpack_values`. With
+    /// ``BitOrder.Lsb0`` the selected bits are rearranged once, up front, and
+    /// the values are then decoded lazily from that.
+    ///
     /// :param object bits: Anything promotable to :class:`Tibs`.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to ``len(bits)``.
+    /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: An iterator of decoded values.
-    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, or
-    ///     if :attr:`length` is zero, as the number of values could then be anything.
-    #[pyo3(signature = (bits, /, start = None, end = None), text_signature = "($self, bits, /, start=None, end=None)")]
+    /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
+    ///     :attr:`length` is zero, as the number of values could then be anything, or if
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
+    ///     ``bits`` is not a whole number of bytes long.
+    #[pyo3(signature = (bits, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, bits, /, start=None, end=None, bit_order=None)")]
     fn unpack_values_iter(
         &self,
         py: Python<'_>,
         bits: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Py<ValuesIterator>> {
-        let bits = bits.extract::<Tibs>()?;
-        let (start, end) = validate_slice(bits.len(), start, end)?;
+        let (bits, start, end) = if bit_order == Some(BitOrder::Lsb0) {
+            let bits = self.with_lsb0_range(bits, start, end, |bits, start, end| {
+                Ok(self.lsb0_to_msb0(bits, start, end))
+            })?;
+            let len = bits.len();
+            (bits, 0, len)
+        } else {
+            let bits = bits.extract::<Tibs>()?;
+            let (start, end) = validate_slice(bits.len(), start, end)?;
+            (bits, start, end)
+        };
         ValuesIterator::new(py, Py::new(py, bits)?, self.clone(), start, end)
     }
 
