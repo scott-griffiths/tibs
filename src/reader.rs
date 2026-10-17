@@ -1,6 +1,8 @@
 use crate::ReadError;
 use crate::core::BitCollection;
-use crate::dtype::{Dtype, dtype_from_kind_and_length, extract_dtype, validate_lsb0_length};
+use crate::dtype::{
+    Dtype, dtype_from_kind_and_length, extract_dtype, lsb0_covering_bytes, validate_lsb0_length,
+};
 use crate::enums::{BitOrder, DtypeKind};
 use crate::mutibs::Mutibs;
 use crate::tibs_::{SearchParams, Tibs, find_in_bits, py_from_value, py_values_from_range};
@@ -168,10 +170,9 @@ impl Reader {
             BitOrder::Msb0 => Ok(Taken::Bits(self.window(py, start, length)?)),
             BitOrder::Lsb0 => {
                 validate_lsb0_length(self.source_len(py)?)?;
-                let first = start / 8 * 8;
-                let last = (start + length).div_ceil(8) * 8;
+                let (first, covered) = lsb0_covering_bytes(start, start + length);
                 Ok(Taken::Lsb0 {
-                    bytes: self.window(py, first, last - first)?,
+                    bytes: self.window(py, first, covered)?,
                     start: start - first,
                     end: start + length - first,
                 })

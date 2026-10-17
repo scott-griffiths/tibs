@@ -309,3 +309,82 @@ def test_reader_lsb0_copies_and_repr():
     for other in (copy.copy(r), copy.deepcopy(r)):
         assert other.bit_order == LSB0
         assert other.read_value("u12") == 0x432
+
+
+# --- the Tibs and Mutibs value methods ---------------------------------------
+
+
+@pytest.mark.parametrize("data, n, values", VECTORS)
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+def test_container_methods_on_the_vectors(cls, data, n, values):
+    data = bytes.fromhex(data)
+    spec = f"u{n}"
+    bits = cls.from_bytes(data)
+
+    assert bits.to_values(spec, bit_order=LSB0) == values
+    assert bits.to_value(spec, start=n, end=2 * n, bit_order=LSB0) == values[1]
+    packed = cls.from_values(spec, values, bit_order=LSB0)
+    assert isinstance(packed, cls)
+    assert packed.to_bytes() == data
+    assert cls.from_value(spec, values[0], bit_order=LSB0) == \
+        cls(Dtype(spec).pack(values[0], bit_order=LSB0))
+    if cls is Tibs:
+        assert list(bits.to_values_iter(spec, bit_order=LSB0)) == values
+
+
+def test_from_values_pads_to_whole_bytes():
+    assert Tibs.from_values("u12", [0x321, 0x654, 0x987], bit_order=LSB0) == Tibs("0x2143658709")
+    assert Mutibs.from_values("u4", [1, 2, 3], bit_order=LSB0) == Mutibs("0x2103")
+    assert len(Tibs.from_value("bool", True, bit_order=LSB0)) == 8
+
+
+@settings(max_examples=200)
+@given(data=st.binary(min_size=1, max_size=40), spec=st.sampled_from(["u5", "i12", "u64", "u70", "bits9", "(u4, [u3; 2])", "f16"]),
+       start=st.integers(0, 80))
+def test_container_methods_agree_with_dtype(data, spec, start):
+    dtype = Dtype(spec)
+    t, m = Tibs.from_bytes(data), Mutibs.from_bytes(data)
+    start = start % (len(t) + 1)
+    count = (len(t) - start) // dtype.length
+    end = start + count * dtype.length
+
+    expected = dtype.unpack_values(data, start=start, end=end, bit_order=LSB0)
+    for bits in (t, m):
+        assert all(map(same, bits.to_values(spec, start=start, end=end, bit_order=LSB0), expected))
+    assert all(map(same, t.to_values_iter(spec, start=start, end=end, bit_order=LSB0), expected))
+    if count:
+        one = dtype.unpack(data, start=start, end=start + dtype.length, bit_order=LSB0)
+        for bits in (t, m):
+            assert same(bits.to_value(spec, start=start, end=start + dtype.length, bit_order=LSB0), one)
+    assert Tibs.from_values(spec, expected, bit_order=LSB0) == dtype.pack_values(expected, bit_order=LSB0)
+    assert Mutibs.from_values(spec, expected, bit_order=LSB0).to_tibs() == \
+        dtype.pack_values(expected, bit_order=LSB0)
+
+
+def test_mutibs_reads_its_current_contents():
+    m = Mutibs.from_bytes(b"\x21\x43")
+    assert m.to_value("u12", start=4, bit_order=LSB0) == 0x432
+    m[0:8] = "0xff"
+    assert m.to_value("u12", start=4, bit_order=LSB0) == 0x43F
+    m.append(1)
+    with pytest.raises(ValueError, match="whole number of bytes"):
+        m.to_values("u1", bit_order=LSB0)
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+def test_container_methods_refuse_what_dtype_refuses(cls):
+    with pytest.raises(ValueError, match="already decides the byte order"):
+        cls.from_value("u16_le", 1, bit_order=LSB0)
+    with pytest.raises(ValueError, match="already decides the byte order"):
+        cls.from_values("(u8, u16_be)", [(1, 2)], bit_order=LSB0)
+    with pytest.raises(ValueError, match="already decides the byte order"):
+        cls.from_bytes(b"\x00\x00").to_value("u16_le", bit_order=LSB0)
+    with pytest.raises(ValueError, match="whole number of bytes"):
+        cls("0b101").to_values("u1", bit_order=LSB0)
+    with pytest.raises(ValueError, match="not a multiple of dtype length"):
+        cls.from_bytes(bytes(3)).to_values("u12", end=20, bit_order=LSB0)
+    with pytest.raises(ValueError, match="Cannot convert 20 bits"):
+        cls.from_bytes(bytes(3)).to_value("u12", end=20, bit_order=LSB0)
+    if cls is Tibs:
+        with pytest.raises(ValueError, match="whole number of bytes"):
+            Tibs("0b101").to_values_iter("u1", bit_order=LSB0)

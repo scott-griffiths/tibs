@@ -3,7 +3,7 @@ use crate::core::{
     BitCollection, concatenate_bitcollections, push_collection_run, read_split_positions,
     repeat_bitcollection,
 };
-use crate::dtype::extract_dtype;
+use crate::dtype::{Dtype, extract_dtype, lsb0_covering_bytes};
 use crate::enums::{BitOrder, ByteOrder, Codec};
 use crate::helpers::{
     BS, BV, BitConcat, LogicalOp, MaskedMatcher, bv_from_bin, bv_from_bools, bv_from_bytes_slice,
@@ -15,8 +15,8 @@ use crate::helpers::{
     validate_slice, with_locked, with_locked_mut, with_locked_mut2, with_locked2,
 };
 use crate::tibs_::{
-    SearchParams, Tibs, bv_from_value, bv_from_values_iter, count_in_bits, find_all_in_bits,
-    find_in_bits, prepare_mask, py_from_value, py_values_from_range, resolve_count_target,
+    SearchParams, Tibs, count_in_bits, find_all_in_bits, find_in_bits, prepare_mask, py_from_value,
+    py_values_from_range, resolve_count_target,
 };
 use crate::view::{MutableView, View};
 
@@ -223,6 +223,25 @@ impl Mutibs {
     #[inline]
     pub(crate) fn to_bitvec(&self) -> BV {
         self.copied_range(0, self.len())
+    }
+
+    /// The whole bytes covering `start..end` of an LSB-first stream, copied
+    /// out under the lock, with the labels the range spans within them, for
+    /// `to_value` and `to_values` with `BitOrder.Lsb0`.
+    ///
+    /// Only the covered bytes are copied, as for the MSB0 windows, and the
+    /// values are decoded from the copy once the lock is released.
+    fn lsb0_window(
+        slf: &Bound<'_, Self>,
+        dtype: &Dtype,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<(Tibs, usize, usize)> {
+        with_locked(slf, |m| {
+            let (start, end) = dtype.lsb0_slice(m.len(), start, end)?;
+            let (first, covered) = lsb0_covering_bytes(start, end);
+            Ok((m.window(first, covered), start - first, end - first))
+        })
     }
 
     /// A copy of `length` bits starting `start_bit` bits in, as a `Tibs`.
@@ -2413,9 +2432,16 @@ impl Mutibs {
 
     /// Create a new instance by encoding one value with a dtype.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the value is packed least significant
+    /// bit first, filling each byte from its least significant bit, as
+    /// :meth:`Dtype.pack` does. The result is padded with zero bits to a
+    /// whole number of bytes, the padding taking the highest labels.
+    ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :param object value: The value to encode.
+    /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Mutibs``.
+    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -2423,37 +2449,52 @@ impl Mutibs {
     ///     Mutibs('0x0f')
     ///
     #[classmethod]
-    #[pyo3(signature = (dtype, value, /), text_signature = "(cls, dtype, value, /)")]
+    #[pyo3(signature = (dtype, value, /, bit_order = BitOrder::Msb0), text_signature = "(cls, dtype, value, /, bit_order=None)")]
     pub fn from_value(
         _cls: &Bound<'_, PyType>,
         dtype: &Bound<'_, PyAny>,
         value: &Bound<'_, PyAny>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Self> {
         let dtype = extract_dtype(dtype)?;
-        Ok(Mutibs::from_bv(bv_from_value(&dtype, value)?))
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        Ok(Mutibs::from_bv(dtype.pack_bv(value, bit_order)?))
     }
 
     /// Create a new instance by encoding and concatenating values with a dtype.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
+    /// bit first, filling each byte from its least significant bit, as
+    /// :meth:`Dtype.pack_values` does. The result is padded with zero bits to a
+    /// whole number of bytes, the padding taking the highest labels.
+    ///
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param Iterable iterable: The values to encode.
+    /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Mutibs``.
+    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
     ///     >>> Mutibs.from_values("u8", [1, 2, 3])
     ///     Mutibs('0x010203')
+    ///     >>> Mutibs.from_values("u4", [1, 2, 3], bit_order=BitOrder.Lsb0)
+    ///     Mutibs('0x2103')
     ///
     #[classmethod]
-    #[pyo3(signature = (dtype, iterable, /), text_signature = "(cls, dtype, iterable, /)")]
+    #[pyo3(signature = (dtype, iterable, /, bit_order = BitOrder::Msb0), text_signature = "(cls, dtype, iterable, /, bit_order=None)")]
     pub fn from_values(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         dtype: &Bound<'_, PyAny>,
         iterable: &Bound<'_, PyAny>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Self> {
         let dtype = extract_dtype(dtype)?;
-        Ok(Mutibs::from_bv(bv_from_values_iter(py, &dtype, iterable)?))
+        let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
+        Ok(Mutibs::from_bv(
+            dtype.pack_values_bv(py, iterable, bit_order)?,
+        ))
     }
 
     /// The bit length of the Mutibs.
@@ -2473,9 +2514,15 @@ impl Mutibs {
     /// The values are decoded from the current contents when the method is
     /// called.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the values are read from bits packed least
+    /// significant bit first, as :meth:`Dtype.unpack_values` reads them: ``start``
+    /// and ``end`` are LSB0 bit labels, and the ``Mutibs`` must be a whole
+    /// number of bytes long.
+    ///
     /// :param Dtype | str dtype: The value encoding to use for each item.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
+    /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: A list of decoded Python values.
     ///
     /// .. code-block:: pycon
@@ -2483,17 +2530,22 @@ impl Mutibs {
     ///     >>> Mutibs('0x010203').to_values("u8")
     ///     [1, 2, 3]
     ///
-    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, dtype, /, start=None, end=None, bit_order=None)")]
     pub fn to_values(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
         dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         // `extract_dtype` parses a spec string, so it is Python and belongs
         // outside the lock.
         let dtype = extract_dtype(dtype)?;
+        if bit_order == Some(BitOrder::Lsb0) {
+            let (bytes, start, end) = Self::lsb0_window(slf, &dtype, start, end)?;
+            return dtype.py_values_lsb0(py, bytes.as_bitslice(), start, end);
+        }
         // Validate against the whole container, then copy out only the
         // selected bits. Snapshotting through `to_tibs` first would copy every
         // bit on every call, making a loop of windowed reads over a large
@@ -2509,9 +2561,15 @@ impl Mutibs {
     ///
     /// The selected range must have exactly the dtype length.
     ///
+    /// With ``bit_order=BitOrder.Lsb0`` the value is read from bits packed least
+    /// significant bit first, as :meth:`Dtype.unpack` reads them: ``start``
+    /// and ``end`` are LSB0 bit labels, and the ``Mutibs`` must be a whole
+    /// number of bytes long.
+    ///
     /// :param Dtype | str dtype: The value encoding to use.
     /// :param int | None start: Start bit position. Defaults to 0.
     /// :param int | None end: End bit position. Defaults to len(self).
+    /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: The decoded Python value.
     ///
     /// .. code-block:: pycon
@@ -2519,15 +2577,20 @@ impl Mutibs {
     ///     >>> Mutibs('0x0f').to_value("u8")
     ///     15
     ///
-    #[pyo3(signature = (dtype, /, start = None, end = None), text_signature = "($self, dtype, /, start=None, end=None)")]
+    #[pyo3(signature = (dtype, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, dtype, /, start=None, end=None, bit_order=None)")]
     pub fn to_value(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
         dtype: &Bound<'_, PyAny>,
         start: Option<isize>,
         end: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
+        if bit_order == Some(BitOrder::Lsb0) {
+            let (bytes, start, end) = Self::lsb0_window(slf, &dtype, start, end)?;
+            return dtype.py_value_lsb0(py, bytes.as_bitslice(), start, end);
+        }
         // Only the selected bits are copied; see the note in `to_values`.
         let value = with_locked(slf, |m| {
             let (start, end) = validate_slice(m.len(), start, end)?;

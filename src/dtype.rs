@@ -1018,7 +1018,7 @@ impl Dtype {
     ///
     /// The stream is padded with zeros to a whole number of bytes, the padding
     /// taking the highest labels, as LSB0 labels only exist in whole bytes.
-    pub(crate) fn msb0_to_lsb0(&self, packed: &BV) -> PyResult<Tibs> {
+    fn msb0_to_lsb0(&self, packed: &BV) -> PyResult<BV> {
         let total = packed.len();
         let mut out = try_byte_buffer(total)?;
         out.resize(total.div_ceil(8), 0);
@@ -1041,7 +1041,48 @@ impl Dtype {
                 }
             }
         }
-        Ok(Tibs::from_bv(try_bv_from_bytes(out)?))
+        try_bv_from_bytes(out)
+    }
+
+    /// Encode one value in `bit_order`, for `Dtype.pack` and the `from_value`
+    /// constructors.
+    pub(crate) fn pack_bv(&self, value: &Bound<'_, PyAny>, bit_order: BitOrder) -> PyResult<BV> {
+        self.check_bit_order(bit_order)?;
+        let packed = bv_from_value(self, value)?;
+        match bit_order {
+            BitOrder::Msb0 => Ok(packed),
+            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
+        }
+    }
+
+    /// Encode and concatenate values in `bit_order`, for `Dtype.pack_values`
+    /// and the `from_values` constructors.
+    pub(crate) fn pack_values_bv(
+        &self,
+        py: Python<'_>,
+        iterable: &Bound<'_, PyAny>,
+        bit_order: BitOrder,
+    ) -> PyResult<BV> {
+        self.check_bit_order(bit_order)?;
+        let packed = bv_from_values_iter(py, self, iterable)?;
+        match bit_order {
+            BitOrder::Msb0 => Ok(packed),
+            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
+        }
+    }
+
+    /// The range `start..end` of an LSB-first stream `len` bits long, after
+    /// every check that reading it with [`BitOrder::Lsb0`] needs: this dtype
+    /// names no byte order, the stream is whole bytes, and the range is in it.
+    pub(crate) fn lsb0_slice(
+        &self,
+        len: usize,
+        start: Option<isize>,
+        end: Option<isize>,
+    ) -> PyResult<(usize, usize)> {
+        self.check_bit_order(BitOrder::Lsb0)?;
+        validate_lsb0_length(len)?;
+        validate_slice(len, start, end)
     }
 
     /// Run `read` over `bits`, an LSB-first stream, with the range
@@ -1056,10 +1097,8 @@ impl Dtype {
         end: Option<isize>,
         read: impl FnOnce(&BS, usize, usize) -> PyResult<R>,
     ) -> PyResult<R> {
-        self.check_bit_order(BitOrder::Lsb0)?;
         let checked = |bits: &BS| {
-            validate_lsb0_length(bits.len())?;
-            let (start, end) = validate_slice(bits.len(), start, end)?;
+            let (start, end) = self.lsb0_slice(bits.len(), start, end)?;
             read(bits, start, end)
         };
         if let Ok(tibs) = bits.cast::<Tibs>() {
@@ -1104,6 +1143,13 @@ pub(crate) fn validate_lsb0_length(len: usize) -> PyResult<()> {
         )));
     }
     Ok(())
+}
+
+/// The bits of the whole bytes that cover `start..end`, as a start and a
+/// length, for a caller that copies them out of a source it has to lock.
+pub(crate) fn lsb0_covering_bytes(start: usize, end: usize) -> (usize, usize) {
+    let first = start / 8 * 8;
+    (first, end.div_ceil(8) * 8 - first)
 }
 
 /// Upper bound on the number of parsed specs kept in [`SPEC_CACHE`].
@@ -1244,12 +1290,7 @@ impl Dtype {
     #[pyo3(signature = (value, /, bit_order = BitOrder::Msb0), text_signature = "($self, value, /, bit_order=None)")]
     fn pack(&self, value: &Bound<'_, PyAny>, bit_order: Option<BitOrder>) -> PyResult<Tibs> {
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
-        self.check_bit_order(bit_order)?;
-        let packed = bv_from_value(self, value)?;
-        match bit_order {
-            BitOrder::Msb0 => Ok(Tibs::from_bv(packed)),
-            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
-        }
+        Ok(Tibs::from_bv(self.pack_bv(value, bit_order)?))
     }
 
     /// Encode and concatenate Python values as a :class:`Tibs`.
@@ -1279,12 +1320,7 @@ impl Dtype {
         bit_order: Option<BitOrder>,
     ) -> PyResult<Tibs> {
         let bit_order = bit_order.unwrap_or(BitOrder::Msb0);
-        self.check_bit_order(bit_order)?;
-        let packed = bv_from_values_iter(py, self, iterable)?;
-        match bit_order {
-            BitOrder::Msb0 => Ok(Tibs::from_bv(packed)),
-            BitOrder::Lsb0 => self.msb0_to_lsb0(&packed),
-        }
+        Ok(Tibs::from_bv(self.pack_values_bv(py, iterable, bit_order)?))
     }
 
     /// Decode one complete value from a bit sequence.

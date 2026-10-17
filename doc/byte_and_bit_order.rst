@@ -208,21 +208,32 @@ tensor formats all work like this.
 
 In LSB0 labels the rule is simple: an ``n``-bit value at label ``L`` is
 ``field(L + n - 1, L)``. One value can be read that way through a view, but for
-many of them the :class:`Dtype` pack and unpack methods take a ``bit_order``,
-and so does :class:`Reader`::
+many of them the methods that pack and unpack values take a ``bit_order``:
+``from_value``, ``from_values``, ``to_value`` and ``to_values`` on ``Tibs`` and
+``Mutibs``, the :class:`Dtype` pack and unpack methods, and :class:`Reader`::
 
-    >>> data = bytes.fromhex('21436587a9cb')
-    >>> [hex(x) for x in Dtype('u12').unpack_values(data, bit_order=BitOrder.Lsb0)]
+    >>> table = Tibs.from_bytes(bytes.fromhex('21436587a9cb'))
+    >>> [hex(x) for x in table.to_values('u12', bit_order=BitOrder.Lsb0)]
     ['0x321', '0x654', '0x987', '0xcba']
-    >>> Dtype('u12').pack_values([0x321, 0x654, 0x987, 0xcba], bit_order=BitOrder.Lsb0).hex
+    >>> Tibs.from_values('u12', [0x321, 0x654, 0x987, 0xcba], bit_order=BitOrder.Lsb0).hex
     '21436587a9cb'
 
 Here ``start`` and ``end`` are labels too, so reading entry ``k`` of a FAT12 table
 doesn't need the whole table decoded first::
 
     >>> k = 2
-    >>> hex(Dtype('u12').unpack(data, start=12 * k, end=12 * k + 12, bit_order=BitOrder.Lsb0))
+    >>> hex(table.to_value('u12', start=12 * k, end=12 * k + 12, bit_order=BitOrder.Lsb0))
     '0x987'
+
+The :class:`Dtype` methods do the same with a ``Dtype`` you already have, and
+accept ``bytes`` without making a ``Tibs`` first::
+
+    >>> [hex(x) for x in Dtype('u12').unpack_values(table.bytes, bit_order=BitOrder.Lsb0)]
+    ['0x321', '0x654', '0x987', '0xcba']
+
+A view's own ``to_value`` and ``write_value`` don't take a ``bit_order``. The
+view was given its bit order when it was made, so a second one would state it
+twice.
 
 A few things follow from the rule:
 
@@ -235,10 +246,11 @@ A few things follow from the rule:
   ``'(u12, u4)'`` is a 12-bit value then a 4-bit one, each LSB first.
 * The values are read in significance order, just as ``field`` reads them. For
   ``bytes``, ``hex`` and the other text kinds that means the last byte comes
-  first: ``Dtype('bytes16').unpack(b'\x01\x02', bit_order=BitOrder.Lsb0)`` is
+  first: ``Tibs('0x0102').to_value('bytes16', bit_order=BitOrder.Lsb0)`` is
   ``b'\x02\x01'``.
 * LSB0 labels only exist in whole bytes, so the bits read must be a whole number
-  of bytes long, and :meth:`~Dtype.pack` and :meth:`~Dtype.pack_values` pad what
-  they produce with zero bits up to the next byte. The padding takes the
+  of bytes long, and the packing methods pad what they produce with zero bits
+  up to the next byte, so ``Tibs.from_values('u12', [1, 2, 3],
+  bit_order=BitOrder.Lsb0)`` is 40 bits long, not 36. The padding takes the
   highest labels, so it falls at the end, where it does in the formats
   themselves.
