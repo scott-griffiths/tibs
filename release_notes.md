@@ -9,6 +9,20 @@
   runs of repeated lines are replaced by a line saying how much is hidden.
   `max_lines` limits the output, and Ctrl-C stops it. Lines fit the
   terminal, and are colourised only when writing to one.
+* `pp()` takes a `bit_order`. With `BitOrder.Lsb0` each group is shown as
+  `to_values()` reads it with the same `bit_order`, so a table of values
+  packed least significant bit first, such as FAT12, can be pretty-printed.
+* Big-endian LSB0 views now work, for registers drawn as bits 31 to 0 and
+  stored most significant byte first, as in Motorola 68k manuals and most SPI
+  and I²C sensor datasheets. In `t.lsb0.be`, label 0 is the least significant
+  bit of the *last* byte, so every LSB0 view follows one rule: label `k` is
+  bit `k` of the view's value. Previously `ByteOrder.Big` was recorded in an
+  LSB0 view and then ignored, so `t.lsb0.be` read the same as `t.lsb0`.
+* An LSB0 view of more than one byte now needs a byte order, as `t.lsb0.le`
+  or `t.lsb0.be`. Plain `t.lsb0` used to read little-endian without saying
+  so; now reading or writing through it raises `ValueError` unless the view
+  is a single byte. Code that used plain `.lsb0` on longer data should add
+  `.le` to keep its results.
 * Zero-length dtypes are now allowed. An array may have a count of zero, such as
   `'[u8; 0]'`, which unpacks to `()`, and `bits0`, `bytes0`, `bin0`, `oct0` and
   `hex0` unpack to `Tibs()`, `b''` and `''`. They can be used inside tuples, as

@@ -1346,15 +1346,20 @@ def test_zero_length_to_value_at_any_position(spec):
         t.to_value(d)
 
 
-@pytest.mark.parametrize("view", ["le", "be", "lsb0"])
+@pytest.mark.parametrize("view", ["le", "be", "lsb0.le", "lsb0.be"])
 def test_zero_length_dtypes_through_byte_order_views(view):
+    def through(bits):
+        for name in view.split("."):
+            bits = getattr(bits, name)
+        return bits
+
     t = Tibs("0x0102")
-    assert getattr(t, view).to_value("[u16; 0]", 16, 16) == ()
-    assert getattr(t, view).to_value("bytes0", 8, 8) == b""
-    assert getattr(Mutibs(t), view).to_value("bits0", 0, 0) == Tibs()
+    assert through(t).to_value("[u16; 0]", 16, 16) == ()
+    assert through(t).to_value("bytes0", 8, 8) == b""
+    assert through(Mutibs(t)).to_value("bits0", 0, 0) == Tibs()
     # A byte order on the element still counts as the dtype naming one.
     with pytest.raises(ValueError, match="specifies its own byte order"):
-        getattr(t, view).to_value("[u16_le; 0]", 0, 0)
+        through(t).to_value("[u16_le; 0]", 0, 0)
 
 
 def test_zero_length_write_value_through_a_mutable_view():

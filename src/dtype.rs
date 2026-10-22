@@ -944,7 +944,7 @@ impl Dtype {
     ///
     /// Value `i` of an `n`-bit scalar dtype is labels `start + i*n` (its least
     /// significant bit) to `start + i*n + n - 1`, which is what
-    /// `bits.lsb0.field(start + i*n + n - 1, start + i*n)` selects. An array or
+    /// `bits.lsb0.le.field(start + i*n + n - 1, start + i*n)` selects. An array or
     /// tuple applies the same rule to each of its scalar fields.
     ///
     /// `bits` must be a whole number of bytes long, which
@@ -1328,7 +1328,7 @@ impl Dtype {
     /// With ``bit_order=BitOrder.Lsb0``, ``start`` and ``end`` are LSB0 bit
     /// labels, counted from the least significant bit of each byte, and the
     /// value is read with ``start`` as its least significant bit. That is the
-    /// value ``bits.lsb0.field(end - 1, start)`` gives, and ``bits`` must be a
+    /// value ``bits.lsb0.le.field(end - 1, start)`` gives, and ``bits`` must be a
     /// whole number of bytes long.
     ///
     /// :param object bits: Anything promotable to :class:`Tibs`.
@@ -1390,7 +1390,7 @@ impl Dtype {
     /// With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
     /// bit first, filling each byte from its least significant bit, as in
     /// FAT12 tables or 1-bit pixel formats such as Qt's ``MonoLSB``. Value
-    /// ``i`` of an ``n``-bit dtype is then ``bits.lsb0.field(start + i*n + n-1,
+    /// ``i`` of an ``n``-bit dtype is then ``bits.lsb0.le.field(start + i*n + n-1,
     /// start + i*n)``, ``start`` and ``end`` are LSB0 bit labels, and ``bits``
     /// must be a whole number of bytes long. An array or tuple dtype applies
     /// the same rule to each of its fields in turn.

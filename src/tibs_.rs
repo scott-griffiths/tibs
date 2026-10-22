@@ -2597,8 +2597,12 @@ impl Tibs {
 
     /// Return an LSB0 bit-order view.
     ///
-    /// ``BitOrder.Lsb0`` means that field labels are counted from the least
-    /// significant bit of each byte. The ``Tibs`` length must be a whole number of
+    /// ``BitOrder.Lsb0`` means that label ``k`` is bit ``k`` of the value, counting
+    /// from its least significant bit. Over more than one byte that depends on the
+    /// byte order, so follow it with ``.le``, where label 0 is the least
+    /// significant bit of the first byte, or ``.be``, where it is the last
+    /// byte's. Plain ``lsb0`` can only be read or written within a single byte.
+    /// The ``Tibs`` length must be a whole number of
     /// bytes.
     ///
     /// Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
@@ -3957,9 +3961,14 @@ impl Tibs {
     /// :param int | None max_lines: Stop after this many lines, not counting the
     ///     header, with a final line saying how much isn't shown if there was more.
     ///     Defaults to no limit.
+    /// :param BitOrder bit_order: With ``BitOrder.Lsb0``, each group is read from bits
+    ///     packed least significant bit first, exactly as :meth:`to_values` reads it
+    ///     with the same ``bit_order``, and the offsets are LSB0 labels. Each line is
+    ///     then a whole number of bytes. Defaults to ``BitOrder.Msb0``.
     /// :return: None
     /// :raises ValueError: if a format is invalid or has no length it can use, or
-    ///     the formats have different lengths.
+    ///     the formats have different lengths, or ``bit_order`` is ``BitOrder.Lsb0``
+    ///     and the bits aren't a whole number of bytes or a format names a byte order.
     /// :raises TypeError: if a format isn't a dtype, kind or string.
     ///
     /// .. code-block:: pycon
@@ -3972,10 +3981,13 @@ impl Tibs {
     ///     Tibs, 64 bits, u8 : hex : bytes
     ///     00: 116 105  98 115 : 74 69 62 73 : t i b s
     ///     04:   0   1   2   3 : 00 01 02 03 : . . . .
+    ///     >>> Tibs('0x21436587a9cb').pp('u12', 'hex', bit_order=BitOrder.Lsb0)
+    ///     Tibs, 48 bits, BitOrder.Lsb0, u12 : hex
+    ///     00:  801 1620 2439 3258 : 321 654 987 cba
     ///
     #[pyo3(
-        signature = (*dtypes, width = None, sep = " ".to_string(), show_offset = None, stream = None, color = None, groups = None, squeeze = true, max_lines = None),
-        text_signature = "($self, *dtypes, width=None, sep=' ', show_offset=True, stream=None, color=None, groups=None, squeeze=True, max_lines=None)"
+        signature = (*dtypes, width = None, sep = " ".to_string(), show_offset = None, stream = None, color = None, groups = None, squeeze = true, max_lines = None, bit_order = BitOrder::Msb0),
+        text_signature = "($self, *dtypes, width=None, sep=' ', show_offset=True, stream=None, color=None, groups=None, squeeze=True, max_lines=None, bit_order=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     pub fn pp(
@@ -3990,6 +4002,7 @@ impl Tibs {
         groups: Option<isize>,
         squeeze: bool,
         max_lines: Option<isize>,
+        bit_order: Option<BitOrder>,
     ) -> PyResult<()> {
         let options = pretty::PpOptions {
             dtypes: dtypes.clone(),
@@ -3998,6 +4011,7 @@ impl Tibs {
             groups,
             squeeze,
             max_lines,
+            bit_order: bit_order.unwrap_or(BitOrder::Msb0),
         };
         let bits = self.clone();
         pretty::pp(py, bits, "Tibs", options, width, stream, color)

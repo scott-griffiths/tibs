@@ -577,7 +577,7 @@ impl Reader {
     ///
     /// For a reader with ``BitOrder.Lsb0`` the bits are labels ``pos`` to
     /// ``pos + n - 1``, returned most significant first, as
-    /// ``source.lsb0.field(pos + n - 1, pos)`` selects them.
+    /// ``source.lsb0.le.field(pos + n - 1, pos)`` selects them.
     ///
     /// :param int n: The number of bits to read.
     /// :return: The bits read.

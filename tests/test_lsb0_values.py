@@ -1,10 +1,11 @@
 """Packing and unpacking values least significant bit first, with ``bit_order``.
 
-The reference throughout is ``lsb0.field``: value ``i`` of an ``n``-bit dtype
-starting at label ``start`` is ``bits.lsb0.field(start + i*n + n-1, start + i*n)``,
+The reference throughout is ``lsb0.le.field``: value ``i`` of an ``n``-bit dtype
+starting at label ``start`` is ``bits.lsb0.le.field(start + i*n + n-1, start + i*n)``,
 and an array or tuple applies that rule to each scalar field in turn.
 """
 import copy
+import io
 import math
 import struct
 
@@ -17,11 +18,11 @@ LSB0 = BitOrder.Lsb0
 
 
 def reference_value(dtype, bits, label):
-    """Decode one value of ``dtype`` at ``label`` through ``lsb0.field``."""
+    """Decode one value of ``dtype`` at ``label`` through ``lsb0.le.field``."""
     if isinstance(dtype, DtypeSingle):
         if dtype.length == 0:
             return dtype.unpack(Tibs())
-        view = bits.lsb0.field(label + dtype.length - 1, label)
+        view = bits.lsb0.le.field(label + dtype.length - 1, label)
         return view.to_value(dtype)
     if isinstance(dtype, DtypeArray):
         item = dtype.dtype
@@ -120,11 +121,11 @@ def test_tuple_and_array_apply_the_rule_to_each_field():
 
 
 def test_bytes_and_text_kinds_read_in_value_order():
-    # As lsb0.field reads them: the value's most significant bit is the
+    # As lsb0.le.field reads them: the value's most significant bit is the
     # highest label, so whole bytes come out last byte first.
     t = Tibs.from_bytes(b"\x01\x02")
 
-    assert Dtype("bytes16").unpack(t, bit_order=LSB0) == t.lsb0.field(15, 0).bytes == b"\x02\x01"
+    assert Dtype("bytes16").unpack(t, bit_order=LSB0) == t.lsb0.le.field(15, 0).bytes == b"\x02\x01"
     assert Dtype("hex16").unpack(t, bit_order=LSB0) == "0201"
     assert Dtype("bits4").unpack(t, end=4, bit_order=LSB0) == Tibs("0b0001")
 
@@ -199,7 +200,7 @@ def test_unpack_values_agrees_with_field(data, n, start, kind):
     assert r.pos == end
     if count:
         assert dtype.unpack(t, start=start, end=start + n, bit_order=LSB0) == expected[0]
-        assert Reader(t, start, bit_order=LSB0).read_bits(n) == t.lsb0.field(start + n - 1, start).to_tibs()
+        assert Reader(t, start, bit_order=LSB0).read_bits(n) == t.lsb0.le.field(start + n - 1, start).to_tibs()
 
 
 @settings(max_examples=300)
@@ -388,3 +389,95 @@ def test_container_methods_refuse_what_dtype_refuses(cls):
     if cls is Tibs:
         with pytest.raises(ValueError, match="whole number of bytes"):
             Tibs("0b101").to_values_iter("u1", bit_order=LSB0)
+
+
+def pp_text(bits, *dtypes, **kwargs):
+    out = io.StringIO()
+    bits.pp(*dtypes, stream=out, color=False, **kwargs)
+    return out.getvalue()
+
+
+@settings(max_examples=200)
+@given(
+    data=st.data(),
+    spec=st.sampled_from(["u1", "u2", "u3", "u4", "i5", "u7", "u12", "hex12", "bin6", "(u4, u8)", "[u2; 3]", "(bool, u3)"]),
+    cls=st.sampled_from([Tibs, Mutibs]),
+)
+def test_pp_shows_what_to_values_reads(data, spec, cls):
+    # An LSB0 pp is the MSB0 pp of the same values repacked MSB first, apart
+    # from the header naming the bit order.
+    dtype = Dtype(spec)
+    per_byte = 8 // math.gcd(dtype.length, 8)
+    count = per_byte * data.draw(st.integers(1, 6))
+    nbytes = count * dtype.length // 8
+    bits = cls.from_bytes(data.draw(st.binary(min_size=nbytes, max_size=nbytes)))
+    groups = per_byte * data.draw(st.sampled_from([1, 2, 4]))
+    repacked = Tibs.from_values(dtype, bits.to_values(dtype, bit_order=LSB0))
+    for offsets in (True, "bits", False):
+        lsb0 = pp_text(bits, spec, groups=groups, show_offset=offsets, bit_order=LSB0).splitlines()
+        msb0 = pp_text(repacked, spec, groups=groups, show_offset=offsets).splitlines()
+        assert lsb0[0] == msb0[0].replace("Tibs", cls.__name__).replace(" bits, ", " bits, BitOrder.Lsb0, ")
+        assert lsb0[1:] == msb0[1:]
+
+
+def test_pp_lsb0_fat12_table():
+    table = Tibs.from_bytes(bytes.fromhex("21436587a9cb"))
+    assert pp_text(table, "u12", "hex", bit_order=LSB0) == (
+        "Tibs, 48 bits, BitOrder.Lsb0, u12 : hex\n"
+        "00:  801 1620 2439 3258 : 321 654 987 cba\n"
+    )
+
+
+def test_pp_lsb0_short_final_group_and_leftover_are_read_as_one_field():
+    # A short final text group, and leftover bits, are each one field in
+    # significance order, as to_value reads them.
+    assert pp_text(Tibs("0x0102030405"), "hex", "bytes", bit_order=LSB0) == (
+        "Tibs, 40 bits, BitOrder.Lsb0, hex : bytes\n"
+        "00: 04030201 05       : .... .\n"
+    )
+    padded = Tibs.from_values("u12", [1, 2, 3], bit_order=LSB0)
+    assert padded.to_value("bits4", start=36, bit_order=LSB0) == Tibs("0x0")
+    assert pp_text(padded, "u12", bit_order=LSB0).splitlines()[1:] == [
+        "00:    1    2    3",
+        "    0x0",
+    ]
+
+
+def test_pp_lsb0_squeezes_whole_byte_lines():
+    assert pp_text(Tibs("0xe4") * 17, "u2", groups=8, bit_order=LSB0).splitlines()[1:] == [
+        "00: 0 1 2 3 0 1 2 3",
+        "... x7 identical lines, 14 bytes",
+        "10: 0 1 2 3",
+    ]
+
+
+@pytest.mark.parametrize("cls", [Tibs, Mutibs])
+def test_pp_lsb0_refuses_what_to_values_refuses(cls):
+    with pytest.raises(ValueError, match="whole number of bytes"):
+        pp_text(cls("0b101"), bit_order=LSB0)
+    with pytest.raises(ValueError, match="already decides the byte order"):
+        pp_text(cls.from_bytes(bytes(4)), "u16_le", bit_order=LSB0)
+    with pytest.raises(ValueError, match="BitOrder.Lsb0 needs a whole number of bytes on each line"):
+        pp_text(cls.from_bytes(bytes(6)), "u12", groups=1, bit_order=LSB0)
+
+
+def test_view_and_stream_agree_on_scalars_and_differ_on_compounds():
+    # Two models, kept on purpose. bit_order reads a stream of fields, each
+    # from the lowest label not yet used. A view reads the one value it
+    # denotes, and a compound dtype splits that most significant field first.
+    pixels = Tibs("0xe4")
+    assert pixels.to_value("[u2; 4]", bit_order=LSB0) == (0, 1, 2, 3)
+    assert pixels.lsb0.to_value("[u2; 4]") == (3, 2, 1, 0)
+    assert pixels.lsb0.to_value("[u2; 4]") == pixels.lsb0.to_tibs().to_value("[u2; 4]")
+
+    header = Tibs("0x05")  # DEFLATE block header: BFINAL is label 0, BTYPE labels 1 and 2
+    assert header.to_value("(u1, u2)", end=3, bit_order=LSB0) == (1, 2)
+    assert header.lsb0.field(2, 0).to_value("(u1, u2)") == (1, 1)
+
+    t = Tibs("0x0102a1ff")
+    for spec in ["u1", "u12", "i16", "u32", "f32", "hex8"]:
+        n = Dtype(spec).length
+        for label in range(0, 33 - n, 4):
+            stream = t.to_value(spec, start=label, end=label + n, bit_order=LSB0)
+            view = t.lsb0.le.field(label + n - 1, label).to_value(spec)
+            assert stream == view or (stream != stream and view != view)

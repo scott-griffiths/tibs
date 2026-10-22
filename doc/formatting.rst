@@ -263,6 +263,19 @@ Pass ``squeeze=False`` to see every line. To see just the start of a large value
 
 Ctrl-C also stops the output part way through.
 
+For values packed least significant bit first, such as a FAT12 table, pass
+``bit_order=BitOrder.Lsb0``. Each group is then shown as :meth:`~Tibs.to_values` reads it
+with the same ``bit_order``, and each line is a whole number of bytes (see
+:ref:`lsb0-values`)::
+
+    >>> fat = Tibs.from_bytes(bytes.fromhex('21436587a9cb'))
+    >>> fat.pp('u12', 'hex')
+    Tibs, 48 bits, u12 : hex
+    00:  532  869 2170 2507 : 214 365 87a 9cb
+    >>> fat.pp('u12', 'hex', bit_order=BitOrder.Lsb0)
+    Tibs, 48 bits, BitOrder.Lsb0, u12 : hex
+    00:  801 1620 2439 3258 : 321 654 987 cba
+
 Output goes to ``sys.stdout`` unless you pass a ``stream``, which can be anything with a
 ``write`` method, such as an ``io.StringIO`` to collect the output as a string. It is
 colourised when the stream is a terminal, unless the ``NO_COLOR`` environment variable is

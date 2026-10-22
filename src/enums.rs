@@ -46,12 +46,16 @@ impl ByteOrder {
     }
 }
 
-///     How bit labels are mapped within each byte.
+///     How bit labels are numbered.
 ///
 ///     ``Msb0`` is the default, and matches ordinary indexing: label 0 is the most
-///     significant bit of the byte. ``Lsb0`` numbers from the least significant bit
-///     instead, as many hardware manuals do. Only the labels differ, never the
-///     stored data.
+///     significant bit of the first byte, and the labels count through the bits
+///     in the order they are stored. ``Lsb0`` numbers by significance instead, as
+///     many hardware manuals do: label ``k`` is bit ``k`` of the value, counting
+///     from its least significant bit. For a little-endian value that is the
+///     first byte's least significant bit, and for a big-endian one the last
+///     byte's, so a view with ``Lsb0`` labels over more than one byte also needs
+///     a byte order. Only the labels differ, never the stored data.
 ///
 ///     A :class:`View` uses the labels for :meth:`View.field`. The
 ///     :class:`Dtype` pack and unpack methods and :class:`Reader` use them to

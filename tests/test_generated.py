@@ -996,7 +996,9 @@ class TestDtypeViewMutableViewEdgeCoverage:
     def test_view_from_indices_respects_layout_for_two_byte_selection(self):
         source = Tibs("0x1234")
 
-        lsb0 = View.from_indices(source, range(16), bit_order=BitOrder.Lsb0)
+        lsb0 = View.from_indices(
+            source, range(16), byte_order=ByteOrder.Little, bit_order=BitOrder.Lsb0
+        )
         little = View.from_indices(source, range(16), byte_order=ByteOrder.Little)
 
         assert lsb0.hex == "3412"
@@ -1061,7 +1063,7 @@ class TestDtypeViewMutableViewEdgeCoverage:
     def test_mutable_view_to_mutibs_materializes_copy(self):
         m = Mutibs("0x1234")
 
-        copy = m.lsb0.to_mutibs()
+        copy = m.lsb0.le.to_mutibs()
         copy[0] = True
 
         assert copy == Mutibs("0xb412")
@@ -1097,7 +1099,7 @@ class TestRustCoverageGaps:
 
         assert m.le.u == 13330
         assert m.le.be.u == 4660
-        assert m.lsb0.bin == "0011010000010010"
+        assert m.lsb0.le.bin == "0011010000010010"
         assert m.lsb0.msb0.bin == "0001001000110100"
 
     def test_mutable_view_octal_conversion(self):

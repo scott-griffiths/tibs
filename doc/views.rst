@@ -53,11 +53,24 @@ This is all quite a lot of typing, so a more convenient way to create a view fro
 
 * :attr:`Tibs.le` / :attr:`Mutibs.le`: little-endian byte order.
 * :attr:`Tibs.be` / :attr:`Mutibs.be`: big-endian byte order.
-* :attr:`Tibs.lsb0` / :attr:`Mutibs.lsb0`: LSB0 bit numbering within each byte.
-* :attr:`Tibs.msb0` / :attr:`Mutibs.msb0`: MSB0 bit numbering within each byte.
+* :attr:`Tibs.lsb0` / :attr:`Mutibs.lsb0`: LSB0 bit numbering, from the least significant bit.
+* :attr:`Tibs.msb0` / :attr:`Mutibs.msb0`: MSB0 bit numbering, in the order the bits are stored.
 
-These can be combined. For example ``t.lsb0.le`` means that bit labels are LSB0,
-and whole-byte values should be interpreted as little-endian.
+These can be combined. An ``lsb0`` view numbers the bits of the value it
+denotes from its least significant bit, so the byte order decides where label 0
+is. With ``t.lsb0.le`` it's the least significant bit of the first byte, and with
+``t.lsb0.be`` of the last. Within a single byte there's nothing to choose, so
+plain ``t.lsb0`` is enough there, but a longer ``lsb0`` view needs one or the
+other::
+
+    >>> Tibs('0x1234').lsb0.u
+    Traceback (most recent call last):
+    ...
+    ValueError: An LSB0 view of more than one byte needs a byte order, as it decides where label 0 is. ...
+    >>> Tibs('0x1234').lsb0.le.u, Tibs('0x1234').lsb0.be.u
+    (13330, 4660)
+
+All four combinations are compared in :ref:`four-conventions`.
 
 For the example above, the :attr:`Tibs.u` property makes the little-endian interpretation more concise::
 
@@ -154,9 +167,9 @@ view, this is the same ordering you would get from
     >>> word = Tibs('0x0100')
     >>> word.bin
     '0000000100000000'
-    >>> word.lsb0.bin
+    >>> word.lsb0.le.bin
     '0000000000000001'
-    >>> word.lsb0.field(0, len(word) - 1).bin
+    >>> word.lsb0.le.field(0, len(word) - 1).bin
     '0000000000000001'
 
 Format specs follow the same rule, so a view can be dropped straight into an
@@ -252,9 +265,9 @@ zero or positive bit labels::
     >>> t = Tibs('0x23a11234')
     >>> t.field(0, 7).hex
     '23'
-    >>> t.lsb0.field(31, 28).u
+    >>> t.lsb0.le.field(31, 28).u
     3
-    >>> t.lsb0.field(28, 31).u
+    >>> t.lsb0.le.field(28, 31).u
     3
 
 When the source is mutable, :meth:`Mutibs.field` and :meth:`MutableView.field`
@@ -306,13 +319,23 @@ bit order to find the labelled bits, then returns those bits in field-value
 order. For LSB0 labels, label 0 is the least-significant bit of the field, so
 the extracted value is not bit-reversed.
 
-A field keeps the view's byte order if it is a whole number of bytes long, and
-drops it if not, because there are then no complete bytes to reorder::
+In an ``le`` view the labels are MSB0, so they follow the stored order. A field
+keeps the view's byte order if it is a whole number of bytes long, and drops it
+if not, because there are then no complete bytes to reorder. A 12-bit field is
+just the first 12 stored bits, which are not the low 12 bits of the 16-bit field
+over the same bytes::
 
-    >>> header.field(31, 16)
-    View(Tibs('0x1234'), ByteOrder.Little, BitOrder.Msb0)
-    >>> header.field(11, 0)
-    View(Tibs('0x123'), ByteOrder.Unspecified, BitOrder.Msb0)
+    >>> reg = Tibs('0x3412').le
+    >>> reg.field(0, 15)
+    View(Tibs('0x3412'), ByteOrder.Little, BitOrder.Msb0)
+    >>> hex(reg.field(0, 15).u)
+    '0x1234'
+    >>> reg.field(0, 11)
+    View(Tibs('0x341'), ByteOrder.Unspecified, BitOrder.Msb0)
+
+If the specification numbers the bits of a little-endian value from its least
+significant bit, use ``lsb0.le`` instead, where every field is part of the same
+little-endian value.
 
 Scattered fields
 ^^^^^^^^^^^^^^^^
@@ -394,10 +417,19 @@ claim about byte order, so it passes any dtype straight through::
     1
 
 Which one to use is mostly decided for you. A view applies its byte order to the
-whole view at once, so a record whose fields differ, or a run of little-endian
-values, has to state it on the dtype and read it from the source. Where a whole
-view really does share one byte order, either place works, and the view form
-composes with ``field()`` and the other view conversions.
+whole view at once, and an array or tuple dtype then splits the value the view
+denotes, most significant field first, as a register diagram draws it. In
+``t.le.to_value("(u8, u24)")`` above, the ``u8`` is the *last* stored byte. So a
+record whose fields each have their own byte order, or a run of little-endian
+values, has to state it on the dtype and read it from the source::
+
+    >>> t.to_value("(u8, u24_le)")
+    (0, 4161536)
+
+Values packed least significant bit first are the same case, and are read with a
+``bit_order`` rather than through an ``lsb0`` view (see :ref:`lsb0-values`).
+Where a whole view really does share one byte order, either place works, and the
+view form composes with ``field()`` and the other view conversions.
 
 On a :class:`MutableView`, :meth:`MutableView.write_value` is the write
 direction. The value is encoded with the dtype and the result is written through

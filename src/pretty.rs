@@ -9,9 +9,9 @@
 use crate::core::BitCollection;
 use crate::dtype::{
     Dtype, DtypeRepr, SingleDtype, dtype_from_kind_and_length, extract_dtype, kind_from_prefix,
-    parse_spec_cached, prefix_for_kind,
+    parse_spec_cached, prefix_for_kind, validate_lsb0_length,
 };
-use crate::enums::DtypeKind;
+use crate::enums::{BitOrder, DtypeKind};
 use crate::tibs_::{Tibs, py_from_value_parts};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -87,6 +87,7 @@ pub(crate) struct PpOptions<'py> {
     pub(crate) groups: Option<isize>,
     pub(crate) squeeze: bool,
     pub(crate) max_lines: Option<isize>,
+    pub(crate) bit_order: BitOrder,
 }
 
 /// One format as given, before the group length is known.
@@ -551,6 +552,10 @@ struct Printer {
     sep: String,
     squeeze: bool,
     max_lines: Option<usize>,
+    /// With `Lsb0`, each line is rearranged for each format by
+    /// [`Dtype::lsb0_to_msb0`] before it is split into groups, so every group
+    /// shows what `to_values` with the same `bit_order` would give.
+    bit_order: BitOrder,
     faint: &'static str,
     off: &'static str,
     stage: Stage,
@@ -572,6 +577,10 @@ impl Printer {
         let groups = positive(options.groups, "groups")?;
         let max_lines = positive(options.max_lines, "max_lines")?;
         let tokens = tokens_from_args(&options.dtypes, length)?;
+        let lsb0 = options.bit_order == BitOrder::Lsb0;
+        if lsb0 {
+            validate_lsb0_length(length)?;
+        }
 
         let mut explicit = tokens.iter().filter_map(|t| t.length().map(|n| (t, n)));
         let first_explicit = explicit.next();
@@ -618,6 +627,9 @@ impl Printer {
                     })?
                 }
             };
+            if lsb0 {
+                dtype.check_bit_order(BitOrder::Lsb0)?;
+            }
             formats.push(Format {
                 group_width: repr_width(&dtype.repr),
                 dtype,
@@ -641,20 +653,28 @@ impl Printer {
         // Bytes need each line to start on a byte boundary, which a number of
         // groups that is a multiple of this always does.
         let byte_step = 8 / gcd(group_length, 8);
+        // LSB0 labels map onto the stored bits a byte at a time, so a line that
+        // started part way into a byte would need bits from outside its own
+        // span, and two lines with the same stored bits could show different
+        // values, which would make squeezing wrong.
+        if let Some(groups) = groups
+            && !groups.is_multiple_of(byte_step)
+            && (lsb0 || options.offsets == Offsets::Bytes)
+        {
+            let reason = if lsb0 {
+                "BitOrder.Lsb0 needs"
+            } else {
+                "Offsets in bytes need"
+            };
+            return Err(PyValueError::new_err(format!(
+                "{reason} a whole number of bytes on each line, but {groups} groups of \
+                 {group_length} bits is {} bits.",
+                groups.saturating_mul(group_length)
+            )));
+        }
         let use_bytes = match options.offsets {
             Offsets::Hidden | Offsets::Bits => false,
-            Offsets::Bytes => {
-                if let Some(groups) = groups
-                    && !groups.is_multiple_of(byte_step)
-                {
-                    return Err(PyValueError::new_err(format!(
-                        "Offsets in bytes need a whole number of bytes on each line, but \
-                         {groups} groups of {group_length} bits is {} bits.",
-                        groups.saturating_mul(group_length)
-                    )));
-                }
-                true
-            }
+            Offsets::Bytes => true,
             Offsets::Auto => {
                 length > 0
                     && length.is_multiple_of(8)
@@ -679,7 +699,7 @@ impl Printer {
                 let fit = 1 + width.saturating_sub(fixed) / per_group.max(1);
                 // A power of two keeps the offsets round numbers.
                 let groups = power_of_two_at_most(fit);
-                if use_bytes {
+                if use_bytes || lsb0 {
                     groups.max(byte_step)
                 } else {
                     groups
@@ -693,8 +713,9 @@ impl Printer {
             .map(|(f, token)| format!("{}{}{}", f.color, token.label(), paint(OFF)))
             .collect::<Vec<_>>()
             .join(FORMAT_SEP);
+        let order = if lsb0 { "BitOrder.Lsb0, " } else { "" };
         Ok(Self {
-            header: format!("{class_name}, {}, {labels}", plural(length, "bit")),
+            header: format!("{class_name}, {}, {order}{labels}", plural(length, "bit")),
             bits,
             formats,
             group_length,
@@ -704,6 +725,7 @@ impl Printer {
             sep: options.sep,
             squeeze: options.squeeze,
             max_lines,
+            bit_order: options.bit_order,
             faint: paint(FAINT),
             off: paint(OFF),
             stage: Stage::Header,
@@ -754,7 +776,16 @@ impl Printer {
                     if self.max_lines == Some(self.lines_written) {
                         return Ok(Some(self.truncate()));
                     }
-                    let bits = self.bits.get_slice_unchecked(self.data_length, leftover);
+                    let bits = match self.bit_order {
+                        BitOrder::Msb0 => self.bits.get_slice_unchecked(self.data_length, leftover),
+                        // Shorter than any value, so the dtype only decides
+                        // that the leftover is one field, in significance order.
+                        BitOrder::Lsb0 => self.formats[0].dtype.lsb0_to_msb0(
+                            self.bits.as_bitslice(),
+                            self.data_length,
+                            self.bits.len(),
+                        ),
+                    };
                     return Ok(Some(format!(
                         "{}{}{}{}",
                         self.faint,
@@ -845,7 +876,7 @@ impl Printer {
     }
 
     fn render_line(&mut self, py: Python<'_>, line_length: usize) -> PyResult<String> {
-        let line = self.bits.get_slice_unchecked(self.line_start, line_length);
+        let stored = self.bits.get_slice_unchecked(self.line_start, line_length);
         let mut out = String::new();
         if self.offsets != OffsetColumn::Hidden {
             out.push_str(self.faint);
@@ -854,6 +885,20 @@ impl Printer {
         }
         let count = self.formats.len();
         for (index, format) in self.formats.iter_mut().enumerate() {
+            // A short final group is passed on by `lsb0_to_msb0` as one field,
+            // which is how `to_value` would read it.
+            let rearranged;
+            let line = match self.bit_order {
+                BitOrder::Msb0 => &stored,
+                BitOrder::Lsb0 => {
+                    rearranged = format.dtype.lsb0_to_msb0(
+                        self.bits.as_bitslice(),
+                        self.line_start,
+                        self.line_start + line_length,
+                    );
+                    &rearranged
+                }
+            };
             let mut text = String::new();
             let mut group_start = 0;
             while group_start < line_length {

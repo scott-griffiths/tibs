@@ -152,6 +152,60 @@ labels, little-endian with LSB0 labels, or another combination. It's important
 to read the specification carefully to identify both conventions.
 
 
+.. _four-conventions:
+
+The four combinations
+^^^^^^^^^^^^^^^^^^^^^
+
+Two choices of byte order and two of bit order make four conventions. Here are
+the labels each one gives the two stored bytes ``12 34``::
+
+    stored byte:       0x12                 0x34
+    stored bits:    0 0 0 1 0 0 1 0      0 0 1 1 0 1 0 0
+
+    BE + MSB0:      0 1 2 3 4 5 6 7      8 9 ...     15    value 0x1234
+    BE + LSB0:     15 14 ...       8     7 6 ...      0    value 0x1234
+    LE + LSB0:      7 6 ...        0    15 14 ...     8    value 0x3412
+    LE + MSB0:      0 1 2 3 4 5 6 7      8 9 ...     15    value 0x3412
+
+LSB0 numbers the bits by significance, so in both LSB0 rows label ``k`` is worth
+``2**k`` in the value, and the rows differ only in which stored byte holds the
+value's least significant end. MSB0 numbers the bits in the order they are
+stored. For big-endian data that is also significance order, counted from the
+other end. For little-endian data it isn't: labels 0 to 7 are bits 7 to 0 of
+the value and labels 8 to 15 are bits 15 to 8, so a field that crosses from one
+byte to the next is not one piece of the value.
+
+In tibs each combination is a view, and labels ``3..0`` and ``15..8`` pick out
+different bits in each::
+
+    >>> t = Tibs('0x1234')
+    >>> t.be.field(0, 3).hex, t.be.field(8, 15).hex          # BE + MSB0
+    ('1', '34')
+    >>> t.lsb0.be.field(3, 0).hex, t.lsb0.be.field(15, 8).hex  # BE + LSB0
+    ('4', '12')
+    >>> t.lsb0.le.field(3, 0).hex, t.lsb0.le.field(15, 8).hex  # LE + LSB0
+    ('2', '34')
+    >>> t.le.field(0, 3).hex, t.le.field(8, 15).hex          # LE + MSB0
+    ('1', '34')
+
+Where you're likely to meet each one:
+
+* **BE + MSB0** is how IETF RFCs draw packets, with bit 0 on the left, and how
+  IBM and PowerPC documentation and the MPEG and H.264 bitstream syntaxes number
+  bits. It's also ordinary Python and ``Tibs`` indexing, so it needs no view
+  unless you want ``field``.
+* **LE + LSB0** is used by Intel and ARM manuals, USB descriptors, eBPF and
+  DEFLATE, and is how C compilers lay out bit-fields on those machines. It's
+  probably the most common convention in hardware documentation.
+* **BE + LSB0** is used by Motorola 68k manuals and many other big-endian
+  processor manuals, and by most SPI and I²C sensor datasheets, which describe
+  a 16-bit register as bits 15 to 0 and send its most significant byte first.
+* **LE + MSB0** is rare as a deliberate choice. It mostly appears where a
+  specification draws each byte with bit 0 on the left and also stores
+  multi-byte integers little-endian.
+
+
 How this maps to tibs
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -168,8 +222,16 @@ This means that ``.field(a, b)`` is the same as ``field(b, a)``.
 Use views when a specification needs a different interpretation:
 
 * ``.be`` and ``.le`` choose big-endian or little-endian byte interpretation.
-* ``.msb0`` and ``.lsb0`` choose how field labels are mapped within bytes.
+* ``.msb0`` and ``.lsb0`` choose how field labels are mapped.
 * ``field(a, b)`` selects bits by inclusive specification labels.
+
+MSB0 labels count through the bits in the order they are stored. LSB0 labels
+count by significance instead: label ``k`` is bit ``k`` of the value the view
+denotes, worth ``2**k``. So with LSB0 the byte order decides where label 0 is:
+in the first byte for ``.lsb0.le``, and in the last for ``.lsb0.be``. Within a
+single byte there's nothing to choose, so plain ``.lsb0`` is enough. For
+anything longer it is an error to use an ``lsb0`` view without saying which
+byte order the specification uses.
 
 For example::
 
@@ -186,6 +248,21 @@ interpreted little-endian, ``0x12`` is the low byte and ``0x34`` is the high
 byte. That is why ``.hex`` returns ``'3412'`` and ``.u`` returns ``13330``::
 
     0x12 + (0x34 << 8) = 0x3412 = 13330
+
+A big-endian specification with LSB0 labels, as in Motorola 68k manuals and
+most SPI and I²C sensor datasheets, draws a register with bit 31 on the left
+and bit 0 on the right, and sends its most significant byte first. Label 0 is
+then the least significant bit of the *last* stored byte, and ``.lsb0.be``
+reads it::
+
+    >>> register = Tibs('0x12345678').lsb0.be
+    >>> register.field(31, 16).hex
+    '1234'
+    >>> register.field(15, 12).u
+    5
+
+The four combinations of byte order and bit order are compared in full, with
+where each one is used, in :ref:`four-conventions`.
 
 The view does not mutate the original data. It supplies the interpretation
 needed for labelled fields and whole-byte values. For practical details and
@@ -206,11 +283,12 @@ low half of the next. FAT12 cluster maps, the little-endian ``Mono12Packed``
 camera format, 1- and 2-bit pixel formats such as Qt's ``MonoLSB``, and 4-bit
 tensor formats all work like this.
 
-In LSB0 labels the rule is simple: an ``n``-bit value at label ``L`` is
-``field(L + n - 1, L)``. One value can be read that way through a view, but for
+In little-endian LSB0 labels the rule is simple: an ``n``-bit value at label
+``L`` is ``lsb0.le.field(L + n - 1, L)``. One value can be read that way through a view, but for
 many of them the methods that pack and unpack values take a ``bit_order``:
 ``from_value``, ``from_values``, ``to_value`` and ``to_values`` on ``Tibs`` and
-``Mutibs``, the :class:`Dtype` pack and unpack methods, and :class:`Reader`::
+``Mutibs``, the :class:`Dtype` pack and unpack methods, and :class:`Reader`.
+``pp`` takes one too, to show them (see :ref:`formatting`)::
 
     >>> table = Tibs.from_bytes(bytes.fromhex('21436587a9cb'))
     >>> [hex(x) for x in table.to_values('u12', bit_order=BitOrder.Lsb0)]
@@ -231,9 +309,29 @@ accept ``bytes`` without making a ``Tibs`` first::
     >>> [hex(x) for x in Dtype('u12').unpack_values(table.bytes, bit_order=BitOrder.Lsb0)]
     ['0x321', '0x654', '0x987', '0xcba']
 
-A view's own ``to_value`` and ``write_value`` don't take a ``bit_order``. The
-view was given its bit order when it was made, so a second one would state it
-twice.
+A view's own ``to_value`` and ``write_value`` don't take a ``bit_order``, and an
+``lsb0`` view is not a substitute for one. The two agree on every single value,
+but they mean different things by an array or tuple:
+
+* ``bit_order=BitOrder.Lsb0`` reads a *stream* of fields. Each field starts at
+  the lowest label not yet used, so the first field takes the least significant
+  bits. That's how LSB-first formats lay out pixels, table entries and header
+  fields, and how C compilers on little-endian machines lay out bit-fields.
+* A view reads *one value*, the one it denotes, and an array or tuple splits
+  that value most significant field first, as a register diagram draws it.
+  That's the same rule ``bin`` and ``hex`` follow on a view, so
+  ``view.to_value(dtype)`` is always ``view.to_tibs().to_value(dtype)``.
+
+For four 2-bit pixels packed LSB first, only the stream gives them in order::
+
+    >>> pixels = Tibs('0xe4')
+    >>> pixels.to_value('[u2; 4]', bit_order=BitOrder.Lsb0)
+    (0, 1, 2, 3)
+    >>> pixels.lsb0.to_value('[u2; 4]')
+    (3, 2, 1, 0)
+
+Use a view to pick out fields by their labels, and ``bit_order`` to read values
+packed one after another.
 
 A few things follow from the rule:
 

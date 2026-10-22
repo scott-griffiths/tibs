@@ -80,12 +80,16 @@ class ByteOrder:
 
 
 class BitOrder:
-    """How bit labels are mapped within each byte.
+    """How bit labels are numbered.
 
     ``Msb0`` is the default, and matches ordinary indexing: label 0 is the most
-    significant bit of the byte. ``Lsb0`` numbers from the least significant bit
-    instead, as many hardware manuals do. Only the labels differ, never the
-    stored data.
+    significant bit of the first byte, and the labels count through the bits
+    in the order they are stored. ``Lsb0`` numbers by significance instead, as
+    many hardware manuals do: label ``k`` is bit ``k`` of the value, counting
+    from its least significant bit. For a little-endian value that is the
+    first byte's least significant bit, and for a big-endian one the last
+    byte's, so a view with ``Lsb0`` labels over more than one byte also needs
+    a byte order. Only the labels differ, never the stored data.
 
     A :class:`View` uses the labels for :meth:`View.field`. The
     :class:`Dtype` pack and unpack methods and :class:`Reader` use them to
@@ -224,7 +228,7 @@ class Dtype:
         With ``bit_order=BitOrder.Lsb0``, ``start`` and ``end`` are LSB0 bit
         labels, counted from the least significant bit of each byte, and the
         value is read with ``start`` as its least significant bit. That is the
-        value ``bits.lsb0.field(end - 1, start)`` gives, and ``bits`` must be a
+        value ``bits.lsb0.le.field(end - 1, start)`` gives, and ``bits`` must be a
         whole number of bytes long.
 
         :param object bits: Anything promotable to :class:`Tibs`.
@@ -250,7 +254,7 @@ class Dtype:
         With ``bit_order=BitOrder.Lsb0`` the values are packed least significant
         bit first, filling each byte from its least significant bit, as in
         FAT12 tables or 1-bit pixel formats such as Qt's ``MonoLSB``. Value
-        ``i`` of an ``n``-bit dtype is then ``bits.lsb0.field(start + i*n + n-1,
+        ``i`` of an ``n``-bit dtype is then ``bits.lsb0.le.field(start + i*n + n-1,
         start + i*n)``, ``start`` and ``end`` are LSB0 bit labels, and ``bits``
         must be a whole number of bytes long. An array or tuple dtype applies
         the same rule to each of its fields in turn.
@@ -418,7 +422,7 @@ class View:
         >>> t = Tibs('0x0100')
         >>> t.le.u
         1
-        >>> t.lsb0.hex
+        >>> t.lsb0.le.hex
         '0001'
     """
 
@@ -502,9 +506,12 @@ class View:
     def lsb0(self) -> View:
         """Return an LSB0 bit-order view.
 
-        ``BitOrder.Lsb0`` means that field labels are counted from the least
-        significant bit of each byte. The view length must be a whole number of
-        bytes.
+        ``BitOrder.Lsb0`` means that label ``k`` is bit ``k`` of the value the view
+        denotes, counting from its least significant bit. The byte order is kept,
+        and decides where label 0 is: the least significant bit of the first byte
+        for a little-endian view, and of the last for a big-endian one. A view
+        longer than one byte with neither can't be read or written. The view
+        length must be a whole number of bytes.
 
         Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
         """
@@ -684,9 +691,11 @@ class View:
         bit labels such as ``31:26``. ``a`` and ``b`` must be zero or positive bit
         labels. The endpoints may be provided in either order.
 
-        For an LSB0 view, labels are interpreted within each byte with bit 0 at the
-        least significant bit. For an MSB0 view, labels match normal Python slice
-        positions.
+        For an LSB0 view, label ``k`` is bit ``k`` of the value the view denotes,
+        counting from its least significant bit: the first stored byte's for a
+        little-endian view, and the last stored byte's for a big-endian one. An
+        LSB0 view of more than one byte must have one or the other. For an MSB0
+        view, labels match normal Python slice positions.
 
         Labels are selected in field-value order after endpoint normalization.
         This means LSB0 labels identify the physical bits, while the returned
@@ -701,7 +710,7 @@ class View:
         .. code-block:: pycon
 
             >>> t = Tibs('0x88040410')
-            >>> t.lsb0.field(31, 26).u
+            >>> t.lsb0.le.field(31, 26).u
             4
         """
 
@@ -1134,7 +1143,7 @@ class Reader:
 
         For a reader with ``BitOrder.Lsb0`` the bits are labels ``pos`` to
         ``pos + n - 1``, returned most significant first, as
-        ``source.lsb0.field(pos + n - 1, pos)`` selects them.
+        ``source.lsb0.le.field(pos + n - 1, pos)`` selects them.
 
         :param int n: The number of bits to read.
         :return: The bits read.
@@ -1531,8 +1540,12 @@ class Tibs:
     def lsb0(self) -> View:
         """Return an LSB0 bit-order view.
 
-        ``BitOrder.Lsb0`` means that field labels are counted from the least
-        significant bit of each byte. The ``Tibs`` length must be a whole number of
+        ``BitOrder.Lsb0`` means that label ``k`` is bit ``k`` of the value, counting
+        from its least significant bit. Over more than one byte that depends on the
+        byte order, so follow it with ``.le``, where label 0 is the least
+        significant bit of the first byte, or ``.be``, where it is the last
+        byte's. Plain ``lsb0`` can only be read or written within a single byte.
+        The ``Tibs`` length must be a whole number of
         bytes.
 
         Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
@@ -2576,7 +2589,7 @@ class Tibs:
     def pp(self, *dtypes: _DtypeLike, width: int | None = None, sep: str = ' ',
            show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
            color: bool | None = None, groups: int | None = None, squeeze: bool = True,
-           max_lines: int | None = None) -> None:
+           max_lines: int | None = None, bit_order: BitOrder = BitOrder.Msb0) -> None:
         """Pretty-print the bits, in one or more formats side by side.
 
         The bits are split into groups, and each line shows the same groups in every
@@ -2620,9 +2633,14 @@ class Tibs:
         :param int | None max_lines: Stop after this many lines, not counting the
             header, with a final line saying how much isn't shown if there was more.
             Defaults to no limit.
+        :param BitOrder bit_order: With ``BitOrder.Lsb0``, each group is read from bits
+            packed least significant bit first, exactly as :meth:`to_values` reads it
+            with the same ``bit_order``, and the offsets are LSB0 labels. Each line is
+            then a whole number of bytes. Defaults to ``BitOrder.Msb0``.
         :return: None
         :raises ValueError: if a format is invalid or has no length it can use, or
-            the formats have different lengths.
+            the formats have different lengths, or ``bit_order`` is ``BitOrder.Lsb0``
+            and the bits aren't a whole number of bytes or a format names a byte order.
         :raises TypeError: if a format isn't a dtype, kind or string.
 
         .. code-block:: pycon
@@ -2635,6 +2653,9 @@ class Tibs:
             Tibs, 64 bits, u8 : hex : bytes
             00: 116 105  98 115 : 74 69 62 73 : t i b s
             04:   0   1   2   3 : 00 01 02 03 : . . . .
+            >>> Tibs('0x21436587a9cb').pp('u12', 'hex', bit_order=BitOrder.Lsb0)
+            Tibs, 48 bits, BitOrder.Lsb0, u12 : hex
+            00:  801 1620 2439 3258 : 321 654 987 cba
         """
 
     def with_set(self, pos: SupportsIndex | Iterable[SupportsIndex] | range, /) -> Tibs:
@@ -3008,8 +3029,12 @@ class Mutibs:
     def lsb0(self) -> MutableView:
         """Return an LSB0 bit-order view.
 
-        ``BitOrder.Lsb0`` means that field labels are counted from the least
-        significant bit of each byte. The ``Mutibs`` length must be a whole number
+        ``BitOrder.Lsb0`` means that label ``k`` is bit ``k`` of the value, counting
+        from its least significant bit. Over more than one byte that depends on the
+        byte order, so follow it with ``.le``, where label 0 is the least
+        significant bit of the first byte, or ``.be``, where it is the last
+        byte's. Plain ``lsb0`` can only be read or written within a single byte.
+        The ``Mutibs`` length must be a whole number
         of bytes.
 
         Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
@@ -4257,7 +4282,7 @@ class Mutibs:
     def pp(self, *dtypes: _DtypeLike, width: int | None = None, sep: str = ' ',
            show_offset: bool | Literal['bits', 'bytes'] = True, stream: TextIO | None = None,
            color: bool | None = None, groups: int | None = None, squeeze: bool = True,
-           max_lines: int | None = None) -> None:
+           max_lines: int | None = None, bit_order: BitOrder = BitOrder.Msb0) -> None:
         """Pretty-print the bits, in one or more formats side by side.
 
         The bits are split into groups, and each line shows the same groups in every
@@ -4301,9 +4326,14 @@ class Mutibs:
         :param int | None max_lines: Stop after this many lines, not counting the
             header, with a final line saying how much isn't shown if there was more.
             Defaults to no limit.
+        :param BitOrder bit_order: With ``BitOrder.Lsb0``, each group is read from bits
+            packed least significant bit first, exactly as :meth:`to_values` reads it
+            with the same ``bit_order``, and the offsets are LSB0 labels. Each line is
+            then a whole number of bytes. Defaults to ``BitOrder.Msb0``.
         :return: None
         :raises ValueError: if a format is invalid or has no length it can use, or
-            the formats have different lengths.
+            the formats have different lengths, or ``bit_order`` is ``BitOrder.Lsb0``
+            and the bits aren't a whole number of bytes or a format names a byte order.
         :raises TypeError: if a format isn't a dtype, kind or string.
 
         .. code-block:: pycon
@@ -4316,6 +4346,9 @@ class Mutibs:
             Mutibs, 64 bits, u8 : hex : bytes
             00: 116 105  98 115 : 74 69 62 73 : t i b s
             04:   0   1   2   3 : 00 01 02 03 : . . . .
+            >>> Mutibs('0x21436587a9cb').pp('u12', 'hex', bit_order=BitOrder.Lsb0)
+            Mutibs, 48 bits, BitOrder.Lsb0, u12 : hex
+            00:  801 1620 2439 3258 : 321 654 987 cba
         """
 
     def rfind(self, needle: _TibsLike, /, start: int | None = None, end: int | None = None,

@@ -32,7 +32,8 @@ This specifies how bit labels are mapped inside each byte when using :class:`Vie
 This matches normal ``Tibs`` indexing and slicing.
 
 ``BitOrder.Lsb0`` is common in hardware manuals and protocol specifications: within each byte, label 0 refers to
-the least significant bit. Use the :attr:`Tibs.lsb0` view property when a specification uses this numbering.
+the least significant bit. Use the :attr:`Tibs.lsb0` view property when a specification uses this numbering,
+with ``.le`` or ``.be`` to say which byte holds the least significant bit of a multi-byte value.
 
 Bit order is about labels, not about the stored data changing. For a longer introduction and examples of field
 extraction, see :doc:`byte_and_bit_order` and :doc:`views`.

@@ -20,12 +20,49 @@ fn byte_order_for_field_len(byte_order: ByteOrder, field_len: usize) -> ByteOrde
     }
 }
 
+/// Whether the value a layout denotes is the source bits as stored, so that
+/// neither a gather nor a swap is needed to read or write it.
+///
+/// MSB0 labels are storage positions, so only a little-endian swap moves
+/// anything. LSB0 labels number the bits of the value from its least
+/// significant end, and when the value is big-endian that end is the last
+/// stored bit: the labels count back through the stored order, and the value
+/// is the stored bits unchanged.
+fn keeps_physical_order(byte_order: ByteOrder, bit_order: BitOrder) -> bool {
+    match bit_order {
+        BitOrder::Msb0 => byte_order != ByteOrder::Little,
+        BitOrder::Lsb0 => byte_order == ByteOrder::Big,
+    }
+}
+
+/// Refuse to read or write through an LSB0 view of more than one byte that
+/// doesn't say which byte holds label 0.
+///
+/// LSB0 labels count from the least significant bit of the value, so the byte
+/// order is what places them: in the first byte for a little-endian value and
+/// in the last for a big-endian one. Within a single byte there is nothing to
+/// choose. Views are still made without one, so that `t.lsb0.le` can be
+/// chained, and the check waits until the labels are used.
+fn validate_lsb0_byte_order(
+    len: usize,
+    byte_order: ByteOrder,
+    bit_order: BitOrder,
+) -> PyResult<()> {
+    if bit_order == BitOrder::Lsb0 && byte_order == ByteOrder::Unspecified && len > 8 {
+        return Err(PyValueError::new_err(format!(
+            "An LSB0 view of more than one byte needs a byte order, as it decides where label 0 is. Use '.lsb0.le' when label 0 is the least significant bit of the first byte, or '.lsb0.be' when it is that of the last byte. This view is {len} bits long."
+        )));
+    }
+    Ok(())
+}
+
 fn view_bits_from_physical_bits(
     source: &Tibs,
     byte_order: ByteOrder,
     bit_order: BitOrder,
 ) -> PyResult<Tibs> {
     let len = source.len();
+    validate_lsb0_byte_order(len, byte_order, bit_order)?;
     let byte_order = byte_order_for_field_len(byte_order, len);
     // MSB0 reads the bits in the order they are stored, so the gather below is
     // the identity and only the byte order is left to apply. Both callers
@@ -36,7 +73,7 @@ fn view_bits_from_physical_bits(
     } else {
         let bits = source.as_bitslice();
         let mut selected = BV::with_capacity(len);
-        for index in field_source_indices(bit_order, byte_order, 0, len) {
+        for index in field_source_indices(bit_order, byte_order, 0, len, len) {
             selected.push(bits[index]);
         }
         Tibs::from_bv(selected)
@@ -55,8 +92,9 @@ fn physical_bits_from_view_bits(
     bit_order: BitOrder,
 ) -> PyResult<BV> {
     let len = viewed.len();
+    validate_lsb0_byte_order(len, byte_order, bit_order)?;
     let byte_order = byte_order_for_field_len(byte_order, len);
-    if bit_order == BitOrder::Msb0 && byte_order != ByteOrder::Little {
+    if keeps_physical_order(byte_order, bit_order) {
         return Ok(viewed);
     }
     let selected = if byte_order == ByteOrder::Little {
@@ -71,7 +109,7 @@ fn physical_bits_from_view_bits(
         return Ok(selected);
     }
     let mut physical = BV::repeat(false, len);
-    for (bit_index, source_index) in field_source_indices(bit_order, byte_order, 0, len)
+    for (bit_index, source_index) in field_source_indices(bit_order, byte_order, 0, len, len)
         .into_iter()
         .enumerate()
     {
@@ -154,17 +192,29 @@ fn validate_field_labels(len: usize, a: i64, b: i64) -> PyResult<(usize, usize)>
     Ok((min, max - min + 1))
 }
 
+/// The source positions of the field at labels `low..low + field_len` of a view
+/// `view_len` bits long, in field order: most significant bit first.
+///
+/// `byte_order` is the view's own, not the field's, since it decides where the
+/// labels are even for a field too short to have a byte order of its own.
 fn field_source_indices(
     bit_order: BitOrder,
     byte_order: ByteOrder,
     low: usize,
     field_len: usize,
+    view_len: usize,
 ) -> Vec<usize> {
     let mut indices = Vec::with_capacity(field_len);
     let high = low + field_len;
     match bit_order {
         BitOrder::Msb0 => {
             indices.extend(low..high);
+        }
+        // Label 0 is the least significant bit of a big-endian value, which is
+        // its last stored bit, so the labels count back from the end and every
+        // field is a run read in stored order.
+        BitOrder::Lsb0 if byte_order == ByteOrder::Big => {
+            indices.extend(view_len - high..view_len - low);
         }
         BitOrder::Lsb0 => {
             // LSB0 labels run opposite to physical order within each byte.
@@ -218,24 +268,36 @@ fn field_source_mapping(
     byte_order: ByteOrder,
     low: usize,
     field_len: usize,
-) -> FieldMapping {
+    view_len: usize,
+) -> PyResult<FieldMapping> {
+    validate_lsb0_byte_order(view_len, byte_order, bit_order)?;
     // MSB0 labels run with physical order, so the field is its own run and
-    // there is nothing to build.
-    if bit_order == BitOrder::Msb0 {
-        return FieldMapping::Run {
-            start: low,
-            len: field_len,
-        };
+    // there is nothing to build. Big-endian LSB0 labels run against it, so the
+    // field is a run counted back from the end.
+    match (bit_order, byte_order) {
+        (BitOrder::Msb0, _) => {
+            return Ok(FieldMapping::Run {
+                start: low,
+                len: field_len,
+            });
+        }
+        (BitOrder::Lsb0, ByteOrder::Big) => {
+            return Ok(FieldMapping::Run {
+                start: view_len - low - field_len,
+                len: field_len,
+            });
+        }
+        (BitOrder::Lsb0, _) => {}
     }
     // LSB0 reverses labels within each byte, which still lands on a run
     // whenever the field lines up with them - a whole byte, or any field
     // inside one. Rather than work out which alignments those are, build the
     // positions and ask.
-    let indices = field_source_indices(bit_order, byte_order, low, field_len);
-    match run_of(&indices) {
+    let indices = field_source_indices(bit_order, byte_order, low, field_len, view_len);
+    Ok(match run_of(&indices) {
         Some((start, len)) => FieldMapping::Run { start, len },
         None => FieldMapping::Indices(indices),
-    }
+    })
 }
 
 fn source_index_error(index: &Bound<'_, PyAny>, source_len: usize, view_name: &str) -> PyErr {
@@ -318,7 +380,7 @@ fn selected_source_bits(source: &BS, indices: &[usize], view_name: &str) -> PyRe
 ///         >>> t = Tibs('0x0100')
 ///         >>> t.le.u
 ///         1
-///         >>> t.lsb0.hex
+///         >>> t.lsb0.le.hex
 ///         '0001'
 ///
 #[pyclass(module = "tibs", frozen)]
@@ -376,7 +438,7 @@ impl View {
     }
 
     fn to_tibs_view(&self) -> PyResult<Tibs> {
-        if self.bit_order == BitOrder::Msb0 && self.byte_order != ByteOrder::Little {
+        if keeps_physical_order(self.byte_order, self.bit_order) {
             return Ok(self.source.clone());
         }
 
@@ -664,7 +726,7 @@ impl MutableView {
     /// Whether the layout hands the selected bits back in the order they are
     /// stored, which is the branch `to_tibs_view` returns unchanged.
     fn keeps_physical_order(&self) -> bool {
-        self.bit_order == BitOrder::Msb0 && self.byte_order != ByteOrder::Little
+        keeps_physical_order(self.byte_order, self.bit_order)
     }
 
     /// The `start..end` bits of the view, as a `Tibs`.
@@ -766,7 +828,7 @@ impl MutableView {
     /// Create a live mutable view from a :class:`Mutibs`.
     ///
     /// ``byte_order`` controls byte-wise interpretation for whole-byte values.
-    /// ``bit_order`` controls how bit labels are interpreted within each byte.
+    /// ``bit_order`` controls how bit labels are numbered.
     ///
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
@@ -1075,7 +1137,13 @@ impl MutableView {
         // itself scattered, has to be composed position by position - and that
         // consumes the positions it was given, so the mapping it walks is
         // rewritten in place rather than copied into a second allocation.
-        let selection = match field_source_mapping(self.bit_order, byte_order, low, field_len) {
+        let selection = match field_source_mapping(
+            self.bit_order,
+            self.byte_order,
+            low,
+            field_len,
+            current_len,
+        )? {
             FieldMapping::Run { start, len } => match self.selection.as_run(current_len) {
                 Some((outer_start, _)) => MutableSelection::Run {
                     start: outer_start + start,
@@ -1313,7 +1381,7 @@ impl View {
     /// copy to view instead.
     ///
     /// ``byte_order`` controls byte-wise interpretation for whole-byte values.
-    /// ``bit_order`` controls how bit labels are interpreted within each byte.
+    /// ``bit_order`` controls how bit labels are numbered.
     ///
     /// Byte-oriented views must have a whole-byte length. This applies when using
     /// little-endian or big-endian byte order, or when using ``BitOrder.Lsb0``.
@@ -1436,9 +1504,12 @@ impl View {
 
     /// Return an LSB0 bit-order view.
     ///
-    /// ``BitOrder.Lsb0`` means that field labels are counted from the least
-    /// significant bit of each byte. The view length must be a whole number of
-    /// bytes.
+    /// ``BitOrder.Lsb0`` means that label ``k`` is bit ``k`` of the value the view
+    /// denotes, counting from its least significant bit. The byte order is kept,
+    /// and decides where label 0 is: the least significant bit of the first byte
+    /// for a little-endian view, and of the last for a big-endian one. A view
+    /// longer than one byte with neither can't be read or written. The view
+    /// length must be a whole number of bytes.
     ///
     /// Equivalent to ``view(bit_order=BitOrder.Lsb0)``.
     ///
@@ -1682,9 +1753,11 @@ impl View {
     /// bit labels such as ``31:26``. ``a`` and ``b`` must be zero or positive bit
     /// labels. The endpoints may be provided in either order.
     ///
-    /// For an LSB0 view, labels are interpreted within each byte with bit 0 at the
-    /// least significant bit. For an MSB0 view, labels match normal Python slice
-    /// positions.
+    /// For an LSB0 view, label ``k`` is bit ``k`` of the value the view denotes,
+    /// counting from its least significant bit: the first stored byte's for a
+    /// little-endian view, and the last stored byte's for a big-endian one. An
+    /// LSB0 view of more than one byte must have one or the other. For an MSB0
+    /// view, labels match normal Python slice positions.
     ///
     /// Labels are selected in field-value order after endpoint normalization.
     /// This means LSB0 labels identify the physical bits, while the returned
@@ -1699,7 +1772,7 @@ impl View {
     /// .. code-block:: pycon
     ///
     ///     >>> t = Tibs('0x88040410')
-    ///     >>> t.lsb0.field(31, 26).u
+    ///     >>> t.lsb0.le.field(31, 26).u
     ///     4
     ///
     #[pyo3(signature = (a, b, /), text_signature = "($self, a, b, /)")]
@@ -1715,17 +1788,18 @@ impl View {
         // A run is a window of the source, and a `Tibs` window shares storage,
         // so the common field costs nothing at all rather than a bit-by-bit
         // copy of everything it selects.
-        let field = match field_source_mapping(self.bit_order, byte_order, low, field_len) {
-            FieldMapping::Run { start, len } => self.source.get_slice_unchecked(start, len),
-            FieldMapping::Indices(indices) => {
-                let source = self.source.as_bitslice();
-                let mut field = BV::with_capacity(field_len);
-                for index in indices {
-                    field.push(source[index]);
+        let field =
+            match field_source_mapping(self.bit_order, self.byte_order, low, field_len, len)? {
+                FieldMapping::Run { start, len } => self.source.get_slice_unchecked(start, len),
+                FieldMapping::Indices(indices) => {
+                    let source = self.source.as_bitslice();
+                    let mut field = BV::with_capacity(field_len);
+                    for index in indices {
+                        field.push(source[index]);
+                    }
+                    Tibs::from_bv(field)
                 }
-                Tibs::from_bv(field)
-            }
-        };
+            };
 
         Ok(View::from_tibs(field, byte_order, BitOrder::Msb0))
     }
