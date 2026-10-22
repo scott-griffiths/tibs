@@ -597,7 +597,7 @@ impl SharedBits {
 ///     * ``Tibs.from_joined(iterable)`` - Concatenate an iterable of objects.
 ///     * ``Tibs.from_value(dtype, value)`` / ``Tibs.from_values(dtype, values)`` - Pack typed values.
 #[derive(Clone)]
-#[pyclass(frozen, sequence, skip_from_py_object, module = "tibs")]
+#[pyclass(frozen, sequence, module = "tibs")]
 pub struct Tibs {
     data: TibsData,
     offset: usize,

@@ -150,7 +150,7 @@ fn index_conversion_error(py: Python<'_>, error: PyErr, length: usize) -> PyErr 
 ///     iterator. Convert first with ``to_tibs()`` for a copy, or ``take_tibs()``
 ///     if the mutable object is no longer needed.
 ///
-#[pyclass(sequence, skip_from_py_object, module = "tibs")]
+#[pyclass(sequence, module = "tibs")]
 pub struct Mutibs {
     pub data: BV,
 }

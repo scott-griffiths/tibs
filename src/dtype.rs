@@ -833,7 +833,7 @@ impl<'a> DtypeParser<'a> {
 ///         >>> Dtype("[(u8, bool); 2]")
 ///         DtypeArray('[(u8, bool); 2]')
 ///
-#[pyclass(module = "tibs", frozen, subclass, skip_from_py_object)]
+#[pyclass(module = "tibs", frozen, subclass)]
 #[derive(Clone)]
 pub struct Dtype {
     pub(crate) repr: DtypeRepr,
@@ -1495,7 +1495,7 @@ impl Dtype {
 ///     Construct directly from a scalar specification, use
 ///     :meth:`from_params`, or obtain one from the :class:`Dtype` factory.
 ///
-#[pyclass(module = "tibs", frozen, extends = Dtype, skip_from_py_object)]
+#[pyclass(module = "tibs", frozen, extends = Dtype)]
 pub struct DtypeSingle;
 
 #[pymethods]
@@ -1570,7 +1570,7 @@ impl DtypeSingle {
 ///     and unpack to Python tuples. The count may be zero, giving a dtype of
 ///     length zero whose value is ``()``.
 ///
-#[pyclass(module = "tibs", frozen, extends = Dtype, skip_from_py_object)]
+#[pyclass(module = "tibs", frozen, extends = Dtype)]
 pub struct DtypeArray;
 
 #[pymethods]
@@ -1644,7 +1644,7 @@ impl DtypeArray {
 ///     Tuple values pack from any iterable with exactly one item per field and
 ///     unpack to Python tuples.
 ///
-#[pyclass(module = "tibs", frozen, extends = Dtype, skip_from_py_object)]
+#[pyclass(module = "tibs", frozen, extends = Dtype)]
 pub struct DtypeTuple;
 
 #[pymethods]
