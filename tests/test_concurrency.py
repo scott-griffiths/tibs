@@ -606,6 +606,140 @@ class TestConstructionUnderLoad:
         assert_no_failures(errors)
 
 
+# Run in a subprocess, because what this guards against is a segfault, which
+# would otherwise take the whole test run down with it rather than fail a test.
+_LIST_ARGUMENT_RACE = """
+import sys
+import threading
+import time
+
+from tibs import Dtype, Mutibs, Tibs
+
+mode, seconds = sys.argv[1], float(sys.argv[2])
+SIZE = 2000
+
+
+class Item:
+    # Not an int or a bool, so reading it takes a reference and calls back
+    # into Python, and each one is a separate heap object that can be freed.
+    __slots__ = ()
+
+    def __bool__(self):
+        return True
+
+    def __index__(self):
+        return 1
+
+
+MAKE = {
+    "init": lambda: 1,
+    "set": Item,
+    "with_set": Item,
+    "from_values": lambda: 10**30,
+    "pack_values": lambda: 10**30,
+    "from_joined_repeated": lambda: SHARED,
+}
+SHARED = Tibs("0b1")
+CALL = {
+    "init": lambda: Tibs(items),
+    "set": lambda: Mutibs.from_zeros(8).set(items),
+    "with_set": lambda: Tibs.from_zeros(8).with_set(items),
+    "from_values": lambda: Tibs.from_values("u128", items),
+    "pack_values": lambda: Dtype("u128").pack_values(items),
+    "from_joined_repeated": lambda: Mutibs.from_joined(items),
+}
+make, call = MAKE[mode], CALL[mode]
+items = [make() for _ in range(SIZE)]
+deadline = time.monotonic() + seconds
+
+
+def replace_items():
+    while time.monotonic() < deadline:
+        for index in range(0, SIZE, 7):
+            try:
+                items[index] = make()
+            except IndexError:
+                pass
+
+
+def resize():
+    while time.monotonic() < deadline:
+        items.clear()
+        items.extend(make() for _ in range(SIZE))
+
+
+def read():
+    while time.monotonic() < deadline:
+        try:
+            call()
+        except (IndexError, TypeError, ValueError):
+            # The list is whatever the other threads have left it as.
+            pass
+
+
+threads = [threading.Thread(target=f) for f in (replace_items, resize, read, read, read)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join(seconds + 30)
+    assert not t.is_alive(), "deadlocked"
+print("ok")
+"""
+
+
+class TestListArgumentsChangedByAnotherThread:
+    """A list passed to tibs may be changed by another thread while it is read.
+
+    The fast paths read list items through borrowed pointers, which on a
+    free-threaded build another thread can free or move in between. The answer
+    may then be for any state the list passed through, or an exception, but it
+    used to be a segfault.
+    """
+
+    @pytest.mark.parametrize(
+        "mode",
+        ["init", "set", "with_set", "from_values", "pack_values", "from_joined_repeated"],
+    )
+    def test_reading_a_list_another_thread_is_changing(self, mode):
+        # There is nothing to race on a GIL-enabled build, where this is only
+        # a quick check that the locking added for it has not broken anything.
+        # Without the locking, each of these crashed in well under a second
+        # on most runs.
+        seconds = "1.0" if FREE_THREADED else "0.1"
+        result = subprocess.run(
+            [sys.executable, "-X", "faulthandler", "-c", _LIST_ARGUMENT_RACE, mode, seconds],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, (
+            f"exit status {result.returncode}\n{result.stderr[-2000:]}"
+        )
+        assert result.stdout.strip() == "ok"
+
+    def test_a_list_changed_by_its_own_items_is_still_read_safely(self):
+        # The lock is released while an item's own Python code runs, so the
+        # list can change under one call on any build.
+        items = []
+
+        class Shrinks:
+            def __index__(self):
+                del items[1:]
+                return 0
+
+        items.extend([Shrinks(), 1, 2, 3, 4, 5, 6, 7])
+        assert Tibs.from_zeros(8).with_set(items) == Tibs("0x80")
+
+        class Grows:
+            def __bool__(self):
+                if len(items) < 20:
+                    items.append(True)
+                return False
+
+        items[:] = [Grows(), True]
+        assert Tibs.from_bools(items) == Tibs("0b011")
+
+
 class TestFreeThreadedGaps:
     """How a refused call has to behave, and the one thing still missing."""
 

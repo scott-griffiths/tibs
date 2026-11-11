@@ -1,8 +1,10 @@
-use super::bits::{BV, bv_from_padded_bytes, try_bv_from_bytes};
+use super::bits::{BV, bv_from_padded_bytes, reserve_bits, try_bv_from_bytes};
 use super::parse::str_to_bv;
+use super::search::SIGNAL_CHECK_INTERVAL;
 use crate::view::{MutableView, View};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyMemoryError, PyTypeError};
 use pyo3::prelude::*;
+use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyInt, PyList, PyMemoryView, PyTuple};
 use pyo3::{PyErr, ffi};
 use std::ffi::c_char;
@@ -212,6 +214,45 @@ pub(crate) fn try_extract_index(index: &Bound<'_, PyAny>) -> PyResult<Option<isi
     }
 }
 
+/// The most items worth reserving up front on the strength of an iterable's
+/// `len()`.
+const MAX_RESERVE_ITEMS: usize = 1 << 16;
+
+/// Convert every item of `iterable` with `convert`, collecting the results.
+///
+/// An iterable's `len()` is a claim, not a fact: a `range` can say 2**45
+/// without holding anything, and any object can define `__len__`. Reserving
+/// the claimed size on trust aborted the process in `split_at(range(2**45))`,
+/// and panicked for a claim past what a `Vec` can hold. So the claim is only
+/// used up to [`MAX_RESERVE_ITEMS`], growth past that is asked for rather than
+/// assumed so that running out is a `MemoryError`, and a long iterable is
+/// broken up to look for Ctrl-C.
+pub(crate) fn collect_items<T>(
+    iterable: &Bound<'_, PyAny>,
+    mut convert: impl FnMut(&Bound<'_, PyAny>) -> PyResult<T>,
+) -> PyResult<Vec<T>> {
+    let py = iterable.py();
+    let hint = iterable.len().ok().unwrap_or(0).min(MAX_RESERVE_ITEMS);
+    let mut items: Vec<T> = Vec::new();
+    let out_of_memory =
+        |count: usize| PyMemoryError::new_err(format!("Not enough memory for {count} items."));
+    items.try_reserve(hint).map_err(|_| out_of_memory(hint))?;
+    let mut check_at = SIGNAL_CHECK_INTERVAL;
+    for item in iterable.try_iter()? {
+        if items.len() == items.capacity() {
+            items
+                .try_reserve(1)
+                .map_err(|_| out_of_memory(items.len() + 1))?;
+        }
+        if items.len() >= check_at {
+            py.check_signals()?;
+            check_at = items.len().saturating_add(SIGNAL_CHECK_INTERVAL);
+        }
+        items.push(convert(&item?)?);
+    }
+    Ok(items)
+}
+
 pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
     // Lists and tuples are the common bulk path. Reading their items through
     // the C API avoids creating a Bound<PyAny> wrapper for every bit.
@@ -229,8 +270,9 @@ pub(crate) fn bv_from_bools(iterable: &Bound<'_, PyAny>) -> PyResult<BV> {
         };
     }
 
-    // For sequences, we can pre-allocate the capacity.
-    let capacity = iterable.len().ok().unwrap_or(64);
+    // For sequences, we can pre-allocate the capacity. The length is only a
+    // claim, so it is capped: see `collect_items`.
+    let capacity = reserve_bits(Some(iterable.len().ok().unwrap_or(64)));
     let mut bv = BV::with_capacity(capacity);
 
     for value in iterable.try_iter()? {
@@ -259,6 +301,36 @@ fn bv_from_strict_bit_pattern(any: &Bound<'_, PyAny>) -> PyResult<Option<BV>> {
 }
 
 fn bv_from_py_list_items(
+    py: Python<'_>,
+    list: &Bound<'_, PyList>,
+    convert_other: impl FnMut(Python<'_>, usize, &Bound<'_, PyAny>) -> PyResult<bool>,
+) -> PyResult<BV> {
+    with_list_locked(list, || bv_from_locked_list_items(py, list, convert_other))
+}
+
+/// Run `f` with `list` locked against other threads.
+///
+/// `PyList_GetItem` returns a borrowed reference, and reads the list's item
+/// array with no lock of its own. On a free-threaded build another thread can
+/// resize the list or replace an item between that read and the use of the
+/// pointer, which crashed `Tibs(lst)`, `from_bools(lst)` and `Mutibs.set(lst)`
+/// when `lst` was being changed at the same time. Every list method takes the
+/// list's critical section before changing it, so holding that section here
+/// keeps the item array and the items still while borrowed pointers are live.
+/// This is what CPython's own list consumers do, and on a GIL-enabled build it
+/// compiles to a direct call.
+///
+/// Python code run inside `f`, such as an item's `__bool__` or `__index__`,
+/// suspends the section, and the list can change during it. So `f` must take a
+/// strong reference to an item before running any Python on it, and must not
+/// trust a length or a borrowed pointer read before that Python ran. The
+/// section is held again by the time the call returns.
+#[inline]
+pub(crate) fn with_list_locked<R>(list: &Bound<'_, PyList>, f: impl FnOnce() -> R) -> R {
+    with_critical_section(list.as_any(), f)
+}
+
+fn bv_from_locked_list_items(
     py: Python<'_>,
     list: &Bound<'_, PyList>,
     mut convert_other: impl FnMut(Python<'_>, usize, &Bound<'_, PyAny>) -> PyResult<bool>,

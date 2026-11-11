@@ -41,8 +41,8 @@ pub(crate) use numeric::{
 };
 pub(crate) use parse::{bv_from_bin, bv_from_hex, bv_from_oct, str_to_bv};
 pub(crate) use python::{
-    bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, convert_to_bool, is_int,
-    promote_to_bv, try_extract_index,
+    bitslice_to_bool_list, bv_from_bools, bytes_like_to_vec, collect_items, convert_to_bool,
+    is_int, promote_to_bv, try_extract_index, with_list_locked,
 };
 pub(crate) use random::bv_from_random;
 pub(crate) use raw_bytes::{

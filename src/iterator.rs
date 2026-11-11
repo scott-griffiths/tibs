@@ -6,7 +6,7 @@ use crate::tibs_::{Tibs, prepare_mask, py_from_value};
 use memchr::memmem;
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(module = "tibs")]
 pub struct BoolIterator {
     pub(crate) bits: Tibs,
     pub(crate) index: usize,
@@ -35,7 +35,7 @@ impl BoolIterator {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "tibs")]
 pub struct FindAllIterator {
     pub haystack: Py<Tibs>, // Py<T> keeps the Python object alive
     pub search_needle: Tibs,
@@ -271,7 +271,7 @@ impl FindAllIterator {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "tibs")]
 pub struct ChunksIterator {
     pub(crate) bits_object: Py<Tibs>,
     pub(crate) chunk_size: usize,
@@ -329,7 +329,7 @@ impl ChunksIterator {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "tibs")]
 pub struct ValuesIterator {
     pub(crate) bits_object: Py<Tibs>,
     pub(crate) dtype: Dtype,

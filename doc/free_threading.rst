@@ -56,6 +56,12 @@ Watch for read-modify-write hidden in an expression. ``m.u = m.u + 1`` is two
 calls and needs a lock; ``m |= mask`` and ``m[0:8] = b'\xff'`` are each one
 call and don't.
 
+The same goes for what you pass in. A ``list`` handed to a call such as
+``Tibs.from_bools(items)`` or ``m.set(positions)`` is locked while it is read,
+so another thread changing it at that moment is safe: the call sees the list
+before or after each change. Which of those it sees is the race, and is yours
+to settle with a lock if it matters.
+
 
 What can be shared
 ^^^^^^^^^^^^^^^^^^

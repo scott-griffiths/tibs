@@ -400,7 +400,34 @@ pub(crate) enum DtypeRepr {
     Tuple(Vec<DtypeRepr>),
 }
 
+/// How deeply arrays and tuples can be nested in one dtype.
+///
+/// Parsing, measuring, comparing, packing, unpacking and dropping a dtype all
+/// recurse once per level, so the depth has to be bounded somewhere or a spec
+/// of a few thousand brackets overflows the stack, which kills the process
+/// rather than raising. The limit is far beyond any real format, and small
+/// enough to be safe on a thread's much smaller stack.
+pub(crate) const MAX_NESTING: usize = 64;
+
+fn nesting_error() -> PyErr {
+    PyValueError::new_err(format!(
+        "Dtype is nested too deeply: arrays and tuples can be nested at most {MAX_NESTING} deep."
+    ))
+}
+
 impl DtypeRepr {
+    /// How many arrays and tuples deep the most nested scalar is.
+    ///
+    /// Recursive, so only for a repr whose parts are already known to be
+    /// within [`MAX_NESTING`], which makes this at most one level past it.
+    fn nesting(&self) -> usize {
+        match self {
+            Self::Single(_) => 0,
+            Self::Array { dtype, .. } => 1 + dtype.nesting(),
+            Self::Tuple(dtypes) => 1 + dtypes.iter().map(Self::nesting).max().unwrap_or(0),
+        }
+    }
+
     pub(crate) fn length(&self) -> PyResult<usize> {
         match self {
             Self::Single(dtype) => Ok(dtype.length),
@@ -593,6 +620,8 @@ struct DtypeParser<'a> {
     /// Cleared for the throwaway parsers that check a proposal, so that
     /// checking a suggestion can't itself go looking for suggestions.
     suggest: bool,
+    /// How many arrays and tuples enclose the dtype being parsed.
+    nesting: usize,
 }
 
 impl<'a> DtypeParser<'a> {
@@ -602,6 +631,7 @@ impl<'a> DtypeParser<'a> {
             bytes: spec.as_bytes(),
             pos: 0,
             suggest: true,
+            nesting: 0,
         }
     }
 
@@ -662,14 +692,28 @@ impl<'a> DtypeParser<'a> {
     fn parse_dtype(&mut self) -> PyResult<DtypeRepr> {
         self.skip_whitespace();
         match self.peek() {
-            Some(b'[') => self.parse_array(),
-            Some(b'(') => self.parse_tuple(),
+            Some(b'[') => self.parse_nested(Self::parse_array),
+            Some(b'(') => self.parse_nested(Self::parse_tuple),
             Some(_) => self.parse_single(),
             None if self.spec.trim().is_empty() => Err(PyValueError::new_err(format!(
                 "Cannot parse a Dtype from an empty spec: {KIND_HINT}."
             ))),
             None => self.error("expected a dtype, but reached the end of the spec"),
         }
+    }
+
+    /// Parse an array or tuple with `parse`, one level further in.
+    ///
+    /// The parser recurses once per level, so the limit is checked here on the
+    /// way down, before the stack it protects has been used.
+    fn parse_nested(&mut self, parse: fn(&mut Self) -> PyResult<DtypeRepr>) -> PyResult<DtypeRepr> {
+        if self.nesting == MAX_NESTING {
+            return Err(nesting_error());
+        }
+        self.nesting += 1;
+        let repr = parse(self);
+        self.nesting -= 1;
+        repr
     }
 
     fn parse_single(&mut self) -> PyResult<DtypeRepr> {
@@ -868,6 +912,12 @@ impl Hash for Dtype {
 
 impl Dtype {
     fn from_repr(repr: DtypeRepr) -> PyResult<Self> {
+        // The parts of `repr` each came from the parser or from an existing
+        // `Dtype`, so they are within the limit and this is the one place a
+        // level can be added past it.
+        if repr.nesting() > MAX_NESTING {
+            return Err(nesting_error());
+        }
         let length = repr.length()?;
         // Nothing this long could be packed or unpacked, since no container can
         // hold it, so it is refused here rather than at its first use.
@@ -1484,6 +1534,22 @@ impl Dtype {
         self.hash(&mut hasher);
         let hash = hasher.finish() as isize;
         if hash == -1 { -2 } else { hash }
+    }
+
+    /// Support for pickling and copying: a dtype is rebuilt from its spec.
+    ///
+    /// ``Dtype(spec)`` returns the matching concrete class, so this one
+    /// method serves :class:`DtypeSingle`, :class:`DtypeArray` and
+    /// :class:`DtypeTuple` alike.
+    ///
+    /// .. code-block:: pycon
+    ///
+    ///     >>> import pickle
+    ///     >>> pickle.loads(pickle.dumps(Dtype('[u16_le; 4]')))
+    ///     DtypeArray('[u16_le; 4]')
+    ///
+    fn __reduce__<'py>(&self, py: Python<'py>) -> (Bound<'py, PyType>, (String,)) {
+        (py.get_type::<Dtype>(), (self.spec(),))
     }
 }
 

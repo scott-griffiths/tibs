@@ -272,3 +272,71 @@ def test_a_missing_array_count_is_not_described_as_needing_to_be_positive():
 def test_reading_an_unknown_number_of_zero_length_values_says_why(read):
     with pytest.raises(ValueError, match="has length 0, so any number of its values fit"):
         read()
+
+
+class _ClaimsToBeHuge:
+    """A short iterable whose ``len()`` says otherwise.
+
+    ``len()`` is only a claim: a ``range`` can report 2**45 while holding
+    nothing, and any class can define ``__len__``.
+    """
+
+    def __init__(self, items, claimed):
+        self._items = items
+        self._claimed = claimed
+
+    def __len__(self):
+        return self._claimed
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __getitem__(self, index):
+        return self._items[index]
+
+
+# One that fails to allocate, and one past what any allocation can be.
+_CLAIMED_LENGTHS = [2**45, 2**62]
+
+_LENGTH_HINT_CALLS = [
+    ("Tibs.split_at", lambda pos: Tibs("0xff").split_at(pos)),
+    ("Mutibs.split_at", lambda pos: Mutibs("0xff").split_at(pos)),
+    ("Tibs.with_set", lambda pos: Tibs("0x00").with_set(pos)),
+    ("Tibs.with_unset", lambda pos: Tibs("0xff").with_unset(pos)),
+    ("Tibs.inverted", lambda pos: Tibs("0x00").inverted(pos)),
+    ("Mutibs.with_set", lambda pos: Mutibs("0x00").with_set(pos)),
+    ("Mutibs.set", lambda pos: _mutated(Mutibs("0x00"), "set", pos)),
+    ("Mutibs.unset", lambda pos: _mutated(Mutibs("0xff"), "unset", pos)),
+    ("Mutibs.invert", lambda pos: _mutated(Mutibs("0x00"), "invert", pos)),
+    ("View.from_indices", lambda pos: View.from_indices(Tibs("0xa5"), pos).bin),
+    ("MutableView.from_indices", lambda pos: MutableView.from_indices(Mutibs("0xa5"), pos).bin),
+    ("Tibs.from_bools", lambda pos: Tibs.from_bools(pos)),
+    ("Mutibs.from_bools", lambda pos: Mutibs.from_bools(pos)),
+    ("Tibs.from_values", lambda pos: Tibs.from_values("u8", pos)),
+    ("Dtype.pack_values", lambda pos: Dtype("u4").pack_values(pos)),
+]
+
+
+def _mutated(m, method, pos):
+    getattr(m, method)(pos)
+    return m
+
+
+@pytest.mark.parametrize("claimed", _CLAIMED_LENGTHS)
+@pytest.mark.parametrize(
+    "call", [call for _, call in _LENGTH_HINT_CALLS], ids=[name for name, _ in _LENGTH_HINT_CALLS]
+)
+def test_an_iterable_is_not_trusted_about_its_length(call, claimed):
+    # Space for `len()` items was reserved before any were read. A claim of
+    # 2**45 aborted the process on the failed allocation, and one of 2**62
+    # panicked, so a claim must change nothing about the result.
+    items = [1, 3, 6]
+    assert call(_ClaimsToBeHuge(items, claimed)) == call(items)
+
+
+def test_a_wrong_length_claim_that_is_too_small_changes_nothing_either():
+    items = list(range(0, 300, 3))
+    t = Tibs.from_zeros(300)
+    assert t.with_set(_ClaimsToBeHuge(items, 0)) == t.with_set(items)
+    assert t.split_at(_ClaimsToBeHuge(items, 1)) == t.split_at(items)
+    assert View.from_indices(t, _ClaimsToBeHuge(items, 2)).bin == "0" * 100

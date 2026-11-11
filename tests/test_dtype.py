@@ -1,10 +1,25 @@
 #!/usr/bin/env python
+import copy
 import math
+import pickle
 import re
 import sys
 
 import pytest
-from tibs import Tibs, Mutibs, MutableView, ByteOrder, Dtype, DtypeKind, DtypeSingle
+from tibs import (
+    BitOrder,
+    ByteOrder,
+    Codec,
+    Dtype,
+    DtypeArray,
+    DtypeKind,
+    DtypeSingle,
+    DtypeTuple,
+    MutableView,
+    Mutibs,
+    Reader,
+    Tibs,
+)
 
 def test_creation():
     d = Dtype("u8")
@@ -1437,3 +1452,163 @@ def test_from_params_rejects_zero_length_for_kinds_without_an_empty_value(kind, 
 def test_from_params_rejects_a_negative_length(kind):
     with pytest.raises(ValueError, match="Dtype length can't be negative, but received -8."):
         DtypeSingle.from_params(kind, -8)
+
+
+# --- nesting depth -----------------------------------------------------------
+
+# Arrays and tuples can be nested this deep, and no deeper.
+_MAX_NESTING = 64
+
+
+def _nested_arrays(depth):
+    return "[" * depth + "u8" + "; 1]" * depth
+
+
+def _nested_tuples(depth):
+    return "(" * depth + "u8" + ",)" * depth
+
+
+@pytest.mark.parametrize("nested", [_nested_arrays, _nested_tuples])
+def test_a_dtype_can_be_nested_up_to_the_limit(nested):
+    dtype = Dtype(nested(_MAX_NESTING))
+    assert dtype.length == 8
+    value = dtype.unpack(b"\x2a")
+    assert dtype.pack(value).to_bytes() == b"\x2a"
+    assert Dtype(str(dtype)) == dtype
+
+
+@pytest.mark.parametrize("nested", [_nested_arrays, _nested_tuples])
+@pytest.mark.parametrize("depth", [_MAX_NESTING + 1, 1000, 100_000])
+def test_a_dtype_nested_past_the_limit_is_refused(nested, depth):
+    # The parser recurses once per level, so with no limit a spec of 30,000
+    # brackets overflowed the stack and took the interpreter with it.
+    with pytest.raises(ValueError, match=f"nested at most {_MAX_NESTING} deep"):
+        Dtype(nested(depth))
+
+
+def test_unbalanced_brackets_past_the_limit_are_refused_too():
+    with pytest.raises(ValueError, match="nested too deeply"):
+        Dtype("[" * 100_000)
+    with pytest.raises(ValueError, match="nested too deeply"):
+        Dtype("([" * 50_000 + "u8")
+
+
+def test_from_params_cannot_nest_past_the_limit():
+    # Each call adds one level to a dtype that already exists, so the parser's
+    # own limit never sees it. 200,000 levels built this way used to crash.
+    dtype = Dtype("u8")
+    for _ in range(_MAX_NESTING):
+        dtype = DtypeArray.from_params(dtype, 1)
+    assert dtype == Dtype(_nested_arrays(_MAX_NESTING))
+    with pytest.raises(ValueError, match="nested too deeply"):
+        DtypeArray.from_params(dtype, 1)
+    with pytest.raises(ValueError, match="nested too deeply"):
+        DtypeTuple.from_params(["bool", dtype])
+    # Putting it beside something else adds no depth.
+    assert DtypeTuple.from_params([dtype.dtype, "bool"]).length == 9
+
+
+# --- arrays of zero-length items --------------------------------------------
+
+
+@pytest.mark.parametrize("count", [2**45, _MAX_BITS, sys.maxsize, 2 * sys.maxsize + 1])
+@pytest.mark.parametrize(
+    "spec", ["[bits0; {}]", "[bytes0; {}]", "[[bin0; 4]; {}]", "[(hex0, oct0); {}]", "(u8, [bits0; {}])"]
+)
+def test_unpacking_more_zero_length_items_than_fit_in_memory_raises(spec, count):
+    # The bits being read put no bound on the count of an array of zero-length
+    # items, and the space for the result was reserved on trust: this aborted
+    # the process, or panicked for a count too large for any allocation.
+    dtype = Dtype(spec.format(count))
+    data = b"" if dtype.length == 0 else b"\x00"
+    with pytest.raises(MemoryError):
+        dtype.unpack(data)
+    with pytest.raises(MemoryError):
+        Tibs(data).to_value(dtype)
+    with pytest.raises(MemoryError):
+        Reader(Tibs(data)).read_value(dtype)
+
+
+def test_unpacking_many_zero_length_items_still_works():
+    assert Dtype("[bits0; 100000]").unpack(b"") == (Tibs(),) * 100_000
+    assert Dtype("[[bin0; 2]; 70000]").unpack(b"") == (("", ""),) * 70_000
+
+
+# --- pickling and copying ----------------------------------------------------
+
+_PICKLED_DTYPES = [
+    "u8",
+    "i12",
+    "u16_le",
+    "f32_be",
+    "bf16",
+    "bool",
+    "bits0",
+    "bytes24",
+    "ocp_e2m1",
+    "binary8p3",
+    "[u8; 4]",
+    "[bits0; 0]",
+    "(u8, bool)",
+    "(u8,)",
+    "[(u16_le, [bool; 8]); 3]",
+    _nested_tuples(_MAX_NESTING),
+]
+
+
+@pytest.mark.parametrize("spec", _PICKLED_DTYPES)
+@pytest.mark.parametrize("protocol", range(pickle.HIGHEST_PROTOCOL + 1))
+def test_dtypes_pickle(spec, protocol):
+    dtype = Dtype(spec)
+    restored = pickle.loads(pickle.dumps(dtype, protocol))
+    assert restored == dtype
+    assert type(restored) is type(dtype)
+    assert hash(restored) == hash(dtype)
+    assert str(restored) == str(dtype)
+
+
+@pytest.mark.parametrize("spec", _PICKLED_DTYPES)
+def test_dtypes_copy(spec):
+    dtype = Dtype(spec)
+    for duplicate in (copy.copy(dtype), copy.deepcopy(dtype)):
+        assert duplicate == dtype
+        assert type(duplicate) is type(dtype)
+
+
+def test_dtypes_built_from_params_pickle():
+    for dtype in (
+        DtypeSingle.from_params(DtypeKind.Uint, 12),
+        DtypeSingle.from_params(DtypeKind.Int, 32, byte_order=ByteOrder.Little),
+        DtypeSingle.from_params(DtypeKind.OcpE2M1),
+        DtypeArray.from_params("u8", 0),
+        DtypeTuple.from_params(["u8", DtypeKind.Bool]),
+    ):
+        assert pickle.loads(pickle.dumps(dtype)) == dtype
+
+
+def test_an_object_holding_a_dtype_can_be_deep_copied():
+    # What made this matter: any user object with a dtype or enum member in it
+    # could not be copied or pickled at all.
+    layout = {"header": Dtype("(u16_le, bool)"), "order": ByteOrder.Little, "codec": Codec.Rice}
+    assert copy.deepcopy(layout) == {**layout, "codec": layout["codec"]}
+    assert pickle.loads(pickle.dumps(layout))["header"] == layout["header"]
+
+
+_ENUM_MEMBERS = [
+    member
+    for enum in (ByteOrder, BitOrder, Codec, DtypeKind)
+    for name, member in vars(enum).items()
+    if isinstance(member, enum)
+]
+
+
+def test_every_enum_member_is_covered():
+    assert len(_ENUM_MEMBERS) == 3 + 2 + 4 + 21
+
+
+@pytest.mark.parametrize("member", _ENUM_MEMBERS, ids=repr)
+def test_enum_members_pickle_and_copy_to_themselves(member):
+    for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+        assert pickle.loads(pickle.dumps(member, protocol)) is member
+    assert copy.copy(member) is member
+    assert copy.deepcopy(member) is member

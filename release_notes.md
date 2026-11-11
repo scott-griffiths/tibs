@@ -47,6 +47,32 @@
   long runs in Rice-coded data decode much faster and can be interrupted.
 * Requests too large to allocate, such as `Tibs.from_zeros(2**60)` or
   `Mutibs.reserve(2**60)`, now raise `MemoryError` instead of crashing.
+* On a free-threaded build, passing a `list` that another thread was changing
+  at the same moment could crash the interpreter. This affected `Tibs(items)`
+  and everything else that promotes a list of bits, `from_bools`,
+  `from_values`, `pack_values`, `from_joined`, and the position lists of
+  `set`, `unset`, `invert` and their copying forms. The list is now locked
+  while it is read.
+* Arrays and tuples in a dtype can be nested at most 64 deep, and a dtype
+  nested further raises `ValueError`. There was no limit before, and a spec
+  with tens of thousands of brackets overflowed the stack and crashed the
+  interpreter, as did nesting that deep with `DtypeArray.from_params`.
+* Unpacking an array of zero-length items with a count too large to hold,
+  such as `'[bits0; 35184372088832]'`, now raises `MemoryError` instead of
+  crashing.
+* An iterable is no longer trusted about its own length. `split_at`, `set`,
+  `unset`, `invert` and their copying forms, `from_bools`, `View.from_indices`
+  and `MutableView.from_indices` reserved space for `len()` items before
+  reading any, so `t.split_at(range(2**45))`, or any object whose `__len__`
+  was wrong, crashed the interpreter. Reading a very long iterable of
+  positions or indices can now also be interrupted with Ctrl-C.
+* `Dtype` objects and the members of `ByteOrder`, `BitOrder`, `Codec` and
+  `DtypeKind` can now be pickled and copied, so an object that holds one can
+  be passed to `pickle` or `copy.deepcopy`. An enum member unpickles and
+  copies to itself.
+* The iterators returned by `iter()`, `chunks_iter`, `rchunks_iter`,
+  `find_all_iter`, `rfind_all_iter` and `to_values_iter` now report their
+  module as `tibs` rather than `builtins`.
 * Performance improvements. Bitwise operations between values whose bits start
   at different offsets, such as two slices, are up to seven times faster.
   Packing many records with a tuple dtype is over three times faster, and hex

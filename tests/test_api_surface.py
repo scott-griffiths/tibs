@@ -190,3 +190,32 @@ def test_no_public_method_takes_a_single_letter_keyword():
                 if p.kind is p.POSITIONAL_OR_KEYWORD and len(p.name) == 1:
                     offenders.append(f"{cls.__name__}.{name}({p.name}=)")
     assert offenders == []
+
+
+@pytest.mark.parametrize(
+    "iterator",
+    [
+        iter(Tibs("0b1")),
+        Tibs("0xff").chunks_iter(4),
+        Tibs("0xff").rchunks_iter(4),
+        Tibs("0xff").find_all_iter("0b1"),
+        Tibs("0xff").rfind_all_iter("0b1"),
+        Tibs("0xff").to_values_iter("u4"),
+        Dtype("u4").unpack_values_iter(b"\xff"),
+    ],
+    ids=lambda iterator: type(iterator).__name__,
+)
+def test_iterator_classes_belong_to_the_tibs_module(iterator):
+    # They were declared without a module, so they reported as
+    # 'builtins.BoolIterator' and so on, in reprs and in error messages.
+    assert type(iterator).__module__ == "tibs"
+    assert repr(type(iterator)).startswith("<class 'tibs.")
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [Tibs, Mutibs, View, MutableView, Reader, Dtype, DtypeSingle, DtypeArray, DtypeTuple,
+     ByteOrder, BitOrder, Codec, DtypeKind],
+)
+def test_public_classes_belong_to_the_tibs_module(cls):
+    assert cls.__module__ == "tibs"

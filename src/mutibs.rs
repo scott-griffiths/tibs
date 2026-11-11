@@ -351,6 +351,11 @@ impl Mutibs {
     }
 
     fn joined_bv_from_repeated_list(list: &Bound<'_, PyList>) -> PyResult<Option<BV>> {
+        // Locked for the borrowed item pointers: see `with_list_locked`.
+        helpers::with_list_locked(list, || Self::joined_bv_from_locked_repeated_list(list))
+    }
+
+    fn joined_bv_from_locked_repeated_list(list: &Bound<'_, PyList>) -> PyResult<Option<BV>> {
         let count = list.len();
         if count == 0 {
             return Ok(Some(BV::new()));
@@ -688,18 +693,14 @@ impl Mutibs {
         Ok(())
     }
 
-    /// Collect bit positions from any iterable of ints, with a fast path for
-    /// sequences. Errors raised while iterating or converting items propagate.
+    /// Collect bit positions from any iterable of ints. Errors raised while
+    /// iterating or converting items propagate.
+    ///
+    /// Not through `extract::<Vec<isize>>()`, which reserves whatever the
+    /// iterable's `len()` claims before reading anything: see
+    /// [`helpers::collect_items`].
     fn collect_position_indices(pos: &Bound<'_, PyAny>) -> PyResult<Vec<isize>> {
-        if let Ok(indices) = pos.extract::<Vec<isize>>() {
-            return Ok(indices);
-        }
-        let capacity = pos.len().ok().unwrap_or(8);
-        let mut indices = Vec::with_capacity(capacity);
-        for item in pos.try_iter()? {
-            indices.push(item?.extract::<isize>()?);
-        }
-        Ok(indices)
+        helpers::collect_items(pos, |item| item.extract::<isize>())
     }
 
     /// Bit positions for `set`, `unset` and `invert`, read out of Python.
@@ -712,11 +713,14 @@ impl Mutibs {
         };
         if let Ok(list) = pos.cast::<PyList>() {
             let items = list.as_ptr();
-            return Self::read_sequence_items(
-                list.py(),
-                || unsafe { ffi::PyList_Size(items) } as usize,
-                |index| unsafe { ffi::PyList_GetItem(items, index) },
-            );
+            // Locked for the borrowed item pointers: see `with_list_locked`.
+            return helpers::with_list_locked(list, || {
+                Self::read_sequence_items(
+                    list.py(),
+                    || unsafe { ffi::PyList_Size(items) } as usize,
+                    |index| unsafe { ffi::PyList_GetItem(items, index) },
+                )
+            });
         }
         if let Ok(tuple) = pos.cast::<PyTuple>() {
             let items = tuple.as_ptr();

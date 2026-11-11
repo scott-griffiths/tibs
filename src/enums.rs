@@ -98,6 +98,17 @@ pub enum Codec {
     Zstd,
 }
 
+impl Codec {
+    pub(crate) fn repr_name(self) -> &'static str {
+        match self {
+            Codec::Auto => "Codec.Auto",
+            Codec::Raw => "Codec.Raw",
+            Codec::Rice => "Codec.Rice",
+            Codec::Zstd => "Codec.Zstd",
+        }
+    }
+}
+
 ///     The kind of value a :class:`DtypeSingle` encodes.
 ///
 ///     The kind says how bits become a Python value, and the dtype's length says how
@@ -160,5 +171,49 @@ impl DtypeKind {
             DtypeKind::OcpE8M0 => "DtypeKind.OcpE8M0",
             DtypeKind::OcpInt8 => "DtypeKind.OcpInt8",
         }
+    }
+}
+
+#[pymethods]
+impl ByteOrder {
+    /// Support for pickling and copying.
+    ///
+    /// Each member is a single shared object, so it is pickled by name, and
+    /// unpickling or copying it gives that same object back.
+    fn __reduce__(&self) -> &'static str {
+        self.repr_name()
+    }
+}
+
+#[pymethods]
+impl BitOrder {
+    /// Support for pickling and copying.
+    ///
+    /// Each member is a single shared object, so it is pickled by name, and
+    /// unpickling or copying it gives that same object back.
+    fn __reduce__(&self) -> &'static str {
+        self.repr_name()
+    }
+}
+
+#[pymethods]
+impl Codec {
+    /// Support for pickling and copying.
+    ///
+    /// Each member is a single shared object, so it is pickled by name, and
+    /// unpickling or copying it gives that same object back.
+    fn __reduce__(&self) -> &'static str {
+        self.repr_name()
+    }
+}
+
+#[pymethods]
+impl DtypeKind {
+    /// Support for pickling and copying.
+    ///
+    /// Each member is a single shared object, so it is pickled by name, and
+    /// unpickling or copying it gives that same object back.
+    fn __reduce__(&self) -> &'static str {
+        self.repr_name()
     }
 }

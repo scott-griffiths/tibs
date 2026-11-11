@@ -3,8 +3,8 @@ use crate::dtype::{Dtype, extract_dtype};
 use crate::enums::{BitOrder, ByteOrder};
 use crate::helpers::{
     BS, BV, bv_from_bin, bv_from_bytes_slice, bv_from_f64, bv_from_hex, bv_from_int, bv_from_oct,
-    bv_from_uint, bytes_like_to_vec, format_bit_collection, try_extract_index, validate_slice,
-    with_locked, with_locked_mut, with_locked2,
+    bv_from_uint, bytes_like_to_vec, collect_items, format_bit_collection, try_extract_index,
+    validate_slice, with_locked, with_locked_mut, with_locked2,
 };
 use crate::mutibs::Mutibs;
 use crate::tibs_::{Tibs, bv_from_value, py_from_value};
@@ -314,22 +314,15 @@ fn extract_source_indices(
     source_len: usize,
     view_name: &str,
 ) -> PyResult<Vec<usize>> {
-    let capacity = source_indices.len().ok().unwrap_or(16);
-    let mut indices = Vec::with_capacity(capacity);
-    for item in source_indices.try_iter()? {
-        let item = item?;
-        let index = match try_extract_index(&item) {
-            Ok(Some(index)) if index >= 0 => index as usize,
-            Ok(Some(_)) => return Err(source_index_error(&item, source_len, view_name)),
-            Err(error) if error.is_instance_of::<PyOverflowError>(item.py()) => {
-                return Err(source_index_error(&item, source_len, view_name));
-            }
-            Err(error) => return Err(error),
-            Ok(None) => return Err(PyTypeError::new_err("Source indices must be integers.")),
-        };
-        indices.push(index);
-    }
-    Ok(indices)
+    collect_items(source_indices, |item| match try_extract_index(item) {
+        Ok(Some(index)) if index >= 0 => Ok(index as usize),
+        Ok(Some(_)) => Err(source_index_error(item, source_len, view_name)),
+        Err(error) if error.is_instance_of::<PyOverflowError>(item.py()) => {
+            Err(source_index_error(item, source_len, view_name))
+        }
+        Err(error) => Err(error),
+        Ok(None) => Err(PyTypeError::new_err("Source indices must be integers.")),
+    })
 }
 
 fn validate_source_indices(indices: &[usize], source_len: usize, view_name: &str) -> PyResult<()> {

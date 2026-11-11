@@ -1,6 +1,6 @@
 use crate::helpers::{
     BS, BV, BitConcat, FAST_INT_BITS, LogicalOp, any_pair_bits, bin_from_padded_bytes,
-    bv_from_padded_bytes, bv_from_zeros, byte_order_name, contains_bit,
+    bv_from_padded_bytes, bv_from_zeros, byte_order_name, collect_items, contains_bit,
     copy_unaligned_padded_bytes, count_bitslice, count_pair_bits, extract_masked_bytes,
     hex_from_padded_bytes, logical_op_with_aligned_bytes, logical_op_with_matching_bytes,
     mask_padding_bits, normalize_split_position, oct_from_padded_bytes, reverse_byte_groups,
@@ -40,14 +40,9 @@ pub(crate) fn read_split_positions(pos: &Bound<'_, PyAny>) -> PyResult<SplitPosi
             Ok(SplitPositions::Overflow)
         }
         Err(error) => Err(error),
-        Ok(None) => {
-            let capacity = pos.len().ok().unwrap_or(1);
-            let mut positions = Vec::with_capacity(capacity);
-            for item in pos.try_iter()? {
-                positions.push(item?.extract::<isize>()?);
-            }
-            Ok(SplitPositions::At(positions))
-        }
+        Ok(None) => Ok(SplitPositions::At(collect_items(pos, |item| {
+            item.extract::<isize>()
+        })?)),
     }
 }
 

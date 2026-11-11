@@ -81,6 +81,13 @@ class ByteOrder:
     Big: ClassVar[ByteOrder]
     Little: ClassVar[ByteOrder]
 
+    def __reduce__(self) -> str:
+        """Support for pickling and copying.
+
+        Each member is a single shared object, so it is pickled by name, and
+        unpickling or copying it gives that same object back.
+        """
+
 
 class BitOrder:
     """How bit labels are numbered.
@@ -107,6 +114,13 @@ class BitOrder:
     Msb0: ClassVar[BitOrder]
     Lsb0: ClassVar[BitOrder]
 
+    def __reduce__(self) -> str:
+        """Support for pickling and copying.
+
+        Each member is a single shared object, so it is pickled by name, and
+        unpickling or copying it gives that same object back.
+        """
+
 
 class Codec:
     """The storage strategy used by :meth:`Tibs.encode`.
@@ -120,6 +134,13 @@ class Codec:
     Raw: ClassVar[Codec]
     Rice: ClassVar[Codec]
     Zstd: ClassVar[Codec]
+
+    def __reduce__(self) -> str:
+        """Support for pickling and copying.
+
+        Each member is a single shared object, so it is pickled by name, and
+        unpickling or copying it gives that same object back.
+        """
 
 
 class DtypeKind:
@@ -157,6 +178,13 @@ class DtypeKind:
     OcpE2M1: ClassVar[DtypeKind]
     OcpE8M0: ClassVar[DtypeKind]
     OcpInt8: ClassVar[DtypeKind]
+
+    def __reduce__(self) -> str:
+        """Support for pickling and copying.
+
+        Each member is a single shared object, so it is pickled by name, and
+        unpickling or copying it gives that same object back.
+        """
 
 
 class Dtype:
@@ -309,6 +337,20 @@ class Dtype:
     def __str__(self) -> str: ...
 
     def __repr__(self) -> str: ...
+
+    def __reduce__(self) -> tuple[type[Dtype], tuple[str]]:
+        """Support for pickling and copying: a dtype is rebuilt from its spec.
+
+        ``Dtype(spec)`` returns the matching concrete class, so this one
+        method serves :class:`DtypeSingle`, :class:`DtypeArray` and
+        :class:`DtypeTuple` alike.
+
+        .. code-block:: pycon
+
+            >>> import pickle
+            >>> pickle.loads(pickle.dumps(Dtype('[u16_le; 4]')))
+            DtypeArray('[u16_le; 4]')
+        """
 
 
 class DtypeSingle(Dtype):

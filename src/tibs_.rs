@@ -24,6 +24,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::ffi;
 use pyo3::prelude::*;
+use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyBool, PyBytes, PyInt, PyList, PySlice, PyTuple, PyType};
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
@@ -1359,29 +1360,38 @@ fn for_each_value(
         return Ok(());
     };
 
-    for index in 0..iterable.len()? {
-        interrupt_check(index)?;
-        // SAFETY: the index is in bounds of the length read above, and the
-        // sequence holds the item for as long as the pointer is used here.
-        let item = unsafe { item_at(iterable.as_ptr(), index as ffi::Py_ssize_t) };
-        if item.is_null() {
-            // A list that has run short can only mean an earlier value was
-            // converted by Python code that removed items from it. Stop here,
-            // as iterating it would.
-            unsafe { ffi::PyErr_Clear() };
-            return Ok(());
+    // The sequence is locked while its items are borrowed, which only does
+    // anything for a list on a free-threaded build, where another thread could
+    // otherwise resize it or replace an item under the pointer read here. See
+    // `helpers::with_list_locked`.
+    with_critical_section(iterable, || {
+        for index in 0..iterable.len()? {
+            interrupt_check(index)?;
+            // SAFETY: the sequence holds the item for as long as the pointer is
+            // used here. An index past the end gives null rather than a read
+            // out of bounds.
+            let item = unsafe { item_at(iterable.as_ptr(), index as ffi::Py_ssize_t) };
+            if item.is_null() {
+                // A list that has run short can only mean Python code ran
+                // part way through and removed items from it: a signal
+                // handler, or the conversion of an earlier value. Stop here,
+                // as iterating it would.
+                unsafe { ffi::PyErr_Clear() };
+                return Ok(());
+            }
+            if unsafe { ffi::Py_IS_TYPE(item, plain) } != 0 {
+                // SAFETY: converting a value of exactly this type runs no
+                // Python code, so the lock stays held and nothing can drop the
+                // item while the borrow is live.
+                let borrowed = unsafe { Borrowed::from_ptr(py, item) };
+                visit(&borrowed)?;
+            } else {
+                let owned = unsafe { Bound::from_borrowed_ptr(py, item) };
+                visit(&owned)?;
+            }
         }
-        if unsafe { ffi::Py_IS_TYPE(item, plain) } != 0 {
-            // SAFETY: converting a value of exactly this type runs no Python
-            // code, so nothing can drop the item while the borrow is live.
-            let borrowed = unsafe { Borrowed::from_ptr(py, item) };
-            visit(&borrowed)?;
-        } else {
-            let owned = unsafe { Bound::from_borrowed_ptr(py, item) };
-            visit(&owned)?;
-        }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 pub(crate) fn bv_from_values_iter(
@@ -2076,16 +2086,23 @@ fn py_from_dtype_repr(
         }
         DtypeRepr::Array { dtype, count } => {
             let item_length = dtype.length()?;
-            let mut values = Vec::with_capacity(*count);
-            for index in 0..*count {
-                values.push(py_from_dtype_repr(
-                    py,
-                    dtype,
-                    value,
-                    start + index * item_length,
-                )?);
-            }
-            Ok(PyTuple::new(py, values)?.into_any().unbind())
+            // Filled in place, so that a count too large to hold is the
+            // `MemoryError` that `PyTuple_New` raises. Collecting into a `Vec`
+            // first reserved the count on trust, and the count of an array of
+            // zero-length items is bounded by nothing in the bits being read:
+            // `Dtype('[bits0; 2**45]').unpack(b'')` aborted the process.
+            let mut check_at = helpers::SIGNAL_CHECK_INTERVAL;
+            let tuple = tuple_from_fn(py, *count, |index| {
+                if index >= check_at {
+                    py.check_signals()?;
+                    check_at = index.saturating_add(helpers::SIGNAL_CHECK_INTERVAL);
+                }
+                Ok(
+                    py_from_dtype_repr(py, dtype, value, start + index * item_length)?
+                        .into_bound(py),
+                )
+            })?;
+            Ok(tuple.into_any().unbind())
         }
         DtypeRepr::Tuple(dtypes) => {
             let mut values = Vec::with_capacity(dtypes.len());
@@ -2114,8 +2131,12 @@ fn tuple_from_fn<'py>(
     // SAFETY: `PyTuple_New` returns a new reference or null with an error set,
     // and `PyTuple_SetItem` steals the reference to an in-range item of a
     // tuple nothing else has seen yet.
+    // A length past `isize::MAX` would reach `PyTuple_New` as a negative size.
+    let size = ffi::Py_ssize_t::try_from(len).map_err(|_| {
+        pyo3::exceptions::PyMemoryError::new_err(format!("Cannot create a tuple of {len} items."))
+    })?;
     unsafe {
-        let tuple = Bound::from_owned_ptr_or_err(py, ffi::PyTuple_New(len as ffi::Py_ssize_t))?
+        let tuple = Bound::from_owned_ptr_or_err(py, ffi::PyTuple_New(size))?
             .cast_into_unchecked::<PyTuple>();
         for index in 0..len {
             let value = item(index)?;

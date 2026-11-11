@@ -171,6 +171,9 @@ tuple records::
     >>> samples.unpack(samples.pack(((10, True), (3, False))))
     ((10, True), (3, False))
 
+Arrays and tuples can be nested up to 64 deep, which is far more than any real
+format needs. A dtype nested further than that raises :exc:`ValueError`.
+
 Use :attr:`DtypeArray.dtype` for the element dtype and
 :attr:`DtypeArray.count` for the number of elements. The programmatic builder
 takes the same two pieces::
