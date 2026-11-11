@@ -3,9 +3,12 @@ use pyo3::prelude::*;
 
 ///     The order of the bytes of a whole-byte value.
 ///
-///     ``Unspecified`` is the default and is interpreted bitwise big-endian, which
-///     for whole-byte data is the same as ``Big``, but can be used at any length.
-///     ``Big`` and ``Little`` require a whole number of bytes.
+///     ``Unspecified`` is the default, and means that no byte order has been
+///     stated. With ``BitOrder.Msb0`` the bits are then read in the order they
+///     are stored, which for whole-byte data is the same as ``Big``, but can be
+///     used at any length. An LSB0 view of more than one byte can't be left
+///     ``Unspecified``, as its byte order decides where label 0 is. ``Big`` and
+///     ``Little`` require a whole number of bytes.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ByteOrder {
@@ -57,10 +60,14 @@ impl ByteOrder {
 ///     byte's, so a view with ``Lsb0`` labels over more than one byte also needs
 ///     a byte order. Only the labels differ, never the stored data.
 ///
-///     A :class:`View` uses the labels for :meth:`View.field`. The
-///     :class:`Dtype` pack and unpack methods and :class:`Reader` use them to
-///     read and write values packed least significant bit first, where each
-///     value starts at a label and runs up through the higher ones.
+///     A :class:`View` uses the labels for :meth:`View.field`. As the
+///     ``bit_order`` of the methods that pack and unpack values, and of
+///     :class:`Reader` and ``pp``, it is the order values are packed in.
+///     ``Lsb0`` there means least significant bit first, each byte filling from
+///     its least significant bit and each value starting at a label and running
+///     up through the higher ones. That makes values little-endian, just as
+///     the default ``Msb0`` packing makes them big-endian, so no byte order is
+///     given, though a dtype can name its own, as in ``'u16_be'``.
 #[pyclass(from_py_object, module = "tibs")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BitOrder {

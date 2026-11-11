@@ -2445,7 +2445,6 @@ impl Mutibs {
     /// :param object value: The value to encode.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Mutibs``.
-    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -2476,7 +2475,6 @@ impl Mutibs {
     /// :param Iterable iterable: The values to encode.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Mutibs``.
-    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -3613,7 +3611,7 @@ impl Mutibs {
     /// :return: None
     /// :raises ValueError: if a format is invalid or has no length it can use, or
     ///     the formats have different lengths, or ``bit_order`` is ``BitOrder.Lsb0``
-    ///     and the bits aren't a whole number of bytes or a format names a byte order.
+    ///     and the bits aren't a whole number of bytes.
     /// :raises TypeError: if a format isn't a dtype, kind or string.
     ///
     /// .. code-block:: pycon

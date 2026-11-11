@@ -103,6 +103,56 @@ pub(crate) fn push_lsb0_field(out: &mut BitAccumulator, bytes: &[u8], label: usi
     }
 }
 
+/// [`push_lsb0_field`] for a field whose dtype names a byte order, which is a
+/// whole number of bytes long: the bytes go out lowest labels first.
+///
+/// That is the natural value with its bytes reversed. A `_le` decoder reverses
+/// them back, so the dtype reads the natural, little-endian value; a `_be`
+/// decoder takes them as they are, so the first byte in the stream is the
+/// most significant.
+#[inline]
+pub(crate) fn push_lsb0_field_bytes(
+    out: &mut BitAccumulator,
+    bytes: &[u8],
+    label: usize,
+    length: usize,
+) {
+    debug_assert!(length.is_multiple_of(8));
+    let mut done = 0;
+    while done < length {
+        let chunk = (length - done).min(64);
+        let value = load_lsb0_bits(bytes, label + done, chunk);
+        out.push_wide(value.swap_bytes() >> (64 - chunk), chunk);
+        done += chunk;
+    }
+}
+
+/// [`store_msb0_field_as_lsb0`] for a field whose dtype names a byte order:
+/// the inverse of [`push_lsb0_field_bytes`], the first byte of the field in
+/// `source` taking the lowest labels.
+#[inline]
+pub(crate) fn store_msb0_field_bytes_as_lsb0(
+    target: &mut [u8],
+    source: &[u8],
+    source_offset: usize,
+    bit: usize,
+    length: usize,
+) {
+    debug_assert!(length.is_multiple_of(8));
+    let mut done = 0;
+    while done < length {
+        let chunk = (length - done).min(64);
+        let value = load_be_bits(source, source_offset + bit + done, chunk);
+        store_lsb0_bits(
+            target,
+            bit + done,
+            chunk,
+            value.swap_bytes() >> (64 - chunk),
+        );
+        done += chunk;
+    }
+}
+
 /// Copy the `length`-bit field that starts `bit` bits into the MSB-first
 /// `source` to the same position, as a label, of the LSB-first stream in
 /// `target`.

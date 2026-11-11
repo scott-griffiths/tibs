@@ -1822,9 +1822,26 @@ impl WordField {
     /// Only a field whose value is a word qualifies: a `bytes` field is copied
     /// out of the storage as it stands, which in an LSB-first stream is not the
     /// value.
+    ///
+    /// The word read from the stream is the little-endian value, so a `_le`
+    /// dtype is read as its unsuffixed form, and so is a single byte. A
+    /// longer `_be` dtype needs its bytes reversed and takes the other route.
     fn for_lsb0(dtype: &Dtype) -> Option<Self> {
-        let field = Self::new(dtype.single()?, 0)?;
-        (!matches!(field.reading, WordReading::Bytes) && !field.swap).then_some(field)
+        let single = dtype.single()?;
+        let natural;
+        let single = match single.byte_order {
+            ByteOrder::Unspecified => single,
+            ByteOrder::Big if single.length > 8 => return None,
+            _ => {
+                natural = SingleDtype {
+                    byte_order: ByteOrder::Unspecified,
+                    ..single.clone()
+                };
+                &natural
+            }
+        };
+        let field = Self::new(single, 0)?;
+        (!matches!(field.reading, WordReading::Bytes)).then_some(field)
     }
 
     /// [`Self::value`] for a `bytes` field, kept out of line and cold so that
@@ -2968,7 +2985,6 @@ impl Tibs {
     /// :param object value: The value to encode.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Tibs``.
-    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -3001,7 +3017,6 @@ impl Tibs {
     /// :param Iterable iterable: The values to encode.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: A newly constructed ``Tibs``.
-    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -3968,7 +3983,7 @@ impl Tibs {
     /// :return: None
     /// :raises ValueError: if a format is invalid or has no length it can use, or
     ///     the formats have different lengths, or ``bit_order`` is ``BitOrder.Lsb0``
-    ///     and the bits aren't a whole number of bytes or a format names a byte order.
+    ///     and the bits aren't a whole number of bytes.
     /// :raises TypeError: if a format isn't a dtype, kind or string.
     ///
     /// .. code-block:: pycon

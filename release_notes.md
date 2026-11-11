@@ -9,7 +9,19 @@
   runs of repeated lines are replaced by a line saying how much is hidden.
   `max_lines` limits the output, and Ctrl-C stops it. Lines fit the
   terminal, and are colourised only when writing to one.
-* `pp()` takes a `bit_order`. With `BitOrder.Lsb0` each group is shown as
+* Values packed least significant bit first can now be read and written, by
+  passing `bit_order=BitOrder.Lsb0` to `from_value`, `from_values`,
+  `to_value`, `to_values` and `to_values_iter` on `Tibs` and `Mutibs`, to the
+  `Dtype` pack and unpack methods, and to the `Reader` constructor. Each byte
+  fills from its least significant bit, as in FAT12 tables, DEFLATE, the
+  little-endian `Mono12Packed` camera format and 1-, 2- and 4-bit pixel
+  formats: `Tibs.from_bytes(fat).to_values('u12', bit_order=BitOrder.Lsb0)`.
+  `start`, `end` and `Reader.pos` are then LSB0 bit labels, the bits must be
+  a whole number of bytes, and packed output is padded with zeros to a whole
+  byte. Values are little-endian, as LSB-first packing makes them, and a
+  dtype can name its own byte order as usual, so `'u16_be'` reads a
+  big-endian field. An LSB0 `Reader` can't search.
+* `pp()` takes a `bit_order` too. With `BitOrder.Lsb0` each group is shown as
   `to_values()` reads it with the same `bit_order`, so a table of values
   packed least significant bit first, such as FAT12, can be pretty-printed.
 * Big-endian LSB0 views now work, for registers drawn as bits 31 to 0 and

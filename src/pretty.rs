@@ -627,9 +627,6 @@ impl Printer {
                     })?
                 }
             };
-            if lsb0 {
-                dtype.check_bit_order(BitOrder::Lsb0)?;
-            }
             formats.push(Format {
                 group_width: repr_width(&dtype.repr),
                 dtype,

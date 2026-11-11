@@ -336,10 +336,21 @@ packed one after another.
 A few things follow from the rule:
 
 * Every value kind works, because each value's bits are found first and decoded
-  after. An LSB-first ``u16`` or ``f32`` that starts on a byte boundary is the
-  same as ``u16_le`` or ``f32_le``. For that reason a dtype that names a byte
-  order, such as ``'u16_le'``, is refused with ``BitOrder.Lsb0``: the byte order
-  would be stated twice.
+  after. Packing LSB first makes a value little-endian, just as packing MSB
+  first makes it big-endian, so an LSB-first ``u16`` or ``f32`` that starts on a
+  byte boundary is the same as an ordinary ``u16_le`` or ``f32_le``.
+* A dtype can still name its own byte order, which then applies to that value
+  as it does with MSB-first packing. ``'u16_le'`` is ``'u16'`` spelt out, and
+  ``'u16_be'`` reads the first byte in the stream as the most significant, for
+  the occasional big-endian field in an LSB-first format::
+
+      >>> Tibs('0x1234').to_value('u16', bit_order=BitOrder.Lsb0) == 0x3412
+      True
+      >>> Tibs('0x1234').to_value('u16_le', bit_order=BitOrder.Lsb0) == 0x3412
+      True
+      >>> Tibs('0x1234').to_value('u16_be', bit_order=BitOrder.Lsb0) == 0x1234
+      True
+
 * An array or tuple dtype applies the rule to each of its fields in turn, so
   ``'(u12, u4)'`` is a 12-bit value then a 4-bit one, each LSB first.
 * The values are read in significance order, just as ``field`` reads them. For

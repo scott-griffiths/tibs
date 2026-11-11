@@ -324,8 +324,7 @@ impl Reader {
     /// at the position as its least significant bit, exactly as
     /// :meth:`Dtype.unpack_values` reads with the same option. Positions on a
     /// byte boundary are the same in either order. The source must be a whole
-    /// number of bytes long, an LSB0 reader can't search, and a dtype that
-    /// names a byte order is refused, as LSB0 order already decides it.
+    /// number of bytes long, and an LSB0 reader can't search.
     ///
     /// :param object source: The bits to read. A :class:`Tibs` or :class:`Mutibs` is used directly; anything else promotable to ``Tibs`` is converted.
     /// :param int pos: The initial bit position. Defaults to 0.
@@ -487,7 +486,6 @@ impl Reader {
         // `extract_dtype` parses a spec string and `py_from_value` builds the
         // result object; both are Python, so both stay outside the section.
         let dtype = extract_dtype(dtype)?;
-        dtype.check_bit_order(slf.get().bit_order)?;
         let taken = Self::with_reader(slf, |r| r.read_window(py, dtype.length))?;
         taken.value(py, &dtype)
     }
@@ -528,7 +526,6 @@ impl Reader {
         count: Option<i64>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let dtype = extract_dtype(dtype)?;
-        dtype.check_bit_order(slf.get().bit_order)?;
         if count.is_none() && dtype.length == 0 {
             return Err(dtype.zero_length_values_error());
         }
@@ -692,7 +689,6 @@ impl Reader {
         dtype: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
         let dtype = extract_dtype(dtype)?;
-        dtype.check_bit_order(slf.get().bit_order)?;
         let taken = Self::with_reader(slf, |r| r.peek_window(py, dtype.length))?;
         taken.value(py, &dtype)
     }

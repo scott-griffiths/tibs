@@ -2,7 +2,8 @@ use crate::core::BitCollection;
 use crate::enums::{BitOrder, ByteOrder, DtypeKind};
 use crate::helpers::{
     BS, BV, BitAccumulator, bv_from_bytes_slice, head_bit_offset, push_lsb0_field,
-    store_msb0_field_as_lsb0, try_bv_from_bytes, try_byte_buffer, validate_slice, whole_bytes,
+    push_lsb0_field_bytes, store_msb0_field_as_lsb0, store_msb0_field_bytes_as_lsb0,
+    try_bv_from_bytes, try_byte_buffer, validate_slice, whole_bytes,
 };
 use crate::iterator::ValuesIterator;
 use crate::tibs_::{
@@ -428,14 +429,19 @@ impl DtypeRepr {
     }
 
     /// Call `f` with the bit offset and length of each scalar field in turn,
-    /// the first starting at `offset`, returning the offset just past the last.
+    /// and whether it names a byte order, the first starting at `offset`,
+    /// returning the offset just past the last.
     ///
     /// An array of zero-length items is skipped whole, so that a huge count of
     /// them costs nothing.
-    fn for_each_field<F: FnMut(usize, usize)>(&self, offset: usize, f: &mut F) -> usize {
+    fn for_each_field<F: FnMut(usize, usize, bool)>(&self, offset: usize, f: &mut F) -> usize {
         match self {
             Self::Single(dtype) => {
-                f(offset, dtype.length);
+                f(
+                    offset,
+                    dtype.length,
+                    dtype.byte_order != ByteOrder::Unspecified,
+                );
                 offset + dtype.length
             }
             Self::Array { dtype, count } => {
@@ -919,25 +925,6 @@ impl Dtype {
         self.repr.has_explicit_byte_order()
     }
 
-    /// Refuse a dtype that names its own byte order when the values are in
-    /// LSB-first order, which already decides it.
-    ///
-    /// Under [`BitOrder::Lsb0`] every value is read least significant bit
-    /// first, so a whole-byte value is little-endian by construction. A `_le`
-    /// or `_be` dtype would state the byte order a second time, as it would
-    /// through an `lsb0` view, and is refused for the same reason.
-    pub(crate) fn check_bit_order(&self, bit_order: BitOrder) -> PyResult<()> {
-        if bit_order == BitOrder::Lsb0 && self.has_explicit_byte_order() {
-            return Err(PyValueError::new_err(format!(
-                "Cannot use the dtype '{}' with BitOrder.Lsb0. LSB0 order reads each value \
-                 least significant bit first, which already decides the byte order, so a '_le' \
-                 or '_be' dtype would state it a second time. Remove the byte order from the dtype.",
-                self.spec()
-            )));
-        }
-        Ok(())
-    }
-
     /// Bits `start..end` of the LSB-first stream `bits`, rearranged into the
     /// order the ordinary decoders read: each field of each value in turn,
     /// most significant bit first.
@@ -946,6 +933,10 @@ impl Dtype {
     /// significant bit) to `start + i*n + n - 1`, which is what
     /// `bits.lsb0.le.field(start + i*n + n - 1, start + i*n)` selects. An array or
     /// tuple applies the same rule to each of its scalar fields.
+    ///
+    /// A field whose dtype names a byte order goes out lowest byte first
+    /// instead, so that `_le` decodes to the natural value and `_be` to the one
+    /// whose most significant byte comes first in the stream.
     ///
     /// `bits` must be a whole number of bytes long, which
     /// [`validate_lsb0_length`] checks, and `start..end` must lie within it.
@@ -961,14 +952,20 @@ impl Dtype {
         let records = total.checked_div(self.length).unwrap_or(0);
         let mut out = BitAccumulator::with_bit_capacity(Some(total));
         match self.single() {
-            Some(single) => {
+            Some(single) if single.byte_order == ByteOrder::Unspecified => {
                 let length = single.length;
                 for index in 0..records {
                     push_lsb0_field(&mut out, &bytes, base + index * length, length);
                 }
             }
-            None => {
-                let mut push = |label, length| push_lsb0_field(&mut out, &bytes, label, length);
+            _ => {
+                let mut push = |label, length, ordered| {
+                    if ordered {
+                        push_lsb0_field_bytes(&mut out, &bytes, label, length);
+                    } else {
+                        push_lsb0_field(&mut out, &bytes, label, length);
+                    }
+                };
                 for index in 0..records {
                     self.repr
                         .for_each_field(base + index * self.length, &mut push);
@@ -1027,15 +1024,20 @@ impl Dtype {
         let records = total.checked_div(self.length).unwrap_or(0);
         debug_assert_eq!(records * self.length, total);
         match self.single() {
-            Some(single) => {
+            Some(single) if single.byte_order == ByteOrder::Unspecified => {
                 let length = single.length;
                 for index in 0..records {
                     store_msb0_field_as_lsb0(&mut out, raw, offset, index * length, length);
                 }
             }
-            None => {
-                let mut store =
-                    |bit, length| store_msb0_field_as_lsb0(&mut out, raw, offset, bit, length);
+            _ => {
+                let mut store = |bit, length, ordered| {
+                    if ordered {
+                        store_msb0_field_bytes_as_lsb0(&mut out, raw, offset, bit, length);
+                    } else {
+                        store_msb0_field_as_lsb0(&mut out, raw, offset, bit, length);
+                    }
+                };
                 for index in 0..records {
                     self.repr.for_each_field(index * self.length, &mut store);
                 }
@@ -1047,7 +1049,6 @@ impl Dtype {
     /// Encode one value in `bit_order`, for `Dtype.pack` and the `from_value`
     /// constructors.
     pub(crate) fn pack_bv(&self, value: &Bound<'_, PyAny>, bit_order: BitOrder) -> PyResult<BV> {
-        self.check_bit_order(bit_order)?;
         let packed = bv_from_value(self, value)?;
         match bit_order {
             BitOrder::Msb0 => Ok(packed),
@@ -1063,7 +1064,6 @@ impl Dtype {
         iterable: &Bound<'_, PyAny>,
         bit_order: BitOrder,
     ) -> PyResult<BV> {
-        self.check_bit_order(bit_order)?;
         let packed = bv_from_values_iter(py, self, iterable)?;
         match bit_order {
             BitOrder::Msb0 => Ok(packed),
@@ -1072,15 +1072,14 @@ impl Dtype {
     }
 
     /// The range `start..end` of an LSB-first stream `len` bits long, after
-    /// every check that reading it with [`BitOrder::Lsb0`] needs: this dtype
-    /// names no byte order, the stream is whole bytes, and the range is in it.
+    /// every check that reading it with [`BitOrder::Lsb0`] needs: the stream is
+    /// whole bytes, and the range is in it.
     pub(crate) fn lsb0_slice(
         &self,
         len: usize,
         start: Option<isize>,
         end: Option<isize>,
     ) -> PyResult<(usize, usize)> {
-        self.check_bit_order(BitOrder::Lsb0)?;
         validate_lsb0_length(len)?;
         validate_slice(len, start, end)
     }
@@ -1278,8 +1277,7 @@ impl Dtype {
     /// :param object value: A scalar or structured value matching this dtype.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: The encoded bits.
-    /// :raises ValueError: if a structured value has the wrong number of items, or if
-    ///     ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
+    /// :raises ValueError: if a structured value has the wrong number of items.
     ///
     /// .. code-block:: pycon
     ///
@@ -1304,7 +1302,6 @@ impl Dtype {
     /// :param Iterable iterable: Values matching this dtype.
     /// :param BitOrder bit_order: The order the bits are written in. Defaults to ``BitOrder.Msb0``.
     /// :return: The concatenated encoded bits.
-    /// :raises ValueError: if ``bit_order`` is ``BitOrder.Lsb0`` and the dtype names a byte order.
     ///
     /// .. code-block:: pycon
     ///
@@ -1337,8 +1334,8 @@ impl Dtype {
     /// :param BitOrder bit_order: The order the bits are read in. Defaults to ``BitOrder.Msb0``.
     /// :return: One scalar value, or a tuple for an array or tuple dtype.
     /// :raises ValueError: if the selected range is not exactly :attr:`length` bits, or if
-    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
-    ///     ``bits`` is not a whole number of bytes long.
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and ``bits`` is not a whole number of bytes
+    ///     long.
     ///
     /// .. code-block:: pycon
     ///
@@ -1402,8 +1399,8 @@ impl Dtype {
     /// :return: A list of decoded values.
     /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
     ///     :attr:`length` is zero, as the number of values could then be anything, or if
-    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
-    ///     ``bits`` is not a whole number of bytes long.
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and ``bits`` is not a whole number of bytes
+    ///     long.
     ///
     /// .. code-block:: pycon
     ///
@@ -1442,8 +1439,8 @@ impl Dtype {
     /// :return: An iterator of decoded values.
     /// :raises ValueError: if the selected range is not a multiple of :attr:`length`, if
     ///     :attr:`length` is zero, as the number of values could then be anything, or if
-    ///     ``bit_order`` is ``BitOrder.Lsb0`` and either the dtype names a byte order or
-    ///     ``bits`` is not a whole number of bytes long.
+    ///     ``bit_order`` is ``BitOrder.Lsb0`` and ``bits`` is not a whole number of bytes
+    ///     long.
     #[pyo3(signature = (bits, /, start = None, end = None, bit_order = BitOrder::Msb0), text_signature = "($self, bits, /, start=None, end=None, bit_order=None)")]
     fn unpack_values_iter(
         &self,

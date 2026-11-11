@@ -133,23 +133,57 @@ def test_bytes_and_text_kinds_read_in_value_order():
 # --- errors -------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("spec", ["u16_le", "f32_be", "(u8, u16_le)", "[i16_be; 2]"])
-def test_a_dtype_with_a_byte_order_is_refused(spec):
-    dtype = Dtype(spec)
-    data = bytes(dtype.length // 8)
-    calls = [
-        lambda: dtype.unpack(data, bit_order=LSB0),
-        lambda: dtype.unpack_values(data, bit_order=LSB0),
-        lambda: dtype.unpack_values_iter(data, bit_order=LSB0),
-        lambda: dtype.pack(dtype.unpack(data), bit_order=LSB0),
-        lambda: dtype.pack_values([dtype.unpack(data)], bit_order=LSB0),
-        lambda: Reader(data, bit_order=LSB0).read_value(dtype),
-        lambda: Reader(data, bit_order=LSB0).peek_value(dtype),
-        lambda: Reader(data, bit_order=LSB0).read_values(dtype),
-    ]
-    for call in calls:
-        with pytest.raises(ValueError, match="already decides the byte order"):
-            call()
+def lsb0_value(data, label, n):
+    """The natural LSB-first value: bit ``k`` is label ``label + k``."""
+    return (int.from_bytes(data, "little") >> label) & ((1 << n) - 1)
+
+
+def test_a_dtype_byte_order_is_that_value_s_byte_order():
+    # As with MSB-first packing, '_le' and '_be' say how one value's bytes are
+    # ordered. LSB-first packing is little-endian by nature, so '_le' is the
+    # unsuffixed dtype spelt out, and '_be' has the first byte in the stream
+    # as its most significant. On a byte boundary they read as struct does.
+    data = bytes(range(1, 13))
+    t = Tibs.from_bytes(data)
+    assert t.to_values("u16_le", bit_order=LSB0) == list(struct.unpack("<6H", data))
+    assert t.to_values("u16_le", bit_order=LSB0) == t.to_values("u16", bit_order=LSB0)
+    assert t.to_values("u16_be", bit_order=LSB0) == list(struct.unpack(">6H", data))
+    assert t.to_values("f32_be", bit_order=LSB0) == list(struct.unpack(">3f", data))
+    assert list(t.to_values_iter("i16_be", bit_order=LSB0)) == list(struct.unpack(">6h", data))
+    assert t.to_values("(u8, u16_be, f64_be, u8)", bit_order=LSB0) == [struct.unpack(">BHdB", data)]
+    assert Tibs.from_values("(u8, u16_be, u8)", [(1, 0x1234, 2)], bit_order=LSB0).hex == "01123402"
+    assert Mutibs.from_value("u16_be", 0x1234, bit_order=LSB0).hex == "1234"
+    assert Mutibs.from_value("u16_le", 0x1234, bit_order=LSB0).hex == "3412"
+    assert Reader(data, bit_order=LSB0).read_values("u16_be", 2) == [0x0102, 0x0304]
+    assert "258" in pp_text(t, "u16_be", bit_order=LSB0)
+
+
+@settings(max_examples=300)
+@given(
+    data=st.binary(min_size=10, max_size=24),
+    n=st.sampled_from([8, 16, 24, 32, 64, 72]),
+    label=st.integers(0, 7),
+    kind=st.sampled_from(["u", "i"]),
+)
+def test_a_dtype_byte_order_at_any_label(data, n, label, kind):
+    t = Tibs.from_bytes(data)
+    natural = lsb0_value(data, label, n)
+    swapped = int.from_bytes(natural.to_bytes(n // 8, "big"), "little")
+
+    def as_kind(x):
+        return x - (1 << n) if kind == "i" and x >> (n - 1) else x
+
+    for suffix, expected in (("", natural), ("_le", natural), ("_be", swapped)):
+        dtype = Dtype(f"{kind}{n}{suffix}")
+        expected = as_kind(expected)
+        assert dtype.unpack(t, start=label, end=label + n, bit_order=LSB0) == expected
+        assert t.to_value(dtype, start=label, end=label + n, bit_order=LSB0) == expected
+        assert Reader(t, label, bit_order=LSB0).read_value(dtype) == expected
+        # In a record of whole bytes, with the value starting part way into one.
+        record = Dtype(f"(bits{label}, {dtype}, bits{8 - label})")
+        value = (Tibs.from_ones(label), expected, Tibs.from_zeros(8 - label))
+        assert record.unpack(record.pack(value, bit_order=LSB0), bit_order=LSB0) == value
+        assert dtype.pack(expected, bit_order=LSB0).to_value(dtype, bit_order=LSB0) == expected
 
 
 def test_bits_that_are_not_whole_bytes_are_refused():
@@ -374,12 +408,6 @@ def test_mutibs_reads_its_current_contents():
 
 @pytest.mark.parametrize("cls", [Tibs, Mutibs])
 def test_container_methods_refuse_what_dtype_refuses(cls):
-    with pytest.raises(ValueError, match="already decides the byte order"):
-        cls.from_value("u16_le", 1, bit_order=LSB0)
-    with pytest.raises(ValueError, match="already decides the byte order"):
-        cls.from_values("(u8, u16_be)", [(1, 2)], bit_order=LSB0)
-    with pytest.raises(ValueError, match="already decides the byte order"):
-        cls.from_bytes(b"\x00\x00").to_value("u16_le", bit_order=LSB0)
     with pytest.raises(ValueError, match="whole number of bytes"):
         cls("0b101").to_values("u1", bit_order=LSB0)
     with pytest.raises(ValueError, match="not a multiple of dtype length"):
@@ -455,8 +483,6 @@ def test_pp_lsb0_squeezes_whole_byte_lines():
 def test_pp_lsb0_refuses_what_to_values_refuses(cls):
     with pytest.raises(ValueError, match="whole number of bytes"):
         pp_text(cls("0b101"), bit_order=LSB0)
-    with pytest.raises(ValueError, match="already decides the byte order"):
-        pp_text(cls.from_bytes(bytes(4)), "u16_le", bit_order=LSB0)
     with pytest.raises(ValueError, match="BitOrder.Lsb0 needs a whole number of bytes on each line"):
         pp_text(cls.from_bytes(bytes(6)), "u12", groups=1, bit_order=LSB0)
 
